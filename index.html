@@ -1,12 +1,21 @@
 <!doctype html>
-<html>
+<html class="h-full">
   <head>
     <meta charset="UTF-8" />
-    <title>Hello World!</title>
+    <title>Browser Artboard</title>
   </head>
-  <body>
-    <h1>💖 Hello World!</h1>
-    <p>Welcome to your Electron application.</p>
+  <body class="flex h-full overflow-hidden">
+    <aside id="sidebar" class="flex shrink-0 items-center justify-center bg-gray-100" style="width: 320px">
+      <span class="text-sm text-gray-500">side</span>
+    </aside>
+
+    <!-- リサイズハンドル -->
+    <div id="resize-handle" class="w-1 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400"></div>
+
+    <main class="flex flex-1 items-center justify-center bg-white">
+      <span class="text-sm text-gray-500">main</span>
+    </main>
+
     <script type="module" src="/src/renderer.ts"></script>
   </body>
 </html>

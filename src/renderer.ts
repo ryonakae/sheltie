@@ -1,31 +1,29 @@
-/**
- * This file will automatically be loaded by vite and run in the "renderer" context.
- * To learn more about the differences between the "main" and the "renderer" context in
- * Electron, visit:
- *
- * https://electronjs.org/docs/tutorial/process-model
- *
- * By default, Node.js integration in this file is disabled. When enabling Node.js integration
- * in a renderer process, please be aware of potential security implications. You can read
- * more about security risks here:
- *
- * https://electronjs.org/docs/tutorial/security
- *
- * To enable Node.js integration in this file, open up `main.ts` and enable the `nodeIntegration`
- * flag:
- *
- * ```
- *  // Create the browser window.
- *  mainWindow = new BrowserWindow({
- *    width: 800,
- *    height: 600,
- *    webPreferences: {
- *      nodeIntegration: true
- *    }
- *  });
- * ```
- */
-
 import './index.css';
 
-console.log('👋 This message is being logged by "renderer.ts", included via Vite');
+const SIDEBAR_MIN_WIDTH = 160;
+const SIDEBAR_MAX_WIDTH = 480;
+
+const sidebar = document.getElementById('sidebar') as HTMLElement;
+const handle = document.getElementById('resize-handle') as HTMLElement;
+
+handle.addEventListener('mousedown', (e: MouseEvent) => {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startWidth = sidebar.offsetWidth;
+
+  const onMouseMove = (e: MouseEvent) => {
+    const delta = e.clientX - startX;
+    const newWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + delta));
+    sidebar.style.width = `${newWidth}px`;
+  };
+
+  const onMouseUp = () => {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    document.body.style.userSelect = '';
+  };
+
+  document.body.style.userSelect = 'none';
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+});

@@ -9,7 +9,6 @@ export interface Tab {
 export interface TabState {
   tabs: Tab[];
   activeId: string;
-  homeSidebarWidth: number;
 }
 
 export type TabAction =

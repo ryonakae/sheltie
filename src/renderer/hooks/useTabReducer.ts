@@ -15,7 +15,6 @@ export function createInitialState(): TabState {
   return {
     tabs: [],
     activeId: HOME_ID,
-    homeSidebarWidth: SIDEBAR_DEFAULT_WIDTH,
   };
 }
 
@@ -42,9 +41,6 @@ export function tabReducer(state: TabState, action: TabAction): TabState {
     case 'REORDER_TABS':
       return { ...state, tabs: action.tabs };
     case 'UPDATE_SIDEBAR_WIDTH':
-      if (action.id === HOME_ID) {
-        return { ...state, homeSidebarWidth: action.width };
-      }
       return {
         ...state,
         tabs: state.tabs.map((t) =>

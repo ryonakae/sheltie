@@ -9,19 +9,24 @@ export default function App() {
   const [state, dispatch] = useReducer(tabReducer, null, createInitialState);
 
   const activeTab = state.tabs.find((t) => t.id === state.activeId);
-  const activeSidebarWidth =
-    state.activeId === HOME_ID ? state.homeSidebarWidth : (activeTab?.sidebarWidth ?? 320);
+  const isHome = state.activeId === HOME_ID;
 
   return (
     <div className="flex h-full flex-col">
       <TabBar tabs={state.tabs} activeId={state.activeId} dispatch={dispatch} />
-      <Canvas
-        key={state.activeId}
-        sidebarWidth={activeSidebarWidth}
-        onSidebarWidthChange={(width) =>
-          dispatch({ type: 'UPDATE_SIDEBAR_WIDTH', id: state.activeId, width })
-        }
-      />
+      {isHome ? (
+        <div className="flex flex-1 items-center justify-center">
+          <span className="text-2xl font-semibold text-gray-400">Browser Artboard</span>
+        </div>
+      ) : (
+        <Canvas
+          key={state.activeId}
+          sidebarWidth={activeTab?.sidebarWidth ?? 320}
+          onSidebarWidthChange={(width) =>
+            dispatch({ type: 'UPDATE_SIDEBAR_WIDTH', id: state.activeId, width })
+          }
+        />
+      )}
     </div>
   );
 }

@@ -15,7 +15,8 @@
     "baseUrl": ".",
     "outDir": "dist",
     "moduleResolution": "node",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "jsx": "react-jsx"
   },
-  "include": ["src/**/*.ts", "forge.config.ts", "forge.env.d.ts", "vite.*.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "forge.config.ts", "forge.env.d.ts", "vite.*.config.ts"]
 }

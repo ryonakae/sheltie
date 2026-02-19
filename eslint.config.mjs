@@ -9,7 +9,7 @@ import betterTailwindcss from 'eslint-plugin-better-tailwindcss';
 export default tseslint.config(
   // ビルド成果物を除外
   {
-    ignores: ['.vite/', 'out/', 'dist/'],
+    ignores: ['.vite/', 'out/', 'dist/', 'src/renderer/.vite/'],
   },
 
   eslint.configs.recommended,
@@ -18,7 +18,7 @@ export default tseslint.config(
 
   // Main / Preload プロセス（Node.js 環境）
   {
-    files: ['src/main.ts', 'src/preload.ts'],
+    files: ['src/main/**/*.ts', 'src/preload/**/*.ts'],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -28,7 +28,7 @@ export default tseslint.config(
 
   // Renderer プロセス（ブラウザ環境）
   {
-    files: ['src/renderer.ts'],
+    files: ['src/renderer/**/*.{ts,tsx}'],
     languageOptions: {
       globals: {
         ...globals.browser,

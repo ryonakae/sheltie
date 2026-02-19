@@ -87,6 +87,7 @@ typings/
 
 # Vite
 .vite/
+src/renderer/.vite/
 
 # Electron-Forge
 out/

@@ -1,33 +1,25 @@
 import { Canvas } from './components/Canvas/Canvas';
 import { TabBar } from './components/TabBar/TabBar';
-import { useTabReducer } from './hooks/useTabReducer';
-import { HOME_ID } from './types/tab';
+import { selectIsHome, useTabStore } from './store/tab-store';
 
 export default function App() {
-  const { state, dispatch, isLoaded } = useTabReducer();
+  const isLoaded = useTabStore((s) => s.isLoaded);
+  const isHome = useTabStore(selectIsHome);
+  const activeId = useTabStore((s) => s.activeId);
 
   // 保存済み状態の読み込み完了まで非表示
   // （BrowserWindow は ready-to-show まで show: false なのでユーザーには見えない）
   if (!isLoaded) return null;
 
-  const activeTab = state.tabs.find((t) => t.id === state.activeId);
-  const isHome = state.activeId === HOME_ID;
-
   return (
     <div className="flex h-full flex-col">
-      <TabBar tabs={state.tabs} activeId={state.activeId} dispatch={dispatch} />
+      <TabBar />
       {isHome ? (
         <div className="flex flex-1 items-center justify-center">
           <span className="text-2xl font-semibold text-gray-400">Browser Artboard</span>
         </div>
       ) : (
-        <Canvas
-          key={state.activeId}
-          sidebarWidth={activeTab?.sidebarWidth ?? 320}
-          onSidebarWidthChange={(width) =>
-            dispatch({ type: 'UPDATE_SIDEBAR_WIDTH', id: state.activeId, width })
-          }
-        />
+        <Canvas key={activeId} />
       )}
     </div>
   );

@@ -3,18 +3,24 @@ import { isSortable } from '@dnd-kit/react/sortable';
 import House from '@gravity-ui/icons/House';
 import Plus from '@gravity-ui/icons/Plus';
 import { Button } from '@heroui/react';
+import { useShallow } from 'zustand/react/shallow';
 
 import { HOME_ID } from '../../types/tab';
-import type { Tab, TabAction } from '../../types/tab';
+import { useTabStore } from '../../store/tab-store';
 import { TabItem } from './TabItem';
 
-interface TabBarProps {
-  tabs: Tab[];
-  activeId: string;
-  dispatch: React.Dispatch<TabAction>;
-}
+export function TabBar() {
+  const { tabs, activeId, setActive, addTab, removeTab, reorderTabs } = useTabStore(
+    useShallow((s) => ({
+      tabs: s.tabs,
+      activeId: s.activeId,
+      setActive: s.setActive,
+      addTab: s.addTab,
+      removeTab: s.removeTab,
+      reorderTabs: s.reorderTabs,
+    })),
+  );
 
-export function TabBar({ tabs, activeId, dispatch }: TabBarProps) {
   const isHomeActive = activeId === HOME_ID;
 
   return (
@@ -27,7 +33,7 @@ export function TabBar({ tabs, activeId, dispatch }: TabBarProps) {
             ? 'border-b-blue-500 bg-white text-gray-900'
             : 'border-b-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-700',
         ].join(' ')}
-        onClick={() => dispatch({ type: 'SET_ACTIVE', id: HOME_ID })}
+        onClick={() => setActive(HOME_ID)}
         aria-label="ホームに切り替え"
       >
         <House className="size-4" />
@@ -45,7 +51,7 @@ export function TabBar({ tabs, activeId, dispatch }: TabBarProps) {
           const newTabs = [...tabs];
           const [removed] = newTabs.splice(fromIndex, 1);
           newTabs.splice(toIndex, 0, removed);
-          dispatch({ type: 'REORDER_TABS', tabs: newTabs });
+          reorderTabs(newTabs);
         }}
       >
         <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
@@ -55,8 +61,8 @@ export function TabBar({ tabs, activeId, dispatch }: TabBarProps) {
               tab={tab}
               index={index}
               isActive={tab.id === activeId}
-              onActivate={() => dispatch({ type: 'SET_ACTIVE', id: tab.id })}
-              onClose={() => dispatch({ type: 'REMOVE_TAB', id: tab.id })}
+              onActivate={() => setActive(tab.id)}
+              onClose={() => removeTab(tab.id)}
             />
           ))}
         </div>
@@ -69,7 +75,7 @@ export function TabBar({ tabs, activeId, dispatch }: TabBarProps) {
         size="sm"
         className="mx-1 self-center"
         aria-label="タブを追加"
-        onPress={() => dispatch({ type: 'ADD_TAB' })}
+        onPress={() => addTab()}
       >
         <Plus className="size-4" />
       </Button>

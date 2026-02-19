@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+import { selectActiveTab, useTabStore } from '../../store/tab-store';
 import { ResizeHandle } from './ResizeHandle';
 import { Sidebar } from './Sidebar';
 
@@ -7,15 +8,16 @@ const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 320;
 
-interface CanvasProps {
-  sidebarWidth: number;
-  onSidebarWidthChange: (width: number) => void;
-}
+export function Canvas() {
+  const activeTab = useTabStore(selectActiveTab);
+  const activeId = useTabStore((s) => s.activeId);
+  const updateSidebarWidth = useTabStore((s) => s.updateSidebarWidth);
 
-export function Canvas({ sidebarWidth, onSidebarWidthChange }: CanvasProps) {
   const sidebarRef = useRef<HTMLElement>(null);
   const isResizing = useRef(false);
   const dragInfo = useRef({ startX: 0, startWidth: 0 });
+
+  const sidebarWidth = activeTab?.sidebarWidth ?? SIDEBAR_DEFAULT_WIDTH;
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -31,8 +33,8 @@ export function Canvas({ sidebarWidth, onSidebarWidthChange }: CanvasProps) {
     if (sidebarRef.current) {
       sidebarRef.current.style.width = `${SIDEBAR_DEFAULT_WIDTH}px`;
     }
-    onSidebarWidthChange(SIDEBAR_DEFAULT_WIDTH);
-  }, [onSidebarWidthChange]);
+    updateSidebarWidth(activeId, SIDEBAR_DEFAULT_WIDTH);
+  }, [updateSidebarWidth, activeId]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -50,7 +52,7 @@ export function Canvas({ sidebarWidth, onSidebarWidthChange }: CanvasProps) {
       isResizing.current = false;
       document.body.style.userSelect = '';
       if (sidebarRef.current) {
-        onSidebarWidthChange(sidebarRef.current.offsetWidth);
+        updateSidebarWidth(activeId, sidebarRef.current.offsetWidth);
       }
     };
 
@@ -60,7 +62,7 @@ export function Canvas({ sidebarWidth, onSidebarWidthChange }: CanvasProps) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [onSidebarWidthChange]);
+  }, [updateSidebarWidth, activeId]);
 
   return (
     <div className="flex flex-1 overflow-hidden">

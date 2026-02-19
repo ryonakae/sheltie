@@ -32,13 +32,14 @@ src/
 │   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定
 └── renderer/    # React レンダラープロセス (ブラウザ環境)
     ├── main.tsx # React エントリーポイント
-    ├── App.tsx  # ルートコンポーネント（useReducer でタブ状態管理）
+    ├── App.tsx  # ルートコンポーネント（Zustand でタブ状態管理）
     ├── index.html
     ├── index.css
     ├── types/
-    │   └── tab.ts # Tab 型、TabState、TabAction の定義
-    ├── hooks/
-    │   └── useTabReducer.ts # タブ状態管理ロジック
+    │   └── tab.ts # Tab 型、TabState の定義
+    ├── store/
+    │   ├── tab-store.ts # Zustand ストア（アクション定義）
+    │   └── tab-persistence.ts # タブ状態の永続化ロジック
     └── components/
         ├── Canvas/
         │   ├── Canvas.tsx # キャンバス全体（サイドバー + メイン領域）
@@ -59,8 +60,9 @@ src/
 - サイドバー幅はタブごとに保持（リサイズ中は DOM 直接操作でパフォーマンス最適化）
 - ResizeHandle で幅調整可能
 
-**状態管理**: `useReducer` + Context なし（シンプルな状態規模のため）
-- アクション: `ADD_TAB`, `REMOVE_TAB`, `SWITCH_TAB`, `REORDER_TABS`, `SET_SIDEBAR_WIDTH`
+**状態管理**: Zustand による共有状態管理（`tab-store.ts`）
+- ストア内アクション: `addTab`, `removeTab`, `setActive`, `reorderTabs`, `updateSidebarWidth`
+- 起動時に `tab-persistence.ts` で保存済み状態を復元（localStorage ベース）
 - ホームタブは `HOME_ID = '__home__'` で特別管理（状態配列には含めない）
 
 ### ビルドパイプライン
@@ -84,7 +86,7 @@ src/
 - **スタイリング**: Tailwind CSS v4 を使用。クラス順序は `eslint-plugin-better-tailwindcss` が自動整列するため、lint に従うこと
 - **TypeScript**: `strict: true`、未使用変数・パラメータはエラーになる
 - **Lint, Format**: 実装完了時に `npm run lint`, `npm run format:check`, `npm run typecheck` を実行し、エラーが出ないようにすること
-- **状態管理**: 複雑でない場合は `useReducer` で十分。グローバル状態が必要な場合のみ Context を検討
+- **状態管理**: グローバル共有状態は Zustand を使用。コンポーネントローカル状態は `useState` で十分
 - **DOM 操作**: タブ幅調整のような高頻度アップデートはレンダリング外で行い、確定時のみ dispatch で同期
 
 
@@ -92,6 +94,7 @@ src/
 
 | ライブラリ | 目的 |
 |---|---|
+| `zustand` | グローバル状態管理（タブ状態、レイアウト設定） |
 | `@dnd-kit/react` | タブのドラッグ&ドロップ並び替え（React 19 対応） |
 | `@gravity-ui/icons` | House, Plus, Xmark などのアイコン |
 | `heroui-react` | UI コンポーネント（Button, Card など） |

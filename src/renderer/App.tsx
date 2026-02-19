@@ -19,6 +19,12 @@ export default function App() {
     document.body.style.userSelect = 'none';
   }, []);
 
+  const handleDoubleClick = useCallback(() => {
+    if (sidebarRef.current) {
+      sidebarRef.current.style.width = `${SIDEBAR_DEFAULT_WIDTH}px`;
+    }
+  }, []);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing.current) {
@@ -65,6 +71,7 @@ export default function App() {
           hover:bg-blue-400
         "
         onMouseDown={handleMouseDown}
+        onDoubleClick={handleDoubleClick}
       />
 
       <main className="flex flex-1 items-center justify-center bg-white">

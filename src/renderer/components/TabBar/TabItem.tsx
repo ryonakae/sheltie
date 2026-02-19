@@ -3,10 +3,10 @@ import { memo, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import Xmark from '@gravity-ui/icons/Xmark';
 
-import type { Tab } from '../../types/tab';
+import type { Project } from '../../types/tab';
 
 interface TabItemProps {
-  tab: Tab;
+  project: Project;
   index: number;
   isActive: boolean;
   onActivate: () => void;
@@ -14,13 +14,13 @@ interface TabItemProps {
 }
 
 export const TabItem = memo(function TabItem({
-  tab,
+  project,
   index,
   isActive,
   onActivate,
   onClose,
 }: TabItemProps) {
-  const { ref, isDragging } = useSortable({ id: tab.id, index });
+  const { ref, isDragging } = useSortable({ id: project.id, index });
 
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
@@ -42,11 +42,11 @@ export const TabItem = memo(function TabItem({
       ].join(' ')}
       onClick={onActivate}
     >
-      <span className="max-w-28 truncate">{tab.title}</span>
+      <span className="max-w-28 truncate">{project.title}</span>
       <button
         className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-gray-300"
         onClick={handleClose}
-        aria-label={`${tab.title}を閉じる`}
+        aria-label={`${project.title}を閉じる`}
       >
         <Xmark className="size-3" />
       </button>

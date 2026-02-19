@@ -1,13 +1,13 @@
 import { ipcMain } from 'electron';
 import ElectronStore from 'electron-store';
 
-import type { Tab, TabState } from '../shared/types';
+import type { Project, ProjectState } from '../shared/types';
 
 const schema = {
-  tabState: {
+  projectState: {
     type: 'object' as const,
     properties: {
-      tabs: {
+      projects: {
         type: 'array' as const,
         items: {
           type: 'object' as const,
@@ -15,36 +15,73 @@ const schema = {
             id: { type: 'string' as const },
             title: { type: 'string' as const },
             sidebarWidth: { type: 'number' as const },
+            createdAt: { type: 'number' as const },
           },
-          required: ['id', 'title', 'sidebarWidth'],
+          required: ['id', 'title', 'sidebarWidth', 'createdAt'],
         },
+      },
+      openIds: {
+        type: 'array' as const,
+        items: { type: 'string' as const },
       },
       activeId: { type: 'string' as const },
     },
-    required: ['tabs', 'activeId'],
+    required: ['projects', 'openIds', 'activeId'],
   },
 };
 
-const DEFAULT_TAB_STATE: TabState = {
-  tabs: [] as Tab[],
+const DEFAULT_PROJECT_STATE: ProjectState = {
+  projects: [] as Project[],
+  openIds: [],
   activeId: '__home__',
 };
 
-type StoreSchema = { tabState: TabState };
+type StoreSchema = { projectState: ProjectState };
 
-const store = new ElectronStore<StoreSchema>({ schema, defaults: { tabState: DEFAULT_TAB_STATE } });
+const store = new ElectronStore<StoreSchema>({
+  schema,
+  defaults: { projectState: DEFAULT_PROJECT_STATE },
+});
 
-export function registerTabStateHandlers(getWindow: () => Electron.BrowserWindow | null): void {
-  ipcMain.handle('tab-state:load', (): TabState => {
-    return store.get('tabState', DEFAULT_TAB_STATE);
+/** 旧 tabState 形式からのマイグレーション */
+function migrateFromTabState(): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const legacy = (store as any).get('tabState');
+  if (!legacy) return;
+
+  const now = Date.now();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const projects: Project[] = (legacy.tabs ?? []).map((t: any) => ({
+    id: t.id,
+    title: t.title,
+    sidebarWidth: t.sidebarWidth,
+    createdAt: now,
+  }));
+
+  const migrated: ProjectState = {
+    projects,
+    openIds: projects.map((p) => p.id),
+    activeId: legacy.activeId ?? '__home__',
+  };
+
+  store.set('projectState', migrated);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (store as any).delete('tabState');
+}
+
+migrateFromTabState();
+
+export function registerProjectStateHandlers(getWindow: () => Electron.BrowserWindow | null): void {
+  ipcMain.handle('project-state:load', (): ProjectState => {
+    return store.get('projectState', DEFAULT_PROJECT_STATE);
   });
 
-  ipcMain.handle('tab-state:save', (_event, state: TabState): void => {
-    store.set('tabState', state);
+  ipcMain.handle('project-state:save', (_event, state: ProjectState): void => {
+    store.set('projectState', state);
   });
 
-  ipcMain.handle('tab-state:close-ready', (_event, state: TabState): void => {
-    store.set('tabState', state);
+  ipcMain.handle('project-state:close-ready', (_event, state: ProjectState): void => {
+    store.set('projectState', state);
     const win = getWindow();
     if (win) {
       win.destroy();

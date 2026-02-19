@@ -2,7 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
-import { registerTabStateHandlers } from './store';
+import { registerProjectStateHandlers } from './store';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -11,7 +11,7 @@ if (started) {
 
 let mainWindow: BrowserWindow | null = null;
 
-registerTabStateHandlers(() => mainWindow);
+registerProjectStateHandlers(() => mainWindow);
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({

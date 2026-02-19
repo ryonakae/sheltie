@@ -3,15 +3,15 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { TabStoreApi } from '../shared/types';
+import type { ProjectStoreApi } from '../shared/types';
 
-const api: TabStoreApi = {
-  loadTabState: () => ipcRenderer.invoke('tab-state:load'),
-  saveTabState: (state) => ipcRenderer.invoke('tab-state:save', state),
+const api: ProjectStoreApi = {
+  loadProjectState: () => ipcRenderer.invoke('project-state:load'),
+  saveProjectState: (state) => ipcRenderer.invoke('project-state:save', state),
   onSaveBeforeClose: (callback) => {
     ipcRenderer.on('save-before-close', () => callback());
   },
-  closeReady: (state) => ipcRenderer.invoke('tab-state:close-ready', state),
+  closeReady: (state) => ipcRenderer.invoke('project-state:close-ready', state),
 };
 
 contextBridge.exposeInMainWorld('api', api);

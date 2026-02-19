@@ -6,20 +6,34 @@ import { Button } from '@heroui/react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { HOME_ID } from '../../types/tab';
-import { useTabStore } from '../../store/tab-store';
+import { useProjectStore } from '../../store/tab-store';
 import { TabItem } from './TabItem';
 
 export function TabBar() {
-  const { tabs, activeId, setActive, addTab, removeTab, reorderTabs } = useTabStore(
+  const {
+    projects,
+    openIds,
+    activeId,
+    setActive,
+    createProject,
+    closeProject,
+    reorderOpenProjects,
+  } = useProjectStore(
     useShallow((s) => ({
-      tabs: s.tabs,
+      projects: s.projects,
+      openIds: s.openIds,
       activeId: s.activeId,
       setActive: s.setActive,
-      addTab: s.addTab,
-      removeTab: s.removeTab,
-      reorderTabs: s.reorderTabs,
+      createProject: s.createProject,
+      closeProject: s.closeProject,
+      reorderOpenProjects: s.reorderOpenProjects,
     })),
   );
+
+  // タブバーに表示するプロジェクトを openIds の順序で取得
+  const openProjects = openIds
+    .map((id) => projects.find((p) => p.id === id))
+    .filter((p) => p !== undefined);
 
   const isHomeActive = activeId === HOME_ID;
 
@@ -48,21 +62,21 @@ export function TabBar() {
           const fromIndex = source.initialIndex;
           const toIndex = source.index;
           if (fromIndex === toIndex) return;
-          const newTabs = [...tabs];
-          const [removed] = newTabs.splice(fromIndex, 1);
-          newTabs.splice(toIndex, 0, removed);
-          reorderTabs(newTabs);
+          const newIds = [...openIds];
+          const [removed] = newIds.splice(fromIndex, 1);
+          newIds.splice(toIndex, 0, removed);
+          reorderOpenProjects(newIds);
         }}
       >
         <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
-          {tabs.map((tab, index) => (
+          {openProjects.map((project, index) => (
             <TabItem
-              key={tab.id}
-              tab={tab}
+              key={project.id}
+              project={project}
               index={index}
-              isActive={tab.id === activeId}
-              onActivate={() => setActive(tab.id)}
-              onClose={() => removeTab(tab.id)}
+              isActive={project.id === activeId}
+              onActivate={() => setActive(project.id)}
+              onClose={() => closeProject(project.id)}
             />
           ))}
         </div>
@@ -74,8 +88,8 @@ export function TabBar() {
         variant="ghost"
         size="sm"
         className="mx-1 self-center"
-        aria-label="タブを追加"
-        onPress={() => addTab()}
+        aria-label="プロジェクトを追加"
+        onPress={() => createProject()}
       >
         <Plus className="size-4" />
       </Button>

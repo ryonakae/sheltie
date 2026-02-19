@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import { selectActiveTab, useTabStore } from '../../store/tab-store';
+import { selectActiveProject, useProjectStore } from '../../store/tab-store';
 import { ResizeHandle } from './ResizeHandle';
 import { Sidebar } from './Sidebar';
 
@@ -9,15 +9,15 @@ const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 320;
 
 export function Canvas() {
-  const activeTab = useTabStore(selectActiveTab);
-  const activeId = useTabStore((s) => s.activeId);
-  const updateSidebarWidth = useTabStore((s) => s.updateSidebarWidth);
+  const activeProject = useProjectStore(selectActiveProject);
+  const activeId = useProjectStore((s) => s.activeId);
+  const updateSidebarWidth = useProjectStore((s) => s.updateSidebarWidth);
 
   const sidebarRef = useRef<HTMLElement>(null);
   const isResizing = useRef(false);
   const dragInfo = useRef({ startX: 0, startWidth: 0 });
 
-  const sidebarWidth = activeTab?.sidebarWidth ?? SIDEBAR_DEFAULT_WIDTH;
+  const sidebarWidth = activeProject?.sidebarWidth ?? SIDEBAR_DEFAULT_WIDTH;
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

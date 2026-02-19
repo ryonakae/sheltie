@@ -1,16 +1,16 @@
-import type { Tab, TabState } from '../renderer/types/tab';
+import type { Project, ProjectState } from '../renderer/types/tab';
 
-export type { Tab, TabState };
+export type { Project, ProjectState };
 
-export interface TabStoreApi {
-  loadTabState: () => Promise<TabState>;
-  saveTabState: (state: TabState) => Promise<void>;
+export interface ProjectStoreApi {
+  loadProjectState: () => Promise<ProjectState>;
+  saveProjectState: (state: ProjectState) => Promise<void>;
   onSaveBeforeClose: (callback: () => void) => void;
-  closeReady: (state: TabState) => Promise<void>;
+  closeReady: (state: ProjectState) => Promise<void>;
 }
 
 declare global {
   interface Window {
-    api: TabStoreApi;
+    api: ProjectStoreApi;
   }
 }

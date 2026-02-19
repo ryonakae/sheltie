@@ -32,38 +32,51 @@ src/
 │   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定
 └── renderer/    # React レンダラープロセス (ブラウザ環境)
     ├── main.tsx # React エントリーポイント
-    ├── App.tsx  # ルートコンポーネント（Zustand でタブ状態管理）
+    ├── App.tsx  # ルートコンポーネント（Zustand でプロジェクト状態管理）
     ├── index.html
     ├── index.css
     ├── types/
-    │   └── tab.ts # Tab 型、TabState の定義
+    │   └── tab.ts # Project 型、ProjectState の定義
     ├── store/
-    │   ├── tab-store.ts # Zustand ストア（アクション定義）
-    │   └── tab-persistence.ts # タブ状態の永続化ロジック
+    │   ├── tab-store.ts # Zustand ストア（useProjectStore、アクション定義）
+    │   └── tab-persistence.ts # プロジェクト状態の永続化ロジック
     └── components/
         ├── Canvas/
         │   ├── Canvas.tsx # キャンバス全体（サイドバー + メイン領域）
         │   ├── Sidebar.tsx # サイドバーコンポーネント
         │   └── ResizeHandle.tsx # サイドバーリサイズハンドル
-        └── TabBar/
-            ├── TabBar.tsx # タブバー全体（DnD, ホーム + タブ + 追加ボタン）
-            └── TabItem.tsx # 個別タブ（ドラッグ可能）
+        ├── TabBar/
+        │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示）
+        │   └── TabItem.tsx # 個別プロジェクトタブ（ドラッグ可能）
+        └── HomeScreen/
+            ├── HomeScreen.tsx # プロジェクト一覧画面（カードグリッド）
+            ├── ProjectCard.tsx # プロジェクトカード（HeroUI Card）
+            ├── RenameModal.tsx # プロジェクト名変更モーダル（HeroUI Modal）
+            └── DeleteDialog.tsx # 削除確認ダイアログ（HeroUI AlertDialog）
 ```
 
 ### コンポーネント構成
 
-**TabBar**: ホームボタン、動的タブ、追加ボタンを持つレイアウト
+**HomeScreen**: プロジェクト一覧画面（ホーム表示時）
+- `HomeScreen.tsx`: プロジェクト一覧のカードグリッドレイアウト
+- `ProjectCard.tsx`: 各プロジェクトをカード表示（Dropdown で操作メニュー提供）
+- `RenameModal.tsx`: プロジェクト名変更用モーダル（HeroUI Modal）
+- `DeleteDialog.tsx`: 削除確認用ダイアログ（HeroUI AlertDialog）
+
+**TabBar**: 開いているプロジェクトのタブバー、ホームボタン、追加ボタン
+- `openIds` に基づいて開いているプロジェクトのみ表示
 - `@dnd-kit/react` を使用したドラッグ&ドロップ並び替え対応
 - 各タブはホバー時に閉じるボタン（×）を表示
 
 **Canvas**: サイドバーとメイン領域を管理
-- サイドバー幅はタブごとに保持（リサイズ中は DOM 直接操作でパフォーマンス最適化）
+- サイドバー幅はプロジェクトごとに保持（リサイズ中は DOM 直接操作でパフォーマンス最適化）
 - ResizeHandle で幅調整可能
 
-**状態管理**: Zustand による共有状態管理（`tab-store.ts`）
-- ストア内アクション: `addTab`, `removeTab`, `setActive`, `reorderTabs`, `updateSidebarWidth`
+**状態管理**: Zustand による共有状態管理（`useProjectStore` in `tab-store.ts`）
+- ストア内アクション: `createProject`, `openProject`, `closeProject`, `deleteProject`, `renameProject`, `setActive`, `reorderOpenProjects`, `updateSidebarWidth`
+- Selectors: `selectActiveProject`, `selectIsHome`
 - 起動時に `tab-persistence.ts` で保存済み状態を復元（localStorage ベース）
-- ホームタブは `HOME_ID = '__home__'` で特別管理（状態配列には含めない）
+- プロジェクトライフサイクル: `createProject` で新規作成、`openProject` で開く（既開いていれば activeId 更新）、`closeProject` でタブバーから閉じる（openIds から除去）、`deleteProject` で削除（projects + openIds 両方から除去）
 
 ### ビルドパイプライン
 
@@ -87,17 +100,17 @@ src/
 - **TypeScript**: `strict: true`、未使用変数・パラメータはエラーになる
 - **Lint, Format**: 実装完了時に `npm run lint`, `npm run format:check`, `npm run typecheck` を実行し、エラーが出ないようにすること
 - **状態管理**: グローバル共有状態は Zustand を使用。コンポーネントローカル状態は `useState` で十分
-- **DOM 操作**: タブ幅調整のような高頻度アップデートはレンダリング外で行い、確定時のみ dispatch で同期
+- **DOM 操作**: サイドバー幅調整のような高頻度アップデートはレンダリング外で行い、確定時のみ dispatch で同期
 
 
 ## 主要ライブラリ
 
 | ライブラリ | 目的 |
 |---|---|
-| `zustand` | グローバル状態管理（タブ状態、レイアウト設定） |
-| `@dnd-kit/react` | タブのドラッグ&ドロップ並び替え（React 19 対応） |
+| `zustand` | グローバル状態管理（プロジェクト状態、レイアウト設定） |
+| `@dnd-kit/react` | 開いているプロジェクトのドラッグ&ドロップ並び替え（React 19 対応） |
 | `@gravity-ui/icons` | House, Plus, Xmark などのアイコン |
-| `heroui-react` | UI コンポーネント（Button, Card など） |
+| `heroui-react` | UI コンポーネント（Button, Card, Modal, AlertDialog など） |
 
 
 ## Claude Code on the Web

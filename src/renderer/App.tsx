@@ -1,12 +1,14 @@
-import { useReducer } from 'react';
-
 import { Canvas } from './components/Canvas/Canvas';
 import { TabBar } from './components/TabBar/TabBar';
-import { createInitialState, tabReducer } from './hooks/useTabReducer';
+import { useTabReducer } from './hooks/useTabReducer';
 import { HOME_ID } from './types/tab';
 
 export default function App() {
-  const [state, dispatch] = useReducer(tabReducer, null, createInitialState);
+  const { state, dispatch, isLoaded } = useTabReducer();
+
+  // 保存済み状態の読み込み完了まで非表示
+  // （BrowserWindow は ready-to-show まで show: false なのでユーザーには見えない）
+  if (!isLoaded) return null;
 
   const activeTab = state.tabs.find((t) => t.id === state.activeId);
   const isHome = state.activeId === HOME_ID;

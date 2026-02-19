@@ -2,13 +2,19 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
+import { registerTabStateHandlers } from './store';
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
 
+let mainWindow: BrowserWindow | null = null;
+
+registerTabStateHandlers(() => mainWindow);
+
 const createWindow = () => {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     show: false,
@@ -27,12 +33,26 @@ const createWindow = () => {
   }
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    mainWindow?.show();
   });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.webContents.openDevTools();
   }
+
+  // ウィンドウクローズ前にレンダラーへ最終保存を要求し、完了後に破棄する
+  let isQuitting = false;
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      isQuitting = true;
+      mainWindow?.webContents.send('save-before-close');
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 };
 
 app.on('ready', createWindow);

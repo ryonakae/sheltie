@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npm ci",
+            "description": "依存パッケージインストール"
+          },
+          {
+            "type": "command",
+            "command": "npx gh-setup-hooks",
+            "description": "GitHub CLI自動設定"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm run format *)",
+      "Bash(npm run lint *)"
+    ]
+  }
+}

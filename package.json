@@ -1,26 +1,27 @@
 {
   "name": "browser-artboard",
-  "productName": "Browser Artboard",
-  "version": "1.0.0",
-  "description": "Browser Artboard - Electron Application",
-  "main": ".vite/build/main.js",
   "private": true,
+  "engines": {
+    "node": "22.14.0"
+  },
+  "main": ".vite/build/main.js",
   "scripts": {
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "make": "electron-forge make",
+    "package": "electron-forge package",
+    "publish": "electron-forge publish",
+    "start": "electron-forge start"
   },
-  "keywords": [],
-  "author": {
-    "name": "Ryo Nakae",
-    "email": "ryo.n.1129@gmail.com"
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.0",
+    "electron-squirrel-startup": "^1.0.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.0"
   },
-  "license": "MIT",
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-deb": "^7.11.1",
@@ -47,11 +48,5 @@
     "typescript-eslint": "^8.0.0",
     "vite": "^5.4.21"
   },
-  "dependencies": {
-    "@tailwindcss/vite": "^4.2.0",
-    "electron-squirrel-startup": "^1.0.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "tailwindcss": "^4.2.0"
-  }
+  "productName": "Browser Artboard"
 }

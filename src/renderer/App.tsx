@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { Button } from '@heroui/react';
 
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 480;
@@ -62,14 +63,12 @@ export default function App() {
         style={{ width: SIDEBAR_DEFAULT_WIDTH }}
       >
         <span className="text-sm text-gray-500">side</span>
+        <Button variant="primary">HeroUI テスト</Button>
       </aside>
 
       {/* リサイズハンドル */}
       <div
-        className="
-          w-1 shrink-0 cursor-col-resize bg-gray-200
-          hover:bg-blue-400
-        "
+        className="w-1 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400"
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
       />

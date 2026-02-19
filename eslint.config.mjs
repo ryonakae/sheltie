@@ -7,9 +7,9 @@ import globals from 'globals';
 import betterTailwindcss from 'eslint-plugin-better-tailwindcss';
 
 export default tseslint.config(
-  // ビルド成果物を除外
+  // ビルド成果物・エージェントスクリプトを除外
   {
-    ignores: ['.vite/', 'out/', 'dist/', 'src/renderer/.vite/'],
+    ignores: ['.vite/', 'out/', 'dist/', 'src/renderer/.vite/', '.agents/'],
   },
 
   eslint.configs.recommended,

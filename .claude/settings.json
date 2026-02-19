@@ -19,9 +19,7 @@
     ]
   },
   "permissions": {
-    "allow": [
-      "Bash(npm run format *)",
-      "Bash(npm run lint *)"
-    ]
-  }
+    "allow": ["Bash(npm run format *)", "Bash(npm run lint *)", "mcp__heroui-react"]
+  },
+  "enabledMcpjsonServers": ["heroui-react"]
 }

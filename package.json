@@ -10,10 +10,27 @@
     "lint:fix": "eslint . --fix",
     "make": "electron-forge make",
     "package": "electron-forge package",
+    "prepare": "husky",
     "publish": "electron-forge publish",
-    "start": "electron-forge start"
+    "start": "electron-forge start",
+    "typecheck": "tsc --noEmit"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,html}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
+    "@heroui/react": "^3.0.0-beta.6",
+    "@heroui/styles": "^3.0.0-beta.6",
     "@tailwindcss/vite": "^4.2.0",
     "electron-squirrel-startup": "^1.0.1",
     "react": "^19.2.4",
@@ -40,6 +57,8 @@
     "eslint-config-prettier": "^10.0.0",
     "eslint-plugin-better-tailwindcss": "^4.3.0",
     "globals": "^15.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.0.0",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "typescript": "~5.7.0",

@@ -27,7 +27,8 @@ Electron の 3 プロセス構造に沿って `src/` が分割されています
 ```
 src/
 ├── main/        # Electron メインプロセス (Node.js)
-│   └── index.ts # ウィンドウ生成・アプリライフサイクル管理（titleBarStyle、trafficLightPosition 設定含む）
+│   ├── index.ts # ウィンドウ生成・アプリライフサイクル管理（titleBarStyle、trafficLightPosition 設定、webviewTag 有効化）
+│   └── store.ts # プロジェクト状態の永続化（ElectronStore）、マイグレーション処理
 ├── preload/     # サンドボックス内のブリッジ
 │   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定（windowControls API 公開）
 ├── shared/
@@ -38,17 +39,20 @@ src/
     ├── index.html
     ├── index.css
     ├── types/
-    │   └── tab.ts # Project 型、ProjectState の定義
+    │   └── tab.ts # Project 型（pages[]、viewport を含む）、Page、Viewport、ProjectState の定義
     ├── store/
-    │   ├── tab-store.ts # Zustand ストア（useProjectStore、アクション定義）
+    │   ├── tab-store.ts # Zustand ストア（useProjectStore、ページ管理アクション含む）
     │   └── tab-persistence.ts # プロジェクト状態の永続化ロジック
     ├── hooks/
     │   └── useWindowControlsInset.ts # ウィンドウコントロール領域（タイトルバー）のインセット計算
     └── components/
         ├── Canvas/
-        │   ├── Canvas.tsx # キャンバス全体（サイドバー + メイン領域）
-        │   ├── Sidebar.tsx # サイドバーコンポーネント
+        │   ├── Canvas.tsx # キャンバス全体（Sidebar + Artboard）
+        │   ├── Sidebar.tsx # サイドバーコンポーネント（ページ一覧、AddPageForm）
+        │   ├── AddPageForm.tsx # ページ追加フォーム
         │   └── ResizeHandle.tsx # サイドバーリサイズハンドル
+        ├── Artboard/
+        │   └── Artboard.tsx # アートボード（webview コンテナ、ページレンダリング、ズーム・パン対応）
         ├── TabBar/
         │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示、useWindowControlsInset で macOS/Windows タイトルバー対応）
         │   └── TabItem.tsx # 個別プロジェクトタブ（ドラッグ可能）
@@ -73,15 +77,42 @@ src/
 - 各タブはホバー時に閉じるボタン（×）を表示
 - `useWindowControlsInset` で macOS トラフィックライト、Windows/Linux のコントロール領域に対応（`-webkit-app-region` スタイルで実装）
 
-**Canvas**: サイドバーとメイン領域を管理
-- サイドバー幅はプロジェクトごとに保持（リサイズ中は DOM 直接操作でパフォーマンス最適化）
-- ResizeHandle で幅調整可能
+**Canvas**: サイドバーとアートボードを管理
+- **Sidebar**: ページ一覧表示、ページ追加フォーム（AddPageForm）、ページごとに削除ボタン付き
+- **ResizeHandle**: サイドバー幅調整可能（リサイズ中は DOM 直接操作でパフォーマンス最適化）
+- **Artboard**: キャンバス領域に複数の webview を配置、ドラッグ・リサイズ・ズーム・パン対応
+
+**Artboard**: ページレンダリング・ビューポート管理
+- 各ページを webview タグで描画（`webviewTag: true` で Electron でサンドボックス化）
+- ドラッグでページ移動（`updatePagePosition` で同期）、リサイズでサイズ変更（`updatePageSize` で同期）
+- マウスホイール or トラックパッドでズーム・パン（`updateViewport` で同期）
+- ページをクリックで最前面に（`bringPageToFront` で z-index 制御）
+- webview のナビゲーション検出で URL・タイトル更新（`updatePageUrl` で同期）
 
 **状態管理**: Zustand による共有状態管理（`useProjectStore` in `tab-store.ts`）
-- ストア内アクション: `createProject`, `openProject`, `closeProject`, `deleteProject`, `renameProject`, `setActive`, `reorderOpenProjects`, `updateSidebarWidth`
-- Selectors: `selectActiveProject`, `selectIsHome`
+- **プロジェクト管理アクション**: `createProject`, `openProject`, `closeProject`, `deleteProject`, `renameProject`, `setActive`, `reorderOpenProjects`, `updateSidebarWidth`
+- **ページ管理アクション**: `addPage`, `removePage`, `updatePagePosition`, `updatePageSize`, `updatePageUrl`, `updateViewport`, `bringPageToFront`
+- **Selectors**: `selectActiveProject`, `selectIsHome`
 - 起動時に `tab-persistence.ts` で保存済み状態を復元（localStorage ベース）
 - プロジェクトライフサイクル: `createProject` で新規作成、`openProject` で開く（既開いていれば activeId 更新）、`closeProject` でタブバーから閉じる（openIds から除去）、`deleteProject` で削除（projects + openIds 両方から除去）
+
+### データ構造
+
+**Page インターフェース** (`src/renderer/types/tab.ts:6-13`)
+- `id`: ページの一意識別子（UUID）
+- `url`: ロード URL
+- `title`: webview のドキュメントタイトルまたはホスト名
+- `x, y, width, height`: キャンバス上の位置・サイズ
+- `createdAt`: 作成タイムスタンプ
+
+**Viewport インターフェース** (`src/renderer/types/tab.ts:15-18`)
+- `zoom`: ズームレベル（初期値 1）
+- `panX, panY`: パンオフセット（ピクセル）
+
+**Project インターフェース** の拡張
+- `pages: Page[]`: プロジェクト内のページ配列
+- `viewport: Viewport`: プロジェクトのビューポート状態
+- （既存）`id, title, sidebarWidth, createdAt`
 
 ### ビルドパイプライン
 
@@ -95,7 +126,13 @@ src/
 
 ### セキュリティ設定
 
-メインプロセスでは Electron のセキュリティベストプラクティスを適用しています：Context Isolation 有効、Node.js 統合無効、Sandbox 有効。IPC は必ず Preload スクリプト経由で実装してください。
+メインプロセスでは Electron のセキュリティベストプラクティスを適用しています：
+- **Context Isolation**: 有効（メインプロセス API へのアクセスを制限）
+- **Node.js 統合**: 無効（レンダラープロセスでの Node.js API アクセスを防止）
+- **Sandbox**: 有効（レンダラープロセスをサンドボックス化）
+- **webview タグ**: 有効（`webviewTag: true`、ページコンテンツを iframe のようにサンドボックス化）
+
+IPC は必ず Preload スクリプト経由で実装してください。webview 内コンテンツはさらに制限されたコンテキストで実行され、ホストレンダラーへのアクセスはできません。
 
 
 ## コーディング規約
@@ -112,7 +149,7 @@ src/
 
 | ライブラリ | 目的 |
 |---|---|
-| `zustand` | グローバル状態管理（プロジェクト状態、レイアウト設定） |
+| `zustand` | グローバル状態管理（プロジェクト・ページ状態、ビューポート設定） |
 | `@dnd-kit/react` | 開いているプロジェクトのドラッグ&ドロップ並び替え（React 19 対応） |
 | `@gravity-ui/icons` | House, Plus, Xmark などのアイコン |
 | `heroui-react` | UI コンポーネント（Button, Card, Modal, AlertDialog など） |

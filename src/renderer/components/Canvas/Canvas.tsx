@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import { selectActiveProject, useProjectStore } from '../../store/tab-store';
+import { Artboard } from '../Artboard/Artboard';
 import { ResizeHandle } from './ResizeHandle';
 import { Sidebar } from './Sidebar';
 
@@ -68,9 +69,7 @@ export function Canvas() {
     <div className="flex flex-1 overflow-hidden">
       <Sidebar ref={sidebarRef} initialWidth={sidebarWidth} />
       <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
-      <main className="flex flex-1 items-center justify-center bg-white">
-        <span className="text-sm text-gray-500">main</span>
-      </main>
+      <Artboard />
     </div>
   );
 }

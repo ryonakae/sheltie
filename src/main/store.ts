@@ -16,6 +16,8 @@ const schema = {
             title: { type: 'string' as const },
             sidebarWidth: { type: 'number' as const },
             createdAt: { type: 'number' as const },
+            pages: { type: 'array' as const },
+            viewport: { type: 'object' as const },
           },
           required: ['id', 'title', 'sidebarWidth', 'createdAt'],
         },
@@ -35,6 +37,8 @@ const DEFAULT_PROJECT_STATE: ProjectState = {
   openIds: [],
   activeId: '__home__',
 };
+
+const DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 };
 
 type StoreSchema = { projectState: ProjectState };
 
@@ -56,6 +60,8 @@ function migrateFromTabState(): void {
     title: t.title,
     sidebarWidth: t.sidebarWidth,
     createdAt: now,
+    pages: [],
+    viewport: DEFAULT_VIEWPORT,
   }));
 
   const migrated: ProjectState = {
@@ -69,7 +75,30 @@ function migrateFromTabState(): void {
   (store as any).delete('tabState');
 }
 
+/** pages/viewport フィールドがない既存プロジェクトにデフォルト値を補完する */
+function migrateToArtboard(): void {
+  const state = store.get('projectState', DEFAULT_PROJECT_STATE);
+  let migrated = false;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updatedProjects = state.projects.map((p: any) => {
+    const needsMigration = !('pages' in p) || !('viewport' in p);
+    if (!needsMigration) return p;
+    migrated = true;
+    return {
+      ...p,
+      pages: p.pages ?? [],
+      viewport: p.viewport ?? DEFAULT_VIEWPORT,
+    };
+  });
+
+  if (migrated) {
+    store.set('projectState', { ...state, projects: updatedProjects });
+  }
+}
+
 migrateFromTabState();
+migrateToArtboard();
 
 export function registerProjectStateHandlers(getWindow: () => Electron.BrowserWindow | null): void {
   ipcMain.handle('project-state:load', (): ProjectState => {

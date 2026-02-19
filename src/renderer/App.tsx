@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 480;
@@ -6,13 +6,25 @@ const SIDEBAR_DEFAULT_WIDTH = 320;
 
 export default function App() {
   const sidebarRef = useRef<HTMLElement>(null);
+  const isResizing = useRef(false);
+  const dragInfo = useRef({ startX: 0, startWidth: 0 });
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = sidebarRef.current?.offsetWidth ?? SIDEBAR_DEFAULT_WIDTH;
+    isResizing.current = true;
+    dragInfo.current = {
+      startX: e.clientX,
+      startWidth: sidebarRef.current?.offsetWidth ?? SIDEBAR_DEFAULT_WIDTH,
+    };
+    document.body.style.userSelect = 'none';
+  }, []);
 
-    const onMouseMove = (e: MouseEvent) => {
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) {
+        return;
+      }
+      const { startX, startWidth } = dragInfo.current;
       const delta = e.clientX - startX;
       const newWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + delta));
       if (sidebarRef.current) {
@@ -20,15 +32,20 @@ export default function App() {
       }
     };
 
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-      document.body.style.userSelect = '';
+    const handleMouseUp = () => {
+      if (isResizing.current) {
+        isResizing.current = false;
+        document.body.style.userSelect = '';
+      }
     };
 
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
   }, []);
 
   return (

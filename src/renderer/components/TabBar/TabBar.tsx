@@ -1,3 +1,5 @@
+import type React from 'react';
+
 import { DragDropProvider } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
 import House from '@gravity-ui/icons/House';
@@ -7,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { HOME_ID } from '../../types/tab';
 import { useProjectStore } from '../../store/tab-store';
+import { useWindowControlsInset } from '../../hooks/useWindowControlsInset';
 import { TabItem } from './TabItem';
 
 export function TabBar() {
@@ -37,8 +40,15 @@ export function TabBar() {
 
   const isHomeActive = activeId === HOME_ID;
 
+  const { left, right } = useWindowControlsInset();
+
   return (
-    <header className="flex h-9 shrink-0 items-stretch border-b border-gray-200 bg-gray-100">
+    <header
+      className="flex h-9 shrink-0 items-stretch border-b border-gray-200 bg-gray-100"
+      style={
+        { WebkitAppRegion: 'drag', paddingLeft: left, paddingRight: right } as React.CSSProperties
+      }
+    >
       {/* ホームボタン: クリックでホームキャンバスに切り替え */}
       <button
         className={[
@@ -47,6 +57,7 @@ export function TabBar() {
             ? 'border-b-blue-500 bg-white text-gray-900'
             : 'border-b-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-700',
         ].join(' ')}
+        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         onClick={() => setActive(HOME_ID)}
         aria-label="ホームに切り替え"
       >
@@ -68,6 +79,7 @@ export function TabBar() {
           reorderOpenProjects(newIds);
         }}
       >
+        {/* コンテナは drag を継承し、タブが少ない時も空き領域でウィンドウドラッグ可能 */}
         <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
           {openProjects.map((project, index) => (
             <TabItem
@@ -79,20 +91,20 @@ export function TabBar() {
               onClose={() => closeProject(project.id)}
             />
           ))}
+          {/* タブ追加ボタン: 最後のタブのすぐ右に配置 */}
+          <Button
+            isIconOnly
+            variant="ghost"
+            size="sm"
+            className="mx-1 self-center"
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            aria-label="プロジェクトを追加"
+            onPress={() => createProject()}
+          >
+            <Plus className="size-4" />
+          </Button>
         </div>
       </DragDropProvider>
-
-      {/* タブ追加ボタン */}
-      <Button
-        isIconOnly
-        variant="ghost"
-        size="sm"
-        className="mx-1 self-center"
-        aria-label="プロジェクトを追加"
-        onPress={() => createProject()}
-      >
-        <Plus className="size-4" />
-      </Button>
     </header>
   );
 }

@@ -27,9 +27,11 @@ Electron の 3 プロセス構造に沿って `src/` が分割されています
 ```
 src/
 ├── main/        # Electron メインプロセス (Node.js)
-│   └── index.ts # ウィンドウ生成・アプリライフサイクル管理
+│   └── index.ts # ウィンドウ生成・アプリライフサイクル管理（titleBarStyle、trafficLightPosition 設定含む）
 ├── preload/     # サンドボックス内のブリッジ
-│   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定
+│   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定（windowControls API 公開）
+├── shared/
+│   └── types.ts # ProjectStoreApi、WindowControlsInfo など共有型定義
 └── renderer/    # React レンダラープロセス (ブラウザ環境)
     ├── main.tsx # React エントリーポイント
     ├── App.tsx  # ルートコンポーネント（Zustand でプロジェクト状態管理）
@@ -40,13 +42,15 @@ src/
     ├── store/
     │   ├── tab-store.ts # Zustand ストア（useProjectStore、アクション定義）
     │   └── tab-persistence.ts # プロジェクト状態の永続化ロジック
+    ├── hooks/
+    │   └── useWindowControlsInset.ts # ウィンドウコントロール領域（タイトルバー）のインセット計算
     └── components/
         ├── Canvas/
         │   ├── Canvas.tsx # キャンバス全体（サイドバー + メイン領域）
         │   ├── Sidebar.tsx # サイドバーコンポーネント
         │   └── ResizeHandle.tsx # サイドバーリサイズハンドル
         ├── TabBar/
-        │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示）
+        │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示、useWindowControlsInset で macOS/Windows タイトルバー対応）
         │   └── TabItem.tsx # 個別プロジェクトタブ（ドラッグ可能）
         └── HomeScreen/
             ├── HomeScreen.tsx # プロジェクト一覧画面（カードグリッド）
@@ -67,6 +71,7 @@ src/
 - `openIds` に基づいて開いているプロジェクトのみ表示
 - `@dnd-kit/react` を使用したドラッグ&ドロップ並び替え対応
 - 各タブはホバー時に閉じるボタン（×）を表示
+- `useWindowControlsInset` で macOS トラフィックライト、Windows/Linux のコントロール領域に対応（`-webkit-app-region` スタイルで実装）
 
 **Canvas**: サイドバーとメイン領域を管理
 - サイドバー幅はプロジェクトごとに保持（リサイズ中は DOM 直接操作でパフォーマンス最適化）

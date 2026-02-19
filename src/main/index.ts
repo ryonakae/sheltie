@@ -13,11 +13,19 @@ let mainWindow: BrowserWindow | null = null;
 
 registerProjectStateHandlers(() => mainWindow);
 
+const isMac = process.platform === 'darwin';
+
+const TRAFFIC_LIGHT_POSITION = { x: 12, y: 10 };
+
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     show: false,
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    ...(isMac
+      ? { trafficLightPosition: TRAFFIC_LIGHT_POSITION }
+      : { titleBarOverlay: { color: '#f3f4f6', symbolColor: '#374151', height: 36 } }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

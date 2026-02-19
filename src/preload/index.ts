@@ -15,3 +15,10 @@ const api: ProjectStoreApi = {
 };
 
 contextBridge.exposeInMainWorld('api', api);
+// trafficLightPosition: { x: 12, y: 10 } ボタン直径 12px × 3 + 間隔 8px × 2 + 右マージン 6px
+const TRAFFIC_LIGHT_WIDTH = 12 + 12 * 3 + 8 * 2 + 6;
+
+contextBridge.exposeInMainWorld('windowControls', {
+  platform: process.platform,
+  trafficLightWidth: process.platform === 'darwin' ? TRAFFIC_LIGHT_WIDTH : 0,
+});

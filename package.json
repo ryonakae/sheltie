@@ -29,6 +29,8 @@
     ]
   },
   "dependencies": {
+    "@dnd-kit/react": "^0.3.2",
+    "@gravity-ui/icons": "^2.17.0",
     "@heroui/react": "^3.0.0-beta.6",
     "@heroui/styles": "^3.0.0-beta.6",
     "@tailwindcss/vite": "^4.2.0",

@@ -18,5 +18,11 @@
     "resolveJsonModule": true,
     "jsx": "react-jsx"
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "forge.config.ts", "forge.env.d.ts", "vite.*.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "forge.config.ts",
+    "forge.env.d.ts",
+    "vite.*.config.ts"
+  ]
 }

@@ -10,32 +10,32 @@
  *   MDX documentation including imports, usage, variants, props, examples
  */
 
-const API_BASE = process.env.HEROUI_API_BASE || "https://mcp-api.heroui.com";
-const FALLBACK_BASE = "https://v3.heroui.com";
-const APP_PARAM = "app=react-skills";
+const API_BASE = process.env.HEROUI_API_BASE || 'https://mcp-api.heroui.com';
+const FALLBACK_BASE = 'https://v3.heroui.com';
+const APP_PARAM = 'app=react-skills';
 
 /**
  * Convert PascalCase to kebab-case.
  */
 function toKebabCase(name) {
   return name
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/([A-Z])([A-Z][a-z])/g, "$1-$2")
+    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
     .toLowerCase();
 }
 
 /**
  * Fetch data from HeroUI API with app parameter for analytics.
  */
-async function fetchApi(endpoint, method = "GET", body = null) {
-  const separator = endpoint.includes("?") ? "&" : "?";
+async function fetchApi(endpoint, method = 'GET', body = null) {
+  const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${API_BASE}${endpoint}${separator}${APP_PARAM}`;
 
   try {
     const options = {
       headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "HeroUI-Skill/1.0",
+        'Content-Type': 'application/json',
+        'User-Agent': 'HeroUI-Skill/1.0',
       },
       method,
       signal: AbortSignal.timeout(30000),
@@ -66,12 +66,12 @@ async function fetchFallback(component) {
 
   try {
     const response = await fetch(url, {
-      headers: {"User-Agent": "HeroUI-Skill/1.0"},
+      headers: { 'User-Agent': 'HeroUI-Skill/1.0' },
       signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
-      return {component, error: `Failed to fetch docs for ${component}`};
+      return { component, error: `Failed to fetch docs for ${component}` };
     }
 
     const content = await response.text();
@@ -79,12 +79,12 @@ async function fetchFallback(component) {
     return {
       component,
       content,
-      contentType: "mdx",
-      source: "fallback",
+      contentType: 'mdx',
+      source: 'fallback',
       url,
     };
   } catch {
-    return {component, error: `Failed to fetch docs for ${component}`};
+    return { component, error: `Failed to fetch docs for ${component}` };
   }
 }
 
@@ -95,16 +95,16 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
-    console.error("Usage: node get_component_docs.mjs <Component1> [Component2] ...");
-    console.error("Example: node get_component_docs.mjs Button Card");
+    console.error('Usage: node get_component_docs.mjs <Component1> [Component2] ...');
+    console.error('Example: node get_component_docs.mjs Button Card');
     process.exit(1);
   }
 
   const components = args;
 
   // Try API first - use POST /v1/components/docs for batch requests
-  console.error(`# Fetching docs for: ${components.join(", ")}...`);
-  const data = await fetchApi("/v1/components/docs", "POST", {components});
+  console.error(`# Fetching docs for: ${components.join(', ')}...`);
+  const data = await fetchApi('/v1/components/docs', 'POST', { components });
 
   if (data && data.results) {
     // Output results
@@ -129,7 +129,7 @@ async function main() {
   }
 
   // Fallback to individual component fetches
-  console.error("# API failed, using fallback...");
+  console.error('# API failed, using fallback...');
   const results = [];
 
   for (const component of components) {

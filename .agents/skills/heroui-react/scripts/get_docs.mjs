@@ -12,9 +12,9 @@
  * Note: For component docs, use get_component_docs.mjs instead.
  */
 
-const API_BASE = process.env.HEROUI_API_BASE || "https://mcp-api.heroui.com";
-const FALLBACK_BASE = "https://v3.heroui.com";
-const APP_PARAM = "app=react-skills";
+const API_BASE = process.env.HEROUI_API_BASE || 'https://mcp-api.heroui.com';
+const FALLBACK_BASE = 'https://v3.heroui.com';
+const APP_PARAM = 'app=react-skills';
 
 /**
  * Fetch documentation from HeroUI API.
@@ -24,18 +24,18 @@ async function fetchApi(path) {
   // The v1 API expects path without /docs/ prefix
   // Input: /docs/react/getting-started/theming
   // API expects: react/getting-started/theming (route is /v1/docs/:path(*))
-  let apiPath = path.startsWith("/docs/")
+  let apiPath = path.startsWith('/docs/')
     ? path.slice(6) // Remove /docs/ prefix
-    : path.startsWith("/")
+    : path.startsWith('/')
       ? path.slice(1) // Remove leading /
       : path;
 
-  const separator = "?";
+  const separator = '?';
   const url = `${API_BASE}/v1/docs/${apiPath}${separator}${APP_PARAM}`;
 
   try {
     const response = await fetch(url, {
-      headers: {"User-Agent": "HeroUI-Skill/1.0"},
+      headers: { 'User-Agent': 'HeroUI-Skill/1.0' },
       signal: AbortSignal.timeout(30000),
     });
 
@@ -58,9 +58,9 @@ async function fetchApi(path) {
  */
 async function fetchFallback(path) {
   // Ensure path starts with /docs and ends with .mdx
-  let cleanPath = path.replace(/^\//, "");
+  let cleanPath = path.replace(/^\//, '');
 
-  if (!cleanPath.endsWith(".mdx")) {
+  if (!cleanPath.endsWith('.mdx')) {
     cleanPath = `${cleanPath}.mdx`;
   }
 
@@ -68,25 +68,25 @@ async function fetchFallback(path) {
 
   try {
     const response = await fetch(url, {
-      headers: {"User-Agent": "HeroUI-Skill/1.0"},
+      headers: { 'User-Agent': 'HeroUI-Skill/1.0' },
       signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
-      return {error: `HTTP ${response.status}: ${response.statusText}`, path};
+      return { error: `HTTP ${response.status}: ${response.statusText}`, path };
     }
 
     const content = await response.text();
 
     return {
       content,
-      contentType: "mdx",
+      contentType: 'mdx',
       path,
-      source: "fallback",
+      source: 'fallback',
       url,
     };
   } catch (error) {
-    return {error: `Fetch Error: ${error.message}`, path};
+    return { error: `Fetch Error: ${error.message}`, path };
   }
 }
 
@@ -97,25 +97,25 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
-    console.error("Usage: node get_docs.mjs <path>");
-    console.error("Example: node get_docs.mjs /docs/react/getting-started/theming");
+    console.error('Usage: node get_docs.mjs <path>');
+    console.error('Example: node get_docs.mjs /docs/react/getting-started/theming');
     console.error();
-    console.error("Available paths include:");
-    console.error("  /docs/react/getting-started/theming");
-    console.error("  /docs/react/getting-started/colors");
-    console.error("  /docs/react/getting-started/animations");
-    console.error("  /docs/react/releases/v3-0-0-beta-3");
+    console.error('Available paths include:');
+    console.error('  /docs/react/getting-started/theming');
+    console.error('  /docs/react/getting-started/colors');
+    console.error('  /docs/react/getting-started/animations');
+    console.error('  /docs/react/releases/v3-0-0-beta-3');
     console.error();
-    console.error("Note: For component docs, use get_component_docs.mjs instead.");
+    console.error('Note: For component docs, use get_component_docs.mjs instead.');
     process.exit(1);
   }
 
   const path = args[0];
 
   // Check if user is trying to get component docs
-  if (path.includes("/components/")) {
-    console.error("# Warning: Use get_component_docs.mjs for component documentation.");
-    const componentName = path.split("/").pop().replace(".mdx", "");
+  if (path.includes('/components/')) {
+    console.error('# Warning: Use get_component_docs.mjs for component documentation.');
+    const componentName = path.split('/').pop().replace('.mdx', '');
     const titleCase = componentName.charAt(0).toUpperCase() + componentName.slice(1);
 
     console.error(`# Example: node get_component_docs.mjs ${titleCase}`);
@@ -127,14 +127,14 @@ async function main() {
   const data = await fetchApi(path);
 
   if (data && data.content) {
-    data.source = "api";
+    data.source = 'api';
     console.log(data.content);
 
     return;
   }
 
   // Fallback to direct fetch
-  console.error("# API failed, using fallback...");
+  console.error('# API failed, using fallback...');
   const fallbackData = await fetchFallback(path);
 
   if (fallbackData.content) {

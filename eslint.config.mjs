@@ -16,6 +16,15 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   betterTailwindcss.configs['recommended'],
 
+  // Tailwind CSS エントリーポイントを指定してクラス順序チェックを有効化
+  {
+    settings: {
+      'better-tailwindcss': {
+        entryPoint: 'src/renderer/index.css',
+      },
+    },
+  },
+
   // Main / Preload プロセス（Node.js 環境）
   {
     files: ['src/main/**/*.ts', 'src/preload/**/*.ts'],
@@ -48,4 +57,11 @@ export default tseslint.config(
 
   // Prettier との競合ルールを無効化（必ず最後に配置）
   eslintConfigPrettier,
+
+  // enforce-consistent-line-wrapping は Prettier のフォーマットと競合するため無効化
+  {
+    rules: {
+      'better-tailwindcss/enforce-consistent-line-wrapping': 'off',
+    },
+  },
 );

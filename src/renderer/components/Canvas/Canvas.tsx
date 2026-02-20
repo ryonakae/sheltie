@@ -55,6 +55,8 @@ export function Canvas() {
       if (sidebarRef.current) {
         updateSidebarWidth(activeId, sidebarRef.current.offsetWidth);
       }
+      // サイドバー幅変更後に artboard の bounds を再同期する
+      window.dispatchEvent(new Event('resize'));
     };
 
     window.addEventListener('mousemove', handleMouseMove);

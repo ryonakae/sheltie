@@ -27,15 +27,17 @@ Electron の 3 プロセス構造に沿って `src/` が分割されています
 ```
 src/
 ├── main/        # Electron メインプロセス (Node.js)
-│   ├── index.ts # ウィンドウ生成・アプリライフサイクル管理（titleBarStyle、trafficLightPosition 設定、webviewTag 有効化）
+│   ├── index.ts # BaseWindow + WebContentsView 3層構成の初期化、IPC ハンドラー登録
+│   │             # (bgView 背景、pageViews ページレンダリング、mainView React SPA)
+│   ├── page-view-manager.ts # WebContentsView ライフサイクル管理クラス（生成・破棄・bounds 更新・z-order）
 │   └── store.ts # プロジェクト状態の永続化（ElectronStore）、マイグレーション処理
 ├── preload/     # サンドボックス内のブリッジ
-│   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定（windowControls API 公開）
+│   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定（windowControls、pageViewApi 公開）
 ├── shared/
-│   └── types.ts # ProjectStoreApi、WindowControlsInfo など共有型定義
+│   └── types.ts # ProjectStoreApi、WindowControlsInfo、PageViewApi、PageBounds など共有型定義
 └── renderer/    # React レンダラープロセス (ブラウザ環境)
     ├── main.tsx # React エントリーポイント
-    ├── App.tsx  # ルートコンポーネント（Zustand でプロジェクト状態管理）
+    ├── App.tsx  # ルートコンポーネント（Zustand でプロジェクト状態管理、ホーム表示時の pageViewApi 制御）
     ├── index.html
     ├── index.css
     ├── types/
@@ -44,15 +46,26 @@ src/
     │   ├── tab-store.ts # Zustand ストア（useProjectStore、ページ管理アクション含む）
     │   └── tab-persistence.ts # プロジェクト状態の永続化ロジック
     ├── hooks/
-    │   └── useWindowControlsInset.ts # ウィンドウコントロール領域（タイトルバー）のインセット計算
+    │   ├── useWindowControlsInset.ts # ウィンドウコントロール領域（タイトルバー）のインセット計算
+    │   ├── useArtboardPan.ts # パン操作（transform 変更時に onTransformChange コールバック）
+    │   ├── useArtboardZoom.ts # ズーム操作（transform 変更時に onTransformChange コールバック）
+    │   ├── usePageDrag.ts # ページドラッグ（位置変更、最前面制御）
+    │   └── usePageResize.ts # ページリサイズ（幅・高さ変更）
+    ├── utils/
+    │   └── page-bounds.ts # 座標変換ユーティリティ（TITLE_BAR_HEIGHT、RESIZE_INSET 定数、calcPageScreenBounds など）
     └── components/
         ├── Canvas/
-        │   ├── Canvas.tsx # キャンバス全体（Sidebar + Artboard）
+        │   ├── Canvas.tsx # キャンバス全体（Sidebar + Artboard）、サイドバー幅変更時に resize イベント発火
         │   ├── Sidebar.tsx # サイドバーコンポーネント（ページ一覧、AddPageForm）
         │   ├── AddPageForm.tsx # ページ追加フォーム
         │   └── ResizeHandle.tsx # サイドバーリサイズハンドル
         ├── Artboard/
-        │   └── Artboard.tsx # アートボード（webview コンテナ、ページレンダリング、ズーム・パン対応）
+        │   ├── Artboard.tsx # 操作モード制御（mainView/pageViews z-order）、pageViewApi 統合、bounds 同期
+        │   ├── InteractionOverlay.tsx # 操作中のカーソル制御（透明オーバーレイ）
+        │   ├── PageFrame.tsx # ページフレーム（プレースホルダー div、リサイズハンドル）
+        │   ├── PageTitleBar.tsx # ページタイトルバー（URL・タイトル表示）
+        │   ├── PageResizeHandle.tsx # リサイズハンドル（8方向）
+        │   └── InteractionOverlay.tsx # 操作中オーバーレイ
         ├── TabBar/
         │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示、useWindowControlsInset で macOS/Windows タイトルバー対応）
         │   └── TabItem.tsx # 個別プロジェクトタブ（ドラッグ可能）
@@ -60,7 +73,7 @@ src/
             ├── HomeScreen.tsx # プロジェクト一覧画面（カードグリッド）
             ├── ProjectCard.tsx # プロジェクトカード（HeroUI Card）
             ├── RenameModal.tsx # プロジェクト名変更モーダル（HeroUI Modal）
-            └── DeleteDialog.tsx # 削除確認ダイアログ（HeroUI AlertDialog）
+            └── DeleteDialog.tsx # 削除確認用ダイアログ（HeroUI AlertDialog）
 ```
 
 ### コンポーネント構成
@@ -82,12 +95,15 @@ src/
 - **ResizeHandle**: サイドバー幅調整可能（リサイズ中は DOM 直接操作でパフォーマンス最適化）
 - **Artboard**: キャンバス領域に複数の webview を配置、ドラッグ・リサイズ・ズーム・パン対応
 
-**Artboard**: ページレンダリング・ビューポート管理
-- 各ページを webview タグで描画（`webviewTag: true` で Electron でサンドボックス化）
-- ドラッグでページ移動（`updatePagePosition` で同期）、リサイズでサイズ変更（`updatePageSize` で同期）
-- マウスホイール or トラックパッドでズーム・パン（`updateViewport` で同期）
-- ページをクリックで最前面に（`bringPageToFront` で z-index 制御）
-- webview のナビゲーション検出で URL・タイトル更新（`updatePageUrl` で同期）
+**Artboard**: ページレンダリング・ビューポート管理・操作モード制御
+- 各ページを WebContentsView で描画（メインプロセス側 `PageViewManager` が生成・管理）
+- キャンバス座標から画面座標への変換を `page-bounds.ts` ユーティリティで計算
+- RAF を使って毎フレーム 1 回 `syncBounds()` で WebContentsView の bounds を一括更新
+- ドラッグでページ移動、リサイズでサイズ変更（`updatePagePosition`/`updatePageSize` で Zustand 状態更新）
+- マウスホイール or トラックパッドでズーム・パン、各操作後に `scheduleSyncBounds()` で bounds 再同期（`updateViewport` で Zustand 状態更新）
+- ページをクリックで最前面に（`bringPageToFront` で Zustand z-index 制御 + IPC で `pageViewApi.bringToFront()` 呼び出し）
+- 操作モード切り替え：ドラッグ/ズーム/パン 操作時は `mainView` が最上位（React が入力を受け取る）、操作終了時は `pageViews` が最上位（ウェブページが入力を受け取る）（`pageViewApi.setInteractionMode()` 経由）
+- IPC の `page-view:navigated`/`page-view:title-updated` イベントで URL・タイトル更新をリッスン
 
 **状態管理**: Zustand による共有状態管理（`useProjectStore` in `tab-store.ts`）
 - **プロジェクト管理アクション**: `createProject`, `openProject`, `closeProject`, `deleteProject`, `renameProject`, `setActive`, `reorderOpenProjects`, `updateSidebarWidth`
@@ -114,6 +130,26 @@ src/
 - `viewport: Viewport`: プロジェクトのビューポート状態
 - （既存）`id, title, sidebarWidth, createdAt`
 
+**PageBounds インターフェース** (`src/shared/types.ts`)
+- `x, y, width, height`: WebContentsView の位置・サイズ（ウィンドウスクリーン座標系）
+
+**ArtboardLayout インターフェース** (`src/shared/types.ts`)
+- `offsetX`: artboard 領域の左端（= sidebarWidth）
+- `offsetY`: artboard 領域の上端（= タブバー高さ）
+- `areaWidth, areaHeight`: artboard 領域の幅・高さ（clipView の bounds として設定）
+
+### PageViewManager と WebContentsView レイアウト
+
+メインプロセス側 (`src/main/page-view-manager.ts`) で WebContentsView のライフサイクルを統括管理：
+
+- **3 層構成**: contentView に bgView（背景）、clipView（ページ表示領域クリップ）、mainView（React SPA）を z-order で配置
+  - bgView: ドットパターン背景（最下層、z-index=0）
+  - clipView: pageViews のコンテナ（中層、bounds は artboard 領域に合わせて動的更新）
+  - mainView: React SPA（最上層の時は操作受け取り、奥層の時は非表示）
+- **z-order 動的切り替え**: 操作中は mainView が最上位（`addChildView(mainView)` で末尾移動）→入力 React が受け取り、操作終了時は clipView が最上位 → pageViews がクリック可能
+- **bounds 一括更新**: レンダラーから `page-view:batch-update-bounds` IPC で all pages の bounds を毎フレーム同期
+- **ナビゲーション検出**: 各 pageView の `did-navigate`/`page-title-updated` イベントをリッスン → mainView へ IPC 送信 → Artboard コンポーネントで Zustand 状態更新
+
 ### ビルドパイプライン
 
 3 つの独立した Vite 設定がそれぞれのプロセスをビルドします：
@@ -129,10 +165,10 @@ src/
 メインプロセスでは Electron のセキュリティベストプラクティスを適用しています：
 - **Context Isolation**: 有効（メインプロセス API へのアクセスを制限）
 - **Node.js 統合**: 無効（レンダラープロセスでの Node.js API アクセスを防止）
-- **Sandbox**: 有効（レンダラープロセスをサンドボックス化）
-- **webview タグ**: 有効（`webviewTag: true`、ページコンテンツを iframe のようにサンドボックス化）
+- **Sandbox**: 有効（mainView・bgView・pageViews すべてサンドボックス化）
+- **WebContentsView パーティション**: `persist:artboard` パーティション使用（各 pageView が同じセッションで cookie/storage 共有、独立した WebContents プロセス）
 
-IPC は必ず Preload スクリプト経由で実装してください。webview 内コンテンツはさらに制限されたコンテキストで実行され、ホストレンダラーへのアクセスはできません。
+IPC は必ず Preload スクリプト経由で実装してください。PageViewApi は `pageViewApi.createPageView()` / `pageViewApi.batchUpdateBounds()` など、メインプロセス側 `PageViewManager` を操作するコマンドセットです。
 
 
 ## コーディング規約

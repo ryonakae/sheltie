@@ -1,2 +1,9 @@
 @import 'tailwindcss';
 @import '@heroui/styles';
+
+/* mainView (React SPA) の背景を透明にして、背後の bgView (ドットパターン) と
+   pageViews (WebContentsView) が透けて見えるようにする */
+html,
+body {
+  background: transparent;
+}

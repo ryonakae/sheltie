@@ -100,7 +100,7 @@ function migrateToArtboard(): void {
 migrateFromTabState();
 migrateToArtboard();
 
-export function registerProjectStateHandlers(getWindow: () => Electron.BrowserWindow | null): void {
+export function registerProjectStateHandlers(getWindow: () => Electron.BaseWindow | null): void {
   ipcMain.handle('project-state:load', (): ProjectState => {
     return store.get('projectState', DEFAULT_PROJECT_STATE);
   });

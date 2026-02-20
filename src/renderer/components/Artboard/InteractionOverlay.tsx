@@ -1,7 +1,7 @@
 /**
- * ドラッグ/パン/リサイズ操作中に webview 上に被せる透明オーバーレイ。
- * webview は独立プロセスのためホストのマウスイベントを飲み込んでしまう。
- * 操作中のみこのオーバーレイを表示してイベントをキャプチャする。
+ * ドラッグ/パン/リサイズ操作中に表示する透明オーバーレイ。
+ * 操作モード時は mainView が最上位に移動してマウスイベントをキャプチャするため、
+ * このオーバーレイはカーソル表示の制御を担う。
  */
 export function InteractionOverlay({ cursor }: { cursor: string }) {
   return <div className="pointer-events-auto absolute inset-0 z-50" style={{ cursor }} />;

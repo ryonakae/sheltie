@@ -11,6 +11,8 @@ interface UseArtboardZoomOptions {
   panX: React.RefObject<number>;
   panY: React.RefObject<number>;
   onZoomEnd: (zoom: number, panX: number, panY: number) => void;
+  /** transform 変更ごとに呼ばれる。WebContentsView の bounds 同期に使用 */
+  onTransformChange?: () => void;
 }
 
 /**
@@ -25,11 +27,13 @@ export function useArtboardZoom({
   panX,
   panY,
   onZoomEnd,
+  onTransformChange,
 }: UseArtboardZoomOptions) {
   const applyTransform = useCallback(() => {
     if (!canvasRef.current) return;
     canvasRef.current.style.transform = `translate(${panX.current}px, ${panY.current}px) scale(${zoom.current})`;
-  }, [canvasRef, zoom, panX, panY]);
+    onTransformChange?.();
+  }, [canvasRef, zoom, panX, panY, onTransformChange]);
 
   useEffect(() => {
     const container = containerRef.current;

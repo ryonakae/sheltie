@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 
 import type { Page } from '../../types/tab';
 import { PageResizeHandle } from './PageResizeHandle';
@@ -9,57 +9,22 @@ type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 interface PageFrameProps {
   page: Page;
   isActive: boolean;
+  title: string;
   onActivate: () => void;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   onResizeStart: (e: React.MouseEvent, direction: ResizeDirection) => void;
-  onUrlChange: (url: string, title: string) => void;
 }
 
 export function PageFrame({
   page,
   isActive,
+  title,
   onActivate,
   onClose,
   onDragStart,
   onResizeStart,
-  onUrlChange,
 }: PageFrameProps) {
-  const webviewRef = useRef<Electron.WebviewTag>(null);
-  const [localTitle, setLocalTitle] = useState(page.title);
-
-  // webview のナビゲーションイベントを購読して URL とタイトルをストアに同期
-  useEffect(() => {
-    const webview = webviewRef.current;
-    if (!webview) return;
-
-    const handleNavigate = () => {
-      const url = webview.getURL();
-      let hostname = url;
-      try {
-        hostname = new URL(url).hostname;
-      } catch {
-        // URL パース失敗時はそのまま使用
-      }
-      setLocalTitle(hostname);
-      onUrlChange(url, hostname);
-    };
-
-    const handleTitleUpdate = (e: Electron.PageTitleUpdatedEvent) => {
-      setLocalTitle(e.title);
-    };
-
-    webview.addEventListener('did-navigate', handleNavigate);
-    webview.addEventListener('did-navigate-in-page', handleNavigate);
-    webview.addEventListener('page-title-updated', handleTitleUpdate);
-
-    return () => {
-      webview.removeEventListener('did-navigate', handleNavigate);
-      webview.removeEventListener('did-navigate-in-page', handleNavigate);
-      webview.removeEventListener('page-title-updated', handleTitleUpdate);
-    };
-  }, [onUrlChange]);
-
   const handleTitleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
       onActivate();
@@ -87,7 +52,7 @@ export function PageFrame({
       onMouseDown={onActivate}
     >
       <PageTitleBar
-        title={localTitle}
+        title={title}
         url={page.url}
         width={page.width}
         height={page.height}
@@ -95,14 +60,13 @@ export function PageFrame({
         onMouseDown={handleTitleBarMouseDown}
       />
 
-      <div className="relative overflow-hidden rounded-b-lg bg-white">
-        <webview
-          ref={webviewRef}
-          src={page.url}
-          partition="persist:artboard"
-          style={{ width: page.width, height: page.height, display: 'block' }}
-        />
-      </div>
+      {/* WebContentsView がネイティブレイヤーでこの領域に表示される。
+          透明プレースホルダーとして高さを確保する */}
+      <div
+        data-page-placeholder
+        className="rounded-b-lg"
+        style={{ width: page.width, height: page.height }}
+      />
 
       {/* リサイズハンドル（8方向） */}
       {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeDirection[]).map((dir) => (

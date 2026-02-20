@@ -14,7 +14,8 @@ interface UsePageResizeOptions {
 interface ResizeState {
   pageId: string;
   frameEl: HTMLElement;
-  webviewEl: HTMLElement | null;
+  /** [data-page-placeholder] 要素。高さの取得と直接操作に使用 */
+  placeholderEl: HTMLElement | null;
   direction: ResizeDirection;
   startMouse: { x: number; y: number };
   startRect: { x: number; y: number; width: number; height: number };
@@ -32,20 +33,20 @@ export function usePageResize({ zoom, onResizeEnd, onInteractionChange }: UsePag
       const frameEl = (e.currentTarget as HTMLElement).closest('[data-page-id]') as HTMLElement;
       if (!frameEl) return;
 
+      const placeholderEl = frameEl.querySelector('[data-page-placeholder]') as HTMLElement | null;
+
       e.preventDefault();
       resizeState.current = {
         pageId,
         frameEl,
-        webviewEl: frameEl.querySelector('webview') as HTMLElement | null,
+        placeholderEl,
         direction,
         startMouse: { x: e.clientX, y: e.clientY },
         startRect: {
           x: parseInt(frameEl.style.left || '0', 10),
           y: parseInt(frameEl.style.top || '0', 10),
           width: frameEl.offsetWidth,
-          height: frameEl.querySelector('webview')
-            ? (frameEl.querySelector('webview') as HTMLElement).offsetHeight
-            : frameEl.offsetHeight,
+          height: placeholderEl ? placeholderEl.offsetHeight : frameEl.offsetHeight,
         },
       };
       document.body.style.userSelect = 'none';
@@ -86,9 +87,9 @@ export function usePageResize({ zoom, onResizeEnd, onInteractionChange }: UsePag
       state.frameEl.style.left = `${newX}px`;
       state.frameEl.style.top = `${newY}px`;
       state.frameEl.style.width = `${newW}px`;
-      if (state.webviewEl) {
-        state.webviewEl.style.width = `${newW}px`;
-        state.webviewEl.style.height = `${newH}px`;
+      if (state.placeholderEl) {
+        state.placeholderEl.style.width = `${newW}px`;
+        state.placeholderEl.style.height = `${newH}px`;
       }
     };
 
@@ -97,7 +98,7 @@ export function usePageResize({ zoom, onResizeEnd, onInteractionChange }: UsePag
       if (!state) return;
 
       const width = parseInt(state.frameEl.style.width || '0', 10);
-      const height = state.webviewEl ? state.webviewEl.offsetHeight : 0;
+      const height = state.placeholderEl ? state.placeholderEl.offsetHeight : 0;
 
       resizeState.current = null;
       document.body.style.userSelect = '';

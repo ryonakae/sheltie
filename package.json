@@ -1,5 +1,5 @@
 {
-  "name": "browser-artboard",
+  "name": "siteboard",
   "version": "1.0.0",
   "private": true,
   "main": ".vite/build/main.js",
@@ -72,5 +72,5 @@
   "engines": {
     "node": "22.14.0"
   },
-  "productName": "Browser Artboard"
+  "productName": "Siteboard"
 }

@@ -45,7 +45,7 @@ export function PageFrame({
     <div
       className={[
         'absolute flex flex-col rounded-lg shadow-lg',
-        isActive ? 'ring-2 ring-blue-400' : 'ring-1 ring-gray-300',
+        isActive ? 'ring-2 ring-focus' : 'ring-1 ring-border',
       ].join(' ')}
       style={{ left: page.x, top: page.y, width: page.width }}
       data-page-id={page.id}

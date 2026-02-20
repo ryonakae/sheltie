@@ -1,8 +1,8 @@
-import { app, BaseWindow, WebContentsView, ipcMain } from 'electron';
+import { app, BaseWindow, WebContentsView, ipcMain, nativeTheme } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
-import { registerProjectStateHandlers } from './store';
+import { registerProjectStateHandlers, getTheme, setTheme } from './store';
 import { PageViewManager } from './page-view-manager';
 import type { ArtboardLayout, PageBounds } from '../shared/types';
 
@@ -22,16 +22,40 @@ const TRAFFIC_LIGHT_POSITION = { x: 12, y: 10 };
 
 /**
  * artboard 背景用の HTML (ドットパターン)。
- * bgView に読み込ませてキャンバス背景を描画する。
+ * CSS 変数で light/dark を切り替える。bgView に読み込ませてキャンバス背景を描画する。
  */
 const BG_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  :root { --bg-color: #f9fafb; --dot-color: #d1d5db; }
+  .dark { --bg-color: #18181b; --dot-color: #27272a; }
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
-    background-color: #f9fafb;
-    background-image: radial-gradient(circle, #d1d5db 1px, transparent 1px);
+    background-color: var(--bg-color);
+    background-image: radial-gradient(circle, var(--dot-color) 1px, transparent 1px);
     background-size: 24px 24px; }
 </style></head><body></body></html>`;
 
+/** bgView の html 要素に .dark クラスをトグルしてテーマを反映する */
+function updateBgViewTheme(bgView: WebContentsView, isDark: boolean): void {
+  void bgView.webContents.executeJavaScript(
+    `document.documentElement.classList.toggle('dark', ${isDark})`,
+  );
+}
+
+/** Windows の titleBarOverlay をテーマに合わせて更新する */
+function updateTitleBarOverlay(win: BaseWindow, isDark: boolean): void {
+  if (isMac) return;
+  win.setTitleBarOverlay(
+    isDark
+      ? { color: '#18181b', symbolColor: '#a1a1aa', height: 36 }
+      : { color: '#f3f4f6', symbolColor: '#374151', height: 36 },
+  );
+}
+
 const createWindow = () => {
+  // 保存済みテーマを読み込み nativeTheme に反映
+  const savedTheme = getTheme();
+  nativeTheme.themeSource = savedTheme;
+  const initialIsDark = nativeTheme.shouldUseDarkColors;
+
   const win = new BaseWindow({
     width: 800,
     height: 600,
@@ -39,7 +63,11 @@ const createWindow = () => {
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac
       ? { trafficLightPosition: TRAFFIC_LIGHT_POSITION }
-      : { titleBarOverlay: { color: '#f3f4f6', symbolColor: '#374151', height: 36 } }),
+      : {
+          titleBarOverlay: initialIsDark
+            ? { color: '#18181b', symbolColor: '#a1a1aa', height: 36 }
+            : { color: '#f3f4f6', symbolColor: '#374151', height: 36 },
+        }),
   });
 
   mainWindow = win;
@@ -50,6 +78,10 @@ const createWindow = () => {
   });
   win.contentView.addChildView(bgView);
   void bgView.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(BG_HTML)}`);
+  // ロード完了後に初期テーマを適用（loadURL は非同期のため）
+  bgView.webContents.once('did-finish-load', () => {
+    updateBgViewTheme(bgView, initialIsDark);
+  });
 
   // ── メイン View (React SPA: index=1, bgView の直上) ───────
   const mainView = new WebContentsView({
@@ -66,6 +98,16 @@ const createWindow = () => {
 
   // ── PageViewManager (pageViews を mainView と bgView の間に挿入) ─
   pageViewManager = new PageViewManager(win, mainView, bgView);
+  pageViewManager.setDarkMode(initialIsDark);
+
+  // OS のテーマ変更を監視してすべてのビューに反映
+  nativeTheme.on('updated', () => {
+    const isDark = nativeTheme.shouldUseDarkColors;
+    updateBgViewTheme(bgView, isDark);
+    updateTitleBarOverlay(win, isDark);
+    pageViewManager?.setDarkMode(isDark);
+    mainView.webContents.send('theme:changed', isDark);
+  });
 
   // ウィンドウ全体を bgView と mainView が占有
   const resizeViews = () => {
@@ -107,6 +149,19 @@ const createWindow = () => {
     pageViewManager?.destroyAll();
     pageViewManager = null;
     mainWindow = null;
+  });
+
+  // ── IPC ハンドラー: テーマ ─────────────────────────────────
+
+  ipcMain.handle('theme:load', () => getTheme());
+
+  ipcMain.handle('theme:set', (_event, mode: string) => {
+    const validModes = ['system', 'light', 'dark'] as const;
+    type ThemeMode = (typeof validModes)[number];
+    if (!validModes.includes(mode as ThemeMode)) return false;
+    setTheme(mode as ThemeMode);
+    nativeTheme.themeSource = mode as ThemeMode;
+    return nativeTheme.shouldUseDarkColors;
   });
 
   // ── IPC ハンドラー: PageView 操作 ─────────────────────────

@@ -17,6 +17,7 @@ interface PageViewEntry {
 export class PageViewManager {
   private entries = new Map<string, PageViewEntry>();
   private lastZoom = 1;
+  private isDark = false;
   private readonly clipView: View;
 
   constructor(
@@ -48,7 +49,7 @@ export class PageViewManager {
       },
     });
 
-    view.setBackgroundColor('#ffffff');
+    view.setBackgroundColor(this.isDark ? '#18181b' : '#ffffff');
     // 初期状態は非表示（bounds 設定後に表示）
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
 
@@ -168,6 +169,15 @@ export class PageViewManager {
       width: layout.areaWidth,
       height: layout.areaHeight,
     });
+  }
+
+  /** ダークモードの切り替え。全 pageView の背景色を一括更新する */
+  setDarkMode(isDark: boolean): void {
+    this.isDark = isDark;
+    const bgColor = isDark ? '#18181b' : '#ffffff';
+    for (const entry of this.entries.values()) {
+      entry.view.setBackgroundColor(bgColor);
+    }
   }
 
   /** bgView と mainView の bounds をウィンドウ全体にリサイズ */

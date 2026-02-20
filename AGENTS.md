@@ -29,12 +29,16 @@ src/
 ├── main/        # Electron メインプロセス (Node.js)
 │   ├── index.ts # BaseWindow + WebContentsView 3層構成の初期化、IPC ハンドラー登録
 │   │             # (bgView 背景、pageViews ページレンダリング、mainView React SPA)
+│   │             # テーマ初期化（getTheme で保存済み値を読み込み、nativeTheme 同期）
+│   │             # OS テーマ変更監視（nativeTheme.on('updated')）で全ビューのテーマ更新
 │   ├── page-view-manager.ts # WebContentsView ライフサイクル管理クラス（生成・破棄・bounds 更新・z-order）
+│   │                        # setDarkMode で全 pageView の背景色を一括更新
 │   └── store.ts # プロジェクト状態の永続化（ElectronStore）、マイグレーション処理
+│               # テーマ設定の永続化（getTheme、setTheme IPC ハンドラー）
 ├── preload/     # サンドボックス内のブリッジ
-│   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定（windowControls、pageViewApi 公開）
+│   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定（api、windowControls、pageViewApi、themeApi 公開）
 ├── shared/
-│   └── types.ts # ProjectStoreApi、WindowControlsInfo、PageViewApi、PageBounds など共有型定義
+│   └── types.ts # ProjectStoreApi、WindowControlsInfo、PageViewApi、ThemeApi、PageBounds など共有型定義
 └── renderer/    # React レンダラープロセス (ブラウザ環境)
     ├── main.tsx # React エントリーポイント
     ├── App.tsx  # ルートコンポーネント（Zustand でプロジェクト状態管理、ホーム表示時の pageViewApi 制御）
@@ -42,9 +46,12 @@ src/
     ├── index.css
     ├── types/
     │   └── tab.ts # Project 型（pages[]、viewport を含む）、Page、Viewport、ProjectState の定義
+    ├── lib/
+    │   └── theme.ts # テーマ管理ユーティリティ（applyThemeToDocument で document root に dark/light クラス設定）
     ├── store/
     │   ├── tab-store.ts # Zustand ストア（useProjectStore、ページ管理アクション含む）
-    │   └── tab-persistence.ts # プロジェクト状態の永続化ロジック
+    │   ├── tab-persistence.ts # プロジェクト状態の永続化ロジック
+    │   └── theme-store.ts # Zustand テーマストア（isDark, mode, setMode, initialize 含む）
     ├── hooks/
     │   ├── useWindowControlsInset.ts # ウィンドウコントロール領域（タイトルバー）のインセット計算
     │   ├── useArtboardPan.ts # パン操作（transform 変更時に onTransformChange コールバック）
@@ -67,8 +74,9 @@ src/
         │   ├── PageResizeHandle.tsx # リサイズハンドル（8方向）
         │   └── InteractionOverlay.tsx # 操作中オーバーレイ
         ├── TabBar/
-        │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示、useWindowControlsInset で macOS/Windows タイトルバー対応）
-        │   └── TabItem.tsx # 個別プロジェクトタブ（ドラッグ可能）
+        │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示、useWindowControlsInset で macOS/Windows タイトルバー対応、ThemeToggle を配置）
+        │   ├── TabItem.tsx # 個別プロジェクトタブ（ドラッグ可能）
+        │   └── ThemeToggle.tsx # テーマ切り替えボタン（light/dark/system 選択、HeroUI Dropdown）
         └── HomeScreen/
             ├── HomeScreen.tsx # プロジェクト一覧画面（カードグリッド）
             ├── ProjectCard.tsx # プロジェクトカード（HeroUI Card）
@@ -105,12 +113,17 @@ src/
 - 操作モード切り替え：ドラッグ/ズーム/パン 操作時は `mainView` が最上位（React が入力を受け取る）、操作終了時は `pageViews` が最上位（ウェブページが入力を受け取る）（`pageViewApi.setInteractionMode()` 経由）
 - IPC の `page-view:navigated`/`page-view:title-updated` イベントで URL・タイトル更新をリッスン
 
-**状態管理**: Zustand による共有状態管理（`useProjectStore` in `tab-store.ts`）
-- **プロジェクト管理アクション**: `createProject`, `openProject`, `closeProject`, `deleteProject`, `renameProject`, `setActive`, `reorderOpenProjects`, `updateSidebarWidth`
-- **ページ管理アクション**: `addPage`, `removePage`, `updatePagePosition`, `updatePageSize`, `updatePageUrl`, `updateViewport`, `bringPageToFront`
-- **Selectors**: `selectActiveProject`, `selectIsHome`
-- 起動時に `tab-persistence.ts` で保存済み状態を復元（localStorage ベース）
-- プロジェクトライフサイクル: `createProject` で新規作成、`openProject` で開く（既開いていれば activeId 更新）、`closeProject` でタブバーから閉じる（openIds から除去）、`deleteProject` で削除（projects + openIds 両方から除去）
+**状態管理**: Zustand による共有状態管理
+- **useProjectStore** (`tab-store.ts`):
+  - **プロジェクト管理アクション**: `createProject`, `openProject`, `closeProject`, `deleteProject`, `renameProject`, `setActive`, `reorderOpenProjects`, `updateSidebarWidth`
+  - **ページ管理アクション**: `addPage`, `removePage`, `updatePagePosition`, `updatePageSize`, `updatePageUrl`, `updateViewport`, `bringPageToFront`
+  - **Selectors**: `selectActiveProject`, `selectIsHome`
+  - 起動時に `tab-persistence.ts` で保存済み状態を復元（localStorage ベース）
+  - プロジェクトライフサイクル: `createProject` で新規作成、`openProject` で開く（既開いていれば activeId 更新）、`closeProject` でタブバーから閉じる（openIds から除去）、`deleteProject` で削除（projects + openIds 両方から除去）
+- **useThemeStore** (`theme-store.ts`):
+  - **状態**: `mode` (ThemeMode: 'system'|'light'|'dark'), `isDark` (boolean)
+  - **アクション**: `initialize()` (起動時、保存済みテーマを読み込み document に反映)、`setMode(mode)` (IPC で theme:set を実行し OS 同期)
+  - 起動時に `main.tsx` で `setupThemeListener()` でリスナー登録、`initialize()` でテーマ適用
 
 ### データ構造
 
@@ -168,7 +181,20 @@ src/
 - **Sandbox**: 有効（mainView・bgView・pageViews すべてサンドボックス化）
 - **WebContentsView パーティション**: `persist:artboard` パーティション使用（各 pageView が同じセッションで cookie/storage 共有、独立した WebContents プロセス）
 
-IPC は必ず Preload スクリプト経由で実装してください。PageViewApi は `pageViewApi.createPageView()` / `pageViewApi.batchUpdateBounds()` など、メインプロセス側 `PageViewManager` を操作するコマンドセットです。
+### IPC チャネル
+
+**Renderer → Main**:
+- `project-state:load` / `project-state:save`: プロジェクト状態永続化
+- `page-view:create/destroy/batch-update-bounds/set-interaction-mode/show-project/bring-to-front/destroy-project/update-artboard-layout`: ページレンダリング・操作制御
+- `theme:load`: 保存済みテーマモード取得
+- `theme:set`: テーマモード設定（OS と同期、`shouldUseDarkColors` 返す）
+
+**Main → Renderer**:
+- `page-view:navigated` / `page-view:title-updated`: ページ URL・タイトル更新
+- `save-before-close`: ウィンドウクローズ前に状態保存
+- `theme:changed`: OS テーマ変更時に isDark フラグを送信（`ThemeToggle` や document 反映に使用）
+
+IPC は必ず Preload スクリプト経由で実装してください。全 API は `src/shared/types.ts` で `ProjectStoreApi`, `PageViewApi`, `ThemeApi` インターフェースとして定義されています。
 
 
 ## コーディング規約

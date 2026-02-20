@@ -6,7 +6,7 @@ interface ResizeHandleProps {
 export function ResizeHandle({ onMouseDown, onDoubleClick }: ResizeHandleProps) {
   return (
     <div
-      className="w-1 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400"
+      className="w-1 shrink-0 cursor-col-resize bg-border hover:bg-accent"
       onMouseDown={onMouseDown}
       onDoubleClick={onDoubleClick}
     />

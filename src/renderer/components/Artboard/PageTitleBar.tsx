@@ -19,22 +19,22 @@ export function PageTitleBar({
 }: PageTitleBarProps) {
   return (
     <div
-      className="flex h-8 shrink-0 cursor-grab items-center gap-2 rounded-t-lg border border-b-0 border-gray-300 bg-gray-100 px-2 select-none active:cursor-grabbing"
+      className="flex h-8 shrink-0 cursor-grab items-center gap-2 rounded-t-lg border border-b-0 border-border-secondary bg-default px-2 select-none active:cursor-grabbing"
       onMouseDown={onMouseDown}
     >
       {/* タイトル */}
-      <span className="min-w-0 flex-1 truncate text-xs text-gray-700" title={url}>
+      <span className="min-w-0 flex-1 truncate text-xs text-foreground" title={url}>
         {title || url}
       </span>
 
       {/* サイズ表示 */}
-      <span className="shrink-0 text-xs text-gray-400">
+      <span className="shrink-0 text-xs text-muted">
         {width} × {height}
       </span>
 
       {/* 閉じるボタン */}
       <button
-        className="shrink-0 rounded-sm p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+        className="shrink-0 rounded-sm p-0.5 text-muted hover:bg-default-hover hover:text-foreground"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={onClose}
         aria-label="ページを閉じる"

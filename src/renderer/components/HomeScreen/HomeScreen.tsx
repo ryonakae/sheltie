@@ -16,7 +16,7 @@ export function HomeScreen() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <h2 className="mb-4 text-lg font-semibold text-gray-700">プロジェクト</h2>
+      <h2 className="mb-4 text-lg font-semibold text-foreground">プロジェクト</h2>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {projects.map((project) => (
           <ProjectCard key={project.id} project={project} onOpen={() => openProject(project.id)} />
@@ -24,7 +24,7 @@ export function HomeScreen() {
 
         {/* 新規プロジェクト追加カード */}
         <button
-          className="flex min-h-[120px] cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 text-gray-400 transition-colors hover:border-gray-400 hover:text-gray-500"
+          className="flex min-h-[120px] cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-border-secondary text-muted transition-colors hover:border-border-tertiary hover:text-foreground"
           onClick={() => createProject()}
           aria-label="新規プロジェクトを追加"
         >
@@ -33,7 +33,7 @@ export function HomeScreen() {
       </div>
 
       {projects.length === 0 && (
-        <p className="mt-8 text-center text-sm text-gray-400">
+        <p className="mt-8 text-center text-sm text-muted">
           「+」ボタンをクリックして最初のプロジェクトを作成してください
         </p>
       )}

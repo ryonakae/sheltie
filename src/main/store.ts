@@ -1,9 +1,13 @@
 import { ipcMain } from 'electron';
 import ElectronStore from 'electron-store';
 
-import type { Project, ProjectState } from '../shared/types';
+import type { Project, ProjectState, ThemeMode } from '../shared/types';
 
 const schema = {
+  theme: {
+    type: 'string' as const,
+    enum: ['system', 'light', 'dark'],
+  },
   projectState: {
     type: 'object' as const,
     properties: {
@@ -40,11 +44,11 @@ const DEFAULT_PROJECT_STATE: ProjectState = {
 
 const DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 };
 
-type StoreSchema = { projectState: ProjectState };
+type StoreSchema = { projectState: ProjectState; theme: ThemeMode };
 
 const store = new ElectronStore<StoreSchema>({
   schema,
-  defaults: { projectState: DEFAULT_PROJECT_STATE },
+  defaults: { projectState: DEFAULT_PROJECT_STATE, theme: 'system' },
 });
 
 /** 旧 tabState 形式からのマイグレーション */
@@ -99,6 +103,14 @@ function migrateToArtboard(): void {
 
 migrateFromTabState();
 migrateToArtboard();
+
+export function getTheme(): ThemeMode {
+  return store.get('theme', 'system');
+}
+
+export function setTheme(mode: ThemeMode): void {
+  store.set('theme', mode);
+}
 
 export function registerProjectStateHandlers(getWindow: () => Electron.BaseWindow | null): void {
   ipcMain.handle('project-state:load', (): ProjectState => {

@@ -35,10 +35,10 @@ export const TabItem = memo(function TabItem({
     <div
       ref={ref}
       className={[
-        'group relative flex h-full cursor-pointer items-center gap-1 border-r border-b-2 border-gray-200 px-3 text-sm transition-colors select-none',
+        'group relative flex h-full cursor-pointer items-center gap-1 border-r border-b-2 border-border px-3 text-sm transition-colors select-none',
         isActive
-          ? 'border-b-blue-500 bg-white text-gray-900'
-          : 'border-b-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-700',
+          ? 'border-b-accent bg-surface text-foreground'
+          : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
         isDragging ? 'opacity-50' : '',
       ].join(' ')}
       style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
@@ -46,7 +46,7 @@ export const TabItem = memo(function TabItem({
     >
       <span className="max-w-28 truncate">{project.title}</span>
       <button
-        className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-gray-300"
+        className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-background-tertiary"
         onClick={handleClose}
         aria-label={`${project.title}を閉じる`}
       >

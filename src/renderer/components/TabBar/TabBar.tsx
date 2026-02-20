@@ -11,6 +11,7 @@ import { HOME_ID } from '../../types/tab';
 import { useProjectStore } from '../../store/tab-store';
 import { useWindowControlsInset } from '../../hooks/useWindowControlsInset';
 import { TabItem } from './TabItem';
+import { ThemeToggle } from './ThemeToggle';
 
 export function TabBar() {
   const {
@@ -44,7 +45,7 @@ export function TabBar() {
 
   return (
     <header
-      className="flex h-9 shrink-0 items-stretch border-b border-gray-200 bg-gray-100"
+      className="flex h-9 shrink-0 items-stretch border-b border-border bg-default"
       style={
         { WebkitAppRegion: 'drag', paddingLeft: left, paddingRight: right } as React.CSSProperties
       }
@@ -52,10 +53,10 @@ export function TabBar() {
       {/* ホームボタン: クリックでホームキャンバスに切り替え */}
       <button
         className={[
-          'flex shrink-0 cursor-pointer items-center border-r border-b-2 border-gray-200 px-3 transition-colors select-none',
+          'flex shrink-0 cursor-pointer items-center border-r border-b-2 border-border px-3 transition-colors select-none',
           isHomeActive
-            ? 'border-b-blue-500 bg-white text-gray-900'
-            : 'border-b-transparent text-gray-500 hover:bg-gray-200/50 hover:text-gray-700',
+            ? 'border-b-accent bg-surface text-foreground'
+            : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
         ].join(' ')}
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         onClick={() => setActive(HOME_ID)}
@@ -105,6 +106,14 @@ export function TabBar() {
           </Button>
         </div>
       </DragDropProvider>
+
+      {/* テーマ切替ボタン: DragDropProvider の外、ウィンドウコントロールの左に配置 */}
+      <div
+        className="flex shrink-0 items-center px-1"
+        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      >
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

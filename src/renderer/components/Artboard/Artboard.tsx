@@ -259,7 +259,7 @@ export function Artboard() {
       {/* ページが 0 件の場合のガイドメッセージ */}
       {pages.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-muted">
             サイドバーの「ページを追加」から URL を入力してください
           </p>
         </div>

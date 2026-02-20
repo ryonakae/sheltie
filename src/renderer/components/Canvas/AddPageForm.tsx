@@ -30,7 +30,7 @@ export function AddPageForm({ onAdd }: AddPageFormProps) {
   if (!isOpen) {
     return (
       <button
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-200"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-default-hover"
         onClick={() => setIsOpen(true)}
       >
         <Plus className="size-4 shrink-0" />

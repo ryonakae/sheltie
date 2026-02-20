@@ -2,6 +2,14 @@ import type { Project, ProjectState } from '../renderer/types/tab';
 
 export type { Project, ProjectState };
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
+export interface ThemeApi {
+  loadTheme: () => Promise<ThemeMode>;
+  setTheme: (mode: ThemeMode) => Promise<boolean>;
+  onThemeChanged: (callback: (isDark: boolean) => void) => void;
+}
+
 export interface ProjectStoreApi {
   loadProjectState: () => Promise<ProjectState>;
   saveProjectState: (state: ProjectState) => Promise<void>;
@@ -63,5 +71,6 @@ declare global {
     api: ProjectStoreApi;
     windowControls: WindowControlsInfo;
     pageViewApi: PageViewApi;
+    themeApi: ThemeApi;
   }
 }

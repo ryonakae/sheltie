@@ -3,7 +3,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { PageViewApi, ProjectStoreApi } from '../shared/types';
+import type { PageViewApi, ProjectStoreApi, ThemeApi } from '../shared/types';
 
 const api: ProjectStoreApi = {
   loadProjectState: () => ipcRenderer.invoke('project-state:load'),
@@ -64,3 +64,13 @@ const pageViewApi: PageViewApi = {
 };
 
 contextBridge.exposeInMainWorld('pageViewApi', pageViewApi);
+
+const themeApi: ThemeApi = {
+  loadTheme: () => ipcRenderer.invoke('theme:load'),
+  setTheme: (mode) => ipcRenderer.invoke('theme:set', mode),
+  onThemeChanged: (callback) => {
+    ipcRenderer.on('theme:changed', (_event, isDark: boolean) => callback(isDark));
+  },
+};
+
+contextBridge.exposeInMainWorld('themeApi', themeApi);

@@ -67,6 +67,7 @@ src/
         │   ├── Artboard.tsx # キャンバス管理・操作制御（zoom/pan/drag/resize、pointer-events 制御）
         │   ├── InteractionOverlay.tsx # 操作中のカーソル制御（透明オーバーレイ）
         │   ├── PageFrame.tsx # ページフレーム（<webview> タグ、リサイズハンドル、タイトルバー）
+        │   │                 # dom-ready で setZoomFactor(1) を実行し、persist:artboard に残留した zoomFactor をリセット
         │   ├── PageTitleBar.tsx # ページタイトルバー（URL・タイトル表示）
         │   └── PageResizeHandle.tsx # リサイズハンドル（8方向）
         ├── TabBar/
@@ -187,6 +188,7 @@ IPC は必ず Preload スクリプト経由で実装してください。全 API
 - **状態管理**: グローバル共有状態は Zustand を使用。コンポーネントローカル状態は `useState` で十分
 - **DOM 操作**: サイドバー幅調整のような高頻度アップデートはレンダリング外で行い、確定時のみ dispatch で同期
 - **ズーム対応 UI**: アートボード内の UI 要素（ボーダー、パディング、アイコンサイズなど）はズーム値に応じて動的にスケーリング必要。実装方法: `--canvas-zoom` CSS Custom Property をルート canvas 要素に設定し、各 UI 要素は `calc(base-size / var(--canvas-zoom, 1))` で自動スケーリング。これにより、ズーム・パン時に React 再レンダリングを回避
+- **WebView パーティション persistence**: `persist:artboard` パーティションはセッション間でデータを保持。zoomFactor など、セッション開始時にリセットすべき webview 設定がある場合は、dom-ready イベントで明示的にリセット（例: `webview.setZoomFactor(1)`）する
 
 
 ## 主要ライブラリ

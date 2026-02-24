@@ -66,6 +66,22 @@ export function PageFrame({
     };
   }, [page.id, onNavigated, onTitleUpdated]);
 
+  // persist:artboard パーティションに前回セッションの zoomFactor が残留している場合に
+  // 備えて、dom-ready のタイミングで明示的に 1.0 にリセットする
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+
+    const resetZoom = () => {
+      webview.setZoomFactor(1);
+    };
+
+    webview.addEventListener('dom-ready', resetZoom);
+    return () => {
+      webview.removeEventListener('dom-ready', resetZoom);
+    };
+  }, []);
+
   const handleTitleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
       onActivate();

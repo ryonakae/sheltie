@@ -1,4 +1,4 @@
-import { useProjectStore } from './tab-store';
+import { useProjectStore } from '@/renderer/store/tab-store';
 
 const SAVE_DEBOUNCE_MS = 500;
 

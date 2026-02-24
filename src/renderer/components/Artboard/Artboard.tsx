@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useShallow } from 'zustand/react/shallow';
 
-import { selectActiveProject, useProjectStore } from '../../store/tab-store';
-import { useArtboardPan } from '../../hooks/useArtboardPan';
-import { useArtboardZoom } from '../../hooks/useArtboardZoom';
-import { usePageDrag } from '../../hooks/usePageDrag';
-import { usePageResize } from '../../hooks/usePageResize';
-import { InteractionOverlay } from './InteractionOverlay';
-import { PageFrame, type ResizeDirection } from './PageFrame';
+import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
+import { useArtboardPan } from '@/renderer/hooks/useArtboardPan';
+import { useArtboardZoom } from '@/renderer/hooks/useArtboardZoom';
+import { usePageDrag } from '@/renderer/hooks/usePageDrag';
+import { usePageResize } from '@/renderer/hooks/usePageResize';
+import { InteractionOverlay } from '@/renderer/components/Artboard/InteractionOverlay';
+import { PageFrame, type ResizeDirection } from '@/renderer/components/Artboard/PageFrame';
 
 export function Artboard() {
   const activeProject = useProjectStore(selectActiveProject);

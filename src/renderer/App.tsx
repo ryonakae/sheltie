@@ -1,7 +1,7 @@
-import { Canvas } from './components/Canvas/Canvas';
-import { HomeScreen } from './components/HomeScreen/HomeScreen';
-import { TabBar } from './components/TabBar/TabBar';
-import { selectIsHome, useProjectStore } from './store/tab-store';
+import { Canvas } from '@/renderer/components/Canvas/Canvas';
+import { HomeScreen } from '@/renderer/components/HomeScreen/HomeScreen';
+import { TabBar } from '@/renderer/components/TabBar/TabBar';
+import { selectIsHome, useProjectStore } from '@/renderer/store/tab-store';
 
 export default function App() {
   const isLoaded = useProjectStore((s) => s.isLoaded);

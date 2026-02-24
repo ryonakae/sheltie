@@ -2,8 +2,8 @@ import { useState } from 'react';
 
 import { AlertDialog, Button } from '@heroui/react';
 
-import type { Project } from '../../types/tab';
-import { useProjectStore } from '../../store/tab-store';
+import type { Project } from '@/renderer/types/tab';
+import { useProjectStore } from '@/renderer/store/tab-store';
 
 interface DeleteDialogProps {
   project: Project;

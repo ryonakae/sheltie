@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import ElectronStore from 'electron-store';
 
-import type { Project, ProjectState, ThemeMode } from '../shared/types';
+import type { Project, ProjectState, ThemeMode } from '@/shared/types';
 
 const schema = {
   theme: {

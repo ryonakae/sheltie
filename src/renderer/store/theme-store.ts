@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import type { ThemeMode } from '../../shared/types';
-import { applyThemeToDocument } from '../lib/theme';
+import type { ThemeMode } from '@/shared/types';
+import { applyThemeToDocument } from '@/renderer/lib/theme';
 
 interface ThemeState {
   mode: ThemeMode;

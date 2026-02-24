@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 
-import { DEFAULT_PAGE_HEIGHT, DEFAULT_PAGE_WIDTH, DEFAULT_VIEWPORT, HOME_ID } from '../types/tab';
-import type { Page, Project, ProjectState, Viewport } from '../types/tab';
+import {
+  DEFAULT_PAGE_HEIGHT,
+  DEFAULT_PAGE_WIDTH,
+  DEFAULT_VIEWPORT,
+  HOME_ID,
+} from '@/renderer/types/tab';
+import type { Page, Project, ProjectState, Viewport } from '@/renderer/types/tab';
 
 const SIDEBAR_DEFAULT_WIDTH = 320;
 const PAGE_GAP = 100;

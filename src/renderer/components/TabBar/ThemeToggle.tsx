@@ -3,8 +3,8 @@ import Moon from '@gravity-ui/icons/Moon';
 import Sun from '@gravity-ui/icons/Sun';
 import { Button, Dropdown, Label, Separator } from '@heroui/react';
 
-import type { ThemeMode } from '../../../shared/types';
-import { useThemeStore } from '../../store/theme-store';
+import type { ThemeMode } from '@/shared/types';
+import { useThemeStore } from '@/renderer/store/theme-store';
 
 export function ThemeToggle() {
   const { isDark, setMode } = useThemeStore();

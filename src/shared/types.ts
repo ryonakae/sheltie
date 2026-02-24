@@ -1,4 +1,4 @@
-import type { Project, ProjectState } from '../renderer/types/tab';
+import type { Project, ProjectState } from '@/renderer/types/tab';
 
 export type { Project, ProjectState };
 

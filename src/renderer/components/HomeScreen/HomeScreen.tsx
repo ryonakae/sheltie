@@ -1,9 +1,9 @@
 import Plus from '@gravity-ui/icons/Plus';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useProjectStore } from '../../store/tab-store';
+import { useProjectStore } from '@/renderer/store/tab-store';
 
-import { ProjectCard } from './ProjectCard';
+import { ProjectCard } from '@/renderer/components/HomeScreen/ProjectCard';
 
 export function HomeScreen() {
   const { projects, createProject, openProject } = useProjectStore(

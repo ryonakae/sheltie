@@ -3,7 +3,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { ProjectStoreApi, ThemeApi } from '../shared/types';
+import type { ProjectStoreApi, ThemeApi } from '@/shared/types';
 
 const api: ProjectStoreApi = {
   loadProjectState: () => ipcRenderer.invoke('project-state:load'),

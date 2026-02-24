@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import { selectActiveProject, useProjectStore } from '../../store/tab-store';
-import { Artboard } from '../Artboard/Artboard';
-import { ResizeHandle } from './ResizeHandle';
-import { Sidebar } from './Sidebar';
+import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
+import { Artboard } from '@/renderer/components/Artboard/Artboard';
+import { ResizeHandle } from '@/renderer/components/Canvas/ResizeHandle';
+import { Sidebar } from '@/renderer/components/Canvas/Sidebar';
 
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 480;

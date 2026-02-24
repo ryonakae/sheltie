@@ -4,7 +4,7 @@ import type React from 'react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import Xmark from '@gravity-ui/icons/Xmark';
 
-import type { Project } from '../../types/tab';
+import type { Project } from '@/renderer/types/tab';
 
 interface TabItemProps {
   project: Project;

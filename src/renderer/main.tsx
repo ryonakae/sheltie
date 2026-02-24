@@ -1,8 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
-import { setupProjectPersistence } from './store/tab-persistence';
-import { setupThemeListener, useThemeStore } from './store/theme-store';
+import App from '@/renderer/App';
+import { setupProjectPersistence } from '@/renderer/store/tab-persistence';
+import { setupThemeListener, useThemeStore } from '@/renderer/store/theme-store';
 import './index.css';
 
 // React マウント前に永続化・テーマをセットアップ

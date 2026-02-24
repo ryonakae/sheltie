@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import type { Page } from '../../types/tab';
-import { PageResizeHandle } from './PageResizeHandle';
-import { PageTitleBar } from './PageTitleBar';
+import type { Page } from '@/renderer/types/tab';
+import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
+import { PageTitleBar } from '@/renderer/components/Artboard/PageTitleBar';
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 

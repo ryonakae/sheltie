@@ -182,6 +182,7 @@ IPC は必ず Preload スクリプト経由で実装してください。全 API
 - **コンポーネント**: Hero UI v3 を優先使用し、不足時のみ独自実装。 `heroui-react` スキル、 `heroui-react` MCP を使用すること
 - **スタイリング**: Tailwind CSS v4 を使用。クラス順序は `eslint-plugin-better-tailwindcss` が自動整列するため、lint に従うこと
 - **TypeScript**: `strict: true`、未使用変数・パラメータはエラーになる
+- **インポート**: すべてのインポートで `@/` パスエイリアスを使用（`tsconfig.json` の `paths` と全 Vite 設定ファイルで定義）。相対パス（`../`）は使用しない
 - **Lint, Format**: 実装完了時に `npm run lint`, `npm run format:check`, `npm run typecheck` を実行し、エラーが出ないようにすること
 - **状態管理**: グローバル共有状態は Zustand を使用。コンポーネントローカル状態は `useState` で十分
 - **DOM 操作**: サイドバー幅調整のような高頻度アップデートはレンダリング外で行い、確定時のみ dispatch で同期

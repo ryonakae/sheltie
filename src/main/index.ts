@@ -2,7 +2,7 @@ import { app, BaseWindow, WebContentsView, ipcMain, nativeTheme } from 'electron
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
-import { registerProjectStateHandlers, getTheme, setTheme } from './store';
+import { registerProjectStateHandlers, getTheme, setTheme } from '@/main/store';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {

@@ -7,11 +7,11 @@ import Plus from '@gravity-ui/icons/Plus';
 import { Button } from '@heroui/react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { HOME_ID } from '../../types/tab';
-import { useProjectStore } from '../../store/tab-store';
-import { useWindowControlsInset } from '../../hooks/useWindowControlsInset';
-import { TabItem } from './TabItem';
-import { ThemeToggle } from './ThemeToggle';
+import { HOME_ID } from '@/renderer/types/tab';
+import { useProjectStore } from '@/renderer/store/tab-store';
+import { useWindowControlsInset } from '@/renderer/hooks/useWindowControlsInset';
+import { TabItem } from '@/renderer/components/TabBar/TabItem';
+import { ThemeToggle } from '@/renderer/components/TabBar/ThemeToggle';
 
 export function TabBar() {
   const {

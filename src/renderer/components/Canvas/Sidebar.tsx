@@ -2,8 +2,8 @@ import { forwardRef, useCallback } from 'react';
 
 import Xmark from '@gravity-ui/icons/Xmark';
 
-import { selectActiveProject, useProjectStore } from '../../store/tab-store';
-import { AddPageForm } from './AddPageForm';
+import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
+import { AddPageForm } from '@/renderer/components/Canvas/AddPageForm';
 
 interface SidebarProps {
   initialWidth: number;

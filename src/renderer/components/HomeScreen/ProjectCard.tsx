@@ -5,10 +5,10 @@ import Pencil from '@gravity-ui/icons/Pencil';
 import TrashBin from '@gravity-ui/icons/TrashBin';
 import { Button, Card, Dropdown, Label, Separator } from '@heroui/react';
 
-import type { Project } from '../../types/tab';
+import type { Project } from '@/renderer/types/tab';
 
-import { DeleteDialog } from './DeleteDialog';
-import { RenameModal } from './RenameModal';
+import { DeleteDialog } from '@/renderer/components/HomeScreen/DeleteDialog';
+import { RenameModal } from '@/renderer/components/HomeScreen/RenameModal';
 
 interface ProjectCardProps {
   project: Project;

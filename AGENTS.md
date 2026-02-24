@@ -27,25 +27,24 @@ Electron の 3 プロセス構造に沿って `src/` が分割されています
 ```
 src/
 ├── main/        # Electron メインプロセス (Node.js)
-│   ├── index.ts # BaseWindow + WebContentsView 3層構成の初期化、IPC ハンドラー登録
-│   │             # (bgView 背景、pageViews ページレンダリング、mainView React SPA)
+│   ├── index.ts # BaseWindow + mainView（React SPA）の初期化、IPC ハンドラー登録
+│   │             # mainView のみで webpreferences.webviewTag: true でレンダリング制御
 │   │             # テーマ初期化（getTheme で保存済み値を読み込み、nativeTheme 同期）
-│   │             # OS テーマ変更監視（nativeTheme.on('updated')）で全ビューのテーマ更新
-│   ├── page-view-manager.ts # WebContentsView ライフサイクル管理クラス（生成・破棄・bounds 更新・z-order）
-│   │                        # setDarkMode で全 pageView の背景色を一括更新
+│   │             # OS テーマ変更監視（nativeTheme.on('updated')）でテーマ更新を mainView へ送信
 │   └── store.ts # プロジェクト状態の永続化（ElectronStore）、マイグレーション処理
 │               # テーマ設定の永続化（getTheme、setTheme IPC ハンドラー）
 ├── preload/     # サンドボックス内のブリッジ
-│   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定（api、windowControls、pageViewApi、themeApi 公開）
+│   └── index.ts # Main ↔ Renderer 間のセキュアな IPC 設定（api、windowControls、themeApi 公開）
 ├── shared/
-│   └── types.ts # ProjectStoreApi、WindowControlsInfo、PageViewApi、ThemeApi、PageBounds など共有型定義
+│   └── types.ts # ProjectStoreApi、WindowControlsInfo、ThemeApi などの共有型定義
 └── renderer/    # React レンダラープロセス (ブラウザ環境)
     ├── main.tsx # React エントリーポイント
-    ├── App.tsx  # ルートコンポーネント（Zustand でプロジェクト状態管理、ホーム表示時の pageViewApi 制御）
+    ├── App.tsx  # ルートコンポーネント（Zustand でプロジェクト状態管理）
     ├── index.html
     ├── index.css
     ├── types/
-    │   └── tab.ts # Project 型（pages[]、viewport を含む）、Page、Viewport、ProjectState の定義
+    │   ├── tab.ts # Project 型（pages[]、viewport を含む）、Page、Viewport、ProjectState の定義
+    │   └── electron.d.ts # <webview> タグの React JSX 型定義
     ├── lib/
     │   └── theme.ts # テーマ管理ユーティリティ（applyThemeToDocument で document root に dark/light クラス設定）
     ├── store/
@@ -54,12 +53,10 @@ src/
     │   └── theme-store.ts # Zustand テーマストア（isDark, mode, setMode, initialize 含む）
     ├── hooks/
     │   ├── useWindowControlsInset.ts # ウィンドウコントロール領域（タイトルバー）のインセット計算
-    │   ├── useArtboardPan.ts # パン操作（transform 変更時に onTransformChange コールバック）
-    │   ├── useArtboardZoom.ts # ズーム操作（transform 変更時に onTransformChange コールバック）
+    │   ├── useArtboardPan.ts # パン操作（canvas transform 変更）
+    │   ├── useArtboardZoom.ts # ズーム操作（canvas transform 変更）
     │   ├── usePageDrag.ts # ページドラッグ（位置変更、最前面制御）
     │   └── usePageResize.ts # ページリサイズ（幅・高さ変更）
-    ├── utils/
-    │   └── page-bounds.ts # 座標変換ユーティリティ（TITLE_BAR_HEIGHT、RESIZE_INSET 定数、calcPageScreenBounds など）
     └── components/
         ├── Canvas/
         │   ├── Canvas.tsx # キャンバス全体（Sidebar + Artboard）、サイドバー幅変更時に resize イベント発火
@@ -67,12 +64,11 @@ src/
         │   ├── AddPageForm.tsx # ページ追加フォーム
         │   └── ResizeHandle.tsx # サイドバーリサイズハンドル
         ├── Artboard/
-        │   ├── Artboard.tsx # 操作モード制御（mainView/pageViews z-order）、pageViewApi 統合、bounds 同期
+        │   ├── Artboard.tsx # キャンバス管理・操作制御（zoom/pan/drag/resize、pointer-events 制御）
         │   ├── InteractionOverlay.tsx # 操作中のカーソル制御（透明オーバーレイ）
-        │   ├── PageFrame.tsx # ページフレーム（プレースホルダー div、リサイズハンドル）
+        │   ├── PageFrame.tsx # ページフレーム（<webview> タグ、リサイズハンドル、タイトルバー）
         │   ├── PageTitleBar.tsx # ページタイトルバー（URL・タイトル表示）
-        │   ├── PageResizeHandle.tsx # リサイズハンドル（8方向）
-        │   └── InteractionOverlay.tsx # 操作中オーバーレイ
+        │   └── PageResizeHandle.tsx # リサイズハンドル（8方向）
         ├── TabBar/
         │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示、useWindowControlsInset で macOS/Windows タイトルバー対応、ThemeToggle を配置）
         │   ├── TabItem.tsx # 個別プロジェクトタブ（ドラッグ可能）
@@ -83,6 +79,10 @@ src/
             ├── RenameModal.tsx # プロジェクト名変更モーダル（HeroUI Modal）
             └── DeleteDialog.tsx # 削除確認用ダイアログ（HeroUI AlertDialog）
 ```
+
+**削除予定**:
+- `src/main/page-view-manager.ts`: WebContentsView ライフサイクル管理（mainView のみになったため不要）
+- `src/renderer/utils/page-bounds.ts`: WebContentsView 座標変換（`<webview>` DOM レンダリングに移行したため不要）
 
 ### コンポーネント構成
 
@@ -103,15 +103,16 @@ src/
 - **ResizeHandle**: サイドバー幅調整可能（リサイズ中は DOM 直接操作でパフォーマンス最適化）
 - **Artboard**: キャンバス領域に複数の webview を配置、ドラッグ・リサイズ・ズーム・パン対応
 
-**Artboard**: ページレンダリング・ビューポート管理・操作モード制御
-- 各ページを WebContentsView で描画（メインプロセス側 `PageViewManager` が生成・管理）
-- キャンバス座標から画面座標への変換を `page-bounds.ts` ユーティリティで計算
-- RAF を使って毎フレーム 1 回 `syncBounds()` で WebContentsView の bounds を一括更新
+**Artboard**: ページレンダリング・ビューポート管理・操作制御
+- 各ページを `<webview>` タグで DOM に描画（React コンポーネント化）
+- canvas 要素に transform (translate + scale) を設定してズーム・パン実装
 - ドラッグでページ移動、リサイズでサイズ変更（`updatePagePosition`/`updatePageSize` で Zustand 状態更新）
-- マウスホイール or トラックパッドでズーム・パン、各操作後に `scheduleSyncBounds()` で bounds 再同期（`updateViewport` で Zustand 状態更新）
-- ページをクリックで最前面に（`bringPageToFront` で Zustand z-index 制御 + IPC で `pageViewApi.bringToFront()` 呼び出し）
-- 操作モード切り替え：ドラッグ/ズーム/パン 操作時は `mainView` が最上位（React が入力を受け取る）、操作終了時は `pageViews` が最上位（ウェブページが入力を受け取る）（`pageViewApi.setInteractionMode()` 経由）
-- IPC の `page-view:navigated`/`page-view:title-updated` イベントで URL・タイトル更新をリッスン
+- マウスホイール or トラックパッドでズーム・パン（`updateViewport` で Zustand 状態更新）
+- ページをクリックで最前面に（`bringPageToFront` で Zustand z-index 制御）
+- 操作モード制御：`isInteracting` フラグで webview の `pointer-events` を制御
+  - 操作中 (`isInteracting: true`): canvas に `pointer-events: auto`、webview に `pointer-events: none` → React が入力受け取り
+  - 操作終了 (`isInteracting: false`): canvas に `pointer-events: none`、webview に `pointer-events: auto` → webview がクリック可能
+- webview イベント (`did-navigate`, `page-title-updated`) で URL・タイトル更新をリッスン
 
 **状態管理**: Zustand による共有状態管理
 - **useProjectStore** (`tab-store.ts`):
@@ -143,26 +144,6 @@ src/
 - `viewport: Viewport`: プロジェクトのビューポート状態
 - （既存）`id, title, sidebarWidth, createdAt`
 
-**PageBounds インターフェース** (`src/shared/types.ts`)
-- `x, y, width, height`: WebContentsView の位置・サイズ（ウィンドウスクリーン座標系）
-
-**ArtboardLayout インターフェース** (`src/shared/types.ts`)
-- `offsetX`: artboard 領域の左端（= sidebarWidth）
-- `offsetY`: artboard 領域の上端（= タブバー高さ）
-- `areaWidth, areaHeight`: artboard 領域の幅・高さ（clipView の bounds として設定）
-
-### PageViewManager と WebContentsView レイアウト
-
-メインプロセス側 (`src/main/page-view-manager.ts`) で WebContentsView のライフサイクルを統括管理：
-
-- **3 層構成**: contentView に bgView（背景）、clipView（ページ表示領域クリップ）、mainView（React SPA）を z-order で配置
-  - bgView: ドットパターン背景（最下層、z-index=0）
-  - clipView: pageViews のコンテナ（中層、bounds は artboard 領域に合わせて動的更新）
-  - mainView: React SPA（最上層の時は操作受け取り、奥層の時は非表示）
-- **z-order 動的切り替え**: 操作中は mainView が最上位（`addChildView(mainView)` で末尾移動）→入力 React が受け取り、操作終了時は clipView が最上位 → pageViews がクリック可能
-- **bounds 一括更新**: レンダラーから `page-view:batch-update-bounds` IPC で all pages の bounds を毎フレーム同期
-- **ナビゲーション検出**: 各 pageView の `did-navigate`/`page-title-updated` イベントをリッスン → mainView へ IPC 送信 → Artboard コンポーネントで Zustand 状態更新
-
 ### ビルドパイプライン
 
 3 つの独立した Vite 設定がそれぞれのプロセスをビルドします：
@@ -178,23 +159,22 @@ src/
 メインプロセスでは Electron のセキュリティベストプラクティスを適用しています：
 - **Context Isolation**: 有効（メインプロセス API へのアクセスを制限）
 - **Node.js 統合**: 無効（レンダラープロセスでの Node.js API アクセスを防止）
-- **Sandbox**: 有効（mainView・bgView・pageViews すべてサンドボックス化）
-- **WebContentsView パーティション**: `persist:artboard` パーティション使用（各 pageView が同じセッションで cookie/storage 共有、独立した WebContents プロセス）
+- **Sandbox**: 有効（mainView をサンドボックス化）
+- **webviewTag**: 有効（mainView 内で `<webview>` タグを使用してウェブページをレンダリング）
+- **WebView パーティション**: `persist:artboard` パーティション使用（複数の webview が同じセッションで cookie/storage 共有）
 
 ### IPC チャネル
 
 **Renderer → Main**:
 - `project-state:load` / `project-state:save`: プロジェクト状態永続化
-- `page-view:create/destroy/batch-update-bounds/set-interaction-mode/show-project/bring-to-front/destroy-project/update-artboard-layout`: ページレンダリング・操作制御
 - `theme:load`: 保存済みテーマモード取得
 - `theme:set`: テーマモード設定（OS と同期、`shouldUseDarkColors` 返す）
 
 **Main → Renderer**:
-- `page-view:navigated` / `page-view:title-updated`: ページ URL・タイトル更新
 - `save-before-close`: ウィンドウクローズ前に状態保存
 - `theme:changed`: OS テーマ変更時に isDark フラグを送信（`ThemeToggle` や document 反映に使用）
 
-IPC は必ず Preload スクリプト経由で実装してください。全 API は `src/shared/types.ts` で `ProjectStoreApi`, `PageViewApi`, `ThemeApi` インターフェースとして定義されています。
+IPC は必ず Preload スクリプト経由で実装してください。全 API は `src/shared/types.ts` で `ProjectStoreApi`, `ThemeApi` インターフェースとして定義されています。
 
 
 ## コーディング規約

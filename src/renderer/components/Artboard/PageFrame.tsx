@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import type { Page } from '../../types/tab';
 import { PageResizeHandle } from './PageResizeHandle';
@@ -10,21 +10,58 @@ interface PageFrameProps {
   page: Page;
   isActive: boolean;
   title: string;
+  isInteracting: boolean;
   onActivate: () => void;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   onResizeStart: (e: React.MouseEvent, direction: ResizeDirection) => void;
+  onNavigated: (pageId: string, url: string, title: string) => void;
+  onTitleUpdated: (pageId: string, title: string) => void;
 }
 
 export function PageFrame({
   page,
   isActive,
   title,
+  isInteracting,
   onActivate,
   onClose,
   onDragStart,
   onResizeStart,
+  onNavigated,
+  onTitleUpdated,
 }: PageFrameProps) {
+  const webviewRef = useRef<Electron.WebviewTag>(null);
+
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+
+    const handleDidNavigate = () => {
+      onNavigated(page.id, webview.getURL(), webview.getTitle());
+    };
+
+    const handleDidNavigateInPage = (e: Electron.DidNavigateInPageEvent) => {
+      // サブフレームのナビゲーションは無視する
+      if (!e.isMainFrame) return;
+      onNavigated(page.id, webview.getURL(), webview.getTitle());
+    };
+
+    const handleTitleUpdated = () => {
+      onTitleUpdated(page.id, webview.getTitle());
+    };
+
+    webview.addEventListener('did-navigate', handleDidNavigate);
+    webview.addEventListener('did-navigate-in-page', handleDidNavigateInPage);
+    webview.addEventListener('page-title-updated', handleTitleUpdated);
+
+    return () => {
+      webview.removeEventListener('did-navigate', handleDidNavigate);
+      webview.removeEventListener('did-navigate-in-page', handleDidNavigateInPage);
+      webview.removeEventListener('page-title-updated', handleTitleUpdated);
+    };
+  }, [page.id, onNavigated, onTitleUpdated]);
+
   const handleTitleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
       onActivate();
@@ -60,12 +97,20 @@ export function PageFrame({
         onMouseDown={handleTitleBarMouseDown}
       />
 
-      {/* WebContentsView がネイティブレイヤーでこの領域に表示される。
-          透明プレースホルダーとして高さを確保する */}
-      <div
-        data-page-placeholder
+      {/* webview: 操作中（ドラッグ/ズーム/パン）は pointer-events: none でブラウザ入力をブロックし、
+          React が入力を受け取れるようにする */}
+      <webview
+        ref={webviewRef}
+        src={page.url}
+        partition="persist:artboard"
+        webpreferences="contextIsolation=yes"
         className="rounded-b-lg"
-        style={{ width: page.width, height: page.height }}
+        style={{
+          width: page.width,
+          height: page.height,
+          pointerEvents: isInteracting ? 'none' : 'auto',
+          display: 'flex',
+        }}
       />
 
       {/* リサイズハンドル（8方向） */}

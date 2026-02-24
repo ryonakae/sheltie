@@ -7,8 +7,6 @@ interface UseArtboardPanOptions {
   panY: React.RefObject<number>;
   onPanEnd: (panX: number, panY: number) => void;
   onInteractionChange: (active: boolean) => void;
-  /** transform 変更ごとに呼ばれる。WebContentsView の bounds 同期に使用 */
-  onTransformChange?: () => void;
 }
 
 /**
@@ -22,7 +20,6 @@ export function useArtboardPan({
   panY,
   onPanEnd,
   onInteractionChange,
-  onTransformChange,
 }: UseArtboardPanOptions) {
   const isPanMode = useRef(false);
   const isDragging = useRef(false);
@@ -33,8 +30,7 @@ export function useArtboardPan({
   const applyTransform = useCallback(() => {
     if (!canvasRef.current) return;
     canvasRef.current.style.transform = `translate(${panX.current}px, ${panY.current}px) scale(${zoom.current})`;
-    onTransformChange?.();
-  }, [canvasRef, zoom, panX, panY, onTransformChange]);
+  }, [canvasRef, zoom, panX, panY]);
 
   const setCursor = useCallback((cursor: string) => {
     currentCursor.current = cursor;

@@ -7,7 +7,6 @@ import { useArtboardPan } from '../../hooks/useArtboardPan';
 import { useArtboardZoom } from '../../hooks/useArtboardZoom';
 import { usePageDrag } from '../../hooks/usePageDrag';
 import { usePageResize } from '../../hooks/usePageResize';
-import { calcAllPageBounds, calcArtboardLayout } from '../../utils/page-bounds';
 import { InteractionOverlay } from './InteractionOverlay';
 import { PageFrame, type ResizeDirection } from './PageFrame';
 
@@ -43,7 +42,7 @@ export function Artboard() {
   // アクティブページ ID（最前面表示・ボーダー制御用）
   const [activePageId, setActivePageId] = useState<string | null>(null);
 
-  // ページタイトルのローカル状態（IPC ナビゲーションイベントで更新）
+  // ページタイトルのローカル状態（webview イベントで更新）
   const [pageTitles, setPageTitles] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const page of activeProject?.pages ?? []) {
@@ -52,38 +51,15 @@ export function Artboard() {
     return initial;
   });
 
-  // 操作中フラグ（InteractionOverlay の表示制御）
+  // 操作中フラグ（webview の pointer-events 制御と InteractionOverlay 表示に使用）
+  const [isInteracting, setIsInteracting] = useState(false);
   const [interactionCursor, setInteractionCursor] = useState<string | null>(null);
 
   const pages = activeProject?.pages ?? [];
 
-  // WebContentsView の bounds を一括更新する関数
-  const syncBounds = useCallback(() => {
-    if (!containerRef.current) return;
-    const layout = calcArtboardLayout(containerRef.current);
-    const updates = calcAllPageBounds(pages, {
-      zoom: zoomRef.current,
-      panX: panXRef.current,
-      panY: panYRef.current,
-    });
-    window.pageViewApi.batchUpdateBounds(updates, zoomRef.current);
-    window.pageViewApi.updateArtboardLayout(layout);
-  }, [pages]);
-
-  // RAF を使って毎フレーム 1 回だけ bounds を同期する
-  const rafRef = useRef<number | null>(null);
-  const scheduleSyncBounds = useCallback(() => {
-    if (rafRef.current !== null) return;
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null;
-      syncBounds();
-    });
-  }, [syncBounds]);
-
   const handleInteractionChange = useCallback((active: boolean, cursor = 'default') => {
+    setIsInteracting(active);
     setInteractionCursor(active ? cursor : null);
-    // mainView の z-order を切り替えて操作モードを制御
-    window.pageViewApi.setInteractionMode(active);
   }, []);
 
   // パン操作
@@ -100,7 +76,6 @@ export function Artboard() {
       (active) => handleInteractionChange(active, 'grabbing'),
       [handleInteractionChange],
     ),
-    onTransformChange: scheduleSyncBounds,
   });
 
   // ズーム操作
@@ -114,7 +89,6 @@ export function Artboard() {
       (z, px, py) => updateViewport(activeId, { zoom: z, panX: px, panY: py }),
       [updateViewport, activeId],
     ),
-    onTransformChange: scheduleSyncBounds,
   });
 
   // ページドラッグ
@@ -123,10 +97,8 @@ export function Artboard() {
     onDragEnd: useCallback(
       (pageId, x, y) => {
         updatePagePosition(activeId, pageId, x, y);
-        // ドラッグ完了後に最終 bounds を同期
-        syncBounds();
       },
-      [updatePagePosition, activeId, syncBounds],
+      [updatePagePosition, activeId],
     ),
     onInteractionChange: useCallback(
       (active) => handleInteractionChange(active, 'grabbing'),
@@ -140,9 +112,8 @@ export function Artboard() {
     onResizeEnd: useCallback(
       (pageId, width, height) => {
         updatePageSize(activeId, pageId, width, height);
-        syncBounds();
       },
-      [updatePageSize, activeId, syncBounds],
+      [updatePageSize, activeId],
     ),
     onInteractionChange: useCallback(
       (active) => handleInteractionChange(active, 'default'),
@@ -157,64 +128,22 @@ export function Artboard() {
     }
   }, []);
 
-  // プロジェクト切り替え時に WebContentsView の表示を切り替え
-  useEffect(() => {
-    window.pageViewApi.showProjectPages(activeId).catch(() => {});
-    // マウント時に bounds を同期
-    syncBounds();
-  }, [activeId, syncBounds]);
-
-  // ページの追加/削除を検知して WebContentsView を生成/破棄
-  const prevPageIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const currentIds = new Set(pages.map((p) => p.id));
-    const prevIds = prevPageIdsRef.current;
-
-    // 追加されたページの WebContentsView を生成
-    for (const page of pages) {
-      if (!prevIds.has(page.id)) {
-        window.pageViewApi.createPageView(activeId, page.id, page.url).catch(() => {});
-      }
-    }
-
-    // 削除されたページの WebContentsView を破棄
-    for (const prevId of prevIds) {
-      if (!currentIds.has(prevId)) {
-        window.pageViewApi.destroyPageView(prevId).catch(() => {});
-      }
-    }
-
-    prevPageIdsRef.current = currentIds;
-    // ページ変更後に bounds を同期
-    syncBounds();
-  }, [pages, activeId, syncBounds]);
-
-  // ウィンドウリサイズ時に bounds を再同期
-  useEffect(() => {
-    const handleResize = () => syncBounds();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [syncBounds]);
-
-  // IPC ナビゲーションイベントの購読（ページタイトル・URL の更新）
-  useEffect(() => {
-    window.pageViewApi.onNavigated((pageId, url, title) => {
+  const handleNavigated = useCallback(
+    (pageId: string, url: string, title: string) => {
       updatePageUrl(activeId, pageId, url, title);
       setPageTitles((prev) => ({ ...prev, [pageId]: title }));
-    });
-    window.pageViewApi.onTitleUpdated((pageId, title) => {
-      setPageTitles((prev) => ({ ...prev, [pageId]: title }));
-    });
-    // onNavigated/onTitleUpdated は ipcRenderer.on で登録するため、
-    // アンマウント時にクリーンアップできないが、Artboard は key={activeId} で
-    // 再マウントされるためリスナーが蓄積しても実害は少ない
-  }, [activeId, updatePageUrl]);
+    },
+    [updatePageUrl, activeId],
+  );
+
+  const handleTitleUpdated = useCallback((pageId: string, title: string) => {
+    setPageTitles((prev) => ({ ...prev, [pageId]: title }));
+  }, []);
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent, pageId: string) => {
       bringPageToFront(activeId, pageId);
       setActivePageId(pageId);
-      window.pageViewApi.bringToFront(pageId);
       startDrag(e, pageId);
     },
     [bringPageToFront, activeId, startDrag],
@@ -228,7 +157,7 @@ export function Artboard() {
   );
 
   return (
-    <div ref={containerRef} className="relative flex-1 overflow-hidden">
+    <div ref={containerRef} className="relative flex-1 overflow-hidden artboard-bg">
       {/* 操作中オーバーレイ */}
       {interactionCursor && <InteractionOverlay cursor={interactionCursor} />}
 
@@ -244,14 +173,16 @@ export function Artboard() {
             page={page}
             isActive={page.id === activePageId}
             title={pageTitles[page.id] ?? page.title}
+            isInteracting={isInteracting}
             onActivate={() => {
               setActivePageId(page.id);
               bringPageToFront(activeId, page.id);
-              window.pageViewApi.bringToFront(page.id);
             }}
             onClose={() => removePage(activeId, page.id)}
             onDragStart={(e) => handleDragStart(e, page.id)}
             onResizeStart={(e, direction) => handleResizeStart(e, page.id, direction)}
+            onNavigated={handleNavigated}
+            onTitleUpdated={handleTitleUpdated}
           />
         ))}
       </div>

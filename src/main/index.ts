@@ -3,8 +3,6 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
 import { registerProjectStateHandlers, getTheme, setTheme } from './store';
-import { PageViewManager } from './page-view-manager';
-import type { ArtboardLayout, PageBounds } from '../shared/types';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -12,33 +10,12 @@ if (started) {
 }
 
 let mainWindow: BaseWindow | null = null;
-let pageViewManager: PageViewManager | null = null;
 
 registerProjectStateHandlers(() => mainWindow);
 
 const isMac = process.platform === 'darwin';
 
 const TRAFFIC_LIGHT_POSITION = { x: 12, y: 10 };
-
-/**
- * artboard 背景用の HTML (ドットパターン)。
- * CSS 変数で light/dark を切り替える。bgView に読み込ませてキャンバス背景を描画する。
- */
-const BG_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-  :root { --bg-color: #f9fafb; --dot-color: #d1d5db; }
-  .dark { --bg-color: #18181b; --dot-color: #27272a; }
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
-    background-color: var(--bg-color);
-    background-image: radial-gradient(circle, var(--dot-color) 1px, transparent 1px);
-    background-size: 24px 24px; }
-</style></head><body></body></html>`;
-
-/** bgView の html 要素に .dark クラスをトグルしてテーマを反映する */
-function updateBgViewTheme(bgView: WebContentsView, isDark: boolean): void {
-  void bgView.webContents.executeJavaScript(
-    `document.documentElement.classList.toggle('dark', ${isDark})`,
-  );
-}
 
 /** Windows の titleBarOverlay をテーマに合わせて更新する */
 function updateTitleBarOverlay(win: BaseWindow, isDark: boolean): void {
@@ -72,47 +49,30 @@ const createWindow = () => {
 
   mainWindow = win;
 
-  // ── 背景 View (最下層: index=0) ──────────────────────────
-  const bgView = new WebContentsView({
-    webPreferences: { contextIsolation: true, sandbox: true },
-  });
-  win.contentView.addChildView(bgView);
-  void bgView.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(BG_HTML)}`);
-  // ロード完了後に初期テーマを適用（loadURL は非同期のため）
-  bgView.webContents.once('did-finish-load', () => {
-    updateBgViewTheme(bgView, initialIsDark);
-  });
-
-  // ── メイン View (React SPA: index=1, bgView の直上) ───────
+  // ── メイン View (React SPA) ────────────────────────────────
+  // webviewTag: true で <webview> タグを有効化し、React DOM 内でウェブページを描画する
   const mainView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: true,
     },
   });
-  // 背景を透明にして pageViews が透けて見えるようにする
-  mainView.setBackgroundColor('#00000000');
   win.contentView.addChildView(mainView);
 
-  // ── PageViewManager (pageViews を mainView と bgView の間に挿入) ─
-  pageViewManager = new PageViewManager(win, mainView, bgView);
-  pageViewManager.setDarkMode(initialIsDark);
-
-  // OS のテーマ変更を監視してすべてのビューに反映
+  // OS のテーマ変更を監視して反映
   nativeTheme.on('updated', () => {
     const isDark = nativeTheme.shouldUseDarkColors;
-    updateBgViewTheme(bgView, isDark);
     updateTitleBarOverlay(win, isDark);
-    pageViewManager?.setDarkMode(isDark);
     mainView.webContents.send('theme:changed', isDark);
   });
 
-  // ウィンドウ全体を bgView と mainView が占有
+  // ウィンドウ全体を mainView が占有
   const resizeViews = () => {
     const { width, height } = win.getContentBounds();
-    pageViewManager?.resizeViews(width, height);
+    mainView.setBounds({ x: 0, y: 0, width, height });
   };
   resizeViews();
   win.on('resize', resizeViews);
@@ -145,9 +105,6 @@ const createWindow = () => {
   });
 
   win.on('closed', () => {
-    // 全 WebContentsView を明示的に破棄（BaseWindow は自動破棄しない）
-    pageViewManager?.destroyAll();
-    pageViewManager = null;
     mainWindow = null;
   });
 
@@ -162,44 +119,6 @@ const createWindow = () => {
     setTheme(mode as ThemeMode);
     nativeTheme.themeSource = mode as ThemeMode;
     return nativeTheme.shouldUseDarkColors;
-  });
-
-  // ── IPC ハンドラー: PageView 操作 ─────────────────────────
-
-  ipcMain.handle('page-view:create', (_event, projectId: string, pageId: string, url: string) => {
-    pageViewManager?.createPageView(projectId, pageId, url);
-  });
-
-  ipcMain.handle('page-view:destroy', (_event, pageId: string) => {
-    pageViewManager?.destroyPageView(pageId);
-  });
-
-  // 高頻度更新のため invoke でなく send (fire-and-forget)
-  ipcMain.on(
-    'page-view:batch-update-bounds',
-    (_event, updates: Array<{ pageId: string; bounds: PageBounds }>, zoom: number) => {
-      pageViewManager?.batchUpdateBounds(updates, zoom);
-    },
-  );
-
-  ipcMain.on('page-view:set-interaction-mode', (_event, isInteracting: boolean) => {
-    pageViewManager?.setInteractionMode(isInteracting);
-  });
-
-  ipcMain.handle('page-view:show-project', (_event, projectId: string) => {
-    pageViewManager?.showProjectPages(projectId);
-  });
-
-  ipcMain.on('page-view:bring-to-front', (_event, pageId: string) => {
-    pageViewManager?.bringToFront(pageId);
-  });
-
-  ipcMain.handle('page-view:destroy-project', (_event, projectId: string) => {
-    pageViewManager?.destroyProjectPages(projectId);
-  });
-
-  ipcMain.on('page-view:update-artboard-layout', (_event, layout: ArtboardLayout) => {
-    pageViewManager?.updateClipBounds(layout);
   });
 };
 

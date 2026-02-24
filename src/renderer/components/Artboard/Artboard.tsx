@@ -42,6 +42,13 @@ export function Artboard() {
   // アクティブページ ID（最前面表示・ボーダー制御用）
   const [activePageId, setActivePageId] = useState<string | null>(null);
 
+  // リサイズ中のページサイズ（タイトルバーのリアルタイム表示用）
+  const [resizingSize, setResizingSize] = useState<{
+    pageId: string;
+    width: number;
+    height: number;
+  } | null>(null);
+
   // ページタイトルのローカル状態（webview イベントで更新）
   const [pageTitles, setPageTitles] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
@@ -109,9 +116,13 @@ export function Artboard() {
   // ページリサイズ
   const { startResize } = usePageResize({
     zoom: zoomRef,
+    onResizeMove: useCallback((pageId: string, width: number, height: number) => {
+      setResizingSize({ pageId, width, height });
+    }, []),
     onResizeEnd: useCallback(
       (pageId, width, height) => {
         updatePageSize(activeId, pageId, width, height);
+        setResizingSize(null);
       },
       [updatePageSize, activeId],
     ),
@@ -125,6 +136,7 @@ export function Artboard() {
   useEffect(() => {
     if (canvasRef.current) {
       canvasRef.current.style.transform = `translate(${panXRef.current}px, ${panYRef.current}px) scale(${zoomRef.current})`;
+      canvasRef.current.style.setProperty('--canvas-zoom', String(zoomRef.current));
     }
   }, []);
 
@@ -173,6 +185,8 @@ export function Artboard() {
             page={page}
             isActive={page.id === activePageId}
             title={pageTitles[page.id] ?? page.title}
+            displayWidth={resizingSize?.pageId === page.id ? resizingSize.width : page.width}
+            displayHeight={resizingSize?.pageId === page.id ? resizingSize.height : page.height}
             isInteracting={isInteracting}
             onActivate={() => {
               setActivePageId(page.id);

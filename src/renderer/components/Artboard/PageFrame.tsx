@@ -10,6 +10,8 @@ interface PageFrameProps {
   page: Page;
   isActive: boolean;
   title: string;
+  displayWidth: number;
+  displayHeight: number;
   isInteracting: boolean;
   onActivate: () => void;
   onClose: () => void;
@@ -23,6 +25,8 @@ export function PageFrame({
   page,
   isActive,
   title,
+  displayWidth,
+  displayHeight,
   isInteracting,
   onActivate,
   onClose,
@@ -80,19 +84,25 @@ export function PageFrame({
 
   return (
     <div
-      className={[
-        'absolute flex flex-col rounded-lg shadow-lg',
-        isActive ? 'ring-2 ring-focus' : 'ring-1 ring-border',
-      ].join(' ')}
-      style={{ left: page.x, top: page.y, width: page.width }}
+      className="absolute flex flex-col shadow-lg"
+      style={{
+        left: page.x,
+        top: page.y,
+        width: page.width,
+        borderRadius: 'calc(8px / var(--canvas-zoom, 1))',
+        outline: isActive
+          ? 'calc(2px / var(--canvas-zoom, 1)) solid var(--color-focus)'
+          : 'calc(1px / var(--canvas-zoom, 1)) solid var(--color-border)',
+        outlineOffset: 'calc(-1px / var(--canvas-zoom, 1))',
+      }}
       data-page-id={page.id}
       onMouseDown={onActivate}
     >
       <PageTitleBar
         title={title}
         url={page.url}
-        width={page.width}
-        height={page.height}
+        width={displayWidth}
+        height={displayHeight}
         onClose={onClose}
         onMouseDown={handleTitleBarMouseDown}
       />
@@ -104,12 +114,12 @@ export function PageFrame({
         src={page.url}
         partition="persist:artboard"
         webpreferences="contextIsolation=yes"
-        className="rounded-b-lg"
         style={{
           width: page.width,
           height: page.height,
           pointerEvents: isInteracting ? 'none' : 'auto',
           display: 'flex',
+          borderRadius: '0 0 calc(8px / var(--canvas-zoom, 1)) calc(8px / var(--canvas-zoom, 1))',
         }}
       />
 

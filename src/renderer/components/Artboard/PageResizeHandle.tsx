@@ -16,16 +16,23 @@ const CURSOR_MAP: Record<ResizeDirection, string> = {
   sw: 'sw-resize',
 };
 
-/** ハンドルの位置スタイル */
+const Z = 'var(--canvas-zoom, 1)';
+
+/** ハンドルの位置スタイル（calc() でズームに関係なく一定のヒット領域を確保） */
 const POSITION_STYLE: Record<ResizeDirection, React.CSSProperties> = {
-  n: { top: 0, left: 8, right: 8, height: 4, cursor: 'n-resize' },
-  s: { bottom: 0, left: 8, right: 8, height: 4, cursor: 's-resize' },
-  e: { top: 8, bottom: 8, right: 0, width: 4, cursor: 'e-resize' },
-  w: { top: 8, bottom: 8, left: 0, width: 4, cursor: 'w-resize' },
-  ne: { top: 0, right: 0, width: 8, height: 8, cursor: 'ne-resize' },
-  nw: { top: 0, left: 0, width: 8, height: 8, cursor: 'nw-resize' },
-  se: { bottom: 0, right: 0, width: 8, height: 8, cursor: 'se-resize' },
-  sw: { bottom: 0, left: 0, width: 8, height: 8, cursor: 'sw-resize' },
+  n: { top: 0, left: `calc(8px / ${Z})`, right: `calc(8px / ${Z})`, height: `calc(4px / ${Z})` },
+  s: {
+    bottom: 0,
+    left: `calc(8px / ${Z})`,
+    right: `calc(8px / ${Z})`,
+    height: `calc(4px / ${Z})`,
+  },
+  e: { top: `calc(8px / ${Z})`, bottom: `calc(8px / ${Z})`, right: 0, width: `calc(4px / ${Z})` },
+  w: { top: `calc(8px / ${Z})`, bottom: `calc(8px / ${Z})`, left: 0, width: `calc(4px / ${Z})` },
+  ne: { top: 0, right: 0, width: `calc(8px / ${Z})`, height: `calc(8px / ${Z})` },
+  nw: { top: 0, left: 0, width: `calc(8px / ${Z})`, height: `calc(8px / ${Z})` },
+  se: { bottom: 0, right: 0, width: `calc(8px / ${Z})`, height: `calc(8px / ${Z})` },
+  sw: { bottom: 0, left: 0, width: `calc(8px / ${Z})`, height: `calc(8px / ${Z})` },
 };
 
 export function PageResizeHandle({ direction, onMouseDown }: PageResizeHandleProps) {

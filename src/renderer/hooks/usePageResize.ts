@@ -7,6 +7,7 @@ const PAGE_MIN_HEIGHT = 200;
 
 interface UsePageResizeOptions {
   zoom: React.RefObject<number>;
+  onResizeMove?: (pageId: string, width: number, height: number) => void;
   onResizeEnd: (pageId: string, width: number, height: number) => void;
   onInteractionChange: (active: boolean) => void;
 }
@@ -14,40 +15,52 @@ interface UsePageResizeOptions {
 interface ResizeState {
   pageId: string;
   frameEl: HTMLElement;
-  /** [data-page-placeholder] 要素。高さの取得と直接操作に使用 */
-  placeholderEl: HTMLElement | null;
+  webviewEl: HTMLElement | null;
   direction: ResizeDirection;
   startMouse: { x: number; y: number };
   startRect: { x: number; y: number; width: number; height: number };
+  currentWidth: number;
+  currentHeight: number;
 }
 
 /**
  * アートボード内のページをリサイズする Hook。
  * 8 方向リサイズハンドルの mousedown → mousemove（DOM 直接操作）→ mouseup（ストア同期）。
  */
-export function usePageResize({ zoom, onResizeEnd, onInteractionChange }: UsePageResizeOptions) {
+export function usePageResize({
+  zoom,
+  onResizeMove,
+  onResizeEnd,
+  onInteractionChange,
+}: UsePageResizeOptions) {
   const resizeState = useRef<ResizeState | null>(null);
+  const onResizeMoveRef = useRef(onResizeMove);
+  onResizeMoveRef.current = onResizeMove;
 
   const startResize = useCallback(
     (e: React.MouseEvent, pageId: string, direction: ResizeDirection) => {
       const frameEl = (e.currentTarget as HTMLElement).closest('[data-page-id]') as HTMLElement;
       if (!frameEl) return;
 
-      const placeholderEl = frameEl.querySelector('[data-page-placeholder]') as HTMLElement | null;
+      const webviewEl = frameEl.querySelector('webview') as HTMLElement | null;
+      const initialWidth = frameEl.offsetWidth;
+      const initialHeight = webviewEl ? webviewEl.offsetHeight : frameEl.offsetHeight;
 
       e.preventDefault();
       resizeState.current = {
         pageId,
         frameEl,
-        placeholderEl,
+        webviewEl,
         direction,
         startMouse: { x: e.clientX, y: e.clientY },
         startRect: {
           x: parseInt(frameEl.style.left || '0', 10),
           y: parseInt(frameEl.style.top || '0', 10),
-          width: frameEl.offsetWidth,
-          height: placeholderEl ? placeholderEl.offsetHeight : frameEl.offsetHeight,
+          width: initialWidth,
+          height: initialHeight,
         },
+        currentWidth: initialWidth,
+        currentHeight: initialHeight,
       };
       document.body.style.userSelect = 'none';
       onInteractionChange(true);
@@ -70,35 +83,38 @@ export function usePageResize({ zoom, onResizeEnd, onInteractionChange }: UsePag
       let newW = width;
       let newH = height;
 
-      // 方向に応じて位置とサイズを計算
-      if (dir.includes('e')) newW = Math.max(PAGE_MIN_WIDTH, width + dx);
-      if (dir.includes('s')) newH = Math.max(PAGE_MIN_HEIGHT, height + dy);
+      // 方向に応じて位置とサイズを計算（整数に丸めてサブピクセルずれを防ぐ）
+      if (dir.includes('e')) newW = Math.max(PAGE_MIN_WIDTH, Math.round(width + dx));
+      if (dir.includes('s')) newH = Math.max(PAGE_MIN_HEIGHT, Math.round(height + dy));
       if (dir.includes('w')) {
         const clampedDx = Math.min(dx, width - PAGE_MIN_WIDTH);
-        newW = width - clampedDx;
-        newX = x + clampedDx;
+        newW = Math.round(width - clampedDx);
+        newX = Math.round(x + clampedDx);
       }
       if (dir.includes('n')) {
         const clampedDy = Math.min(dy, height - PAGE_MIN_HEIGHT);
-        newH = height - clampedDy;
-        newY = y + clampedDy;
+        newH = Math.round(height - clampedDy);
+        newY = Math.round(y + clampedDy);
       }
 
       state.frameEl.style.left = `${newX}px`;
       state.frameEl.style.top = `${newY}px`;
       state.frameEl.style.width = `${newW}px`;
-      if (state.placeholderEl) {
-        state.placeholderEl.style.width = `${newW}px`;
-        state.placeholderEl.style.height = `${newH}px`;
+      if (state.webviewEl) {
+        state.webviewEl.style.width = `${newW}px`;
+        state.webviewEl.style.height = `${newH}px`;
       }
+      state.currentWidth = newW;
+      state.currentHeight = newH;
+      onResizeMoveRef.current?.(state.pageId, newW, newH);
     };
 
     const handleMouseUp = () => {
       const state = resizeState.current;
       if (!state) return;
 
-      const width = parseInt(state.frameEl.style.width || '0', 10);
-      const height = state.placeholderEl ? state.placeholderEl.offsetHeight : 0;
+      const width = state.currentWidth;
+      const height = state.currentHeight;
 
       resizeState.current = null;
       document.body.style.userSelect = '';

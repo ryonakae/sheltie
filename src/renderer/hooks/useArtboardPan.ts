@@ -30,6 +30,7 @@ export function useArtboardPan({
   const applyTransform = useCallback(() => {
     if (!canvasRef.current) return;
     canvasRef.current.style.transform = `translate(${panX.current}px, ${panY.current}px) scale(${zoom.current})`;
+    canvasRef.current.style.setProperty('--canvas-zoom', String(zoom.current));
   }, [canvasRef, zoom, panX, panY]);
 
   const setCursor = useCallback((cursor: string) => {

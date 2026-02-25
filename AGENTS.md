@@ -68,7 +68,8 @@ src/
         │   ├── InteractionOverlay.tsx # 操作中のカーソル制御（透明オーバーレイ）
         │   ├── PageFrame.tsx # ページフレーム（<webview> タグ、リサイズハンドル、タイトルバー）
         │   │                 # dom-ready で setZoomFactor(1) を実行し、persist:artboard に残留した zoomFactor をリセット
-        │   ├── PageTitleBar.tsx # ページタイトルバー（URL・タイトル表示）
+        │   ├── PageTitleBar.tsx # ページタイトルバー（URL・タイトル・サイズ表示、デバイスプリセットボタン）
+        │   ├── TabletIcon.tsx # タブレットアイコンコンポーネント（カスタムSVG）
         │   └── PageResizeHandle.tsx # リサイズハンドル（8方向）
         ├── TabBar/
         │   ├── TabBar.tsx # タブバー全体（openIds に基づく開いているプロジェクト表示、useWindowControlsInset で macOS/Windows タイトルバー対応、ThemeToggle を配置）
@@ -108,6 +109,7 @@ src/
 - 各ページを `<webview>` タグで DOM に描画（React コンポーネント化）
 - canvas 要素に transform (translate + scale) を設定してズーム・パン実装
 - ドラッグでページ移動、リサイズでサイズ変更（`updatePagePosition`/`updatePageSize` で Zustand 状態更新）
+- タイトルバーのデバイスプリセットボタン（モバイル・タブレット・PC）でワンクリック高さ・幅変更
 - マウスホイール or トラックパッドでズーム・パン（`updateViewport` で Zustand 状態更新）
 - ページをクリックで最前面に（`bringPageToFront` で Zustand z-index 制御）
 - 操作モード制御：`isInteracting` フラグで webview の `pointer-events` を制御
@@ -129,16 +131,22 @@ src/
 
 ### データ構造
 
-**Page インターフェース** (`src/renderer/types/tab.ts:6-13`)
+**Page インターフェース** (`src/renderer/types/tab.ts:3-12`)
 - `id`: ページの一意識別子（UUID）
 - `url`: ロード URL
 - `title`: webview のドキュメントタイトルまたはホスト名
 - `x, y, width, height`: キャンバス上の位置・サイズ
 - `createdAt`: 作成タイムスタンプ
 
-**Viewport インターフェース** (`src/renderer/types/tab.ts:15-18`)
+**Viewport インターフェース** (`src/renderer/types/tab.ts:14-18`)
 - `zoom`: ズームレベル（初期値 1）
 - `panX, panY`: パンオフセット（ピクセル）
+
+**SizePreset インターフェース** (`src/renderer/types/tab.ts:24-28`)
+- `label`: プリセット名（'モバイル'、'タブレット'、'PC'）
+- `width`: 推奨幅（ピクセル）
+- `height`: 推奨高さ（ピクセル）
+- SIZE_PRESETS 定数で 3 種類の標準デバイスサイズを定義
 
 **Project インターフェース** の拡張
 - `pages: Page[]`: プロジェクト内のページ配列

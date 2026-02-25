@@ -21,6 +21,18 @@ export const DEFAULT_VIEWPORT: Viewport = { zoom: 1, panX: 0, panY: 0 };
 export const DEFAULT_PAGE_WIDTH = 1280;
 export const DEFAULT_PAGE_HEIGHT = 800;
 
+export interface SizePreset {
+  label: string;
+  width: number;
+  height: number;
+}
+
+export const SIZE_PRESETS: readonly SizePreset[] = [
+  { label: 'モバイル', width: 375, height: 812 },
+  { label: 'タブレット', width: 768, height: 1024 },
+  { label: 'PC', width: 1280, height: 800 },
+];
+
 export interface Project {
   id: string;
   title: string;

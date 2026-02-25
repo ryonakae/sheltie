@@ -195,6 +195,7 @@ export function Artboard() {
             onClose={() => removePage(activeId, page.id)}
             onDragStart={(e) => handleDragStart(e, page.id)}
             onResizeStart={(e, direction) => handleResizeStart(e, page.id, direction)}
+            onResizePreset={(w, h) => updatePageSize(activeId, page.id, w, h)}
             onNavigated={handleNavigated}
             onTitleUpdated={handleTitleUpdated}
           />

@@ -17,6 +17,7 @@ interface PageFrameProps {
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   onResizeStart: (e: React.MouseEvent, direction: ResizeDirection) => void;
+  onResizePreset: (width: number, height: number) => void;
   onNavigated: (pageId: string, url: string, title: string) => void;
   onTitleUpdated: (pageId: string, title: string) => void;
 }
@@ -32,6 +33,7 @@ export function PageFrame({
   onClose,
   onDragStart,
   onResizeStart,
+  onResizePreset,
   onNavigated,
   onTitleUpdated,
 }: PageFrameProps) {
@@ -121,6 +123,7 @@ export function PageFrame({
         height={displayHeight}
         onClose={onClose}
         onMouseDown={handleTitleBarMouseDown}
+        onResizePreset={onResizePreset}
       />
 
       {/* webview: 操作中（ドラッグ/ズーム/パン）は pointer-events: none でブラウザ入力をブロックし、

@@ -25,7 +25,8 @@ export function Canvas() {
     isResizing.current = true;
     dragInfo.current = {
       startX: e.clientX,
-      startWidth: sidebarRef.current?.offsetWidth ?? sidebarWidth,
+      // sidebarRef が取得できない場合のフォールバックは 0 で問題なし（実際には必ず取得できる）
+      startWidth: sidebarRef.current?.offsetWidth ?? 0,
     };
     document.body.style.userSelect = 'none';
   }, []);

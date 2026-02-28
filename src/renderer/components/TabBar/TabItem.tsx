@@ -1,5 +1,4 @@
 import { memo, useCallback } from 'react';
-import type React from 'react';
 
 import { useSortable } from '@dnd-kit/react/sortable';
 import Xmark from '@gravity-ui/icons/Xmark';
@@ -41,7 +40,6 @@ export const TabItem = memo(function TabItem({
           : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
         isDragging ? 'opacity-50' : '',
       ].join(' ')}
-      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       onClick={onActivate}
     >
       <span className="max-w-28 truncate">{project.title}</span>

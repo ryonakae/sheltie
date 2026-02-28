@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { getPlatformInfo } from '@/renderer/lib/tauri-bridge';
+
 interface WindowControlsOverlay {
   readonly visible: boolean;
   getTitlebarAreaRect(): DOMRect;
@@ -22,12 +24,21 @@ function calcRightInset(): number {
  * - Windows/Linux: 右インセット（コントロールボタン分）を動的取得、左は 0
  */
 export function useWindowControlsInset(): { left: number; right: number } {
-  const { platform, trafficLightWidth } = window.windowControls;
-
+  const [platform, setPlatform] = useState<string>('');
+  const [trafficLightWidth, setTrafficLightWidth] = useState(0);
   const [right, setRight] = useState(() => calcRightInset());
 
   useEffect(() => {
-    if (platform === 'darwin') return;
+    getPlatformInfo()
+      .then(({ platform: p, trafficLightWidth: tlw }) => {
+        setPlatform(p);
+        setTrafficLightWidth(tlw);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (platform === 'macos') return;
 
     const wco = (navigator as Navigator & { windowControlsOverlay?: WindowControlsOverlay })
       .windowControlsOverlay as WindowControlsOverlay | undefined;
@@ -38,7 +49,7 @@ export function useWindowControlsInset(): { left: number; right: number } {
     return () => wco.removeEventListener('geometrychange', handler);
   }, [platform]);
 
-  if (platform === 'darwin') {
+  if (platform === 'macos') {
     return { left: trafficLightWidth, right: 0 };
   }
 

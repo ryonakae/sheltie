@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useShallow } from 'zustand/react/shallow';
 
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
+import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import { useArtboardPan } from '@/renderer/hooks/useArtboardPan';
 import { useArtboardZoom } from '@/renderer/hooks/useArtboardZoom';
 import { usePageDrag } from '@/renderer/hooks/usePageDrag';
@@ -20,6 +21,7 @@ export function Artboard() {
     updatePageUrl,
     removePage,
     bringPageToFront,
+    setPageWebviewLabel,
   } = useProjectStore(
     useShallow((s) => ({
       updateViewport: s.updateViewport,
@@ -28,6 +30,7 @@ export function Artboard() {
       updatePageUrl: s.updatePageUrl,
       removePage: s.removePage,
       bringPageToFront: s.bringPageToFront,
+      setPageWebviewLabel: s.setPageWebviewLabel,
     })),
   );
 
@@ -49,7 +52,7 @@ export function Artboard() {
     height: number;
   } | null>(null);
 
-  // ページタイトルのローカル状態（webview イベントで更新）
+  // ページタイトルのローカル状態（Webview イベントで更新）
   const [pageTitles, setPageTitles] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const page of activeProject?.pages ?? []) {
@@ -58,16 +61,52 @@ export function Artboard() {
     return initial;
   });
 
-  // 操作中フラグ（webview の pointer-events 制御と InteractionOverlay 表示に使用）
+  // 操作中フラグ（ネイティブ Webview の hide/show 制御と InteractionOverlay 表示に使用）
   const [isInteracting, setIsInteracting] = useState(false);
   const [interactionCursor, setInteractionCursor] = useState<string | null>(null);
 
-  const pages = activeProject?.pages ?? [];
+  // activeProject が undefined の時 `?? []` が毎回新しい配列を生成するのを防ぐ
+  const pages = useMemo(() => activeProject?.pages ?? [], [activeProject?.pages]);
 
-  const handleInteractionChange = useCallback((active: boolean, cursor = 'default') => {
-    setIsInteracting(active);
-    setInteractionCursor(active ? cursor : null);
-  }, []);
+  /** 全ページの webviewLabel を収集 */
+  const getAllWebviewLabels = useCallback(() => {
+    return pages.map((p) => p.webviewLabel).filter((l): l is string => !!l);
+  }, [pages]);
+
+  /** 全ネイティブ Webview の座標をプレースホルダーに同期して再表示 */
+  const syncAllWebviewBounds = useCallback(() => {
+    if (!canvasRef.current) return;
+
+    const entries = pages
+      .filter((p) => p.webviewLabel)
+      .map((p) => {
+        const el = canvasRef.current?.querySelector(
+          `[data-page-id="${p.id}"] [data-webview-placeholder]`,
+        ) as HTMLElement | null;
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        return { label: p.webviewLabel!, x: rect.left, y: rect.top, w: rect.width, h: rect.height };
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null);
+
+    void webviewApi.showAllWithBounds(entries);
+  }, [pages]);
+
+  const handleInteractionChange = useCallback(
+    (active: boolean, cursor = 'default') => {
+      setIsInteracting(active);
+      setInteractionCursor(active ? cursor : null);
+
+      if (active) {
+        // 操作開始: 全ネイティブ Webview を非表示（プレースホルダーが透けて見える）
+        void webviewApi.hideAll(getAllWebviewLabels());
+      } else {
+        // 操作完了: ネイティブ Webview の座標を更新して再表示
+        syncAllWebviewBounds();
+      }
+    },
+    [getAllWebviewLabels, syncAllWebviewBounds],
+  );
 
   // パン操作
   useArtboardPan({
@@ -95,6 +134,10 @@ export function Artboard() {
     onZoomEnd: useCallback(
       (z, px, py) => updateViewport(activeId, { zoom: z, panX: px, panY: py }),
       [updateViewport, activeId],
+    ),
+    onInteractionChange: useCallback(
+      (active: boolean) => handleInteractionChange(active, 'default'),
+      [handleInteractionChange],
     ),
   });
 
@@ -140,10 +183,21 @@ export function Artboard() {
     }
   }, []);
 
+  // ウィンドウがフォーカスを失った場合に isInteracting を強制解除
+  // （ウィンドウ外でマウスアップした際に操作中フラグが残り Webview が隠れ続けるのを防ぐ）
+  useEffect(() => {
+    const handleBlur = () => handleInteractionChange(false);
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, [handleInteractionChange]);
+
   const handleNavigated = useCallback(
     (pageId: string, url: string, title: string) => {
       updatePageUrl(activeId, pageId, url, title);
-      setPageTitles((prev) => ({ ...prev, [pageId]: title }));
+      // 空タイトルの場合はローカル状態を更新しない（on_navigation の中間イベントで既存タイトルが消えるのを防ぐ）
+      if (title) {
+        setPageTitles((prev) => ({ ...prev, [pageId]: title }));
+      }
     },
     [updatePageUrl, activeId],
   );
@@ -166,6 +220,13 @@ export function Artboard() {
       startResize(e, pageId, direction);
     },
     [startResize],
+  );
+
+  const handleWebviewCreated = useCallback(
+    (pageId: string, label: string) => {
+      setPageWebviewLabel(activeId, pageId, label);
+    },
+    [setPageWebviewLabel, activeId],
   );
 
   return (
@@ -191,6 +252,10 @@ export function Artboard() {
             onActivate={() => {
               setActivePageId(page.id);
               bringPageToFront(activeId, page.id);
+              // 非操作中でも選択ページの Webview を再表示して最前面に配置
+              if (page.webviewLabel && !isInteracting) {
+                void webviewApi.show(page.webviewLabel);
+              }
             }}
             onClose={() => removePage(activeId, page.id)}
             onDragStart={(e) => handleDragStart(e, page.id)}
@@ -198,6 +263,7 @@ export function Artboard() {
             onResizePreset={(w, h) => updatePageSize(activeId, page.id, w, h)}
             onNavigated={handleNavigated}
             onTitleUpdated={handleTitleUpdated}
+            onWebviewCreated={handleWebviewCreated}
           />
         ))}
       </div>

@@ -9,6 +9,8 @@ export interface Page {
   width: number;
   height: number;
   createdAt: number;
+  /** Tauri Webview のラベル（ランタイムのみ・永続化不要） */
+  webviewLabel?: string;
 }
 
 export interface Viewport {

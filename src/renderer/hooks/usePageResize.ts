@@ -35,14 +35,17 @@ export function usePageResize({
 }: UsePageResizeOptions) {
   const resizeState = useRef<ResizeState | null>(null);
   const onResizeMoveRef = useRef(onResizeMove);
-  onResizeMoveRef.current = onResizeMove;
+  // レンダリング外で ref を更新（latest ref パターン: stale closure を回避）
+  useEffect(() => {
+    onResizeMoveRef.current = onResizeMove;
+  });
 
   const startResize = useCallback(
     (e: React.MouseEvent, pageId: string, direction: ResizeDirection) => {
       const frameEl = (e.currentTarget as HTMLElement).closest('[data-page-id]') as HTMLElement;
       if (!frameEl) return;
 
-      const webviewEl = frameEl.querySelector('webview') as HTMLElement | null;
+      const webviewEl = frameEl.querySelector('[data-webview-placeholder]') as HTMLElement | null;
       const initialWidth = frameEl.offsetWidth;
       const initialHeight = webviewEl ? webviewEl.offsetHeight : frameEl.offsetHeight;
 

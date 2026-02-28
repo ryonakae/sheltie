@@ -1,5 +1,3 @@
-import type React from 'react';
-
 import { DragDropProvider } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
 import House from '@gravity-ui/icons/House';
@@ -44,11 +42,11 @@ export function TabBar() {
   const { left, right } = useWindowControlsInset();
 
   return (
+    // data-tauri-drag-region で Tauri のウィンドウドラッグ領域を指定
     <header
       className="flex h-9 shrink-0 items-stretch border-b border-border bg-default"
-      style={
-        { WebkitAppRegion: 'drag', paddingLeft: left, paddingRight: right } as React.CSSProperties
-      }
+      data-tauri-drag-region
+      style={{ paddingLeft: left, paddingRight: right }}
     >
       {/* ホームボタン: クリックでホームキャンバスに切り替え */}
       <button
@@ -58,7 +56,6 @@ export function TabBar() {
             ? 'border-b-accent bg-surface text-foreground'
             : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
         ].join(' ')}
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         onClick={() => setActive(HOME_ID)}
         aria-label="ホームに切り替え"
       >
@@ -98,7 +95,6 @@ export function TabBar() {
             variant="ghost"
             size="sm"
             className="mx-1 self-center"
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
             aria-label="プロジェクトを追加"
             onPress={() => createProject()}
           >
@@ -108,10 +104,7 @@ export function TabBar() {
       </DragDropProvider>
 
       {/* テーマ切替ボタン: DragDropProvider の外、ウィンドウコントロールの左に配置 */}
-      <div
-        className="flex shrink-0 items-center px-1"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-      >
+      <div className="flex shrink-0 items-center px-1">
         <ThemeToggle />
       </div>
     </header>

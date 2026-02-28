@@ -88,6 +88,13 @@ typings/
 # Vite
 .vite/
 src/renderer/.vite/
+dist/
 
-# Electron-Forge
+# Tauri
+src-tauri/target/
+
+# Claude Code
+.claude/settings.local.json
+
+# Electron-Forge (削除予定)
 out/

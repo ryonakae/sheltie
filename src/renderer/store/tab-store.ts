@@ -67,6 +67,8 @@ interface ProjectActions {
   updateViewport: (projectId: string, viewport: Partial<Viewport>) => void;
   /** ページを配列末尾に移動して最前面に表示する */
   bringPageToFront: (projectId: string, pageId: string) => void;
+  /** ネイティブ Webview 作成後にラベルをページに紐付ける（ランタイムのみ・永続化不要） */
+  setPageWebviewLabel: (projectId: string, pageId: string, label: string) => void;
   /** 永続化モジュール専用: 起動時に保存済み状態を復元する */
   _restoreState: (state: ProjectState) => void;
   /** 永続化モジュール専用: 復元完了フラグを立てる */
@@ -201,7 +203,13 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         if (p.id !== projectId) return p;
         return {
           ...p,
-          pages: p.pages.map((pg) => (pg.id === pageId ? { ...pg, url, title } : pg)),
+          pages: p.pages.map((pg) => {
+            if (pg.id !== pageId) return pg;
+            // URL・タイトルが同一なら参照を維持して不要な再レンダリングを防ぐ
+            // 空タイトルの場合は既存タイトルを維持（on_navigation の URL 正規化後に来る空文字を無視）
+            if (pg.url === url && (pg.title === title || !title)) return pg;
+            return { ...pg, url, title: title || pg.title };
+          }),
         };
       }),
     })),
@@ -220,6 +228,8 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         if (p.id !== projectId) return p;
         const page = p.pages.find((pg) => pg.id === pageId);
         if (!page) return p;
+        // 既に末尾（最前面）なら配列を再構築しない（冪等化）
+        if (p.pages[p.pages.length - 1]?.id === pageId) return p;
         return {
           ...p,
           pages: [...p.pages.filter((pg) => pg.id !== pageId), page],
@@ -227,9 +237,24 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     })),
 
+  setPageWebviewLabel: (projectId, pageId, label) =>
+    set((state) => ({
+      projects: state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          pages: p.pages.map((pg) => (pg.id === pageId ? { ...pg, webviewLabel: label } : pg)),
+        };
+      }),
+    })),
+
   _restoreState: (restoredState) =>
     set({
-      projects: restoredState.projects,
+      // webviewLabel はランタイム専用のため、復元時に必ずクリアする
+      projects: restoredState.projects.map((p) => ({
+        ...p,
+        pages: p.pages.map(({ webviewLabel: _wl, ...pg }) => pg),
+      })),
       openIds: restoredState.openIds,
       activeId: restoredState.activeId,
     }),

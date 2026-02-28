@@ -1,3 +1,4 @@
+import { api } from '@/renderer/lib/tauri-bridge';
 import { useProjectStore } from '@/renderer/store/tab-store';
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -6,11 +7,11 @@ const SAVE_DEBOUNCE_MS = 500;
 let initialized = false;
 
 /**
- * プロジェクト状態の IPC 永続化をセットアップする。
+ * プロジェクト状態の永続化をセットアップする。
  * React マウント前に 1 度だけ呼び出すこと。
  *
- * - 起動時: electron-store から状態を読み込んで復元
- * - 変更時: 500ms デバウンスで electron-store に保存
+ * - 起動時: Tauri Store から状態を読み込んで復元
+ * - 変更時: 500ms デバウンスで Tauri Store に保存
  * - クローズ前: 最新状態を即時保存してウィンドウを破棄
  */
 export function setupProjectPersistence(): void {
@@ -18,7 +19,7 @@ export function setupProjectPersistence(): void {
   initialized = true;
 
   // 1. 起動時: 保存済み状態を読み込んで復元
-  window.api
+  api
     .loadProjectState()
     .then((saved) => {
       useProjectStore.getState()._restoreState(saved);
@@ -43,18 +44,17 @@ export function setupProjectPersistence(): void {
 
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      // デバウンス後に getState() で最新状態を取得する
       const { projects, openIds, activeId } = useProjectStore.getState();
-      window.api.saveProjectState({ projects, openIds, activeId }).catch(() => {
+      api.saveProjectState({ projects, openIds, activeId }).catch(() => {
         // 保存失敗は無視（次の変更時に再試行される）
       });
     }, SAVE_DEBOUNCE_MS);
   });
 
   // 3. ウィンドウクローズ前の最終保存
-  window.api.onSaveBeforeClose(() => {
+  api.onSaveBeforeClose(() => {
     if (saveTimer) clearTimeout(saveTimer);
     const { projects, openIds, activeId } = useProjectStore.getState();
-    window.api.closeReady({ projects, openIds, activeId }).catch(() => {});
+    api.closeReady({ projects, openIds, activeId }).catch(() => {});
   });
 }

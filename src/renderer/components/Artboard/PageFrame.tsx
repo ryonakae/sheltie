@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import type { Page } from '@/renderer/types/tab';
+import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
 import { PageTitleBar } from '@/renderer/components/Artboard/PageTitleBar';
 
@@ -20,6 +21,7 @@ interface PageFrameProps {
   onResizePreset: (width: number, height: number) => void;
   onNavigated: (pageId: string, url: string, title: string) => void;
   onTitleUpdated: (pageId: string, title: string) => void;
+  onWebviewCreated: (pageId: string, label: string) => void;
 }
 
 export function PageFrame({
@@ -36,60 +38,110 @@ export function PageFrame({
   onResizePreset,
   onNavigated,
   onTitleUpdated,
+  onWebviewCreated,
 }: PageFrameProps) {
-  const webviewRef = useRef<Electron.WebviewTag>(null);
+  const placeholderRef = useRef<HTMLDivElement>(null);
+  // Zustand の stale ラベルは参照しない（プロジェクト切替後の孤児 Webview 防止）
+  const webviewLabelRef = useRef<string | null>(null);
+  // IPC 実行中フラグ: StrictMode の二重マウントによる二重 create IPC を防ぐ
+  const isCreatingRef = useRef(false);
+  // マウント時の URL をキャプチャ（ナビゲーション後に page.url が更新されても Webview を再作成しない）
+  const initialUrlRef = useRef(page.url);
 
+  // マウント時: Rust コマンドでネイティブ Webview を作成
   useEffect(() => {
-    const webview = webviewRef.current;
-    if (!webview) return;
+    const placeholder = placeholderRef.current;
+    if (!placeholder) return;
 
-    const handleDidNavigate = () => {
-      onNavigated(page.id, webview.getURL(), webview.getTitle());
-    };
+    // 既に label が割り当て済み、または作成中なら再作成しない（HMR / StrictMode 対策）
+    if (webviewLabelRef.current || isCreatingRef.current) return;
 
-    const handleDidNavigateInPage = (e: Electron.DidNavigateInPageEvent) => {
-      // サブフレームのナビゲーションは無視する
-      if (!e.isMainFrame) return;
-      onNavigated(page.id, webview.getURL(), webview.getTitle());
-    };
+    isCreatingRef.current = true;
+    // アンマウントとの競合を防ぐキャンセルフラグ
+    let cancelled = false;
 
-    const handleTitleUpdated = () => {
-      onTitleUpdated(page.id, webview.getTitle());
-    };
+    const rect = placeholder.getBoundingClientRect();
+    console.log(`[PageFrame] Webview 作成開始: page.id=${page.id}`);
+    webviewApi
+      .create(page.id, initialUrlRef.current, rect.left, rect.top, rect.width, rect.height)
+      .then((label) => {
+        if (cancelled) {
+          // StrictMode Cleanup 済み（cancelled=true）→ 孤児化防止のため即破棄してフラグ解除
+          console.log(`[PageFrame] cancelled=true → destroy(${label})`);
+          void webviewApi.destroy(label);
+          isCreatingRef.current = false;
+          return;
+        }
+        webviewLabelRef.current = label;
+        isCreatingRef.current = false;
+        onWebviewCreated(page.id, label);
+        console.log(`[PageFrame] Webview 作成完了: label=${label}`);
 
-    webview.addEventListener('did-navigate', handleDidNavigate);
-    webview.addEventListener('did-navigate-in-page', handleDidNavigateInPage);
-    webview.addEventListener('page-title-updated', handleTitleUpdated);
+        // show effect は webviewLabelRef の変化を検知しないため、create 完了直後に明示表示
+        const currentRect = placeholder.getBoundingClientRect();
+        void webviewApi.updateBounds(
+          label,
+          currentRect.left,
+          currentRect.top,
+          currentRect.width,
+          currentRect.height,
+        );
+        void webviewApi.show(label);
+      })
+      .catch((err: unknown) => {
+        console.error('[PageFrame] Webview 作成に失敗:', err);
+        isCreatingRef.current = false;
+      });
 
     return () => {
-      webview.removeEventListener('did-navigate', handleDidNavigate);
-      webview.removeEventListener('did-navigate-in-page', handleDidNavigateInPage);
-      webview.removeEventListener('page-title-updated', handleTitleUpdated);
+      cancelled = true;
+      // アンマウント時に Webview を破棄
+      if (webviewLabelRef.current) {
+        console.log(`[PageFrame] アンマウント → destroy(${webviewLabelRef.current})`);
+        void webviewApi.destroy(webviewLabelRef.current);
+        webviewLabelRef.current = null;
+      }
+    };
+    // page.id が変わった場合のみ再実行（page.url はナビゲーションで更新されるが Webview の再作成は不要）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.id]);
+
+  // Rust → JS イベント: ナビゲーション・タイトル変更をリッスン
+  useEffect(() => {
+    const unlistenNav = webviewApi.onPageNavigated(page.id, ({ url }) => {
+      onNavigated(page.id, url, '');
+    });
+    const unlistenTitle = webviewApi.onPageTitleChanged(page.id, ({ title: t }) => {
+      onTitleUpdated(page.id, t);
+    });
+
+    return () => {
+      void unlistenNav.then((f) => f());
+      void unlistenTitle.then((f) => f());
     };
   }, [page.id, onNavigated, onTitleUpdated]);
 
-  // persist:artboard パーティションに前回セッションの zoomFactor が残留している場合に
-  // 備えて、dom-ready のタイミングで明示的に 1.0 にリセットする
+  // 操作完了時: プレースホルダー座標をネイティブ Webview に同期して再表示
   useEffect(() => {
-    const webview = webviewRef.current;
-    if (!webview) return;
+    if (isInteracting || !webviewLabelRef.current || !placeholderRef.current) return;
 
-    const resetZoom = () => {
-      webview.setZoomFactor(1);
-    };
-
-    webview.addEventListener('dom-ready', resetZoom);
-    return () => {
-      webview.removeEventListener('dom-ready', resetZoom);
-    };
-  }, []);
+    const rect = placeholderRef.current.getBoundingClientRect();
+    void webviewApi.updateBounds(
+      webviewLabelRef.current,
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height,
+    );
+    void webviewApi.show(webviewLabelRef.current);
+  }, [isInteracting, page.x, page.y, page.width, page.height]);
 
   const handleTitleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      onActivate();
+      // onActivate は外側 div の onMouseDown バブリングで呼ばれるため重複して呼ばない
       onDragStart(e);
     },
-    [onActivate, onDragStart],
+    [onDragStart],
   );
 
   const handleResizeStart = useCallback(
@@ -126,18 +178,16 @@ export function PageFrame({
         onResizePreset={onResizePreset}
       />
 
-      {/* webview: 操作中（ドラッグ/ズーム/パン）は pointer-events: none でブラウザ入力をブロックし、
-          React が入力を受け取れるようにする */}
-      <webview
-        ref={webviewRef}
-        src={page.url}
-        partition="persist:artboard"
-        webpreferences="contextIsolation=yes"
+      {/* webview プレースホルダー: ネイティブ Webview の位置合わせ基準
+          操作中（ドラッグ/ズーム/パン）はネイティブ Webview を hide() しているため
+          このプレースホルダーが表示される */}
+      <div
+        ref={placeholderRef}
+        data-webview-placeholder
+        className="bg-background"
         style={{
           width: page.width,
           height: page.height,
-          pointerEvents: isInteracting ? 'none' : 'auto',
-          display: 'flex',
           borderRadius: '0 0 calc(8px / var(--canvas-zoom, 1)) calc(8px / var(--canvas-zoom, 1))',
         }}
       />

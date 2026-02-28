@@ -22,10 +22,10 @@
     "jsx": "react-jsx"
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "forge.config.ts",
-    "forge.env.d.ts",
-    "vite.*.config.ts"
-  ]
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx",
+    "src/shared/**/*.ts",
+    "vite.config.mts"
+  ],
+  "exclude": ["src-tauri", "src/main", "src/preload"]
 }

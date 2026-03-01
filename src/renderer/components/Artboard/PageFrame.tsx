@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Page } from '@/renderer/types/tab';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
@@ -45,6 +45,8 @@ export function PageFrame({
   const webviewLabelRef = useRef<string | null>(null);
   // IPC 実行中フラグ: StrictMode の二重マウントによる二重 create IPC を防ぐ
   const isCreatingRef = useRef(false);
+  // StrictMode 対応: cancelled パスでインクリメントして effect を再トリガー
+  const [createAttempt, setCreateAttempt] = useState(0);
   // マウント時の URL をキャプチャ（ナビゲーション後に page.url が更新されても Webview を再作成しない）
   const initialUrlRef = useRef(page.url);
 
@@ -70,14 +72,14 @@ export function PageFrame({
           console.log(`[PageFrame] cancelled=true → destroy(${label})`);
           void webviewApi.destroy(label);
           isCreatingRef.current = false;
+          // createAttempt をインクリメントして次マウントで再試行
+          setCreateAttempt((c) => c + 1);
           return;
         }
         webviewLabelRef.current = label;
         isCreatingRef.current = false;
-        onWebviewCreated(page.id, label);
-        console.log(`[PageFrame] Webview 作成完了: label=${label}`);
 
-        // show effect は webviewLabelRef の変化を検知しないため、create 完了直後に明示表示
+        // ネイティブ表示を Zustand 更新より先に試みる（初期化完了タイミングを最大化）
         const currentRect = placeholder.getBoundingClientRect();
         void webviewApi.updateBounds(
           label,
@@ -87,6 +89,9 @@ export function PageFrame({
           currentRect.height,
         );
         void webviewApi.show(label);
+        // Zustand 更新後にフォールバック effect が念押し表示
+        onWebviewCreated(page.id, label);
+        console.log(`[PageFrame] Webview 作成完了: label=${label}`);
       })
       .catch((err: unknown) => {
         console.error('[PageFrame] Webview 作成に失敗:', err);
@@ -103,8 +108,9 @@ export function PageFrame({
       }
     };
     // page.id が変わった場合のみ再実行（page.url はナビゲーションで更新されるが Webview の再作成は不要）
+    // createAttempt: StrictMode の cancelled パスで再試行トリガー
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page.id]);
+  }, [page.id, createAttempt]);
 
   // Rust → JS イベント: ナビゲーション・タイトル変更をリッスン
   useEffect(() => {
@@ -134,7 +140,8 @@ export function PageFrame({
       rect.height,
     );
     void webviewApi.show(webviewLabelRef.current);
-  }, [isInteracting, page.x, page.y, page.width, page.height]);
+    // page.webviewLabel: setPageWebviewLabel 後に effect を再実行して初期表示を念押し
+  }, [isInteracting, page.x, page.y, page.width, page.height, page.webviewLabel]);
 
   const handleTitleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {

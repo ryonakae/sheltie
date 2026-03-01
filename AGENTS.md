@@ -53,15 +53,15 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │   │   └── theme-store.ts # Zustand テーマストア
 │   │   ├── hooks/
 │   │   │   ├── useWindowControlsInset.ts # getPlatformInfo() 非同期に更新
-│   │   │   ├── useArtboardPan.ts # パン操作
-│   │   │   ├── useArtboardZoom.ts # ズーム・パン操作
+│   │   │   ├── useArtboardPan.ts # パン操作（onPanMove コールバック）
+│   │   │   ├── useArtboardZoom.ts # ズーム・パン操作（onBoundsUpdate コールバック）
 │   │   │   ├── usePageDrag.ts # ページドラッグ
 │   │   │   └── usePageResize.ts # ページリサイズ
 │   │   └── components/
 │   │       ├── Canvas/ # キャンバス管理
 │   │       ├── Artboard/ # ページレンダリング・操作制御
 │   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview
-│   │       │   ├── Artboard.tsx # hideAll / syncAllWebviewBounds 追加
+│   │       │   ├── Artboard.tsx # InteractionType 型、hideAll / syncAllWebviewBounds / syncAllWebviewBoundsImmediate
 │   │       │   └── PageTitleBar.tsx
 │   │       ├── TabBar/ # data-tauri-drag-region で実装
 │   │       └── HomeScreen/ # プロジェクト一覧
@@ -99,11 +99,11 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
   - `Ctrl/Cmd + ホイール`: マウスカーソル中心にズーム
   - `ホイール（修飾キーなし）`: キャンバスをパン（スクロール移動）
 - ページをクリックで最前面に（`bringPageToFront` で Zustand z-index 制御）
-- 操作モード制御：`isInteracting` フラグで Webview の `pointer-events` を制御
-  - 操作中 (`isInteracting: true`): canvas に `pointer-events: auto`、Webview に `pointer-events: none` → React が入力受け取り
-  - 操作終了 (`isInteracting: false`): canvas に `pointer-events: none`、Webview に `pointer-events: auto` → Webview がクリック可能
+- 操作モード制御：`InteractionType` (`'pan' | 'zoom' | 'drag' | 'resize'`) で操作タイプを分類
+  - **ページ操作（drag / resize）**: 全 Webview を `hideAll()` で非表示、操作完了時に `syncAllWebviewBounds()` で座標同期して再表示
+  - **キャンバス操作（pan / zoom）**: Webview を非表示にせず、操作中リアルタイムで `syncAllWebviewBoundsImmediate()` で座標を同期（rAF スロットリング）
+  - `activeInteractionsRef` (`Set<InteractionType>`) で複数操作の同時性を管理（ホイール debounce と他操作の競合防止）
 - Webview イベント（`navigate`, `document-title-changed`）で URL・タイトル更新をリッスン
-- `hideAll()` で全 Webview を一括非表示、`syncAllWebviewBounds()` で位置・サイズ同期
 
 **状態管理**: Zustand による共有状態管理
 - **useProjectStore** (`tab-store.ts`):
@@ -177,6 +177,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 **Webview 操作 API** (`src/renderer/lib/tauri-bridge.ts` の `webviewApi`):
 - `create()`: Webview 作成（IPC）
 - `updateBounds()`: 位置・サイズ更新（`getWebviewHandle()` で同期取得、IPC 不要）
+- `updateAllBounds()`: 複数 Webview の位置・サイズを一括更新（show/hide なし、操作中のリアルタイム同期用）
 - `show()`, `hide()`, `destroy()`: 表示制御（IPC 不要）
 - `hideAll()`, `showAllWithBounds()`: 一括操作（複数 Webview の効率的な制御）
 - イベントリスナー登録: `onPageNavigated()`, `onPageTitleChanged()`
@@ -194,8 +195,9 @@ IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、t
 - **状態管理**: グローバル共有状態は Zustand を使用。コンポーネントローカル状態は `useState` で十分
 - **DOM 操作**: サイドバー幅調整のような高頻度アップデートはレンダリング外で行い、確定時のみ dispatch で同期
 - **ズーム対応 UI**: アートボード内の UI 要素（ボーダー、パディング、アイコンサイズなど）はズーム値に応じて動的にスケーリング必要。実装方法: `--canvas-zoom` CSS Custom Property をルート canvas 要素に設定し、各 UI 要素は `calc(base-size / var(--canvas-zoom, 1))` で自動スケーリング。これにより、ズーム・パン時に React 再レンダリングを回避
-- **タイトルバー制御**: macOS/Windows のコントロール領域は `data-tauri-drag-region` 属性で指定（`-webkit-app-region: drag` の代わり）
+- **タイトルバー制御**: macOS/Windows のコントロール領域は `data-tauri-drag-region` 属性で指定（`-webkit-app-region: drag` の代わり）。Tauri v2 では属性が子要素に自動継承されないため、コンテナ要素ごとに明示的に設定。ネイティブの `<button>` 等は自動的にドラッグが抑制される
 - **Webview 非同期制御**: Webview 作成は React StrictMode の二重マウントによる create/destroy 競合の対象。`PageFrame.tsx` で `isCreatingRef` フラグを使用して二重 create IPC を防止。`webviewApi` メソッドはすべて try-catch で保護し、Webview 未作成・既破棄時は no-op。詳細は MEMORY.md の「非同期制御パターン（Webview 作成）」を参照
+- **操作中の Webview 座標リアルタイム同期**: キャンバス操作（pan / zoom）中は Webview を hide しないで `updateAllBounds()` でリアルタイム同期。これはカーソルが Webview 外にある場合 React コンテナがイベント受け取れるため可能。`syncAllWebviewBoundsImmediate()` で rAF スロットリングして過負荷防止。詳細は MEMORY.md の「Webview hide/show 制御（v2）」を参照
 
 
 ## 主要ライブラリ

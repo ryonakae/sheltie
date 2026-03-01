@@ -110,6 +110,13 @@ export const webviewApi = {
     await Promise.all(labels.map((l) => this.hide(l)));
   },
 
+  /** 複数 Webview の座標を一括更新（show/hide なし、操作中のリアルタイム同期用） */
+  async updateAllBounds(
+    entries: { label: string; x: number; y: number; w: number; h: number }[],
+  ): Promise<void> {
+    await Promise.all(entries.map(({ label, x, y, w, h }) => this.updateBounds(label, x, y, w, h)));
+  },
+
   /** 複数 Webview の座標を更新してから一括表示（操作完了時） */
   async showAllWithBounds(
     entries: { label: string; x: number; y: number; w: number; h: number }[],

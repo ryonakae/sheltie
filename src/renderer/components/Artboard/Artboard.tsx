@@ -65,6 +65,10 @@ export function Artboard() {
   const [isInteracting, setIsInteracting] = useState(false);
   const [interactionCursor, setInteractionCursor] = useState<string | null>(null);
 
+  // 複数操作の同時性を管理（例: ホイール debounce 終了前にドラッグ開始した場合の競合防止）
+  type InteractionType = 'pan' | 'zoom' | 'drag' | 'resize';
+  const activeInteractionsRef = useRef<Set<InteractionType>>(new Set());
+
   // activeProject が undefined の時 `?? []` が毎回新しい配列を生成するのを防ぐ
   const pages = useMemo(() => activeProject?.pages ?? [], [activeProject?.pages]);
 
@@ -92,17 +96,56 @@ export function Artboard() {
     void webviewApi.showAllWithBounds(entries);
   }, [pages]);
 
-  const handleInteractionChange = useCallback(
-    (active: boolean, cursor = 'default') => {
-      setIsInteracting(active);
-      setInteractionCursor(active ? cursor : null);
+  /** rAF スロットリング用 ID（操作中の Webview 座標リアルタイム同期用） */
+  const rafIdRef = useRef<number>(0);
 
+  /** 操作中に全 Webview の座標をリアルタイム同期（show/hide なし、1フレーム1回に制限） */
+  const syncAllWebviewBoundsImmediate = useCallback(() => {
+    if (rafIdRef.current) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = 0;
+      if (!canvasRef.current) return;
+      const entries = pages
+        .filter((p) => p.webviewLabel)
+        .map((p) => {
+          const el = canvasRef.current?.querySelector(
+            `[data-page-id="${p.id}"] [data-webview-placeholder]`,
+          ) as HTMLElement | null;
+          if (!el) return null;
+          const rect = el.getBoundingClientRect();
+          return {
+            label: p.webviewLabel!,
+            x: rect.left,
+            y: rect.top,
+            w: rect.width,
+            h: rect.height,
+          };
+        })
+        .filter((e): e is NonNullable<typeof e> => e !== null);
+      void webviewApi.updateAllBounds(entries);
+    });
+  }, [pages]);
+
+  const handleInteractionChange = useCallback(
+    (active: boolean, cursor = 'default', type: InteractionType = 'drag') => {
       if (active) {
-        // 操作開始: 全ネイティブ Webview を非表示（プレースホルダーが透けて見える）
-        void webviewApi.hideAll(getAllWebviewLabels());
+        activeInteractionsRef.current.add(type);
+        setIsInteracting(true);
+        setInteractionCursor(cursor);
+
+        // ページ操作のみ hideAll（キャンバス操作では Webview を非表示にしない）
+        if (type === 'drag' || type === 'resize') {
+          void webviewApi.hideAll(getAllWebviewLabels());
+        }
       } else {
-        // 操作完了: ネイティブ Webview の座標を更新して再表示
-        syncAllWebviewBounds();
+        activeInteractionsRef.current.delete(type);
+
+        // 全操作が終了した時のみ座標同期して再表示
+        if (activeInteractionsRef.current.size === 0) {
+          setIsInteracting(false);
+          setInteractionCursor(null);
+          syncAllWebviewBounds();
+        }
       }
     },
     [getAllWebviewLabels, syncAllWebviewBounds],
@@ -119,9 +162,10 @@ export function Artboard() {
       [updateViewport, activeId],
     ),
     onInteractionChange: useCallback(
-      (active) => handleInteractionChange(active, 'grabbing'),
+      (active) => handleInteractionChange(active, 'grabbing', 'pan'),
       [handleInteractionChange],
     ),
+    onPanMove: syncAllWebviewBoundsImmediate,
   });
 
   // ズーム操作
@@ -136,9 +180,10 @@ export function Artboard() {
       [updateViewport, activeId],
     ),
     onInteractionChange: useCallback(
-      (active: boolean) => handleInteractionChange(active, 'default'),
+      (active: boolean) => handleInteractionChange(active, 'default', 'zoom'),
       [handleInteractionChange],
     ),
+    onBoundsUpdate: syncAllWebviewBoundsImmediate,
   });
 
   // ページドラッグ
@@ -151,7 +196,7 @@ export function Artboard() {
       [updatePagePosition, activeId],
     ),
     onInteractionChange: useCallback(
-      (active) => handleInteractionChange(active, 'grabbing'),
+      (active) => handleInteractionChange(active, 'grabbing', 'drag'),
       [handleInteractionChange],
     ),
   });
@@ -170,7 +215,7 @@ export function Artboard() {
       [updatePageSize, activeId],
     ),
     onInteractionChange: useCallback(
-      (active) => handleInteractionChange(active, 'default'),
+      (active) => handleInteractionChange(active, 'default', 'resize'),
       [handleInteractionChange],
     ),
   });

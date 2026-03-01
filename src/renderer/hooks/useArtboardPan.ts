@@ -7,6 +7,8 @@ interface UseArtboardPanOptions {
   panY: React.RefObject<number>;
   onPanEnd: (panX: number, panY: number) => void;
   onInteractionChange: (active: boolean) => void;
+  /** パン移動中に毎フレーム呼ばれる（Webview 座標リアルタイム同期用） */
+  onPanMove?: () => void;
 }
 
 /**
@@ -20,6 +22,7 @@ export function useArtboardPan({
   panY,
   onPanEnd,
   onInteractionChange,
+  onPanMove,
 }: UseArtboardPanOptions) {
   const isPanMode = useRef(false);
   const isDragging = useRef(false);
@@ -79,6 +82,7 @@ export function useArtboardPan({
       panX.current = startPan.current.x + dx;
       panY.current = startPan.current.y + dy;
       applyTransform();
+      onPanMove?.();
     };
 
     const handleMouseUp = () => {
@@ -102,7 +106,7 @@ export function useArtboardPan({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [applyTransform, setCursor, zoom, panX, panY, onPanEnd, onInteractionChange]);
+  }, [applyTransform, setCursor, zoom, panX, panY, onPanEnd, onInteractionChange, onPanMove]);
 
   return { isPanMode, isDragging };
 }

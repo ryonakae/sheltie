@@ -11,8 +11,10 @@ interface UseArtboardZoomOptions {
   panX: React.RefObject<number>;
   panY: React.RefObject<number>;
   onZoomEnd: (zoom: number, panX: number, panY: number) => void;
-  /** ズーム操作の開始/終了を通知（Webview の hide/show 制御用） */
+  /** ズーム/パン操作の開始/終了を通知 */
   onInteractionChange?: (active: boolean) => void;
+  /** ホイール操作中に毎フレーム呼ばれる（Webview 座標リアルタイム同期用） */
+  onBoundsUpdate?: () => void;
 }
 
 /**
@@ -29,6 +31,7 @@ export function useArtboardZoom({
   panY,
   onZoomEnd,
   onInteractionChange,
+  onBoundsUpdate,
 }: UseArtboardZoomOptions) {
   const applyTransform = useCallback(() => {
     if (!canvasRef.current) return;
@@ -76,6 +79,7 @@ export function useArtboardZoom({
       }
 
       applyTransform();
+      onBoundsUpdate?.();
 
       // ホイール操作が止まってから 150ms 後にストアへ同期して操作終了を通知
       if (commitTimer) clearTimeout(commitTimer);
@@ -93,5 +97,14 @@ export function useArtboardZoom({
       container.removeEventListener('wheel', handleWheel);
       if (commitTimer) clearTimeout(commitTimer);
     };
-  }, [containerRef, applyTransform, zoom, panX, panY, onZoomEnd, onInteractionChange]);
+  }, [
+    containerRef,
+    applyTransform,
+    zoom,
+    panX,
+    panY,
+    onZoomEnd,
+    onInteractionChange,
+    onBoundsUpdate,
+  ]);
 }

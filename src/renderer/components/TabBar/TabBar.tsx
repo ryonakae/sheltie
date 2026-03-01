@@ -77,8 +77,8 @@ export function TabBar() {
           reorderOpenProjects(newIds);
         }}
       >
-        {/* コンテナは drag を継承し、タブが少ない時も空き領域でウィンドウドラッグ可能 */}
-        <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
+        {/* タブが少ない時の空き領域でもウィンドウドラッグできるよう data-tauri-drag-region を付与 */}
+        <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto" data-tauri-drag-region>
           {openProjects.map((project, index) => (
             <TabItem
               key={project.id}
@@ -104,7 +104,7 @@ export function TabBar() {
       </DragDropProvider>
 
       {/* テーマ切替ボタン: DragDropProvider の外、ウィンドウコントロールの左に配置 */}
-      <div className="flex shrink-0 items-center px-1">
+      <div className="flex shrink-0 items-center px-1" data-tauri-drag-region>
         <ThemeToggle />
       </div>
     </header>

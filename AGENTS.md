@@ -61,7 +61,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │       ├── Canvas/ # キャンバス管理
 │   │       ├── Artboard/ # ページレンダリング・操作制御
 │   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview
-│   │       │   ├── Artboard.tsx # InteractionType 型、hideAll / syncAllWebviewBounds / syncAllWebviewBoundsImmediate
+│   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）
 │   │       │   └── PageTitleBar.tsx
 │   │       ├── TabBar/ # data-tauri-drag-region で実装
 │   │       └── HomeScreen/ # プロジェクト一覧
@@ -100,10 +100,12 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
   - `ホイール（修飾キーなし）`: キャンバスをパン（スクロール移動）
 - ページをクリックで最前面に（`bringPageToFront` で Zustand z-index 制御）
 - 操作モード制御：`InteractionType` (`'pan' | 'zoom' | 'drag' | 'resize'`) で操作タイプを分類
-  - **ページ操作（drag / resize）**: 全 Webview を `hideAll()` で非表示、操作完了時に `syncAllWebviewBounds()` で座標同期して再表示
-  - **キャンバス操作（pan / zoom）**: Webview を非表示にせず、操作中リアルタイムで `syncAllWebviewBoundsImmediate()` で座標を同期（rAF スロットリング）
+  - **ページ操作（drag / resize）**: 開始時に全 Webview を `hideAll()` で非表示。操作完了時に `computeDisplayModes()` で座標同期、DOM 属性更新、命令的 Webview 制御で再表示
+  - **キャンバス操作（pan / zoom）**: 開始時に `containerRectRef` へ container rect をキャッシュし `computeInteractionModes()` を即時実行。pan/zoom 中は `scheduleInteractionUpdate()` が rAF（1フレーム1回）で `computeInteractionModes()` を呼び出し、完全にキャンバス内のページは native 維持（`updateAllBounds()` で位置同期）、一部でもキャンバス外またはプリディスプレイゾーン内（50px 以内）はスクリーンショット準備済みなら screenshot、それ以外は hidden に切り替え。操作終了時に `computeDisplayModes()` で最終判定
+  - 操作中の遷移ルール（`computeInteractionModes`）: `native → screenshot/hidden` は許可。`screenshot/hidden → native` は禁止（show() 遅延によるフリッカー回避、操作終了後の `computeDisplayModes()` で復帰）
   - `activeInteractionsRef` (`Set<InteractionType>`) で複数操作の同時性を管理（ホイール debounce と他操作の競合防止）
-- **Screenshot Clipping**: Webview がアートボード端にかかる時、スクリーンショット画像（DOM `<img>`）に切り替えて CSS `overflow:hidden` でクリッピング可能に。状態遷移は `DisplayMode` (`'native' | 'screenshot' | 'hidden'`) で管理。ヒステリシス 4px で境界振動防止
+  - blur 時は `activeInteractionsRef.current.clear()` で全操作タイプを一括クリア（旧: 'drag' のみクリアするバグあり）
+- **Screenshot Clipping**: Webview がアートボード端にかかる時、スクリーンショット画像（DOM `<img>`）に切り替えて CSS `overflow:hidden` でクリッピング可能に。状態遷移は `DisplayMode` (`'native' | 'screenshot' | 'hidden'`) で管理。ヒステリシス 4px で境界振動防止。**プリキャプチャ機能**（`checkPreCapture()`, `PRE_CAPTURE_MARGIN_PX = 50px`, `CAPTURE_MIN_INTERVAL_MS = 1000ms`）: ページ矩形がキャンバス端から 50px 以内に入った瞬間にスクリーンショットを撮り直し、`screenshot` モード遷移時に最新の画像を表示。エッジトリガー方式でゾーン外→内の遷移時のみ発火し、過剰撮影を防止。**Eager Capture**: `computeDisplayModes()` で native モードだが `screenshotReadyRef` が false のページを自動撮影開始。**定期リフレッシュ**（`SCREENSHOT_REFRESH_INTERVAL_MS = 2000ms`）: 2秒ごとに native モードのページのスクリーンショットを自動更新し、Webview 内スクロール等による画像の陳腐化を防止。pan/zoom 中は native Webview が表示されているため撮影可能（drag/resize 中のみスキップ）。**命令的制御**: `computeDisplayModes()` で `wrapper.setAttribute('data-display-mode', ...)` と `webviewApi.show()/hide()` を直接実行し、React state Bailout（前フレームと同じモードなら effect が発火しない）の罠を回避
 - Webview イベント（`navigate`, `document-title-changed`）で URL・タイトル更新をリッスン
 
 **状態管理**: Zustand による共有状態管理
@@ -206,8 +208,7 @@ IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、t
 - **ズーム対応 UI**: アートボード内の UI 要素（ボーダー、パディング、アイコンサイズなど）はズーム値に応じて動的にスケーリング必要。実装方法: `--canvas-zoom` CSS Custom Property をルート canvas 要素に設定し、各 UI 要素は `calc(base-size / var(--canvas-zoom, 1))` で自動スケーリング。これにより、ズーム・パン時に React 再レンダリングを回避
 - **タイトルバー制御**: macOS/Windows のコントロール領域は `data-tauri-drag-region` 属性で指定（`-webkit-app-region: drag` の代わり）。Tauri v2 では属性が子要素に自動継承されないため、コンテナ要素ごとに明示的に設定。ネイティブの `<button>` 等は自動的にドラッグが抑制される
 - **Webview 非同期制御**: Webview 作成は React StrictMode の二重マウントによる create/destroy 競合の対象。`PageFrame.tsx` で `isCreatingRef` フラグを使用して二重 create IPC を防止。`webviewApi` メソッドはすべて try-catch で保護し、Webview 未作成・既破棄時は no-op。詳細は MEMORY.md の「非同期制御パターン（Webview 作成）」を参照
-- **操作中の Webview 座標リアルタイム同期**: キャンバス操作（pan / zoom）中は Webview を hide しないで `updateAllBounds()` でリアルタイム同期。これはカーソルが Webview 外にある場合 React コンテナがイベント受け取れるため可能。`syncAllWebviewBoundsImmediate()` で rAF スロットリングして過負荷防止。詳細は MEMORY.md の「Webview hide/show 制御（v2）」を参照
-- **Screenshot Clipping**: Webview がアートボード端にかかる時、ネイティブ Webview を hide してスクリーンショット画像（DOM `<img>`）に切り替える。CSS の `overflow:hidden` でクリッピング可能。`DisplayMode` で状態遷移管理。ヒステリシス（HYSTERESIS_PX = 4px）で境界近辺での振動防止。詳細は MEMORY.md の「Screenshot Clipping の実装パターン」を参照
+- **Screenshot Clipping**: Webview がアートボード端にかかる時、ネイティブ Webview を hide してスクリーンショット画像（DOM `<img>`）に切り替える。CSS の `overflow:hidden` でクリッピング可能。`DisplayMode` で状態遷移管理。ヒステリシス（HYSTERESIS_PX = 4px）で境界近辺での振動防止。`computeDisplayModes()` 内で DOM 属性を直接更新し、命令的に Webview show/hide を実行することで React state Bailout の罠を回避。`captureScreenshot` のガードは drag/resize 中のみ（pan/zoom 中は native Webview が表示されているため撮影可能）。詳細は MEMORY.md の「Screenshot Clipping の実装パターン」を参照
 
 
 ## 主要ライブラリ

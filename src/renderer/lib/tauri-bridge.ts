@@ -129,6 +129,24 @@ export const webviewApi = {
     );
   },
 
+  /** Webview 内のページズームレベルを設定する（キャンバスズームとビューポートを同期させるために使用） */
+  async setZoom(label: string, scaleFactor: number): Promise<void> {
+    try {
+      await getWebviewHandle(label).setZoom(scaleFactor);
+    } catch {
+      // Webview 未作成・既破棄時は no-op
+    }
+  },
+
+  /** ページの Webview を指定 URL にナビゲートする（追加時 URL へのリセットに使用） */
+  async reload(pageId: string, url: string): Promise<void> {
+    try {
+      await invoke('reload_page_webview', { pageId, url });
+    } catch {
+      // Webview 未作成・既破棄時は no-op
+    }
+  },
+
   /** Webview のスクリーンショットを取得し base64 Data URL を返す（macOS のみ）。失敗時は null */
   async captureScreenshot(pageId: string): Promise<string | null> {
     try {

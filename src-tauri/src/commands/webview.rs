@@ -117,6 +117,21 @@ fn encode_nsimage_to_base64(image: *mut objc2::runtime::AnyObject) -> Result<Str
     }
 }
 
+/// ページの Webview を指定 URL にナビゲートする（追加時 URL へのリセットに使用）。
+#[tauri::command]
+pub async fn reload_page_webview(app: AppHandle, page_id: String, url: String) -> Result<(), String> {
+    let label = format!("page-{}", page_id);
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    let parsed_url = url
+        .parse::<tauri::Url>()
+        .map_err(|e| format!("URL のパースに失敗しました: {e}"))?;
+    webview
+        .navigate(parsed_url)
+        .map_err(|e| format!("ナビゲーションに失敗: {e}"))
+}
+
 /// ページ用のネイティブ Webview を作成しイベントハンドラーを登録する。
 ///
 /// 作成後の位置・サイズ・表示制御は JS 側の Webview API で行う（IPC 不要）。

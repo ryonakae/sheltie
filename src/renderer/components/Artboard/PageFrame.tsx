@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Page } from '@/renderer/types/tab';
 import type { DisplayMode } from '@/renderer/types/tab';
+import { isPageMoved } from '@/renderer/types/tab';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
-import { PageTitleBar } from '@/renderer/components/Artboard/PageTitleBar';
+import { PageBottomBar, PageTopBar } from '@/renderer/components/Artboard/PageTitleBar';
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
@@ -18,7 +19,10 @@ interface PageFrameProps {
   displayMode: DisplayMode;
   /** スクリーンショット ObjectURL（screenshot モード時に表示） */
   screenshotUrl: string | null;
+  /** キャンバスのズームレベル（Webview のページズームに適用してビューポートを論理サイズに復元） */
+  canvasZoom: number;
   onActivate: () => void;
+  onReload: () => void;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   onResizeStart: (e: React.MouseEvent, direction: ResizeDirection) => void;
@@ -38,7 +42,9 @@ export function PageFrame({
   displayHeight,
   displayMode,
   screenshotUrl,
+  canvasZoom,
   onActivate,
+  onReload,
   onClose,
   onDragStart,
   onResizeStart,
@@ -99,6 +105,8 @@ export function PageFrame({
           currentRect.width,
           currentRect.height,
         );
+        // キャンバスズームに合わせてビューポートを論理サイズに復元
+        void webviewApi.setZoom(label, canvasZoom);
         void webviewApi.show(label);
         // Zustand 更新後にフォールバック effect が念押し表示
         onWebviewCreated(page.id, label);
@@ -155,12 +163,14 @@ export function PageFrame({
     if (displayMode === 'native') {
       const rect = placeholderRef.current.getBoundingClientRect();
       void webviewApi.updateBounds(label, rect.left, rect.top, rect.width, rect.height);
+      // キャンバスズームに合わせてビューポートを論理サイズに復元（Artboard の命令的制御が主経路、こちらはフォールバック）
+      void webviewApi.setZoom(label, canvasZoom);
       void webviewApi.show(label);
     } else {
       void webviewApi.hide(label);
     }
     // page.webviewLabel: setPageWebviewLabel 後に effect を再実行して初期表示を念押し
-  }, [displayMode, page.x, page.y, page.width, page.height, page.webviewLabel]);
+  }, [displayMode, page.x, page.y, page.width, page.height, page.webviewLabel, canvasZoom]);
 
   const handleTitleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -194,14 +204,13 @@ export function PageFrame({
       data-page-id={page.id}
       onMouseDown={onActivate}
     >
-      <PageTitleBar
+      <PageTopBar
         title={title}
         url={page.url}
-        width={displayWidth}
-        height={displayHeight}
+        isMoved={isPageMoved(page)}
+        onReload={onReload}
         onClose={onClose}
         onMouseDown={handleTitleBarMouseDown}
-        onResizePreset={onResizePreset}
       />
 
       {/* webview プレースホルダー: ネイティブ Webview の位置合わせ基準。
@@ -214,7 +223,7 @@ export function PageFrame({
         style={{
           width: page.width,
           height: page.height,
-          borderRadius: '0 0 calc(8px / var(--canvas-zoom, 1)) calc(8px / var(--canvas-zoom, 1))',
+          borderRadius: 0,
         }}
       >
         {/* スクリーンショット画像: data-display-mode="screenshot" の時のみ表示（CSS で制御） */}
@@ -228,6 +237,8 @@ export function PageFrame({
           />
         )}
       </div>
+
+      <PageBottomBar width={displayWidth} height={displayHeight} onResizePreset={onResizePreset} />
 
       {/* リサイズハンドル（8方向） */}
       {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeDirection[]).map((dir) => (

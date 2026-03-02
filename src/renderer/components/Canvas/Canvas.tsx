@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
 import { Artboard } from '@/renderer/components/Artboard/Artboard';
@@ -6,13 +6,15 @@ import { ResizeHandle } from '@/renderer/components/Canvas/ResizeHandle';
 import { Sidebar } from '@/renderer/components/Canvas/Sidebar';
 
 const SIDEBAR_MIN_WIDTH = 160;
-const SIDEBAR_MAX_WIDTH = 480;
-const SIDEBAR_DEFAULT_WIDTH = 320;
+const SIDEBAR_MAX_WIDTH = 384;
+const SIDEBAR_DEFAULT_WIDTH = 240;
 
 export function Canvas() {
   const activeProject = useProjectStore(selectActiveProject);
   const activeId = useProjectStore((s) => s.activeId);
   const updateSidebarWidth = useProjectStore((s) => s.updateSidebarWidth);
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [centeredPageId, setCenteredPageId] = useState<string | null>(null);
 
   const sidebarRef = useRef<HTMLElement>(null);
   const isResizing = useRef(false);
@@ -37,6 +39,31 @@ export function Canvas() {
     }
     updateSidebarWidth(activeId, SIDEBAR_DEFAULT_WIDTH);
   }, [updateSidebarWidth, activeId]);
+
+  const handleSelectPage = useCallback((pageId: string) => {
+    setSelectedPageId(pageId);
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedPageId(null);
+  }, []);
+
+  const handleCenteredPage = useCallback((pageId: string) => {
+    setCenteredPageId(pageId);
+  }, []);
+
+  const handleCenteredPageHandled = useCallback(() => {
+    setCenteredPageId(null);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPageId) return;
+    const exists = activeProject?.pages.some((page) => page.id === selectedPageId) ?? false;
+    if (!exists) {
+      // effect 内での直接 setState を避けるため非同期で実行
+      queueMicrotask(() => setSelectedPageId(null));
+    }
+  }, [selectedPageId, activeProject?.pages]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -70,9 +97,21 @@ export function Canvas() {
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      <Sidebar ref={sidebarRef} initialWidth={sidebarWidth} />
+      <Sidebar
+        ref={sidebarRef}
+        initialWidth={sidebarWidth}
+        selectedPageId={selectedPageId}
+        onSelectPage={handleSelectPage}
+        onCentered={handleCenteredPage}
+      />
       <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
-      <Artboard />
+      <Artboard
+        selectedPageId={selectedPageId}
+        onSelectPage={handleSelectPage}
+        onClearSelection={handleClearSelection}
+        centeredPageId={centeredPageId}
+        onCenteredPageHandled={handleCenteredPageHandled}
+      />
     </div>
   );
 }

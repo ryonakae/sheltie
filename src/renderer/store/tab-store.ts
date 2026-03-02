@@ -8,8 +8,9 @@ import {
 } from '@/renderer/types/tab';
 import type { Page, Project, ProjectState, Viewport } from '@/renderer/types/tab';
 
-const SIDEBAR_DEFAULT_WIDTH = 320;
+const SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_GAP = 100;
+const MAX_VERTICAL_SEARCH_STEPS = 60;
 
 function createProject(count: number): Project {
   return {
@@ -22,11 +23,52 @@ function createProject(count: number): Project {
   };
 }
 
-/** 新規ページを既存ページの右端 + gap の位置に配置する */
-function calcNextPageX(pages: Page[]): number {
-  if (pages.length === 0) return 0;
-  const rightmost = Math.max(...pages.map((p) => p.x + p.width));
-  return rightmost + PAGE_GAP;
+function isVerticalOverlapping(y: number, h: number, page: Pick<Page, 'y' | 'height'>): boolean {
+  return !(y + h <= page.y || page.y + page.height <= y);
+}
+
+function isHorizontalOverlapping(x: number, w: number, page: Pick<Page, 'x' | 'width'>): boolean {
+  return !(x + w <= page.x || page.x + page.width <= x);
+}
+
+function findNonOverlappingPosition(
+  pages: Page[],
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  if (pages.length === 0) {
+    return { x, y };
+  }
+
+  for (let step = 0; step <= MAX_VERTICAL_SEARCH_STEPS; step++) {
+    const yCandidates = step === 0 ? [0] : [step * PAGE_GAP, -step * PAGE_GAP];
+    for (const yOffset of yCandidates) {
+      const candidateY = y + yOffset;
+      const sameRowPages = pages.filter((page) => isVerticalOverlapping(candidateY, height, page));
+
+      if (sameRowPages.length === 0) {
+        return { x, y: candidateY };
+      }
+
+      let candidateX = x;
+      while (true) {
+        const overlapPages = sameRowPages.filter((page) =>
+          isHorizontalOverlapping(candidateX, width, page),
+        );
+        if (overlapPages.length === 0) {
+          return { x: candidateX, y: candidateY };
+        }
+
+        const rightmost = Math.max(...overlapPages.map((page) => page.x + page.width));
+        candidateX = rightmost + PAGE_GAP;
+      }
+    }
+  }
+
+  const fallbackY = Math.max(...pages.map((page) => page.y + page.height)) + PAGE_GAP;
+  return { x, y: fallbackY };
 }
 
 /**
@@ -54,7 +96,11 @@ interface ProjectActions {
   reorderOpenProjects: (openIds: string[]) => void;
   updateSidebarWidth: (id: string, width: number) => void;
   /** プロジェクトにページを追加する */
-  addPage: (projectId: string, url: string) => void;
+  addPage: (
+    projectId: string,
+    url: string,
+    options?: { x: number; y: number; width: number; height: number },
+  ) => Page | null;
   /** プロジェクトからページを削除する */
   removePage: (projectId: string, pageId: string) => void;
   /** ページの位置を更新する（ドラッグ完了時） */
@@ -63,6 +109,8 @@ interface ProjectActions {
   updatePageSize: (projectId: string, pageId: string, width: number, height: number) => void;
   /** ページの URL とタイトルを更新する（webview のナビゲーション後） */
   updatePageUrl: (projectId: string, pageId: string, url: string, title: string) => void;
+  /** ページタイトルを更新する（Webview のタイトル変更時） */
+  updatePageTitle: (projectId: string, pageId: string, title: string) => void;
   /** アートボードのズーム・パンを更新する */
   updateViewport: (projectId: string, viewport: Partial<Viewport>) => void;
   /** ページを配列末尾に移動して最前面に表示する */
@@ -143,9 +191,11 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       projects: state.projects.map((p) => (p.id === id ? { ...p, sidebarWidth: width } : p)),
     })),
 
-  addPage: (projectId, url) =>
-    set((state) => ({
-      projects: state.projects.map((p) => {
+  addPage: (projectId, url, options) => {
+    let createdPage: Page | null = null;
+
+    set((state) => {
+      const nextState = state.projects.map((p) => {
         if (p.id !== projectId) return p;
         let hostname = url;
         try {
@@ -153,19 +203,40 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         } catch {
           // URL パース失敗時はそのまま使用
         }
-        const newPage: Page = {
+        const nextPage: Page = {
           id: crypto.randomUUID(),
           url,
           title: hostname,
-          x: calcNextPageX(p.pages),
+          addedUrl: url,
+          x: 0,
           y: 0,
-          width: DEFAULT_PAGE_WIDTH,
-          height: DEFAULT_PAGE_HEIGHT,
+          width: options?.width ?? DEFAULT_PAGE_WIDTH,
+          height: options?.height ?? DEFAULT_PAGE_HEIGHT,
           createdAt: Date.now(),
         };
-        return { ...p, pages: [...p.pages, newPage] };
-      }),
-    })),
+        const positioned = findNonOverlappingPosition(
+          p.pages,
+          options?.x ?? 0,
+          options?.y ?? 0,
+          nextPage.width,
+          nextPage.height,
+        );
+        const newPage = {
+          ...nextPage,
+          x: positioned.x,
+          y: positioned.y,
+        };
+        createdPage = newPage;
+        return {
+          ...p,
+          pages: [...p.pages, newPage],
+        };
+      });
+      return { projects: nextState };
+    });
+
+    return createdPage;
+  },
 
   removePage: (projectId, pageId) =>
     set((state) => ({
@@ -209,6 +280,20 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
             // 空タイトルの場合は既存タイトルを維持（on_navigation の URL 正規化後に来る空文字を無視）
             if (pg.url === url && (pg.title === title || !title)) return pg;
             return { ...pg, url, title: title || pg.title };
+          }),
+        };
+      }),
+    })),
+
+  updatePageTitle: (projectId, pageId, title) =>
+    set((state) => ({
+      projects: state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          pages: p.pages.map((pg) => {
+            if (pg.id !== pageId || pg.title === title) return pg;
+            return { ...pg, title };
           }),
         };
       }),

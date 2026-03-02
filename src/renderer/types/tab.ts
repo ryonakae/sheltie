@@ -7,6 +7,8 @@ export interface Page {
   id: string;
   url: string;
   title: string;
+  /** 追加時点のURLを保持し、リダイレクト後でも一覧で参照可能にする */
+  addedUrl?: string;
   x: number;
   y: number;
   width: number;
@@ -45,6 +47,19 @@ export interface Project {
   createdAt: number;
   pages: Page[];
   viewport: Viewport;
+}
+
+/**
+ * ページが追加時の URL から別ページに遷移したかどうかを判定する。
+ * URL の正規化（末尾スラッシュ等）を考慮して比較する。
+ */
+export function isPageMoved(page: Page): boolean {
+  if (!page.addedUrl) return false;
+  try {
+    return new URL(page.addedUrl).href !== new URL(page.url).href;
+  } catch {
+    return page.addedUrl !== page.url;
+  }
 }
 
 export interface ProjectState {

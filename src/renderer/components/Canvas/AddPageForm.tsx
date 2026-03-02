@@ -34,7 +34,7 @@ export function AddPageForm({ onAdd }: AddPageFormProps) {
         onClick={() => setIsOpen(true)}
       >
         <Plus className="size-4 shrink-0" />
-        ページを追加
+        Webページを追加
       </button>
     );
   }

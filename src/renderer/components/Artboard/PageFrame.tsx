@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Page } from '@/renderer/types/tab';
+import type { DisplayMode } from '@/renderer/types/tab';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
 import { PageTitleBar } from '@/renderer/components/Artboard/PageTitleBar';
@@ -13,7 +14,10 @@ interface PageFrameProps {
   title: string;
   displayWidth: number;
   displayHeight: number;
-  isInteracting: boolean;
+  /** ネイティブ Webview の表示モード（Artboard が intersection 判定で制御） */
+  displayMode: DisplayMode;
+  /** スクリーンショット ObjectURL（screenshot モード時に表示） */
+  screenshotUrl: string | null;
   onActivate: () => void;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
@@ -22,6 +26,8 @@ interface PageFrameProps {
   onNavigated: (pageId: string, url: string, title: string) => void;
   onTitleUpdated: (pageId: string, title: string) => void;
   onWebviewCreated: (pageId: string, label: string) => void;
+  /** Webview のロード完了通知（スクリーンショットキャプチャのトリガー） */
+  onWebviewLoaded: (pageId: string) => void;
 }
 
 export function PageFrame({
@@ -30,7 +36,8 @@ export function PageFrame({
   title,
   displayWidth,
   displayHeight,
-  isInteracting,
+  displayMode,
+  screenshotUrl,
   onActivate,
   onClose,
   onDragStart,
@@ -39,6 +46,7 @@ export function PageFrame({
   onNavigated,
   onTitleUpdated,
   onWebviewCreated,
+  onWebviewLoaded,
 }: PageFrameProps) {
   const placeholderRef = useRef<HTMLDivElement>(null);
   // Zustand の stale ラベルは参照しない（プロジェクト切替後の孤児 Webview 防止）
@@ -49,6 +57,8 @@ export function PageFrame({
   const [createAttempt, setCreateAttempt] = useState(0);
   // マウント時の URL をキャプチャ（ナビゲーション後に page.url が更新されても Webview を再作成しない）
   const initialUrlRef = useRef(page.url);
+  // タイトル変更イベントが初回かどうかを追跡（ロード完了の指標として使用）
+  const isFirstTitleRef = useRef(true);
 
   // マウント時: Rust コマンドでネイティブ Webview を作成
   useEffect(() => {
@@ -78,6 +88,7 @@ export function PageFrame({
         }
         webviewLabelRef.current = label;
         isCreatingRef.current = false;
+        isFirstTitleRef.current = true;
 
         // ネイティブ表示を Zustand 更新より先に試みる（初期化完了タイミングを最大化）
         const currentRect = placeholder.getBoundingClientRect();
@@ -119,29 +130,37 @@ export function PageFrame({
     });
     const unlistenTitle = webviewApi.onPageTitleChanged(page.id, ({ title: t }) => {
       onTitleUpdated(page.id, t);
+      // タイトル変更イベントをロード完了の指標として使用（最初の非空タイトルでキャプチャ）
+      if (t && isFirstTitleRef.current) {
+        isFirstTitleRef.current = false;
+        onWebviewLoaded(page.id);
+      }
     });
 
     return () => {
       void unlistenNav.then((f) => f());
       void unlistenTitle.then((f) => f());
     };
-  }, [page.id, onNavigated, onTitleUpdated]);
+  }, [page.id, onNavigated, onTitleUpdated, onWebviewLoaded]);
 
-  // 操作完了時: プレースホルダー座標をネイティブ Webview に同期して再表示
+  /**
+   * displayMode が変化した時: ネイティブ Webview の show/hide と bounds 同期。
+   * 操作中のリアルタイム切り替えは Artboard 側の DOM 直接操作で行うため、
+   * この effect は静的状態の変化と操作完了後の再描画に対応する。
+   */
   useEffect(() => {
-    if (isInteracting || !webviewLabelRef.current || !placeholderRef.current) return;
+    const label = webviewLabelRef.current;
+    if (!label || !placeholderRef.current) return;
 
-    const rect = placeholderRef.current.getBoundingClientRect();
-    void webviewApi.updateBounds(
-      webviewLabelRef.current,
-      rect.left,
-      rect.top,
-      rect.width,
-      rect.height,
-    );
-    void webviewApi.show(webviewLabelRef.current);
+    if (displayMode === 'native') {
+      const rect = placeholderRef.current.getBoundingClientRect();
+      void webviewApi.updateBounds(label, rect.left, rect.top, rect.width, rect.height);
+      void webviewApi.show(label);
+    } else {
+      void webviewApi.hide(label);
+    }
     // page.webviewLabel: setPageWebviewLabel 後に effect を再実行して初期表示を念押し
-  }, [isInteracting, page.x, page.y, page.width, page.height, page.webviewLabel]);
+  }, [displayMode, page.x, page.y, page.width, page.height, page.webviewLabel]);
 
   const handleTitleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -185,19 +204,30 @@ export function PageFrame({
         onResizePreset={onResizePreset}
       />
 
-      {/* webview プレースホルダー: ネイティブ Webview の位置合わせ基準
-          操作中（ドラッグ/ズーム/パン）はネイティブ Webview を hide() しているため
-          このプレースホルダーが表示される */}
+      {/* webview プレースホルダー: ネイティブ Webview の位置合わせ基準。
+          displayMode=screenshot の時はスクリーンショット画像を表示。
+          displayMode=native の時はネイティブ Webview が前面に重なるため透明で問題ない。 */}
       <div
         ref={placeholderRef}
         data-webview-placeholder
-        className="bg-background"
+        className="relative bg-background"
         style={{
           width: page.width,
           height: page.height,
           borderRadius: '0 0 calc(8px / var(--canvas-zoom, 1)) calc(8px / var(--canvas-zoom, 1))',
         }}
-      />
+      >
+        {/* スクリーンショット画像: data-display-mode="screenshot" の時のみ表示（CSS で制御） */}
+        {screenshotUrl && (
+          <img
+            src={screenshotUrl}
+            alt=""
+            className="pointer-events-none absolute inset-0 hidden size-full object-cover object-top-left"
+            data-screenshot-img
+            draggable={false}
+          />
+        )}
+      </div>
 
       {/* リサイズハンドル（8方向） */}
       {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeDirection[]).map((dir) => (

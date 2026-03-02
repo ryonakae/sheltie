@@ -3155,13 +3155,17 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 name = "siteboard"
 version = "1.0.0"
 dependencies = [
+ "base64 0.22.1",
+ "block2",
  "log",
+ "objc2",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
  "tauri-plugin-store",
+ "tokio",
 ]
 
 [[package]]

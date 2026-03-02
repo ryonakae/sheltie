@@ -1,5 +1,8 @@
 export const HOME_ID = '__home__' as const;
 
+/** ネイティブ Webview の表示モード */
+export type DisplayMode = 'native' | 'screenshot' | 'hidden';
+
 export interface Page {
   id: string;
   url: string;

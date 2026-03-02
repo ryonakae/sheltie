@@ -14,3 +14,8 @@
     background-image: radial-gradient(circle, #27272a 1px, transparent 1px);
   }
 }
+
+/* スクリーンショット画像: displayMode=screenshot の時のみ表示 */
+[data-display-mode='screenshot'] [data-screenshot-img] {
+  display: block;
+}

@@ -3,7 +3,7 @@ mod commands;
 use commands::{
     store::{close_ready, load_project_state, save_project_state},
     theme::{get_platform_info, load_theme, set_theme},
-    webview::create_page_webview,
+    webview::{capture_webview_screenshot, create_page_webview},
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -28,6 +28,7 @@ pub fn run() {
             set_theme,
             get_platform_info,
             create_page_webview,
+            capture_webview_screenshot,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri アプリの起動中にエラーが発生しました");

@@ -103,6 +103,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
   - **ページ操作（drag / resize）**: 全 Webview を `hideAll()` で非表示、操作完了時に `syncAllWebviewBounds()` で座標同期して再表示
   - **キャンバス操作（pan / zoom）**: Webview を非表示にせず、操作中リアルタイムで `syncAllWebviewBoundsImmediate()` で座標を同期（rAF スロットリング）
   - `activeInteractionsRef` (`Set<InteractionType>`) で複数操作の同時性を管理（ホイール debounce と他操作の競合防止）
+- **Screenshot Clipping**: Webview がアートボード端にかかる時、スクリーンショット画像（DOM `<img>`）に切り替えて CSS `overflow:hidden` でクリッピング可能に。状態遷移は `DisplayMode` (`'native' | 'screenshot' | 'hidden'`) で管理。ヒステリシス 4px で境界振動防止
 - Webview イベント（`navigate`, `document-title-changed`）で URL・タイトル更新をリッスン
 
 **状態管理**: Zustand による共有状態管理
@@ -119,6 +120,11 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
   - 起動時に `main.tsx` で `setupThemeListener()` でイベントリスナー登録、`initialize()` でテーマ適用
 
 ### データ構造
+
+**DisplayMode 型** (`src/renderer/types/tab.ts`)
+- `'native'`: Webview が完全にアートボード内 → ネイティブ Webview を表示
+- `'screenshot'`: Webview が一部アートボード外 → スクリーンショット画像（DOM `<img>`）で代替表示
+- `'hidden'`: 完全にアートボード外、またはドラッグ/リサイズ中 → 両方非表示
 
 **Page インターフェース** (`src/renderer/types/tab.ts`)
 - `id`: ページの一意識別子（UUID）
@@ -158,6 +164,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - **Sandbox**: デフォルト有効（すべての IPC は Rust コマンド経由でサンドボックス化）
 - **コマンド実行**: `src-tauri/src/commands/` で Rust コマンド定義、権限制御
 - **パーミッション**: `src-tauri/capabilities/default.json` で詳細制御
+  - `core:window:allow-start-dragging`: `data-tauri-drag-region` 属性でのウィンドウドラッグを有効化（タブバー等で必須）
 - **WebView**: `titleBarStyle: Overlay, hiddenTitle: true` で macOS トラフィックライト対応
 
 ### Tauri IPC
@@ -170,6 +177,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - `set_theme`: テーマモード設定（OS と同期、isDark 返す）
 - `get_platform_info`: プラットフォーム情報取得（inset, os）
 - `create_page_webview`: ページ用 Webview 作成
+- `capture_webview_screenshot`: WKWebView スナップショットを base64 PNG Data URL として取得（macOS のみ）
 
 **Backend → Renderer** (emit):
 - `theme:changed`: OS テーマ変更時に isDark フラグを送信
@@ -180,6 +188,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - `updateAllBounds()`: 複数 Webview の位置・サイズを一括更新（show/hide なし、操作中のリアルタイム同期用）
 - `show()`, `hide()`, `destroy()`: 表示制御（IPC 不要）
 - `hideAll()`, `showAllWithBounds()`: 一括操作（複数 Webview の効率的な制御）
+- `captureScreenshot()`: Webview スクリーンショット取得（base64 Data URL、失敗時は null）
 - イベントリスナー登録: `onPageNavigated()`, `onPageTitleChanged()`
 
 IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、themeApi、webviewApi、getPlatformInfo）。
@@ -198,6 +207,7 @@ IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、t
 - **タイトルバー制御**: macOS/Windows のコントロール領域は `data-tauri-drag-region` 属性で指定（`-webkit-app-region: drag` の代わり）。Tauri v2 では属性が子要素に自動継承されないため、コンテナ要素ごとに明示的に設定。ネイティブの `<button>` 等は自動的にドラッグが抑制される
 - **Webview 非同期制御**: Webview 作成は React StrictMode の二重マウントによる create/destroy 競合の対象。`PageFrame.tsx` で `isCreatingRef` フラグを使用して二重 create IPC を防止。`webviewApi` メソッドはすべて try-catch で保護し、Webview 未作成・既破棄時は no-op。詳細は MEMORY.md の「非同期制御パターン（Webview 作成）」を参照
 - **操作中の Webview 座標リアルタイム同期**: キャンバス操作（pan / zoom）中は Webview を hide しないで `updateAllBounds()` でリアルタイム同期。これはカーソルが Webview 外にある場合 React コンテナがイベント受け取れるため可能。`syncAllWebviewBoundsImmediate()` で rAF スロットリングして過負荷防止。詳細は MEMORY.md の「Webview hide/show 制御（v2）」を参照
+- **Screenshot Clipping**: Webview がアートボード端にかかる時、ネイティブ Webview を hide してスクリーンショット画像（DOM `<img>`）に切り替える。CSS の `overflow:hidden` でクリッピング可能。`DisplayMode` で状態遷移管理。ヒステリシス（HYSTERESIS_PX = 4px）で境界近辺での振動防止。詳細は MEMORY.md の「Screenshot Clipping の実装パターン」を参照
 
 
 ## 主要ライブラリ

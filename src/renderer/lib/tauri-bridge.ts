@@ -129,6 +129,15 @@ export const webviewApi = {
     );
   },
 
+  /** Webview のスクリーンショットを取得し base64 Data URL を返す（macOS のみ）。失敗時は null */
+  async captureScreenshot(pageId: string): Promise<string | null> {
+    try {
+      return await invoke<string>('capture_webview_screenshot', { pageId });
+    } catch {
+      return null;
+    }
+  },
+
   /** Rust → JS: ナビゲーション URL 変更イベントをリッスン */
   onPageNavigated: (pageId: string, callback: (payload: { url: string }) => void) =>
     listen<{ url: string }>(`page-navigated-${pageId}`, (event) => callback(event.payload)),

@@ -25,8 +25,8 @@ export interface Viewport {
 }
 
 export const DEFAULT_VIEWPORT: Viewport = { zoom: 1, panX: 0, panY: 0 };
-export const DEFAULT_PAGE_WIDTH = 1280;
-export const DEFAULT_PAGE_HEIGHT = 800;
+export const DEFAULT_PAGE_WIDTH = 375;
+export const DEFAULT_PAGE_HEIGHT = 812;
 
 export interface SizePreset {
   label: string;

@@ -167,9 +167,39 @@ pub async fn create_page_webview(
         .parse::<tauri::Url>()
         .map_err(|e| format!("URL のパースに失敗しました: {e}"))?;
 
+    // SPA のクライアントサイドルーティング（history.pushState/replaceState）を検出するため、
+    // initialization_script を注入して URL 変更を on_document_title_changed 経由で通知する。
+    // on_navigation は WKWebView の decidePolicyForNavigationAction にマッピングされており、
+    // pushState/replaceState では発火しないため、この代替手段が必要。
+    let spa_url_detection_script = r#"(function() {
+  var lastUrl = location.href;
+  function onUrlChange() {
+    var newUrl = location.href;
+    if (newUrl === lastUrl) return;
+    lastUrl = newUrl;
+    var orig = document.title;
+    document.title = '\x01' + newUrl;
+    requestAnimationFrame(function() { document.title = orig; });
+  }
+  var origPush = history.pushState;
+  history.pushState = function() {
+    var r = origPush.apply(this, arguments);
+    onUrlChange();
+    return r;
+  };
+  var origReplace = history.replaceState;
+  history.replaceState = function() {
+    var r = origReplace.apply(this, arguments);
+    onUrlChange();
+    return r;
+  };
+  window.addEventListener('popstate', onUrlChange);
+})();"#;
+
     window
         .add_child(
             tauri::webview::WebviewBuilder::new(&label_clone, WebviewUrl::External(parsed_url))
+                .initialization_script(spa_url_detection_script)
                 .on_navigation({
                     let ah = app_handle.clone();
                     let pid = pid.clone();
@@ -187,11 +217,20 @@ pub async fn create_page_webview(
                     let ah = app_handle.clone();
                     let pid = pid.clone();
                     move |_webview, title| {
-                        ah.emit(
-                            &format!("page-title-changed-{pid}"),
-                            serde_json::json!({ "title": title }),
-                        )
-                        .ok();
+                        // \x01 プレフィックスは initialization_script からの SPA URL 変更通知
+                        if let Some(url) = title.strip_prefix('\u{0001}') {
+                            ah.emit(
+                                &format!("page-navigated-{pid}"),
+                                serde_json::json!({ "url": url }),
+                            )
+                            .ok();
+                        } else {
+                            ah.emit(
+                                &format!("page-title-changed-{pid}"),
+                                serde_json::json!({ "title": title }),
+                            )
+                            .ok();
+                        }
                     }
                 }),
             LogicalPosition::new(x, y),

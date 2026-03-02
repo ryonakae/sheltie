@@ -1,12 +1,13 @@
 import { useCallback, useEffect } from 'react';
 
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 3.0;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 1.5;
 const ZOOM_SENSITIVITY = 0.001;
 
 interface UseArtboardZoomOptions {
   containerRef: React.RefObject<HTMLDivElement | null>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
+  backgroundRef?: React.RefObject<HTMLDivElement | null>;
   zoom: React.RefObject<number>;
   panX: React.RefObject<number>;
   panY: React.RefObject<number>;
@@ -26,6 +27,7 @@ interface UseArtboardZoomOptions {
 export function useArtboardZoom({
   containerRef,
   canvasRef,
+  backgroundRef,
   zoom,
   panX,
   panY,
@@ -37,7 +39,11 @@ export function useArtboardZoom({
     if (!canvasRef.current) return;
     canvasRef.current.style.transform = `translate(${panX.current}px, ${panY.current}px) scale(${zoom.current})`;
     canvasRef.current.style.setProperty('--canvas-zoom', String(zoom.current));
-  }, [canvasRef, zoom, panX, panY]);
+    if (!backgroundRef?.current) return;
+    backgroundRef.current.style.setProperty('--artboard-dot-scale', String(zoom.current));
+    backgroundRef.current.style.setProperty('--artboard-bg-x', `${panX.current}px`);
+    backgroundRef.current.style.setProperty('--artboard-bg-y', `${panY.current}px`);
+  }, [backgroundRef, canvasRef, zoom, panX, panY]);
 
   useEffect(() => {
     const container = containerRef.current;

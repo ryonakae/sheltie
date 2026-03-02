@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 interface UseArtboardPanOptions {
   canvasRef: React.RefObject<HTMLDivElement | null>;
+  backgroundRef?: React.RefObject<HTMLDivElement | null>;
   zoom: React.RefObject<number>;
   panX: React.RefObject<number>;
   panY: React.RefObject<number>;
@@ -17,6 +18,7 @@ interface UseArtboardPanOptions {
  */
 export function useArtboardPan({
   canvasRef,
+  backgroundRef,
   zoom,
   panX,
   panY,
@@ -34,7 +36,11 @@ export function useArtboardPan({
     if (!canvasRef.current) return;
     canvasRef.current.style.transform = `translate(${panX.current}px, ${panY.current}px) scale(${zoom.current})`;
     canvasRef.current.style.setProperty('--canvas-zoom', String(zoom.current));
-  }, [canvasRef, zoom, panX, panY]);
+    if (!backgroundRef?.current) return;
+    backgroundRef.current.style.setProperty('--artboard-dot-scale', String(zoom.current));
+    backgroundRef.current.style.setProperty('--artboard-bg-x', `${panX.current}px`);
+    backgroundRef.current.style.setProperty('--artboard-bg-y', `${panY.current}px`);
+  }, [backgroundRef, canvasRef, zoom, panX, panY]);
 
   const setCursor = useCallback((cursor: string) => {
     currentCursor.current = cursor;

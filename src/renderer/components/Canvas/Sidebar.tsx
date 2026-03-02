@@ -1,13 +1,14 @@
-import { forwardRef, useCallback, useEffect, useRef } from 'react';
+import { type MouseEvent, forwardRef, useCallback, useEffect, useRef } from 'react';
 
 import Xmark from '@gravity-ui/icons/Xmark';
+import { animate, motion, useReducedMotion } from 'motion/react';
 
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
 import { AddPageForm } from '@/renderer/components/Canvas/AddPageForm';
 import {
   DEFAULT_PAGE_HEIGHT,
   DEFAULT_PAGE_WIDTH,
-  DEFAULT_VIEWPORT,
+  type Page,
   isPageMoved,
 } from '@/renderer/types/tab';
 
@@ -19,30 +20,65 @@ interface SidebarProps {
   onCentered?: (pageId: string) => void;
 }
 
-/** アートボードの中心付近に収まる初期矩形を算出する */
-function getCenteredFrame(viewportZoom: number, viewportPanX: number, viewportPanY: number) {
+const pageListItemVariants = {
+  rest: {},
+  hover: {},
+} as const;
+
+const removeButtonVariants = {
+  rest: { opacity: 0 },
+  hover: { opacity: 1 },
+} as const;
+
+const PAGE_CHROME_HEIGHT = 48; // PageTopBar + PageBottomBar の合計（world 座標ベース）
+
+type CenterTarget = Pick<Page, 'id' | 'x' | 'y' | 'width' | 'height'>;
+
+type FrameRect = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+};
+
+/** ページ本体（タイトルバー含む）を基準にセンタリングするため、必要に応じて実 DOM 幾何を取得する */
+function getPageFrameRect(artboard: HTMLElement, pageId: string | undefined): FrameRect | null {
+  if (!pageId) return null;
+  const frame = artboard.querySelector<HTMLElement>(`[data-page-id="${pageId}"]`);
+  if (!frame) return null;
+
+  const rect = frame.getBoundingClientRect();
+  return {
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+/** 現在のビューポート中央のワールド座標を起点とした、ページの配置位置を算出する */
+function getViewportCenterPos(
+  viewportZoom: number,
+  viewportPanX: number,
+  viewportPanY: number,
+): { x: number; y: number } | null {
   const artboard = document.querySelector<HTMLElement>('[data-artboard-container]');
   if (!artboard) return null;
 
   const rect = artboard.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0 || viewportZoom <= 0) return null;
 
-  const maxWorldWidth = rect.width / viewportZoom;
-  const maxWorldHeight = rect.height / viewportZoom;
-  const scale = Math.min(
-    maxWorldWidth / DEFAULT_PAGE_WIDTH,
-    maxWorldHeight / DEFAULT_PAGE_HEIGHT,
-    1,
-  );
-  if (scale <= 0) return null;
-
-  const width = Math.round(DEFAULT_PAGE_WIDTH * scale);
-  const height = Math.round(DEFAULT_PAGE_HEIGHT * scale);
-
-  const x = (rect.width / viewportZoom - width) / 2 - viewportPanX / viewportZoom;
-  const y = (rect.height / viewportZoom - height) / 2 - viewportPanY / viewportZoom;
-
-  return { x, y, width, height };
+  // ビューポート中央のワールド座標（ページ左上を起点とするため半サイズ分ずらす）
+  const centerWorldX = (rect.width / 2 - viewportPanX) / viewportZoom;
+  const centerWorldY = (rect.height / 2 - viewportPanY) / viewportZoom;
+  return {
+    x: centerWorldX - DEFAULT_PAGE_WIDTH / 2,
+    y: centerWorldY - DEFAULT_PAGE_HEIGHT / 2,
+  };
 }
 
 export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
@@ -55,17 +91,21 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
   const removePage = useProjectStore((s) => s.removePage);
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = activeProject?.viewport;
-  const centeringFrameRef = useRef<number | null>(null);
+  const centeringAnimationRef = useRef<Array<{ stop: () => void }>>([]);
+  const activeIdRef = useRef<string | null>(null);
+  const prefersReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
 
   const cancelCentering = useCallback(() => {
-    if (centeringFrameRef.current !== null) {
-      cancelAnimationFrame(centeringFrameRef.current);
-      centeringFrameRef.current = null;
-    }
+    centeringAnimationRef.current.forEach((animation) => animation.stop());
+    centeringAnimationRef.current = [];
   }, []);
 
   const ensureFrameVisible = useCallback(
-    (target: { x: number; y: number; width: number; height: number }, onCentered?: () => void) => {
+    (target: CenterTarget, onCentered?: () => void) => {
       const artboard = document.querySelector<HTMLElement>('[data-artboard-container]');
       if (!artboard || !viewport) return;
       const rect = artboard.getBoundingClientRect();
@@ -73,23 +113,27 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
 
       const nextPanX = viewport.panX;
       const nextPanY = viewport.panY;
-      const left = target.x * viewport.zoom + nextPanX;
-      const top = target.y * viewport.zoom + nextPanY;
-      const right = left + target.width * viewport.zoom;
-      const bottom = top + target.height * viewport.zoom;
+      const frameRect = getPageFrameRect(artboard, target.id);
+
+      const left = frameRect ? frameRect.left - rect.left : target.x * viewport.zoom + nextPanX;
+      const top = frameRect ? frameRect.top - rect.top : target.y * viewport.zoom + nextPanY;
+      const right = frameRect ? left + frameRect.width : left + target.width * viewport.zoom;
+      const bottom = frameRect
+        ? top + frameRect.height
+        : top + (target.height + PAGE_CHROME_HEIGHT) * viewport.zoom;
+      const frameWidth = frameRect ? frameRect.width : target.width * viewport.zoom;
+      const frameHeight = frameRect
+        ? frameRect.height
+        : (target.height + PAGE_CHROME_HEIGHT) * viewport.zoom;
 
       let panX = nextPanX;
       let panY = nextPanY;
 
-      const isOutsideX = left < 0 || right > rect.width;
-      const isOutsideY = top < 0 || bottom > rect.height;
+      const isFullyVisible = left >= 0 && right <= rect.width && top >= 0 && bottom <= rect.height;
 
-      if (isOutsideX) {
-        panX = (rect.width - target.width * viewport.zoom) / 2 - target.x * viewport.zoom;
-      }
-
-      if (isOutsideY) {
-        panY = (rect.height - target.height * viewport.zoom) / 2 - target.y * viewport.zoom;
+      if (!isFullyVisible) {
+        panX = (rect.width - frameWidth) / 2 - (left - nextPanX);
+        panY = (rect.height - frameHeight) / 2 - (top - nextPanY);
       }
 
       if (panX === nextPanX && panY === nextPanY) {
@@ -98,52 +142,169 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
       }
 
       cancelCentering();
-      const fromPanX = nextPanX;
-      const fromPanY = nextPanY;
-      const targetPanX = panX;
-      const targetPanY = panY;
-      const start = performance.now();
-      const duration = 260;
-      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-
-      const animate = (now: number) => {
-        const elapsed = now - start;
-        const progress = Math.min(1, elapsed / duration);
-        const eased = easeOutCubic(progress);
-        const nextX = fromPanX + (targetPanX - fromPanX) * eased;
-        const nextY = fromPanY + (targetPanY - fromPanY) * eased;
-        updateViewport(activeId, { panX: nextX, panY: nextY });
-
-        if (progress < 1) {
-          centeringFrameRef.current = requestAnimationFrame(animate);
-          return;
+      if (prefersReducedMotion) {
+        const id = activeIdRef.current ?? activeId;
+        if (id) {
+          updateViewport(id, { panX, panY });
         }
+        onCentered?.();
+        return;
+      }
 
-        centeringFrameRef.current = null;
+      let completed = false;
+      const currentId = activeIdRef.current ?? activeId;
+      const latestPan = { x: nextPanX, y: nextPanY };
+      const updatePan = () => {
+        if (!currentId) return;
+        updateViewport(currentId, { panX: latestPan.x, panY: latestPan.y });
+      };
+      const handleComplete = () => {
+        if (completed) return;
+        completed = true;
+        if (!currentId) return;
+        centeringAnimationRef.current = [];
+        updateViewport(currentId, { panX, panY });
         onCentered?.();
       };
 
-      centeringFrameRef.current = requestAnimationFrame(animate);
+      const xControls = animate(nextPanX, panX, {
+        duration: 0.26,
+        ease: [0.215, 0.61, 0.355, 1],
+        onUpdate: (latestPanX: number) => {
+          latestPan.x = latestPanX;
+          updatePan();
+        },
+        onComplete: handleComplete,
+      });
+      const yControls = animate(nextPanY, panY, {
+        duration: 0.26,
+        ease: [0.215, 0.61, 0.355, 1],
+        onUpdate: (latestPanY: number) => {
+          latestPan.y = latestPanY;
+          updatePan();
+        },
+        onComplete: handleComplete,
+      });
+
+      centeringAnimationRef.current = [xControls, yControls];
     },
-    [activeId, updateViewport, viewport, cancelCentering],
+    [activeId, updateViewport, viewport, cancelCentering, prefersReducedMotion],
   );
 
   useEffect(() => cancelCentering, [cancelCentering]);
 
+  /**
+   * ページ追加後にビューポートをアニメーションしてページを中央・フィット表示する。
+   * ズームとパンを同時にアニメーションし、常にアニメーションが発火する（isFullyVisible チェックなし）。
+   */
+  const centerOnNewPage = useCallback(
+    (page: Pick<Page, 'id' | 'x' | 'y' | 'width' | 'height'>, onComplete?: () => void) => {
+      const artboard = document.querySelector<HTMLElement>('[data-artboard-container]');
+      if (!artboard || !viewport) return;
+      const rect = artboard.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const pageHeightWithChrome = page.height + PAGE_CHROME_HEIGHT;
+      // ページ全体がビューポートに 80% フィットするズームを計算（最大 1 倍）
+      const targetZoom = Math.min(
+        (rect.width * 0.8) / page.width,
+        (rect.height * 0.8) / pageHeightWithChrome,
+        1,
+      );
+      // ページ中心がビューポート中心に来るパンを計算
+      const targetPanX = rect.width / 2 - (page.x + page.width / 2) * targetZoom;
+      const targetPanY = rect.height / 2 - (page.y + pageHeightWithChrome / 2) * targetZoom;
+
+      cancelCentering();
+      const currentId = activeIdRef.current ?? activeId;
+
+      if (prefersReducedMotion) {
+        if (currentId)
+          updateViewport(currentId, { zoom: targetZoom, panX: targetPanX, panY: targetPanY });
+        onComplete?.();
+        return;
+      }
+
+      let completed = false;
+      const latestState = { x: viewport.panX, y: viewport.panY, zoom: viewport.zoom };
+      const updateAll = () => {
+        if (!currentId) return;
+        updateViewport(currentId, {
+          zoom: latestState.zoom,
+          panX: latestState.x,
+          panY: latestState.y,
+        });
+      };
+      const handleComplete = () => {
+        if (completed) return;
+        completed = true;
+        if (!currentId) return;
+        centeringAnimationRef.current = [];
+        updateViewport(currentId, { zoom: targetZoom, panX: targetPanX, panY: targetPanY });
+        onComplete?.();
+      };
+
+      const DURATION = 0.4;
+      const EASE = [0.215, 0.61, 0.355, 1] as const;
+      const xControls = animate(viewport.panX, targetPanX, {
+        duration: DURATION,
+        ease: EASE,
+        onUpdate: (v: number) => {
+          latestState.x = v;
+          updateAll();
+        },
+        onComplete: handleComplete,
+      });
+      const yControls = animate(viewport.panY, targetPanY, {
+        duration: DURATION,
+        ease: EASE,
+        onUpdate: (v: number) => {
+          latestState.y = v;
+          updateAll();
+        },
+        onComplete: handleComplete,
+      });
+      const zoomControls = animate(viewport.zoom, targetZoom, {
+        duration: DURATION,
+        ease: EASE,
+        onUpdate: (v: number) => {
+          latestState.zoom = v;
+          updateAll();
+        },
+        onComplete: handleComplete,
+      });
+
+      centeringAnimationRef.current = [xControls, yControls, zoomControls];
+    },
+    [activeId, updateViewport, viewport, cancelCentering, prefersReducedMotion],
+  );
+
   const handleAdd = useCallback(
     (url: string) => {
-      const centered = getCenteredFrame(
-        viewport?.zoom ?? DEFAULT_VIEWPORT.zoom,
-        viewport?.panX ?? DEFAULT_VIEWPORT.panX,
-        viewport?.panY ?? DEFAULT_VIEWPORT.panY,
+      // 現在のビューポート中央を起点にして findNonOverlappingPosition で重ならない位置を探す
+      const centerPos = getViewportCenterPos(
+        viewport?.zoom ?? 1,
+        viewport?.panX ?? 0,
+        viewport?.panY ?? 0,
       );
-      const created = addPage(activeId, url, centered ? centered : undefined);
+      const created = addPage(
+        activeId,
+        url,
+        centerPos
+          ? {
+              x: centerPos.x,
+              y: centerPos.y,
+              width: DEFAULT_PAGE_WIDTH,
+              height: DEFAULT_PAGE_HEIGHT,
+            }
+          : undefined,
+      );
       if (created) {
         onSelectPage(created.id);
-        ensureFrameVisible(created, () => onCentered?.(created.id));
+        centerOnNewPage(created, () => onCentered?.(created.id));
       }
     },
-    [addPage, activeId, viewport, ensureFrameVisible, onSelectPage, onCentered],
+    [addPage, activeId, viewport, centerOnNewPage, onSelectPage, onCentered],
   );
 
   const pages = activeProject?.pages ?? [];
@@ -164,11 +325,14 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
             const addedUrl = page.addedUrl ?? page.url;
 
             return (
-              <li
+              <motion.li
                 key={page.id}
-                className={`group flex items-start gap-1.5 rounded-md px-2 py-1.5 text-sm ${
+                className={`flex items-start gap-1.5 rounded-md px-2 py-1.5 text-sm ${
                   isSelected ? 'bg-default-hover/80' : ''
                 } hover:bg-default-hover`}
+                variants={pageListItemVariants}
+                initial="rest"
+                whileHover="hover"
                 onClick={() => {
                   onSelectPage(page.id);
                   ensureFrameVisible(page, () => onCentered?.(page.id));
@@ -181,20 +345,22 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                     {isPageMoved(page) && <span className="ml-1 text-muted">(Moved)</span>}
                   </p>
                   <p className="truncate text-xs text-muted" title={addedUrl}>
-                    {addedUrl}
+                    {addedUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                   </p>
                 </div>
-                <button
-                  className="shrink-0 rounded-sm p-0.5 text-muted opacity-0 group-hover:opacity-100 hover:bg-background-tertiary hover:text-foreground"
-                  onClick={(event) => {
+                <motion.button
+                  variants={removeButtonVariants}
+                  initial="rest"
+                  className="shrink-0 rounded-sm p-0.5 text-muted hover:bg-background-tertiary hover:text-foreground"
+                  onClick={(event: MouseEvent<HTMLButtonElement>) => {
                     event.stopPropagation();
                     removePage(activeId, page.id);
                   }}
                   aria-label="ページを削除"
                 >
                   <Xmark className="size-3.5" />
-                </button>
-              </li>
+                </motion.button>
+              </motion.li>
             );
           })}
         </ul>

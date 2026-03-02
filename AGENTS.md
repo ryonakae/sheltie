@@ -36,7 +36,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │       │   ├── mod.rs  # モジュール定義
 │       │   ├── store.rs # load_project_state / save_project_state / close_ready
 │       │   ├── theme.rs # load_theme / set_theme / get_platform_info
-│       │   └── webview.rs # create_page_webview（on_navigation / on_document_title_changed 登録）/ reload_page_webview（url パラメータを受け取り webview.navigate() でナビゲート）
+│       │   └── webview.rs # create_page_webview（initialization_script で SPA URL 変更検出スクリプト注入 / on_navigation / on_document_title_changed 登録: \x01 プレフィックスで SPA ナビゲーション検出）/ reload_page_webview（url パラメータを受け取り webview.navigate() でナビゲート）
 ├── src/                # React フロントエンド
 │   ├── renderer/       # React SPA
 │   │   ├── main.tsx    # React エントリーポイント
@@ -53,8 +53,8 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │   │   └── theme-store.ts # Zustand テーマストア
 │   │   ├── hooks/
 │   │   │   ├── useWindowControlsInset.ts # getPlatformInfo() 非同期に更新
-│   │   │   ├── useArtboardPan.ts # パン操作（onPanMove コールバック）
-│   │   │   ├── useArtboardZoom.ts # ズーム・パン操作（onBoundsUpdate コールバック）
+│   │   │   ├── useArtboardPan.ts # パン操作（onPanMove コールバック）。backgroundRef で背景グリッドを同期
+│   │   │   ├── useArtboardZoom.ts # ズーム・パン操作（MIN_ZOOM=0.5, MAX_ZOOM=1.5）。backgroundRef で背景グリッドを同期
 │   │   │   ├── usePageDrag.ts # ページドラッグ
 │   │   │   └── usePageResize.ts # ページリサイズ
 │   │   └── components/
@@ -62,7 +62,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │       ├── Artboard/ # ページレンダリング・操作制御
 │   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（canvasZoom prop で Webview 作成直後に setZoom 適用）
 │   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setZoom） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setZoom 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）
-│   │       │   └── PageTitleBar.tsx # PageTopBar（タイトル・リロード・閉じるボタン）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示
+│   │       │   └── PageTitleBar.tsx # PageTopBar（タイトル・リロード・閉じるボタン）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
 │   │       ├── TabBar/ # data-tauri-drag-region で実装
 │   │       └── HomeScreen/ # プロジェクト一覧
 │   └── shared/
@@ -82,11 +82,11 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 **TabBar**: 開いているプロジェクトのタブバー、ホームボタン、追加ボタン
 - `openIds` に基づいて開いているプロジェクトのみ表示
 - `@dnd-kit/react` を使用したドラッグ&ドロップ並び替え対応
-- 各タブはホバー時に閉じるボタン（×）を表示
+- 各タブはホバー時に閉じるボタン（×）を表示（`motion` の `variants` パターン、CSS `group` は使用しない）
 - `useWindowControlsInset` で macOS トラフィックライト、Windows/Linux のコントロール領域に対応（`data-tauri-drag-region` 属性で実装）
 
 **Canvas**: サイドバーとアートボードを管理
-- **Sidebar**: ページ一覧表示、ページ追加フォーム（AddPageForm）、ページごとに削除ボタン付き。`isPageMoved()` で (Moved) インジケーター表示。ページクリックで `onSelectPage` 呼び出し + `ensureFrameVisible` でスムーズスクロールアニメーション（260ms easeOutCubic）でページをビューポート内に移動
+- **Sidebar**: ページ一覧表示、ページ追加フォーム（AddPageForm）、ページごとに削除ボタン付き。`isPageMoved()` で (Moved) インジケーター表示。ページクリックで `onSelectPage` 呼び出し + `ensureFrameVisible`（`motion` アニメーション 260ms easeOutCubic、`useReducedMotion` 対応）でページをビューポート内に移動。ページ追加時は `centerOnNewPage`（ズーム込みで 400ms アニメーション、常に発火）でビューポートにフィット表示。ホバー状態管理は CSS `group` パターンから `motion` の `variants`（`whileHover="hover"`）パターンに移行。URL 入力は `AddPageForm` でスキーム補完・`new URL()` バリデーション（localhost/IP を除くドット必須）・`FieldError` によるエラー表示
 - **ResizeHandle**: サイドバー幅調整可能（リサイズ中は DOM 直接操作でパフォーマンス最適化）
 - **Artboard**: キャンバス領域に複数の Tauri Webview を配置、ドラッグ・リサイズ・ズーム・パン対応
 - **選択状態管理**: `Canvas` が `selectedPageId` / `centeredPageId` ステートを保持し、`Sidebar` と `Artboard` に props 経由で連携
@@ -108,9 +108,10 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
   - 操作中の遷移ルール（`computeInteractionModes`）: `native → screenshot/hidden` は許可。`screenshot/hidden → native` は禁止（show() 遅延によるフリッカー回避、操作終了後の `computeDisplayModes()` で復帰）
   - `activeInteractionsRef` (`Set<InteractionType>`) で複数操作の同時性を管理（ホイール debounce と他操作の競合防止）
   - blur 時は `activeInteractionsRef.current.clear()` で全操作タイプを一括クリア（旧: 'drag' のみクリアするバグあり）
-- アートボードコンテナは `data-artboard-container` 属性を付与（`Sidebar` の `getCenteredFrame` がページ追加時の配置計算に使用）
+- アートボードコンテナは `data-artboard-container` 属性を付与（`Sidebar` の `getViewportCenterPos` がページ追加時の配置計算に使用）
+- アートボード背景のドットグリッドは `--artboard-dot-scale` / `--artboard-bg-x` / `--artboard-bg-y` CSS Custom Property で制御。`useArtboardPan` / `useArtboardZoom` の `backgroundRef` 経由でパン・ズームに追従（React 再レンダリング不要）
 - **Screenshot Clipping**: Webview がアートボード端にかかる時、スクリーンショット画像（DOM `<img>`）に切り替えて CSS `overflow:hidden` でクリッピング可能に。状態遷移は `DisplayMode` (`'native' | 'screenshot' | 'hidden'`) で管理。ヒステリシス 4px で境界振動防止。**プリキャプチャ機能**（`checkPreCapture()`, `PRE_CAPTURE_MARGIN_PX = 50px`, `CAPTURE_MIN_INTERVAL_MS = 1000ms`）: ページ矩形がキャンバス端から 50px 以内に入った瞬間にスクリーンショットを撮り直し、`screenshot` モード遷移時に最新の画像を表示。エッジトリガー方式でゾーン外→内の遷移時のみ発火し、過剰撮影を防止。**Eager Capture**: `computeDisplayModes()` で native モードだが `screenshotReadyRef` が false のページを自動撮影開始。**定期リフレッシュ**（`SCREENSHOT_REFRESH_INTERVAL_MS = 2000ms`）: 2秒ごとに native モードのページのスクリーンショットを自動更新し、Webview 内スクロール等による画像の陳腐化を防止。pan/zoom 中は native Webview が表示されているため撮影可能（drag/resize 中のみスキップ）。**命令的制御**: `computeDisplayModes()` で `wrapper.setAttribute('data-display-mode', ...)` と `webviewApi.show()/hide()` を直接実行し、React state Bailout（前フレームと同じモードなら effect が発火しない）の罠を回避
-- Webview イベント（`navigate`, `document-title-changed`）で URL・タイトル更新をリッスン
+- Webview イベント（`navigate`, `document-title-changed`）で URL・タイトル更新をリッスン。SPA の `history.pushState`/`replaceState` は `on_navigation` では検出できないため、`initialization_script` で注入したスクリプトが `document.title` に `\x01` プレフィックスを付与して `on_document_title_changed` 経由で Rust に通知し、`page-navigated-{pageId}` イベントとして emit する
 
 **状態管理**: Zustand による共有状態管理
 - **useProjectStore** (`tab-store.ts`):
@@ -148,11 +149,12 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - `zoom`: ズームレベル（初期値 1）
 - `panX, panY`: パンオフセット（ピクセル）
 
-**SizePreset インターフェース** (`src/renderer/types/tab.ts:24-28`)
+**SizePreset インターフェース** (`src/renderer/types/tab.ts`)
 - `label`: プリセット名（'モバイル'、'タブレット'、'PC'）
 - `width`: 推奨幅（ピクセル）
 - `height`: 推奨高さ（ピクセル）
 - SIZE_PRESETS 定数で 3 種類の標準デバイスサイズを定義
+- `DEFAULT_PAGE_WIDTH = 375`, `DEFAULT_PAGE_HEIGHT = 812`（モバイルファースト。旧: 1280x800）
 
 **Project インターフェース** の拡張
 - `pages: Page[]`: プロジェクト内のページ配列
@@ -233,6 +235,7 @@ IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、t
 | `heroui-react` | UI コンポーネント（Button, Card, Modal, AlertDialog など） |
 | `@tauri-apps/api` | Tauri フロントエンド API（invoke, event など） |
 | `@tauri-apps/plugin-store` | Tauri プロジェクト状態永続化 |
+| `motion` (Motion for React) | アニメーション（`motion` コンポーネント、`animate()` 関数、`useReducedMotion`）。`MotionConfig` で全体設定（reducedMotion: "user", duration: 0.22） |
 
 
 ## Claude Code on the Web

@@ -199,7 +199,7 @@ export function PageFrame({
         outline: isActive
           ? 'calc(2px / var(--canvas-zoom, 1)) solid var(--color-focus)'
           : 'calc(1px / var(--canvas-zoom, 1)) solid var(--color-border)',
-        outlineOffset: 'calc(-1px / var(--canvas-zoom, 1))',
+        outlineOffset: 0,
       }}
       data-page-id={page.id}
       onMouseDown={onActivate}

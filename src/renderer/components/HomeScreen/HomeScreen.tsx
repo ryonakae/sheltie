@@ -1,3 +1,4 @@
+import { motion } from 'motion/react';
 import Plus from '@gravity-ui/icons/Plus';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -23,13 +24,16 @@ export function HomeScreen() {
         ))}
 
         {/* 新規プロジェクト追加カード */}
-        <button
-          className="flex min-h-[120px] cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-border-secondary text-muted transition-colors hover:border-border-tertiary hover:text-foreground"
+        <motion.button
+          className="flex min-h-[120px] cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-border-secondary text-muted hover:border-border-tertiary hover:text-foreground"
           onClick={() => createProject()}
           aria-label="新規プロジェクトを追加"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ duration: 0.15 }}
         >
           <Plus className="size-6" />
-        </button>
+        </motion.button>
       </div>
 
       {projects.length === 0 && (

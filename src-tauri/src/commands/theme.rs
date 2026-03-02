@@ -53,8 +53,11 @@ pub async fn set_theme(
             window
                 .set_theme(None)
                 .map_err(|e| format!("テーマ設定に失敗しました: {e}"))?;
-            // macOS/Windows の OS テーマを参照（最善の推測）
-            cfg!(target_os = "macos") && is_system_dark()
+            // Tauri API で現在の実効テーマを取得
+            let current_theme = window
+                .theme()
+                .map_err(|e| format!("テーマ取得に失敗しました: {e}"))?;
+            current_theme == Theme::Dark
         }
     };
 
@@ -81,15 +84,3 @@ pub async fn get_platform_info() -> (String, f64) {
     (platform, traffic_light_width)
 }
 
-/// OS のダークモード状態を取得する（macOS 専用）
-#[cfg(target_os = "macos")]
-fn is_system_dark() -> bool {
-    // macOS では環境変数やシステム API で判定できるが、
-    // ここでは簡易的に false を返す（Tauri の theme:changed イベントで後から更新される）
-    false
-}
-
-#[cfg(not(target_os = "macos"))]
-fn is_system_dark() -> bool {
-    false
-}

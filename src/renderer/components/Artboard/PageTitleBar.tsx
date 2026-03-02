@@ -34,6 +34,13 @@ const TOOLBAR_PADDING = 'calc(8px / var(--canvas-zoom, 1))';
 const TOOLBAR_BUTTON_PADDING = 'calc(2px / var(--canvas-zoom, 1))';
 const TOOLBAR_GAP = 'calc(6px / var(--canvas-zoom, 1))';
 
+function formatDisplayUrl(url: string) {
+  return url
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/+$/g, '');
+}
+
 export function PageTopBar({
   title,
   url,
@@ -44,7 +51,7 @@ export function PageTopBar({
 }: Pick<PageTitleBarProps, 'title' | 'url' | 'isMoved' | 'onReload' | 'onClose' | 'onMouseDown'>) {
   return (
     <div
-      className="flex shrink-0 cursor-grab items-center border border-b-0 border-border-secondary bg-default select-none active:cursor-grabbing"
+      className="flex shrink-0 cursor-grab items-center border-t border-border-secondary bg-default select-none active:cursor-grabbing"
       style={{
         height: TOOLBAR_HEIGHT,
         paddingInline: TOOLBAR_PADDING,
@@ -56,7 +63,7 @@ export function PageTopBar({
       onMouseDown={onMouseDown}
     >
       <span className="min-w-0 flex-1 truncate text-foreground" title={url}>
-        {title || url}
+        {title || formatDisplayUrl(url)}
         {isMoved && <span className="ml-1 text-muted">(Moved)</span>}
       </span>
 
@@ -106,7 +113,7 @@ export function PageBottomBar({
 }: Pick<PageTitleBarProps, 'width' | 'height' | 'onResizePreset'>) {
   return (
     <div
-      className="flex shrink-0 items-center border border-t-0 border-border-secondary bg-default select-none"
+      className="flex shrink-0 items-center border-b border-border-secondary bg-default select-none"
       style={{
         height: TOOLBAR_HEIGHT,
         paddingInline: TOOLBAR_PADDING,

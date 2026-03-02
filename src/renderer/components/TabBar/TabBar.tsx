@@ -3,6 +3,7 @@ import { isSortable } from '@dnd-kit/react/sortable';
 import House from '@gravity-ui/icons/House';
 import Plus from '@gravity-ui/icons/Plus';
 import { Button } from '@heroui/react';
+import { motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { HOME_ID } from '@/renderer/types/tab';
@@ -49,18 +50,21 @@ export function TabBar() {
       style={{ paddingLeft: left, paddingRight: right }}
     >
       {/* ホームボタン: クリックでホームキャンバスに切り替え */}
-      <button
+      <motion.button
         className={[
-          'flex shrink-0 cursor-pointer items-center border-r border-b-2 border-border px-3 transition-colors select-none',
+          'flex shrink-0 cursor-pointer items-center border-r border-b-2 border-border px-3 select-none',
           isHomeActive
             ? 'border-b-accent bg-surface text-foreground'
             : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
         ].join(' ')}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ duration: 0.15 }}
         onClick={() => setActive(HOME_ID)}
         aria-label="ホームに切り替え"
       >
         <House className="size-4" />
-      </button>
+      </motion.button>
 
       {/* タブリスト: DragDropProvider 内でタブの並び替えを管理 */}
       <DragDropProvider

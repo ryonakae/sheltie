@@ -240,6 +240,13 @@ export function Artboard({
     }
   }, [pages, checkPreCapture]);
 
+  const applyBackgroundGrid = useCallback(() => {
+    if (!containerRef.current) return;
+    containerRef.current.style.setProperty('--artboard-dot-scale', String(zoomRef.current));
+    containerRef.current.style.setProperty('--artboard-bg-x', `${panXRef.current}px`);
+    containerRef.current.style.setProperty('--artboard-bg-y', `${panYRef.current}px`);
+  }, []);
+
   /**
    * パン/ズーム操作中に毎フレーム呼ばれる表示モード計算関数。
    * container rect はキャッシュ値を使用（パン/ズーム中は変化しない）。
@@ -477,6 +484,7 @@ export function Artboard({
   // パン操作
   const { isPanMode } = useArtboardPan({
     canvasRef,
+    backgroundRef: containerRef,
     zoom: zoomRef,
     panX: panXRef,
     panY: panYRef,
@@ -495,6 +503,7 @@ export function Artboard({
   useArtboardZoom({
     containerRef,
     canvasRef,
+    backgroundRef: containerRef,
     zoom: zoomRef,
     panX: panXRef,
     panY: panYRef,
@@ -549,9 +558,10 @@ export function Artboard({
       canvasRef.current.style.transform = `translate(${panXRef.current}px, ${panYRef.current}px) scale(${zoomRef.current})`;
       canvasRef.current.style.setProperty('--canvas-zoom', String(zoomRef.current));
     }
+    applyBackgroundGrid();
     // transform 反映後に displayMode を計算
     requestAnimationFrame(() => computeDisplayModes());
-  }, [computeDisplayModes]);
+  }, [applyBackgroundGrid, computeDisplayModes]);
 
   // ストア由来 viewport 変更時（追加時の auto center など）に transform refs も同期
   useEffect(() => {
@@ -571,8 +581,9 @@ export function Artboard({
     if (!canvasRef.current) return;
     canvasRef.current.style.transform = `translate(${panXRef.current}px, ${panYRef.current}px) scale(${zoomRef.current})`;
     canvasRef.current.style.setProperty('--canvas-zoom', String(zoomRef.current));
+    applyBackgroundGrid();
     requestAnimationFrame(() => computeDisplayModes());
-  }, [activeProject?.viewport, computeDisplayModes]);
+  }, [activeProject?.viewport, applyBackgroundGrid, computeDisplayModes]);
 
   // ウィンドウリサイズ時に displayMode を再計算
   useEffect(() => {
@@ -766,7 +777,7 @@ export function Artboard({
       {/* アートボードキャンバス（transform-origin: 0 0） */}
       <div
         ref={canvasRef}
-        className="absolute"
+        className="absolute inset-0"
         style={{ transformOrigin: '0 0', willChange: 'transform' }}
       >
         {pages.map((page) => (

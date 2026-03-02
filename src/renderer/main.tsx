@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MotionConfig } from 'motion/react';
 import App from '@/renderer/App';
 import { setupProjectPersistence } from '@/renderer/store/tab-persistence';
 import { setupThemeListener, useThemeStore } from '@/renderer/store/theme-store';
@@ -13,6 +14,8 @@ void useThemeStore.getState().initialize();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <MotionConfig reducedMotion="user" transition={{ duration: 0.22, ease: 'easeOut' }}>
+      <App />
+    </MotionConfig>
   </StrictMode>,
 );

@@ -101,7 +101,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - マウスホイール or トラックパッドで操作（`updateViewport` で Zustand 状態更新）:
   - `Ctrl/Cmd + ホイール`: マウスカーソル中心にズーム
   - `ホイール（修飾キーなし）`: キャンバスをパン（スクロール移動）
-- ページをクリックで最前面に（`bringPageToFront` で Zustand z-index 制御）
+- ページをクリックで選択（`onSelectPage` で Canvas が selectedPageId を管理）・ドラッグでページ移動。`bringPageToFront` は tab-store に定義があるが現在は Artboard から直接呼ばれていない
 - 操作モード制御：`InteractionType` (`'pan' | 'zoom' | 'drag' | 'resize'`) で操作タイプを分類
   - **ページ操作（drag / resize）**: 開始時に全 Webview を `hideAll()` で非表示。操作完了時に `computeDisplayModes()` で座標同期、DOM 属性更新、命令的 Webview 制御で再表示
   - **キャンバス操作（pan / zoom）**: 開始時に `containerRectRef` へ container rect をキャッシュし `computeInteractionModes()` を即時実行。pan/zoom 中は `scheduleInteractionUpdate()` が rAF（1フレーム1回）で `computeInteractionModes()` を呼び出し、完全にキャンバス内のページは native 維持（`updateAllBounds()` で位置同期）、一部でもキャンバス外またはプリディスプレイゾーン内（50px 以内）はスクリーンショット準備済みなら screenshot、それ以外は hidden に切り替え。操作終了時に `computeDisplayModes()` で最終判定

@@ -36,11 +36,11 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │       │   ├── mod.rs  # モジュール定義
 │       │   ├── store.rs # load_project_state / save_project_state / close_ready
 │       │   ├── theme.rs # load_theme / set_theme / get_platform_info
-│       │   └── webview.rs # create_page_webview（initialization_script で SPA URL 変更検出スクリプト注入 / on_navigation / on_document_title_changed 登録: \x01 プレフィックスで SPA ナビゲーション検出）/ reload_page_webview（url パラメータを受け取り webview.navigate() でナビゲート）
+│       │   └── webview.rs # create_page_webview（initialization_script で SPA URL 変更検出スクリプト注入 / on_navigation / on_document_title_changed 登録: \x01 プレフィックスで SPA ナビゲーション検出）/ reload_page_webview（url パラメータを受け取り webview.navigate() でナビゲート）/ go_back_page_webview・go_forward_page_webview（eval で history.back/forward()）/ get_navigation_state_page_webview（macOS のみ with_webview + objc2::msg_send! で canGoBack/canGoForward 取得、非 macOS は {false, false}）
 ├── src/                # React フロントエンド
 │   ├── renderer/       # React SPA
 │   │   ├── main.tsx    # React エントリーポイント
-│   │   ├── App.tsx     # ルートコンポーネント（Zustand でプロジェクト状態管理）
+│   │   ├── App.tsx     # ルートコンポーネント（Zustand でプロジェクト状態管理）。`<Toast.Provider placement="bottom" />` を末尾に配置（トースト通知）
 │   │   ├── types/
 │   │   │   ├── tab.ts  # Project 型（pages[]、viewport を含む）、Page、Viewport、ProjectState、webviewLabel、isPageMoved()、isPageEmpty()
 │   │   │   └── electron.d.ts # (削除予定）
@@ -49,7 +49,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │   │   ├── tauri-bridge.ts # Tauri IPC ブリッジ層（api / themeApi / webviewApi / getPlatformInfo）
 │   │   │   └── url-utils.ts # URL 正規化ユーティリティ（normalizeUrl: scheme 補完・バリデーション）
 │   │   ├── store/
-│   │   │   ├── tab-store.ts # Zustand ストア（setPageWebviewLabel / setPageUrl アクション）
+│   │   │   ├── tab-store.ts # Zustand ストア（setPageWebviewLabel / setPageUrl / pinPageUrl アクション）
 │   │   │   ├── tab-persistence.ts # プロジェクト状態の永続化ロジック
 │   │   │   └── theme-store.ts # Zustand テーマストア
 │   │   ├── hooks/
@@ -64,7 +64,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（canvasZoom prop で Webview 作成直後に setZoom 適用。url 空時は Webview 作成スキップ・PageUrlForm 表示。onUrlSubmit prop で空フレームへの初回 URL 設定）
 │   │       │   ├── PageUrlForm.tsx # 空フレーム内の URL 入力フォーム（ズーム対応: calc(base / var(--canvas-zoom, 1))）
 │   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setZoom） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setZoom 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）/ onAddPage prop・handleUrlSubmit（setPageUrl 経由で空フレームに URL を設定）/ ResizeObserver で containerRef のサイズ変化を監視し computeDisplayModes() を呼び出す（window resize より汎用的、サイドバー幅変更にも対応）
-│   │       │   └── PageTitleBar.tsx # PageTopBar（タイトル・リロード・閉じるボタン。onReload は optional、空フレーム時 disabled）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
+│   │       │   └── PageTitleBar.tsx # PageTopBar（タイトル左に ChevronLeft/ChevronRight で戻る/進むボタン、タイトル・リロード・ピン留め・閉じるボタン。onReload / onPinUrl は optional、空フレーム時 disabled。ピン留めボタンは isMoved && onPinUrl 条件でリロードボタン右に表示。canGoBack/canGoForward/onGoBack/onGoForward props でナビゲーション制御）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
 │   │       ├── Canvas/
 │   │       │   └── FloatingToolbar.tsx # キャンバス下端中央のフローティングツールバー（＋ボタンで空フレーム追加。z-40、外側 pointer-events-none / 内側 pointer-events-auto）
 │   │       ├── TabBar/ # data-tauri-drag-region で実装
@@ -99,7 +99,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - **`getViewportCenterPos` / `centerOnNewPage`**: Canvas に実装。`data-artboard-container` を使ってビューポート中央座標を算出し、ズーム込み 400ms アニメーションで新規ページにフィット。`prefersReducedMotion` 対応
 
 **Artboard**: ページレンダリング・ビューポート管理・操作制御
-- `ArtboardProps`: `selectedPageId`, `onSelectPage`, `onClearSelection`, `centeredPageId`, `onCenteredPageHandled`, `onAddPage` を受け取る
+- `ArtboardProps`: `selectedPageId`, `onSelectPage`, `onClearSelection`, `centeredPageId`, `onCenteredPageHandled`, `onAddPage` を受け取る。`navStates: Record<string, NavigationState>` を useState で管理し、`refreshNavigationState(pageId)` で同一値なら参照を維持しつつ更新。`handleGoBack`/`handleGoForward` で IPC 経由のナビゲーション操作
 - 各ページを `<div data-webview-placeholder>` + Tauri Webview で DOM に描画
 - canvas 要素に transform (translate + scale) を設定してズーム・パン実装
 - ドラッグでページ移動、リサイズでサイズ変更（`updatePagePosition`/`updatePageSize` で Zustand 状態更新）
@@ -123,7 +123,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 **状態管理**: Zustand による共有状態管理
 - **useProjectStore** (`tab-store.ts`):
   - **プロジェクト管理アクション**: `createProject`, `openProject`, `closeProject`, `deleteProject`, `renameProject`, `setActive`, `reorderOpenProjects`, `updateSidebarWidth`
-  - **ページ管理アクション**: `addPage`（`url` 省略可能・省略時は空フレーム `url=''`。`options?: {x,y,width,height}` で配置指定可能、戻り値 `Page | null`）, `setPageUrl`（空フレームへの初回 URL 設定・`url`/`addedUrl`/`title` を同時更新）, `removePage`, `updatePagePosition`, `updatePageSize`, `updatePageUrl`, `updatePageTitle`, `updateViewport`, `bringPageToFront`, `setPageWebviewLabel`
+  - **ページ管理アクション**: `addPage`（`url` 省略可能・省略時は空フレーム `url=''`。`options?: {x,y,width,height}` で配置指定可能、戻り値 `Page | null`）, `setPageUrl`（空フレームへの初回 URL 設定・`url`/`addedUrl`/`title` を同時更新）, `pinPageUrl`（現在の `page.url` を `page.addedUrl` に上書きしリロード先を更新）, `removePage`, `updatePagePosition`, `updatePageSize`, `updatePageUrl`, `updatePageTitle`, `updateViewport`, `bringPageToFront`, `setPageWebviewLabel`
   - **Selectors**: `selectActiveProject`, `selectIsHome`
   - 起動時に `tab-persistence.ts` で保存済み状態を復元（tauri-plugin-store ベース）
   - プロジェクトライフサイクル: `createProject` で新規作成、`openProject` で開く（既開いていれば activeId 更新）、`closeProject` でタブバーから閉じる（openIds から除去）、`deleteProject` で削除（projects + openIds 両方から除去）
@@ -200,6 +200,9 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - `get_platform_info`: プラットフォーム情報取得（inset, os）
 - `create_page_webview`: ページ用 Webview 作成
 - `reload_page_webview`: Webview を指定 URL にナビゲート（`url: String` を受け取り `webview.navigate()` で追加時 URL に戻す）
+- `go_back_page_webview`: `eval("history.back()")` で前のページに戻る
+- `go_forward_page_webview`: `eval("history.forward()")` で次のページに進む
+- `get_navigation_state_page_webview`: canGoBack/canGoForward を取得（macOS のみ `with_webview + objc2::msg_send!` で正確に取得、非 macOS は `{false, false}` を返す）
 - `capture_webview_screenshot`: WKWebView スナップショットを base64 PNG Data URL として取得（macOS のみ）
 
 **Backend → Renderer** (emit):
@@ -213,6 +216,8 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - `hideAll()`, `showAllWithBounds()`: 一括操作（複数 Webview の効率的な制御）
 - `setZoom(label, scaleFactor)`: Webview のページズームを設定（CSS `transform: scale()` と乖離するビューポートを補正）
 - `reload(pageId, url)`: Webview を追加時 URL にナビゲート（IPC 経由で `reload_page_webview` を呼び出す。`page.addedUrl ?? page.url` を渡す）
+- `goBack(pageId)` / `goForward(pageId)`: 前後のページに移動（IPC 経由）
+- `getNavigationState(pageId)`: `NavigationState { can_go_back, can_go_forward }` を取得（IPC 経由）
 - `captureScreenshot()`: Webview スクリーンショット取得（base64 Data URL、失敗時は null）
 - イベントリスナー登録: `onPageNavigated()`, `onPageTitleChanged()`
 
@@ -241,7 +246,7 @@ IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、t
 | `zustand` | グローバル状態管理（プロジェクト・ページ状態、ビューポート設定） |
 | `@dnd-kit/react` | 開いているプロジェクトのドラッグ&ドロップ並び替え（React 19 対応） |
 | `@gravity-ui/icons` | House, Plus, Xmark などのアイコン |
-| `heroui-react` | UI コンポーネント（Button, Card, Modal, AlertDialog など） |
+| `heroui-react` | UI コンポーネント（Button, Card, Modal, AlertDialog, Toast など）。`toast()` 関数でトースト通知（`Toast.Provider` を `App.tsx` ルートに配置） |
 | `@tauri-apps/api` | Tauri フロントエンド API（invoke, event など） |
 | `@tauri-apps/plugin-store` | Tauri プロジェクト状態永続化 |
 | `motion` (Motion for React) | アニメーション（`motion` コンポーネント、`animate()` 関数、`useReducedMotion`）。`MotionConfig` で全体設定（reducedMotion: "user", duration: 0.22） |

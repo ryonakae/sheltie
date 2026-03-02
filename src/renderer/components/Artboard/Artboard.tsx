@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { toast } from '@heroui/react';
+import { AnimatePresence, animate, motion, useReducedMotion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
+import type { NavigationState } from '@/renderer/lib/tauri-bridge';
 import { useArtboardPan } from '@/renderer/hooks/useArtboardPan';
 import { useArtboardZoom } from '@/renderer/hooks/useArtboardZoom';
 import { usePageDrag } from '@/renderer/hooks/usePageDrag';
@@ -25,6 +28,9 @@ const CAPTURE_MIN_INTERVAL_MS = 1000;
 const PRE_DISPLAY_MARGIN_PX = 50;
 /** native ページのスクリーンショット定期リフレッシュ間隔（ms）。Webview 内スクロール等に対応 */
 const SCREENSHOT_REFRESH_INTERVAL_MS = 2000;
+const ZOOM_RESET_TARGET = 1;
+const ZOOM_RESET_DURATION_SEC = 0.24;
+const ZOOM_ANIMATION_EASE = [0.215, 0.61, 0.355, 1] as const;
 
 interface ArtboardProps {
   selectedPageId: string | null;
@@ -58,6 +64,7 @@ export function Artboard({
     removePage,
     setPageWebviewLabel,
     setPageUrl,
+    pinPageUrl,
     updateStickyNoteContent,
     cycleStickyNoteColor,
   } = useProjectStore(
@@ -70,6 +77,7 @@ export function Artboard({
       removePage: s.removePage,
       setPageWebviewLabel: s.setPageWebviewLabel,
       setPageUrl: s.setPageUrl,
+      pinPageUrl: s.pinPageUrl,
       updateStickyNoteContent: s.updateStickyNoteContent,
       cycleStickyNoteColor: s.cycleStickyNoteColor,
     })),
@@ -101,8 +109,14 @@ export function Artboard({
     return initial;
   });
 
+  // ページの戻る/進み可否状態（ナビゲーションイベントで更新、ランタイムのみ）
+  const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
+
   // 操作中フラグ（InteractionOverlay 表示に使用）
   const [interactionCursor, setInteractionCursor] = useState<string | null>(null);
+  const [uiZoom, setUiZoom] = useState(() => activeProject?.viewport.zoom ?? 1);
+  const zoomResetAnimationRef = useRef<{ stop: () => void } | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   // 複数操作の同時性を管理（例: ホイール debounce 終了前にドラッグ開始した場合の競合防止）
   type InteractionType = 'pan' | 'zoom' | 'drag' | 'resize';
@@ -260,6 +274,13 @@ export function Artboard({
     containerRef.current.style.setProperty('--artboard-bg-y', `${panYRef.current}px`);
   }, []);
 
+  const applyCanvasTransform = useCallback(() => {
+    if (!canvasRef.current) return;
+    canvasRef.current.style.transform = `translate(${panXRef.current}px, ${panYRef.current}px) scale(${zoomRef.current})`;
+    canvasRef.current.style.setProperty('--canvas-zoom', String(zoomRef.current));
+    applyBackgroundGrid();
+  }, [applyBackgroundGrid]);
+
   /**
    * パン/ズーム操作中に毎フレーム呼ばれる表示モード計算関数。
    * container rect はキャッシュ値を使用（パン/ズーム中は変化しない）。
@@ -385,6 +406,69 @@ export function Artboard({
       computeInteractionModes();
     });
   }, [computeInteractionModes]);
+
+  const handleZoomMove = useCallback(() => {
+    scheduleInteractionUpdate();
+    setUiZoom(zoomRef.current);
+  }, [scheduleInteractionUpdate]);
+
+  const handleResetZoom = useCallback(() => {
+    if (activeId == null || !containerRef.current) return;
+    if (activeInteractionsRef.current.size > 0) return;
+    if (Math.abs(zoomRef.current - ZOOM_RESET_TARGET) < 0.0001) return;
+
+    const nextContainerRect = containerRef.current.getBoundingClientRect();
+    if (nextContainerRect.width <= 0 || nextContainerRect.height <= 0) return;
+
+    if (prefersReducedMotion) {
+      zoomResetAnimationRef.current?.stop();
+      zoomResetAnimationRef.current = null;
+      zoomRef.current = ZOOM_RESET_TARGET;
+      setUiZoom(ZOOM_RESET_TARGET);
+      applyCanvasTransform();
+      updateViewport(activeId, {
+        zoom: ZOOM_RESET_TARGET,
+        panX: panXRef.current,
+        panY: panYRef.current,
+      });
+      return;
+    }
+
+    zoomResetAnimationRef.current?.stop();
+
+    containerRectRef.current = nextContainerRect;
+    const controls = animate(zoomRef.current, ZOOM_RESET_TARGET, {
+      duration: ZOOM_RESET_DURATION_SEC,
+      ease: ZOOM_ANIMATION_EASE,
+      onUpdate: (nextZoom) => {
+        zoomRef.current = nextZoom;
+        applyCanvasTransform();
+        computeInteractionModes();
+        setUiZoom(nextZoom);
+      },
+      onComplete: () => {
+        zoomResetAnimationRef.current = null;
+        containerRectRef.current = null;
+        zoomRef.current = ZOOM_RESET_TARGET;
+        setUiZoom(ZOOM_RESET_TARGET);
+        applyCanvasTransform();
+        updateViewport(activeId, {
+          zoom: ZOOM_RESET_TARGET,
+          panX: panXRef.current,
+          panY: panYRef.current,
+        });
+        requestAnimationFrame(() => computeDisplayModes());
+      },
+    });
+    zoomResetAnimationRef.current = controls;
+  }, [
+    activeId,
+    applyCanvasTransform,
+    computeDisplayModes,
+    computeInteractionModes,
+    prefersReducedMotion,
+    updateViewport,
+  ]);
 
   // ── スクリーンショットキャッシュ ─────────────────────────────────────────
 
@@ -528,7 +612,7 @@ export function Artboard({
       (active: boolean) => handleInteractionChange(active, 'default', 'zoom'),
       [handleInteractionChange],
     ),
-    onBoundsUpdate: scheduleInteractionUpdate,
+    onBoundsUpdate: handleZoomMove,
   });
 
   // ページドラッグ
@@ -585,13 +669,11 @@ export function Artboard({
   // 初回マウント時にキャンバスの transform を設定して displayMode を計算
   useEffect(() => {
     if (canvasRef.current) {
-      canvasRef.current.style.transform = `translate(${panXRef.current}px, ${panYRef.current}px) scale(${zoomRef.current})`;
-      canvasRef.current.style.setProperty('--canvas-zoom', String(zoomRef.current));
+      applyCanvasTransform();
     }
-    applyBackgroundGrid();
     // transform 反映後に displayMode を計算
     requestAnimationFrame(() => computeDisplayModes());
-  }, [applyBackgroundGrid, computeDisplayModes]);
+  }, [applyCanvasTransform, computeDisplayModes]);
 
   // ストア由来 viewport 変更時（追加時の auto center など）に transform refs も同期
   useEffect(() => {
@@ -609,11 +691,21 @@ export function Artboard({
     lastAppliedZoomRef.current = nextZoom;
 
     if (!canvasRef.current) return;
-    canvasRef.current.style.transform = `translate(${panXRef.current}px, ${panYRef.current}px) scale(${zoomRef.current})`;
-    canvasRef.current.style.setProperty('--canvas-zoom', String(zoomRef.current));
-    applyBackgroundGrid();
+    applyCanvasTransform();
     requestAnimationFrame(() => computeDisplayModes());
-  }, [activeProject?.viewport, applyBackgroundGrid, computeDisplayModes]);
+    setUiZoom(nextZoom);
+  }, [activeProject?.viewport, applyCanvasTransform, computeDisplayModes]);
+
+  useEffect(() => {
+    setUiZoom(viewportZoom);
+  }, [viewportZoom]);
+
+  useEffect(() => {
+    return () => {
+      zoomResetAnimationRef.current?.stop();
+      zoomResetAnimationRef.current = null;
+    };
+  }, []);
 
   // Artboard コンテナのサイズ変更時に displayMode を再計算
   // ウィンドウリサイズ・サイドバー幅変更の両方に対応
@@ -700,6 +792,30 @@ export function Artboard({
     return () => clearInterval(id);
   }, [pages]);
 
+  const refreshNavigationState = useCallback(async (pageId: string) => {
+    const state = await webviewApi.getNavigationState(pageId);
+    setNavStates((prev) => {
+      const existing = prev[pageId];
+      // 同一値なら参照維持（不要な再レンダリング防止）
+      if (
+        existing &&
+        existing.can_go_back === state.can_go_back &&
+        existing.can_go_forward === state.can_go_forward
+      ) {
+        return prev;
+      }
+      return { ...prev, [pageId]: state };
+    });
+  }, []);
+
+  const handleGoBack = useCallback((pageId: string) => {
+    void webviewApi.goBack(pageId);
+  }, []);
+
+  const handleGoForward = useCallback((pageId: string) => {
+    void webviewApi.goForward(pageId);
+  }, []);
+
   const handleNavigated = useCallback(
     (pageId: string, url: string, title: string) => {
       updatePageUrl(activeId, pageId, url, title);
@@ -708,8 +824,9 @@ export function Artboard({
       }
       // ナビゲーション完了後にスクリーンショットを更新（500ms 遅延でロード完了を待つ）
       setTimeout(() => void captureScreenshot(pageId), 500);
+      void refreshNavigationState(pageId);
     },
-    [updatePageUrl, activeId, captureScreenshot],
+    [updatePageUrl, activeId, captureScreenshot, refreshNavigationState],
   );
 
   const handleTitleUpdated = useCallback(
@@ -717,8 +834,10 @@ export function Artboard({
       if (!title) return;
       updatePageTitle(activeId, pageId, title);
       setPageTitles((prev) => ({ ...prev, [pageId]: title }));
+      // SPA の pushState/replaceState 検出後にナビゲーション状態を更新
+      void refreshNavigationState(pageId);
     },
-    [updatePageTitle, activeId],
+    [updatePageTitle, activeId, refreshNavigationState],
   );
 
   const handleDragStart = useCallback(
@@ -743,16 +862,18 @@ export function Artboard({
       void webviewApi.setZoom(label, zoomRef.current);
       // Webview 作成完了後に displayMode を再計算（初期表示位置の判定）
       requestAnimationFrame(() => computeDisplayModes());
+      void refreshNavigationState(pageId);
     },
-    [setPageWebviewLabel, activeId, computeDisplayModes],
+    [setPageWebviewLabel, activeId, computeDisplayModes, refreshNavigationState],
   );
 
   const handleWebviewLoaded = useCallback(
     (pageId: string) => {
       // ページロード完了後にスクリーンショットをキャプチャ（Webview が表示中の時に取る）
       void captureScreenshot(pageId);
+      void refreshNavigationState(pageId);
     },
-    [captureScreenshot],
+    [captureScreenshot, refreshNavigationState],
   );
 
   const handleRemovePage = useCallback(
@@ -785,6 +906,14 @@ export function Artboard({
       void webviewApi.reload(pageId, page.addedUrl ?? page.url);
     },
     [pages],
+  );
+
+  const handlePinPageUrl = useCallback(
+    (pageId: string) => {
+      pinPageUrl(activeId, pageId);
+      toast.success('表示中のページで固定しました');
+    },
+    [pinPageUrl, activeId],
   );
 
   const handleUrlSubmit = useCallback(
@@ -861,10 +990,15 @@ export function Artboard({
               displayMode={displayModes[page.id] ?? 'native'}
               screenshotUrl={screenshotUrls[page.id] ?? null}
               canvasZoom={viewportZoom}
+              canGoBack={navStates[page.id]?.can_go_back ?? false}
+              canGoForward={navStates[page.id]?.can_go_forward ?? false}
+              onGoBack={() => handleGoBack(page.id)}
+              onGoForward={() => handleGoForward(page.id)}
               onActivate={() => {
                 onSelectPage(page.id);
               }}
               onReload={() => handleReloadPage(page.id)}
+              onPinUrl={() => handlePinPageUrl(page.id)}
               onClose={() => handleRemovePage(page.id)}
               onDragStart={(e) => handleDragStart(e, page.id)}
               onResizeStart={(e, direction) => handleResizeStart(e, page.id, direction)}
@@ -888,6 +1022,27 @@ export function Artboard({
 
       {/* フローティングツールバー（InteractionOverlay の z-50 より下の z-40） */}
       <FloatingToolbar onAddPage={onAddPage} onAddStickyNote={onAddStickyNote} />
+
+      <motion.button
+        type="button"
+        className="absolute right-3 bottom-3 z-20 rounded-md border border-border bg-default px-2 py-1 text-xs text-foreground shadow-md"
+        onClick={handleResetZoom}
+        whileHover={{ y: -1, scale: 1.04 }}
+        whileTap={{ scale: 0.96 }}
+        aria-label="ズームを100%に戻す"
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={Math.round(uiZoom * 100)}
+            initial={{ opacity: 0.2, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.12 }}
+          >
+            {Math.round(uiZoom * 100)}%
+          </motion.span>
+        </AnimatePresence>
+      </motion.button>
     </div>
   );
 }

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { animate, useReducedMotion } from 'motion/react';
+import { Button, Tooltip } from '@heroui/react';
+import ChevronsCollapseHorizontal from '@gravity-ui/icons/ChevronsCollapseHorizontal';
+import ChevronsExpandHorizontal from '@gravity-ui/icons/ChevronsExpandHorizontal';
 
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
 import {
@@ -52,6 +55,7 @@ export function Canvas() {
   const viewport = activeProject?.viewport;
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [centeredPageId, setCenteredPageId] = useState<string | null>(null);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   const sidebarRef = useRef<HTMLElement>(null);
   const isResizing = useRef(false);
@@ -105,6 +109,10 @@ export function Canvas() {
   }, []);
 
   useEffect(() => cancelCentering, [cancelCentering]);
+
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarVisible((prev) => !prev);
+  }, []);
 
   /**
    * ページ追加後にビューポートをアニメーションしてページを中央・フィット表示する。
@@ -278,15 +286,33 @@ export function Canvas() {
   }, [updateSidebarWidth, activeId]);
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="relative flex flex-1 overflow-hidden">
       <Sidebar
         ref={sidebarRef}
-        initialWidth={sidebarWidth}
+        initialWidth={isSidebarVisible ? sidebarWidth : 0}
         selectedPageId={selectedPageId}
         onSelectPage={handleSelectPage}
         onCentered={handleCenteredPage}
       />
-      <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
+      {isSidebarVisible && (
+        <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
+      )}
+      <div className="absolute bottom-4 left-4 z-30">
+        <Tooltip>
+          <Button
+            isIconOnly
+            size="sm"
+            variant="ghost"
+            onPress={toggleSidebar}
+            aria-label={isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}
+          >
+            {isSidebarVisible ? <ChevronsCollapseHorizontal /> : <ChevronsExpandHorizontal />}
+          </Button>
+          <Tooltip.Content placement="top">
+            <p>{isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}</p>
+          </Tooltip.Content>
+        </Tooltip>
+      </div>
       <Artboard
         selectedPageId={selectedPageId}
         onSelectPage={handleSelectPage}

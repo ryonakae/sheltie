@@ -6,39 +6,42 @@ interface PageResizeHandleProps {
 }
 
 const CURSOR_MAP: Record<ResizeDirection, string> = {
-  n: 'n-resize',
-  s: 's-resize',
-  e: 'e-resize',
-  w: 'w-resize',
-  ne: 'ne-resize',
-  nw: 'nw-resize',
-  se: 'se-resize',
-  sw: 'sw-resize',
+  n: 'ns-resize',
+  s: 'ns-resize',
+  e: 'ew-resize',
+  w: 'ew-resize',
+  ne: 'nesw-resize',
+  nw: 'nwse-resize',
+  se: 'nwse-resize',
+  sw: 'nesw-resize',
 };
 
 const Z = 'var(--canvas-zoom, 1)';
+const EDGE_SIZE = `calc(12px / ${Z})`;
+const EDGE_OFFSET = `calc(12px / ${Z})`;
+const CORNER_SIZE = `calc(12px / ${Z})`;
 
 /** ハンドルの位置スタイル（calc() でズームに関係なく一定のヒット領域を確保） */
 const POSITION_STYLE: Record<ResizeDirection, React.CSSProperties> = {
-  n: { top: 0, left: `calc(8px / ${Z})`, right: `calc(8px / ${Z})`, height: `calc(4px / ${Z})` },
+  n: { top: 0, left: EDGE_OFFSET, right: EDGE_OFFSET, height: EDGE_SIZE },
   s: {
     bottom: 0,
-    left: `calc(8px / ${Z})`,
-    right: `calc(8px / ${Z})`,
-    height: `calc(4px / ${Z})`,
+    left: EDGE_OFFSET,
+    right: EDGE_OFFSET,
+    height: EDGE_SIZE,
   },
-  e: { top: `calc(8px / ${Z})`, bottom: `calc(8px / ${Z})`, right: 0, width: `calc(4px / ${Z})` },
-  w: { top: `calc(8px / ${Z})`, bottom: `calc(8px / ${Z})`, left: 0, width: `calc(4px / ${Z})` },
-  ne: { top: 0, right: 0, width: `calc(8px / ${Z})`, height: `calc(8px / ${Z})` },
-  nw: { top: 0, left: 0, width: `calc(8px / ${Z})`, height: `calc(8px / ${Z})` },
-  se: { bottom: 0, right: 0, width: `calc(8px / ${Z})`, height: `calc(8px / ${Z})` },
-  sw: { bottom: 0, left: 0, width: `calc(8px / ${Z})`, height: `calc(8px / ${Z})` },
+  e: { top: EDGE_OFFSET, bottom: EDGE_OFFSET, right: 0, width: EDGE_SIZE },
+  w: { top: EDGE_OFFSET, bottom: EDGE_OFFSET, left: 0, width: EDGE_SIZE },
+  ne: { top: 0, right: 0, width: CORNER_SIZE, height: CORNER_SIZE },
+  nw: { top: 0, left: 0, width: CORNER_SIZE, height: CORNER_SIZE },
+  se: { bottom: 0, right: 0, width: CORNER_SIZE, height: CORNER_SIZE },
+  sw: { bottom: 0, left: 0, width: CORNER_SIZE, height: CORNER_SIZE },
 };
 
 export function PageResizeHandle({ direction, onMouseDown }: PageResizeHandleProps) {
   return (
     <div
-      className="absolute z-10"
+      className="absolute z-20"
       style={{ ...POSITION_STYLE[direction], cursor: CURSOR_MAP[direction] }}
       onMouseDown={(e) => {
         e.stopPropagation();

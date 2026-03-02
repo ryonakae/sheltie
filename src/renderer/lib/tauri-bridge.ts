@@ -138,6 +138,33 @@ export const webviewApi = {
     }
   },
 
+  /** ページ Webview のブラウザ履歴を1つ戻る */
+  async goBack(pageId: string): Promise<void> {
+    try {
+      await invoke('go_back_page_webview', { pageId });
+    } catch {
+      // Webview 未作成・既破棄時は no-op
+    }
+  },
+
+  /** ページ Webview のブラウザ履歴を1つ進める */
+  async goForward(pageId: string): Promise<void> {
+    try {
+      await invoke('go_forward_page_webview', { pageId });
+    } catch {
+      // Webview 未作成・既破棄時は no-op
+    }
+  },
+
+  /** ページ Webview の戻る/進み可否状態を取得する（macOS のみ正確。失敗時は両方 false） */
+  async getNavigationState(pageId: string): Promise<NavigationState> {
+    try {
+      return await invoke<NavigationState>('get_navigation_state_page_webview', { pageId });
+    } catch {
+      return { can_go_back: false, can_go_forward: false };
+    }
+  },
+
   /** ページの Webview を指定 URL にナビゲートする（追加時 URL へのリセットに使用） */
   async reload(pageId: string, url: string): Promise<void> {
     try {
@@ -163,6 +190,13 @@ export const webviewApi = {
   /** Rust → JS: タイトル変更イベントをリッスン */
   onPageTitleChanged: (pageId: string, callback: (payload: { title: string }) => void) =>
     listen<{ title: string }>(`page-title-changed-${pageId}`, (event) => callback(event.payload)),
+};
+
+// ── 型定義 ───────────────────────────────────────────────────────
+
+export type NavigationState = {
+  can_go_back: boolean;
+  can_go_forward: boolean;
 };
 
 // ── プラットフォーム情報 ──────────────────────────────────────────

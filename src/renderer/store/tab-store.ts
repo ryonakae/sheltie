@@ -128,6 +128,8 @@ interface ProjectActions {
   updateStickyNoteContent: (projectId: string, pageId: string, content: string) => void;
   /** 付箋のカラーインデックスを次の色に進める */
   cycleStickyNoteColor: (projectId: string, pageId: string) => void;
+  /** 現在表示中の url を addedUrl として固定する（リロード先を遷移後の URL に更新） */
+  pinPageUrl: (projectId: string, pageId: string) => void;
   /** ネイティブ Webview 作成後にラベルをページに紐付ける（ランタイムのみ・永続化不要） */
   setPageWebviewLabel: (projectId: string, pageId: string, label: string) => void;
   /** 永続化モジュール専用: 起動時に保存済み状態を復元する */
@@ -413,6 +415,22 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           pages: p.pages.map((pg) => {
             if (pg.id !== pageId) return pg;
             return { ...pg, colorIndex: ((pg.colorIndex ?? 0) + 1) % 4 };
+          }),
+        };
+      }),
+    })),
+
+  pinPageUrl: (projectId, pageId) =>
+    set((state) => ({
+      projects: state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          pages: p.pages.map((pg) => {
+            if (pg.id !== pageId) return pg;
+            // 既に addedUrl と url が同一なら参照を維持して不要な再レンダリングを防ぐ
+            if (!pg.url || pg.addedUrl === pg.url) return pg;
+            return { ...pg, addedUrl: pg.url };
           }),
         };
       }),

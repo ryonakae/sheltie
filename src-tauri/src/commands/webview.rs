@@ -117,6 +117,94 @@ fn encode_nsimage_to_base64(image: *mut objc2::runtime::AnyObject) -> Result<Str
     }
 }
 
+/// ページ Webview のブラウザ履歴を1つ戻る。
+#[tauri::command]
+pub async fn go_back_page_webview(app: AppHandle, page_id: String) -> Result<(), String> {
+    let label = format!("page-{}", page_id);
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    webview
+        .eval("history.back()")
+        .map_err(|e| format!("history.back() の実行に失敗: {e}"))
+}
+
+/// ページ Webview のブラウザ履歴を1つ進める。
+#[tauri::command]
+pub async fn go_forward_page_webview(app: AppHandle, page_id: String) -> Result<(), String> {
+    let label = format!("page-{}", page_id);
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    webview
+        .eval("history.forward()")
+        .map_err(|e| format!("history.forward() の実行に失敗: {e}"))
+}
+
+#[derive(serde::Serialize)]
+pub struct NavigationState {
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
+}
+
+/// ページ Webview の戻る/進み可否状態を取得する（macOS のみ正確）。
+#[tauri::command]
+pub async fn get_navigation_state_page_webview(
+    app: AppHandle,
+    page_id: String,
+) -> Result<NavigationState, String> {
+    get_navigation_state_impl(app, page_id).await
+}
+
+#[cfg(target_os = "macos")]
+async fn get_navigation_state_impl(
+    app: AppHandle,
+    page_id: String,
+) -> Result<NavigationState, String> {
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::oneshot;
+
+    let label = format!("page-{}", page_id);
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+
+    let (tx, rx) = oneshot::channel::<Result<NavigationState, String>>();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+
+    webview
+        .with_webview(move |platform_wv| {
+            let raw_ptr = platform_wv.inner() as *mut objc2::runtime::AnyObject;
+            unsafe {
+                let can_go_back: bool = objc2::msg_send![raw_ptr, canGoBack];
+                let can_go_forward: bool = objc2::msg_send![raw_ptr, canGoForward];
+                if let Ok(mut guard) = tx.lock() {
+                    if let Some(sender) = guard.take() {
+                        let _ = sender.send(Ok(NavigationState {
+                            can_go_back,
+                            can_go_forward,
+                        }));
+                    }
+                }
+            }
+        })
+        .map_err(|e| format!("with_webview エラー: {e}"))?;
+
+    rx.await
+        .map_err(|_| "ナビゲーション状態チャネルが閉じられました".to_string())?
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn get_navigation_state_impl(
+    _app: AppHandle,
+    _page_id: String,
+) -> Result<NavigationState, String> {
+    Ok(NavigationState {
+        can_go_back: false,
+        can_go_forward: false,
+    })
+}
+
 /// ページの Webview を指定 URL にナビゲートする（追加時 URL へのリセットに使用）。
 #[tauri::command]
 pub async fn reload_page_webview(app: AppHandle, page_id: String, url: String) -> Result<(), String> {

@@ -1,3 +1,5 @@
+import { Toast } from '@heroui/react';
+
 import { Canvas } from '@/renderer/components/Canvas/Canvas';
 import { HomeScreen } from '@/renderer/components/HomeScreen/HomeScreen';
 import { TabBar } from '@/renderer/components/TabBar/TabBar';
@@ -16,6 +18,7 @@ export default function App() {
     <div className="flex h-full flex-col">
       <TabBar />
       {isHome ? <HomeScreen /> : <Canvas key={activeId} />}
+      <Toast.Provider placement="bottom" />
     </div>
   );
 }

@@ -22,8 +22,13 @@ interface PageFrameProps {
   screenshotUrl: string | null;
   /** キャンバスのズームレベル（Webview のページズームに適用してビューポートを論理サイズに復元） */
   canvasZoom: number;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onGoBack: () => void;
+  onGoForward: () => void;
   onActivate: () => void;
   onReload: () => void;
+  onPinUrl: () => void;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   onResizeStart: (e: React.MouseEvent, direction: ResizeDirection) => void;
@@ -46,8 +51,13 @@ export function PageFrame({
   displayMode,
   screenshotUrl,
   canvasZoom,
+  canGoBack,
+  canGoForward,
+  onGoBack,
+  onGoForward,
   onActivate,
   onReload,
+  onPinUrl,
   onClose,
   onDragStart,
   onResizeStart,
@@ -218,7 +228,12 @@ export function PageFrame({
         title={title}
         url={page.url}
         isMoved={isPageMoved(page)}
+        canGoBack={isPageEmpty(page) ? false : canGoBack}
+        canGoForward={isPageEmpty(page) ? false : canGoForward}
+        onGoBack={isPageEmpty(page) ? undefined : onGoBack}
+        onGoForward={isPageEmpty(page) ? undefined : onGoForward}
         onReload={isPageEmpty(page) ? undefined : onReload}
+        onPinUrl={isPageMoved(page) ? onPinUrl : undefined}
         onClose={onClose}
         onMouseDown={handleTitleBarMouseDown}
       />

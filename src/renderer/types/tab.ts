@@ -3,12 +3,21 @@ export const HOME_ID = '__home__' as const;
 /** ネイティブ Webview の表示モード */
 export type DisplayMode = 'native' | 'screenshot' | 'hidden';
 
+/** ページの種類 */
+export type PageType = 'webpage' | 'stickynote';
+
 export interface Page {
   id: string;
   url: string;
   title: string;
+  /** ページ種別（undefined は 'webpage' として扱う・後方互換） */
+  type?: PageType;
   /** 追加時点のURLを保持し、リダイレクト後でも一覧で参照可能にする */
   addedUrl?: string;
+  /** 付箋のテキスト内容 */
+  content?: string;
+  /** 付箋のカラーインデックス（STICKY_NOTE_COLORS への参照） */
+  colorIndex?: number;
   x: number;
   y: number;
   width: number;
@@ -27,6 +36,16 @@ export interface Viewport {
 export const DEFAULT_VIEWPORT: Viewport = { zoom: 1, panX: 0, panY: 0 };
 export const DEFAULT_PAGE_WIDTH = 375;
 export const DEFAULT_PAGE_HEIGHT = 812;
+export const DEFAULT_STICKY_NOTE_WIDTH = 200;
+export const DEFAULT_STICKY_NOTE_HEIGHT = 200;
+
+/** 付箋のカラーパレット */
+export const STICKY_NOTE_COLORS = [
+  { bg: '#FFF9C4', border: '#FBC02D' }, // 薄黄色
+  { bg: '#FCE4EC', border: '#E91E63' }, // 薄ピンク
+  { bg: '#E0F7FA', border: '#00ACC1' }, // 薄水色
+  { bg: '#E8F5E9', border: '#43A047' }, // 薄緑
+] as const;
 
 export interface SizePreset {
   label: string;
@@ -52,6 +71,16 @@ export interface Project {
 /** URL 未設定の空フレームかどうか */
 export function isPageEmpty(page: Page): boolean {
   return page.url === '';
+}
+
+/** 付箋ページかどうか */
+export function isStickyNote(page: Page): boolean {
+  return page.type === 'stickynote';
+}
+
+/** Webページかどうか（type が undefined の場合も 'webpage' 扱い = 後方互換） */
+export function isWebPage(page: Page): boolean {
+  return !isStickyNote(page);
 }
 
 /**

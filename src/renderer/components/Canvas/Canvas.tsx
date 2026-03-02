@@ -3,7 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { animate, useReducedMotion } from 'motion/react';
 
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
-import { DEFAULT_PAGE_HEIGHT, DEFAULT_PAGE_WIDTH, type Page } from '@/renderer/types/tab';
+import {
+  DEFAULT_PAGE_HEIGHT,
+  DEFAULT_PAGE_WIDTH,
+  DEFAULT_STICKY_NOTE_HEIGHT,
+  DEFAULT_STICKY_NOTE_WIDTH,
+  type Page,
+} from '@/renderer/types/tab';
 import { Artboard } from '@/renderer/components/Artboard/Artboard';
 import { ResizeHandle } from '@/renderer/components/Canvas/ResizeHandle';
 import { Sidebar } from '@/renderer/components/Canvas/Sidebar';
@@ -13,11 +19,13 @@ const SIDEBAR_MAX_WIDTH = 384;
 const SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_CHROME_HEIGHT = 48;
 
-/** 現在のビューポート中央のワールド座標を起点とした、ページの配置位置を算出する */
+/** 現在のビューポート中央のワールド座標を起点とした、指定サイズの要素の配置位置を算出する */
 function getViewportCenterPos(
   viewportZoom: number,
   viewportPanX: number,
   viewportPanY: number,
+  targetWidth: number,
+  targetHeight: number,
 ): { x: number; y: number } | null {
   const artboard = document.querySelector<HTMLElement>('[data-artboard-container]');
   if (!artboard) return null;
@@ -25,12 +33,12 @@ function getViewportCenterPos(
   const rect = artboard.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0 || viewportZoom <= 0) return null;
 
-  // ビューポート中央のワールド座標（ページ左上を起点とするため半サイズ分ずらす）
+  // ビューポート中央のワールド座標（要素左上を起点とするため半サイズ分ずらす）
   const centerWorldX = (rect.width / 2 - viewportPanX) / viewportZoom;
   const centerWorldY = (rect.height / 2 - viewportPanY) / viewportZoom;
   return {
-    x: centerWorldX - DEFAULT_PAGE_WIDTH / 2,
-    y: centerWorldY - DEFAULT_PAGE_HEIGHT / 2,
+    x: centerWorldX - targetWidth / 2,
+    y: centerWorldY - targetHeight / 2,
   };
 }
 
@@ -39,6 +47,7 @@ export function Canvas() {
   const activeId = useProjectStore((s) => s.activeId);
   const updateSidebarWidth = useProjectStore((s) => s.updateSidebarWidth);
   const addPage = useProjectStore((s) => s.addPage);
+  const addStickyNote = useProjectStore((s) => s.addStickyNote);
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = activeProject?.viewport;
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -189,6 +198,8 @@ export function Canvas() {
       viewport?.zoom ?? 1,
       viewport?.panX ?? 0,
       viewport?.panY ?? 0,
+      DEFAULT_PAGE_WIDTH,
+      DEFAULT_PAGE_HEIGHT,
     );
     const created = addPage(
       activeId,
@@ -202,6 +213,32 @@ export function Canvas() {
       centerOnNewPage(created, () => handleCenteredPage(created.id));
     }
   }, [addPage, activeId, viewport, centerOnNewPage, handleSelectPage, handleCenteredPage]);
+
+  /** FloatingToolbar の付箋ボタンから呼ばれる: 付箋をキャンバス中央に追加してセンタリング */
+  const handleAddStickyNote = useCallback(() => {
+    const centerPos = getViewportCenterPos(
+      viewport?.zoom ?? 1,
+      viewport?.panX ?? 0,
+      viewport?.panY ?? 0,
+      DEFAULT_STICKY_NOTE_WIDTH,
+      DEFAULT_STICKY_NOTE_HEIGHT,
+    );
+    const created = addStickyNote(
+      activeId,
+      centerPos
+        ? {
+            x: centerPos.x,
+            y: centerPos.y,
+            width: DEFAULT_STICKY_NOTE_WIDTH,
+            height: DEFAULT_STICKY_NOTE_HEIGHT,
+          }
+        : undefined,
+    );
+    if (created) {
+      handleSelectPage(created.id);
+      centerOnNewPage(created, () => handleCenteredPage(created.id));
+    }
+  }, [addStickyNote, activeId, viewport, centerOnNewPage, handleSelectPage, handleCenteredPage]);
 
   useEffect(() => {
     if (!selectedPageId) return;
@@ -257,6 +294,7 @@ export function Canvas() {
         centeredPageId={centeredPageId}
         onCenteredPageHandled={handleCenteredPageHandled}
         onAddPage={handleAddEmptyPage}
+        onAddStickyNote={handleAddStickyNote}
       />
     </div>
   );

@@ -4,7 +4,13 @@ import Xmark from '@gravity-ui/icons/Xmark';
 import { animate, motion, useReducedMotion } from 'motion/react';
 
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
-import { type Page, isPageEmpty, isPageMoved } from '@/renderer/types/tab';
+import {
+  STICKY_NOTE_COLORS,
+  type Page,
+  isPageEmpty,
+  isPageMoved,
+  isStickyNote,
+} from '@/renderer/types/tab';
 
 interface SidebarProps {
   initialWidth: number;
@@ -178,8 +184,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
         <ul className="flex flex-col gap-1">
           {pages.map((page) => {
             const isSelected = selectedPageId === page.id;
-            const addedUrl = page.addedUrl ?? page.url;
-            const isEmpty = isPageEmpty(page);
+            const sticky = isStickyNote(page);
 
             return (
               <motion.li
@@ -196,17 +201,39 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                 }}
                 aria-current={isSelected ? 'true' : undefined}
               >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-foreground" title={page.title || page.url}>
-                    {page.title || '新規ページ'}
-                    {isPageMoved(page) && <span className="ml-1 text-muted">(Moved)</span>}
-                  </p>
-                  <p className="truncate text-xs text-muted" title={addedUrl}>
-                    {isEmpty
-                      ? 'URL 未設定'
-                      : addedUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                  </p>
-                </div>
+                {sticky ? (
+                  /* 付箋: カラードット + タイトル + テキストプレビュー */
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1 truncate text-foreground">
+                      <span
+                        className="inline-block size-2.5 shrink-0 rounded-full border"
+                        style={{
+                          backgroundColor: STICKY_NOTE_COLORS[page.colorIndex ?? 0].bg,
+                          borderColor: STICKY_NOTE_COLORS[page.colorIndex ?? 0].border,
+                        }}
+                      />
+                      {page.title}
+                    </p>
+                    <p className="truncate text-xs text-muted">
+                      {page.content ? page.content.slice(0, 40) : 'テキストなし'}
+                    </p>
+                  </div>
+                ) : (
+                  /* Webページ: タイトル + URL */
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-foreground" title={page.title || page.url}>
+                      {page.title || '新規ページ'}
+                      {isPageMoved(page) && <span className="ml-1 text-muted">(Moved)</span>}
+                    </p>
+                    <p className="truncate text-xs text-muted" title={page.addedUrl ?? page.url}>
+                      {isPageEmpty(page)
+                        ? 'URL 未設定'
+                        : (page.addedUrl ?? page.url)
+                            .replace(/^https?:\/\//, '')
+                            .replace(/\/$/, '')}
+                    </p>
+                  </div>
+                )}
                 <motion.button
                   variants={removeButtonVariants}
                   initial="rest"

@@ -10,8 +10,10 @@ import { usePageDrag } from '@/renderer/hooks/usePageDrag';
 import { usePageResize } from '@/renderer/hooks/usePageResize';
 import { InteractionOverlay } from '@/renderer/components/Artboard/InteractionOverlay';
 import { PageFrame, type ResizeDirection } from '@/renderer/components/Artboard/PageFrame';
+import { StickyNoteFrame } from '@/renderer/components/Artboard/StickyNoteFrame';
 import { FloatingToolbar } from '@/renderer/components/Canvas/FloatingToolbar';
 import type { DisplayMode } from '@/renderer/types/tab';
+import { isStickyNote } from '@/renderer/types/tab';
 
 /** intersection 判定のヒステリシスマージン（境界近辺でのモード振動を防ぐ） */
 const HYSTERESIS_PX = 4;
@@ -31,6 +33,7 @@ interface ArtboardProps {
   centeredPageId?: string | null;
   onCenteredPageHandled?: () => void;
   onAddPage: () => void;
+  onAddStickyNote: () => void;
 }
 
 export function Artboard({
@@ -40,6 +43,7 @@ export function Artboard({
   centeredPageId = null,
   onCenteredPageHandled,
   onAddPage,
+  onAddStickyNote,
 }: ArtboardProps) {
   const activeProject = useProjectStore(selectActiveProject);
   const activeId = useProjectStore((s) => s.activeId);
@@ -54,6 +58,8 @@ export function Artboard({
     removePage,
     setPageWebviewLabel,
     setPageUrl,
+    updateStickyNoteContent,
+    cycleStickyNoteColor,
   } = useProjectStore(
     useShallow((s) => ({
       updateViewport: s.updateViewport,
@@ -64,6 +70,8 @@ export function Artboard({
       removePage: s.removePage,
       setPageWebviewLabel: s.setPageWebviewLabel,
       setPageUrl: s.setPageUrl,
+      updateStickyNoteContent: s.updateStickyNoteContent,
+      cycleStickyNoteColor: s.cycleStickyNoteColor,
     })),
   );
 
@@ -557,6 +565,23 @@ export function Artboard({
     ),
   });
 
+  // 付箋リサイズ（最小サイズを付箋用に設定）
+  const { startResize: startStickyNoteResize } = usePageResize({
+    zoom: zoomRef,
+    onResizeEnd: useCallback(
+      (pageId, width, height) => {
+        updatePageSize(activeId, pageId, width, height);
+      },
+      [updatePageSize, activeId],
+    ),
+    onInteractionChange: useCallback(
+      (active) => handleInteractionChange(active, 'default', 'resize'),
+      [handleInteractionChange],
+    ),
+    minWidth: 150,
+    minHeight: 150,
+  });
+
   // 初回マウント時にキャンバスの transform を設定して displayMode を計算
   useEffect(() => {
     if (canvasRef.current) {
@@ -769,6 +794,20 @@ export function Artboard({
     [setPageUrl, activeId],
   );
 
+  const handleStickyNoteContentChange = useCallback(
+    (pageId: string, content: string) => {
+      updateStickyNoteContent(activeId, pageId, content);
+    },
+    [updateStickyNoteContent, activeId],
+  );
+
+  const handleStickyNoteColorCycle = useCallback(
+    (pageId: string) => {
+      cycleStickyNoteColor(activeId, pageId);
+    },
+    [cycleStickyNoteColor, activeId],
+  );
+
   const handleArtboardMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       // 左クリック以外では選択解除しない
@@ -798,43 +837,57 @@ export function Artboard({
         className="absolute inset-0"
         style={{ transformOrigin: '0 0', willChange: 'transform' }}
       >
-        {pages.map((page) => (
-          <PageFrame
-            key={page.id}
-            page={page}
-            isActive={page.id === selectedPageId}
-            title={pageTitles[page.id] ?? page.title}
-            displayWidth={resizingSize?.pageId === page.id ? resizingSize.width : page.width}
-            displayHeight={resizingSize?.pageId === page.id ? resizingSize.height : page.height}
-            displayMode={displayModes[page.id] ?? 'native'}
-            screenshotUrl={screenshotUrls[page.id] ?? null}
-            canvasZoom={viewportZoom}
-            onActivate={() => {
-              onSelectPage(page.id);
-            }}
-            onReload={() => handleReloadPage(page.id)}
-            onClose={() => handleRemovePage(page.id)}
-            onDragStart={(e) => handleDragStart(e, page.id)}
-            onResizeStart={(e, direction) => handleResizeStart(e, page.id, direction)}
-            onResizePreset={(w, h) => updatePageSize(activeId, page.id, w, h)}
-            onNavigated={handleNavigated}
-            onTitleUpdated={handleTitleUpdated}
-            onWebviewCreated={handleWebviewCreated}
-            onWebviewLoaded={handleWebviewLoaded}
-            onUrlSubmit={handleUrlSubmit}
-          />
-        ))}
+        {pages.map((page) =>
+          isStickyNote(page) ? (
+            <StickyNoteFrame
+              key={page.id}
+              page={page}
+              isActive={page.id === selectedPageId}
+              onActivate={() => onSelectPage(page.id)}
+              onClose={() => handleRemovePage(page.id)}
+              onDragStart={(e) => handleDragStart(e, page.id)}
+              onResizeStart={(e, direction) => startStickyNoteResize(e, page.id, direction)}
+              onContentChange={handleStickyNoteContentChange}
+              onColorCycle={handleStickyNoteColorCycle}
+            />
+          ) : (
+            <PageFrame
+              key={page.id}
+              page={page}
+              isActive={page.id === selectedPageId}
+              title={pageTitles[page.id] ?? page.title}
+              displayWidth={resizingSize?.pageId === page.id ? resizingSize.width : page.width}
+              displayHeight={resizingSize?.pageId === page.id ? resizingSize.height : page.height}
+              displayMode={displayModes[page.id] ?? 'native'}
+              screenshotUrl={screenshotUrls[page.id] ?? null}
+              canvasZoom={viewportZoom}
+              onActivate={() => {
+                onSelectPage(page.id);
+              }}
+              onReload={() => handleReloadPage(page.id)}
+              onClose={() => handleRemovePage(page.id)}
+              onDragStart={(e) => handleDragStart(e, page.id)}
+              onResizeStart={(e, direction) => handleResizeStart(e, page.id, direction)}
+              onResizePreset={(w, h) => updatePageSize(activeId, page.id, w, h)}
+              onNavigated={handleNavigated}
+              onTitleUpdated={handleTitleUpdated}
+              onWebviewCreated={handleWebviewCreated}
+              onWebviewLoaded={handleWebviewLoaded}
+              onUrlSubmit={handleUrlSubmit}
+            />
+          ),
+        )}
       </div>
 
       {/* ページが 0 件の場合のガイドメッセージ */}
       {pages.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <p className="text-sm text-muted">下部の ＋ ボタンから Web ページを追加してください</p>
+          <p className="text-sm text-muted">下部のボタンから Web ページや付箋を追加してください</p>
         </div>
       )}
 
       {/* フローティングツールバー（InteractionOverlay の z-50 より下の z-40） */}
-      <FloatingToolbar onAddPage={onAddPage} />
+      <FloatingToolbar onAddPage={onAddPage} onAddStickyNote={onAddStickyNote} />
     </div>
   );
 }

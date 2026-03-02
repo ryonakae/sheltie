@@ -10,6 +10,10 @@ interface UsePageResizeOptions {
   onResizeMove?: (pageId: string, width: number, height: number) => void;
   onResizeEnd: (pageId: string, width: number, height: number) => void;
   onInteractionChange: (active: boolean) => void;
+  /** リサイズ最小幅（デフォルト: PAGE_MIN_WIDTH = 320） */
+  minWidth?: number;
+  /** リサイズ最小高さ（デフォルト: PAGE_MIN_HEIGHT = 200） */
+  minHeight?: number;
 }
 
 interface ResizeState {
@@ -32,6 +36,8 @@ export function usePageResize({
   onResizeMove,
   onResizeEnd,
   onInteractionChange,
+  minWidth = PAGE_MIN_WIDTH,
+  minHeight = PAGE_MIN_HEIGHT,
 }: UsePageResizeOptions) {
   const resizeState = useRef<ResizeState | null>(null);
   const onResizeMoveRef = useRef(onResizeMove);
@@ -87,15 +93,15 @@ export function usePageResize({
       let newH = height;
 
       // 方向に応じて位置とサイズを計算（整数に丸めてサブピクセルずれを防ぐ）
-      if (dir.includes('e')) newW = Math.max(PAGE_MIN_WIDTH, Math.round(width + dx));
-      if (dir.includes('s')) newH = Math.max(PAGE_MIN_HEIGHT, Math.round(height + dy));
+      if (dir.includes('e')) newW = Math.max(minWidth, Math.round(width + dx));
+      if (dir.includes('s')) newH = Math.max(minHeight, Math.round(height + dy));
       if (dir.includes('w')) {
-        const clampedDx = Math.min(dx, width - PAGE_MIN_WIDTH);
+        const clampedDx = Math.min(dx, width - minWidth);
         newW = Math.round(width - clampedDx);
         newX = Math.round(x + clampedDx);
       }
       if (dir.includes('n')) {
-        const clampedDy = Math.min(dy, height - PAGE_MIN_HEIGHT);
+        const clampedDy = Math.min(dy, height - minHeight);
         newH = Math.round(height - clampedDy);
         newY = Math.round(y + clampedDy);
       }
@@ -131,7 +137,7 @@ export function usePageResize({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [zoom, onResizeEnd, onInteractionChange]);
+  }, [zoom, onResizeEnd, onInteractionChange, minWidth, minHeight]);
 
   return { startResize };
 }

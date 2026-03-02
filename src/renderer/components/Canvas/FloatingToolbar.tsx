@@ -1,11 +1,13 @@
 import Plus from '@gravity-ui/icons/Plus';
+import Sticker from '@gravity-ui/icons/Sticker';
 import { Button, Surface, Tooltip } from '@heroui/react';
 
 interface FloatingToolbarProps {
   onAddPage: () => void;
+  onAddStickyNote: () => void;
 }
 
-export function FloatingToolbar({ onAddPage }: FloatingToolbarProps) {
+export function FloatingToolbar({ onAddPage, onAddStickyNote }: FloatingToolbarProps) {
   return (
     /* ツールバー全体の配置レイヤー: pointer-events-none で Artboard の操作を妨げない */
     <div
@@ -29,6 +31,21 @@ export function FloatingToolbar({ onAddPage }: FloatingToolbarProps) {
             </Button>
             <Tooltip.Content placement="top">
               <p>Webページを追加</p>
+            </Tooltip.Content>
+          </Tooltip>
+
+          <Tooltip delay={300}>
+            <Button
+              isIconOnly
+              variant="ghost"
+              size="sm"
+              onPress={onAddStickyNote}
+              aria-label="付箋を追加"
+            >
+              <Sticker />
+            </Button>
+            <Tooltip.Content placement="top">
+              <p>付箋を追加</p>
             </Tooltip.Content>
           </Tooltip>
         </Surface>

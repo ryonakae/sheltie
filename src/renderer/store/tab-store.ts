@@ -3,6 +3,8 @@ import { create } from 'zustand';
 import {
   DEFAULT_PAGE_HEIGHT,
   DEFAULT_PAGE_WIDTH,
+  DEFAULT_STICKY_NOTE_HEIGHT,
+  DEFAULT_STICKY_NOTE_WIDTH,
   DEFAULT_VIEWPORT,
   HOME_ID,
 } from '@/renderer/types/tab';
@@ -117,6 +119,15 @@ interface ProjectActions {
   updateViewport: (projectId: string, viewport: Partial<Viewport>) => void;
   /** ページを配列末尾に移動して最前面に表示する */
   bringPageToFront: (projectId: string, pageId: string) => void;
+  /** 付箋を追加する */
+  addStickyNote: (
+    projectId: string,
+    options?: { x: number; y: number; width: number; height: number },
+  ) => Page | null;
+  /** 付箋のテキスト内容を更新する */
+  updateStickyNoteContent: (projectId: string, pageId: string, content: string) => void;
+  /** 付箋のカラーインデックスを次の色に進める */
+  cycleStickyNoteColor: (projectId: string, pageId: string) => void;
   /** ネイティブ Webview 作成後にラベルをページに紐付ける（ランタイムのみ・永続化不要） */
   setPageWebviewLabel: (projectId: string, pageId: string, label: string) => void;
   /** 永続化モジュール専用: 起動時に保存済み状態を復元する */
@@ -341,6 +352,67 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
               // パース失敗時はそのまま使用
             }
             return { ...pg, url, addedUrl: url, title };
+          }),
+        };
+      }),
+    })),
+
+  addStickyNote: (projectId, options) => {
+    let createdPage: Page | null = null;
+
+    set((state) => {
+      const nextState = state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        const nextPage: Page = {
+          id: crypto.randomUUID(),
+          type: 'stickynote',
+          url: '',
+          title: 'Sticky Note',
+          content: '',
+          colorIndex: 0,
+          x: 0,
+          y: 0,
+          width: options?.width ?? DEFAULT_STICKY_NOTE_WIDTH,
+          height: options?.height ?? DEFAULT_STICKY_NOTE_HEIGHT,
+          createdAt: Date.now(),
+        };
+        const positioned = findNonOverlappingPosition(
+          p.pages,
+          options?.x ?? 0,
+          options?.y ?? 0,
+          nextPage.width,
+          nextPage.height,
+        );
+        const newPage = { ...nextPage, x: positioned.x, y: positioned.y };
+        createdPage = newPage;
+        return { ...p, pages: [...p.pages, newPage] };
+      });
+      return { projects: nextState };
+    });
+
+    return createdPage;
+  },
+
+  updateStickyNoteContent: (projectId, pageId, content) =>
+    set((state) => ({
+      projects: state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          pages: p.pages.map((pg) => (pg.id === pageId ? { ...pg, content } : pg)),
+        };
+      }),
+    })),
+
+  cycleStickyNoteColor: (projectId, pageId) =>
+    set((state) => ({
+      projects: state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          pages: p.pages.map((pg) => {
+            if (pg.id !== pageId) return pg;
+            return { ...pg, colorIndex: ((pg.colorIndex ?? 0) + 1) % 4 };
           }),
         };
       }),

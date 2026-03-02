@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Page } from '@/renderer/types/tab';
 import type { DisplayMode } from '@/renderer/types/tab';
-import { isPageMoved } from '@/renderer/types/tab';
+import { isPageEmpty, isPageMoved } from '@/renderer/types/tab';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
 import { PageBottomBar, PageTopBar } from '@/renderer/components/Artboard/PageTitleBar';
+import { PageUrlForm } from '@/renderer/components/Artboard/PageUrlForm';
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
@@ -32,6 +33,8 @@ interface PageFrameProps {
   onWebviewCreated: (pageId: string, label: string) => void;
   /** Webview のロード完了通知（スクリーンショットキャプチャのトリガー） */
   onWebviewLoaded: (pageId: string) => void;
+  /** 空フレームに URL が入力・submit された時のコールバック */
+  onUrlSubmit: (pageId: string, url: string) => void;
 }
 
 export function PageFrame({
@@ -53,6 +56,7 @@ export function PageFrame({
   onTitleUpdated,
   onWebviewCreated,
   onWebviewLoaded,
+  onUrlSubmit,
 }: PageFrameProps) {
   const placeholderRef = useRef<HTMLDivElement>(null);
   // Zustand の stale ラベルは参照しない（プロジェクト切替後の孤児 Webview 防止）
@@ -61,19 +65,24 @@ export function PageFrame({
   const isCreatingRef = useRef(false);
   // StrictMode 対応: cancelled パスでインクリメントして effect を再トリガー
   const [createAttempt, setCreateAttempt] = useState(0);
-  // マウント時の URL をキャプチャ（ナビゲーション後に page.url が更新されても Webview を再作成しない）
-  const initialUrlRef = useRef(page.url);
+  // Webview 作成時の URL をキャプチャ（ナビゲーション後に page.url が更新されても Webview を再作成しない）
+  const initialUrlRef = useRef<string>('');
   // タイトル変更イベントが初回かどうかを追跡（ロード完了の指標として使用）
   const isFirstTitleRef = useRef(true);
 
-  // マウント時: Rust コマンドでネイティブ Webview を作成
+  // マウント時: Rust コマンドでネイティブ Webview を作成（URL が空の場合はスキップ）
   useEffect(() => {
     const placeholder = placeholderRef.current;
     if (!placeholder) return;
 
+    // URL 未設定の空フレームは Webview を作成しない
+    if (!page.url) return;
+
     // 既に label が割り当て済み、または作成中なら再作成しない（HMR / StrictMode 対策）
     if (webviewLabelRef.current || isCreatingRef.current) return;
 
+    // Webview 作成直前にキャプチャ（ナビゲーションで page.url が変わっても再作成しない）
+    initialUrlRef.current = page.url;
     isCreatingRef.current = true;
     // アンマウントとの競合を防ぐキャンセルフラグ
     let cancelled = false;
@@ -126,10 +135,11 @@ export function PageFrame({
         webviewLabelRef.current = null;
       }
     };
-    // page.id が変わった場合のみ再実行（page.url はナビゲーションで更新されるが Webview の再作成は不要）
+    // page.url: 空フレームに URL が設定された時に Webview を作成する（空→有効URLの遷移で再実行）
+    //   ナビゲーション後の URL 変更は initialUrlRef でキャプチャ済みのため Webview 再作成は不要
     // createAttempt: StrictMode の cancelled パスで再試行トリガー
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page.id, createAttempt]);
+  }, [page.id, page.url, createAttempt]);
 
   // Rust → JS イベント: ナビゲーション・タイトル変更をリッスン
   useEffect(() => {
@@ -208,12 +218,13 @@ export function PageFrame({
         title={title}
         url={page.url}
         isMoved={isPageMoved(page)}
-        onReload={onReload}
+        onReload={isPageEmpty(page) ? undefined : onReload}
         onClose={onClose}
         onMouseDown={handleTitleBarMouseDown}
       />
 
       {/* webview プレースホルダー: ネイティブ Webview の位置合わせ基準。
+          URL 未設定の場合は URL 入力フォームを表示。
           displayMode=screenshot の時はスクリーンショット画像を表示。
           displayMode=native の時はネイティブ Webview が前面に重なるため透明で問題ない。 */}
       <div
@@ -226,15 +237,19 @@ export function PageFrame({
           borderRadius: 0,
         }}
       >
-        {/* スクリーンショット画像: data-display-mode="screenshot" の時のみ表示（CSS で制御） */}
-        {screenshotUrl && (
-          <img
-            src={screenshotUrl}
-            alt=""
-            className="pointer-events-none absolute inset-0 hidden size-full object-cover object-top-left"
-            data-screenshot-img
-            draggable={false}
-          />
+        {isPageEmpty(page) ? (
+          <PageUrlForm onSubmit={(url) => onUrlSubmit(page.id, url)} />
+        ) : (
+          /* スクリーンショット画像: data-display-mode="screenshot" の時のみ表示（CSS で制御） */
+          screenshotUrl && (
+            <img
+              src={screenshotUrl}
+              alt=""
+              className="pointer-events-none absolute inset-0 hidden size-full object-cover object-top-left"
+              data-screenshot-img
+              draggable={false}
+            />
+          )
         )}
       </div>
 

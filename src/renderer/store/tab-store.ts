@@ -95,12 +95,14 @@ interface ProjectActions {
   setActive: (id: string) => void;
   reorderOpenProjects: (openIds: string[]) => void;
   updateSidebarWidth: (id: string, width: number) => void;
-  /** プロジェクトにページを追加する */
+  /** プロジェクトにページを追加する（url 省略時は空フレームとして追加） */
   addPage: (
     projectId: string,
-    url: string,
+    url?: string,
     options?: { x: number; y: number; width: number; height: number },
   ) => Page | null;
+  /** 空フレームに URL を初回設定する（url + addedUrl + title を同時更新） */
+  setPageUrl: (projectId: string, pageId: string, url: string) => void;
   /** プロジェクトからページを削除する */
   removePage: (projectId: string, pageId: string) => void;
   /** ページの位置を更新する（ドラッグ完了時） */
@@ -191,23 +193,25 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       projects: state.projects.map((p) => (p.id === id ? { ...p, sidebarWidth: width } : p)),
     })),
 
-  addPage: (projectId, url, options) => {
+  addPage: (projectId, url = '', options) => {
     let createdPage: Page | null = null;
 
     set((state) => {
       const nextState = state.projects.map((p) => {
         if (p.id !== projectId) return p;
-        let hostname = url;
-        try {
-          hostname = new URL(url).hostname;
-        } catch {
-          // URL パース失敗時はそのまま使用
+        let title = '新規ページ';
+        if (url) {
+          try {
+            title = new URL(url).hostname;
+          } catch {
+            title = url;
+          }
         }
         const nextPage: Page = {
           id: crypto.randomUUID(),
           url,
-          title: hostname,
-          addedUrl: url,
+          title,
+          addedUrl: url || undefined,
           x: 0,
           y: 0,
           width: options?.width ?? DEFAULT_PAGE_WIDTH,
@@ -318,6 +322,26 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         return {
           ...p,
           pages: [...p.pages.filter((pg) => pg.id !== pageId), page],
+        };
+      }),
+    })),
+
+  setPageUrl: (projectId, pageId, url) =>
+    set((state) => ({
+      projects: state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          pages: p.pages.map((pg) => {
+            if (pg.id !== pageId) return pg;
+            let title = url;
+            try {
+              title = new URL(url).hostname;
+            } catch {
+              // パース失敗時はそのまま使用
+            }
+            return { ...pg, url, addedUrl: url, title };
+          }),
         };
       }),
     })),

@@ -49,6 +49,11 @@ export interface Project {
   viewport: Viewport;
 }
 
+/** URL 未設定の空フレームかどうか */
+export function isPageEmpty(page: Page): boolean {
+  return page.url === '';
+}
+
 /**
  * ページが追加時の URL から別ページに遷移したかどうかを判定する。
  * URL の正規化（末尾スラッシュ等）を考慮して比較する。

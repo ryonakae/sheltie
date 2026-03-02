@@ -10,6 +10,7 @@ import { usePageDrag } from '@/renderer/hooks/usePageDrag';
 import { usePageResize } from '@/renderer/hooks/usePageResize';
 import { InteractionOverlay } from '@/renderer/components/Artboard/InteractionOverlay';
 import { PageFrame, type ResizeDirection } from '@/renderer/components/Artboard/PageFrame';
+import { FloatingToolbar } from '@/renderer/components/Canvas/FloatingToolbar';
 import type { DisplayMode } from '@/renderer/types/tab';
 
 /** intersection 判定のヒステリシスマージン（境界近辺でのモード振動を防ぐ） */
@@ -29,6 +30,7 @@ interface ArtboardProps {
   onClearSelection: () => void;
   centeredPageId?: string | null;
   onCenteredPageHandled?: () => void;
+  onAddPage: () => void;
 }
 
 export function Artboard({
@@ -37,6 +39,7 @@ export function Artboard({
   onClearSelection,
   centeredPageId = null,
   onCenteredPageHandled,
+  onAddPage,
 }: ArtboardProps) {
   const activeProject = useProjectStore(selectActiveProject);
   const activeId = useProjectStore((s) => s.activeId);
@@ -50,6 +53,7 @@ export function Artboard({
     updatePageTitle,
     removePage,
     setPageWebviewLabel,
+    setPageUrl,
   } = useProjectStore(
     useShallow((s) => ({
       updateViewport: s.updateViewport,
@@ -59,6 +63,7 @@ export function Artboard({
       updatePageTitle: s.updatePageTitle,
       removePage: s.removePage,
       setPageWebviewLabel: s.setPageWebviewLabel,
+      setPageUrl: s.setPageUrl,
     })),
   );
 
@@ -585,10 +590,16 @@ export function Artboard({
     requestAnimationFrame(() => computeDisplayModes());
   }, [activeProject?.viewport, applyBackgroundGrid, computeDisplayModes]);
 
-  // ウィンドウリサイズ時に displayMode を再計算
+  // Artboard コンテナのサイズ変更時に displayMode を再計算
+  // ウィンドウリサイズ・サイドバー幅変更の両方に対応
   useEffect(() => {
-    window.addEventListener('resize', computeDisplayModes);
-    return () => window.removeEventListener('resize', computeDisplayModes);
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      computeDisplayModes();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [computeDisplayModes]);
 
   // ウィンドウがフォーカスを失った場合に全操作タイプを一括クリア
@@ -751,6 +762,13 @@ export function Artboard({
     [pages],
   );
 
+  const handleUrlSubmit = useCallback(
+    (pageId: string, url: string) => {
+      setPageUrl(activeId, pageId, url);
+    },
+    [setPageUrl, activeId],
+  );
+
   const handleArtboardMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       // 左クリック以外では選択解除しない
@@ -803,6 +821,7 @@ export function Artboard({
             onTitleUpdated={handleTitleUpdated}
             onWebviewCreated={handleWebviewCreated}
             onWebviewLoaded={handleWebviewLoaded}
+            onUrlSubmit={handleUrlSubmit}
           />
         ))}
       </div>
@@ -810,11 +829,12 @@ export function Artboard({
       {/* ページが 0 件の場合のガイドメッセージ */}
       {pages.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <p className="text-sm text-muted">
-            サイドバーの「Webページを追加」から URL を入力してください
-          </p>
+          <p className="text-sm text-muted">下部の ＋ ボタンから Web ページを追加してください</p>
         </div>
       )}
+
+      {/* フローティングツールバー（InteractionOverlay の z-50 より下の z-40） */}
+      <FloatingToolbar onAddPage={onAddPage} />
     </div>
   );
 }

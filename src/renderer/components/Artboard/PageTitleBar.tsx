@@ -21,7 +21,7 @@ interface PageTitleBarProps {
   isMoved: boolean;
   width: number;
   height: number;
-  onReload: () => void;
+  onReload?: () => void;
   onClose: () => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onResizePreset: (width: number, height: number) => void;
@@ -48,7 +48,9 @@ export function PageTopBar({
   onReload,
   onClose,
   onMouseDown,
-}: Pick<PageTitleBarProps, 'title' | 'url' | 'isMoved' | 'onReload' | 'onClose' | 'onMouseDown'>) {
+}: Pick<PageTitleBarProps, 'title' | 'url' | 'isMoved' | 'onClose' | 'onMouseDown'> & {
+  onReload?: () => void;
+}) {
   return (
     <div
       className="flex shrink-0 cursor-grab items-center border-t border-border-secondary bg-default select-none active:cursor-grabbing"
@@ -68,11 +70,12 @@ export function PageTopBar({
       </span>
 
       <button
-        className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
+        className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         style={{
           padding: TOOLBAR_BUTTON_PADDING,
           borderRadius: 'calc(2px / var(--canvas-zoom, 1))',
         }}
+        disabled={!onReload}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={onReload}
         aria-label="ページをリロード"

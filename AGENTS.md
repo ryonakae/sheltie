@@ -42,13 +42,14 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │   ├── main.tsx    # React エントリーポイント
 │   │   ├── App.tsx     # ルートコンポーネント（Zustand でプロジェクト状態管理）
 │   │   ├── types/
-│   │   │   ├── tab.ts  # Project 型（pages[]、viewport を含む）、Page、Viewport、ProjectState、webviewLabel、isPageMoved()
+│   │   │   ├── tab.ts  # Project 型（pages[]、viewport を含む）、Page、Viewport、ProjectState、webviewLabel、isPageMoved()、isPageEmpty()
 │   │   │   └── electron.d.ts # (削除予定）
 │   │   ├── lib/
-│   │   │   ├── theme.ts # テーマ管理ユーティリティ
-│   │   │   └── tauri-bridge.ts # Tauri IPC ブリッジ層（api / themeApi / webviewApi / getPlatformInfo）
+│   │   │   ├── theme.ts # テーマ管理ユーティリティ（applyThemeToDocument: dark/light クラス・data-theme 属性・color-scheme を同期）
+│   │   │   ├── tauri-bridge.ts # Tauri IPC ブリッジ層（api / themeApi / webviewApi / getPlatformInfo）
+│   │   │   └── url-utils.ts # URL 正規化ユーティリティ（normalizeUrl: scheme 補完・バリデーション）
 │   │   ├── store/
-│   │   │   ├── tab-store.ts # Zustand ストア（setPageWebviewLabel アクション追加）
+│   │   │   ├── tab-store.ts # Zustand ストア（setPageWebviewLabel / setPageUrl アクション）
 │   │   │   ├── tab-persistence.ts # プロジェクト状態の永続化ロジック
 │   │   │   └── theme-store.ts # Zustand テーマストア
 │   │   ├── hooks/
@@ -60,9 +61,12 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │   └── components/
 │   │       ├── Canvas/ # キャンバス管理
 │   │       ├── Artboard/ # ページレンダリング・操作制御
-│   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（canvasZoom prop で Webview 作成直後に setZoom 適用）
-│   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setZoom） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setZoom 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）
-│   │       │   └── PageTitleBar.tsx # PageTopBar（タイトル・リロード・閉じるボタン）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
+│   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（canvasZoom prop で Webview 作成直後に setZoom 適用。url 空時は Webview 作成スキップ・PageUrlForm 表示。onUrlSubmit prop で空フレームへの初回 URL 設定）
+│   │       │   ├── PageUrlForm.tsx # 空フレーム内の URL 入力フォーム（ズーム対応: calc(base / var(--canvas-zoom, 1))）
+│   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setZoom） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setZoom 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）/ onAddPage prop・handleUrlSubmit（setPageUrl 経由で空フレームに URL を設定）/ ResizeObserver で containerRef のサイズ変化を監視し computeDisplayModes() を呼び出す（window resize より汎用的、サイドバー幅変更にも対応）
+│   │       │   └── PageTitleBar.tsx # PageTopBar（タイトル・リロード・閉じるボタン。onReload は optional、空フレーム時 disabled）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
+│   │       ├── Canvas/
+│   │       │   └── FloatingToolbar.tsx # キャンバス下端中央のフローティングツールバー（＋ボタンで空フレーム追加。z-40、外側 pointer-events-none / 内側 pointer-events-auto）
 │   │       ├── TabBar/ # data-tauri-drag-region で実装
 │   │       └── HomeScreen/ # プロジェクト一覧
 │   └── shared/
@@ -86,13 +90,16 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - `useWindowControlsInset` で macOS トラフィックライト、Windows/Linux のコントロール領域に対応（`data-tauri-drag-region` 属性で実装）
 
 **Canvas**: サイドバーとアートボードを管理
-- **Sidebar**: ページ一覧表示、ページ追加フォーム（AddPageForm）、ページごとに削除ボタン付き。`isPageMoved()` で (Moved) インジケーター表示。ページクリックで `onSelectPage` 呼び出し + `ensureFrameVisible`（`motion` アニメーション 260ms easeOutCubic、`useReducedMotion` 対応）でページをビューポート内に移動。ページ追加時は `centerOnNewPage`（ズーム込みで 400ms アニメーション、常に発火）でビューポートにフィット表示。ホバー状態管理は CSS `group` パターンから `motion` の `variants`（`whileHover="hover"`）パターンに移行。URL 入力は `AddPageForm` でスキーム補完・`new URL()` バリデーション（localhost/IP を除くドット必須）・`FieldError` によるエラー表示
+- **Sidebar**: ページ一覧表示、ページごとに削除ボタン付き。`isPageMoved()` で (Moved) インジケーター表示。ページクリックで `onSelectPage` 呼び出し + `ensureFrameVisible`（`motion` アニメーション 260ms easeOutCubic、`useReducedMotion` 対応）でページをビューポート内に移動。ホバー状態管理は CSS `group` パターンから `motion` の `variants`（`whileHover="hover"`）パターンに移行。ページ追加ロジック（AddPageForm）は削除済み（FloatingToolbar に移設）
+- **FloatingToolbar**: キャンバス下端中央に配置。＋ボタンで `handleAddEmptyPage` を呼び出し、空フレームをキャンバス中央に追加する
 - **ResizeHandle**: サイドバー幅調整可能（リサイズ中は DOM 直接操作でパフォーマンス最適化）
 - **Artboard**: キャンバス領域に複数の Tauri Webview を配置、ドラッグ・リサイズ・ズーム・パン対応
 - **選択状態管理**: `Canvas` が `selectedPageId` / `centeredPageId` ステートを保持し、`Sidebar` と `Artboard` に props 経由で連携
+- **ページ追加フロー**: FloatingToolbar の＋ボタン → `handleAddEmptyPage`（Canvas）→ `addPage`（url 省略）→ 空フレームがキャンバス中央に配置 → `PageUrlForm` で URL 入力・submit → `setPageUrl`（`url` + `addedUrl` + `title` を同時設定）→ `page.url` 変化で `PageFrame` effect が再実行して Webview 作成
+- **`getViewportCenterPos` / `centerOnNewPage`**: Canvas に実装。`data-artboard-container` を使ってビューポート中央座標を算出し、ズーム込み 400ms アニメーションで新規ページにフィット。`prefersReducedMotion` 対応
 
 **Artboard**: ページレンダリング・ビューポート管理・操作制御
-- `ArtboardProps`: `selectedPageId`, `onSelectPage`, `onClearSelection`, `centeredPageId`, `onCenteredPageHandled` を受け取る
+- `ArtboardProps`: `selectedPageId`, `onSelectPage`, `onClearSelection`, `centeredPageId`, `onCenteredPageHandled`, `onAddPage` を受け取る
 - 各ページを `<div data-webview-placeholder>` + Tauri Webview で DOM に描画
 - canvas 要素に transform (translate + scale) を設定してズーム・パン実装
 - ドラッグでページ移動、リサイズでサイズ変更（`updatePagePosition`/`updatePageSize` で Zustand 状態更新）
@@ -116,7 +123,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 **状態管理**: Zustand による共有状態管理
 - **useProjectStore** (`tab-store.ts`):
   - **プロジェクト管理アクション**: `createProject`, `openProject`, `closeProject`, `deleteProject`, `renameProject`, `setActive`, `reorderOpenProjects`, `updateSidebarWidth`
-  - **ページ管理アクション**: `addPage`（`options?: {x,y,width,height}` で配置指定可能、戻り値 `Page | null`）, `removePage`, `updatePagePosition`, `updatePageSize`, `updatePageUrl`, `updatePageTitle`, `updateViewport`, `bringPageToFront`, `setPageWebviewLabel`
+  - **ページ管理アクション**: `addPage`（`url` 省略可能・省略時は空フレーム `url=''`。`options?: {x,y,width,height}` で配置指定可能、戻り値 `Page | null`）, `setPageUrl`（空フレームへの初回 URL 設定・`url`/`addedUrl`/`title` を同時更新）, `removePage`, `updatePagePosition`, `updatePageSize`, `updatePageUrl`, `updatePageTitle`, `updateViewport`, `bringPageToFront`, `setPageWebviewLabel`
   - **Selectors**: `selectActiveProject`, `selectIsHome`
   - 起動時に `tab-persistence.ts` で保存済み状態を復元（tauri-plugin-store ベース）
   - プロジェクトライフサイクル: `createProject` で新規作成、`openProject` で開く（既開いていれば activeId 更新）、`closeProject` でタブバーから閉じる（openIds から除去）、`deleteProject` で削除（projects + openIds 両方から除去）
@@ -142,6 +149,8 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - `x, y, width, height`: キャンバス上の位置・サイズ
 - `createdAt`: 作成タイムスタンプ
 - `webviewLabel?`: Tauri Webview ラベル（ランタイム専用、永続化しない）
+
+**isPageEmpty()** (`src/renderer/types/tab.ts`): `page.url === ''` で空フレーム（URL 未設定）かどうかを判定するヘルパー関数。`PageFrame` で Webview 作成スキップ判定に使用。
 
 **isPageMoved()** (`src/renderer/types/tab.ts`): ページが追加時 URL から別ページに遷移したかを判定するヘルパー関数。`new URL(str).href` で比較し末尾スラッシュ等の正規化差異を吸収する。`PageTitleBar` と `Sidebar` で共通使用。
 

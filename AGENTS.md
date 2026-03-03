@@ -36,7 +36,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │       │   ├── mod.rs  # モジュール定義
 │       │   ├── store.rs # load_project_state / save_project_state / close_ready
 │       │   ├── theme.rs # load_theme / set_theme / get_platform_info
-│       │   └── webview.rs # create_page_webview（initialization_script で SPA URL 変更検出スクリプト注入 / on_navigation / on_document_title_changed 登録: \x01 プレフィックスで SPA ナビゲーション検出）/ reload_page_webview（url パラメータを受け取り webview.navigate() でナビゲート）/ go_back_page_webview・go_forward_page_webview（eval で history.back/forward()）/ get_navigation_state_page_webview（macOS のみ with_webview + objc2::msg_send! で canGoBack/canGoForward 取得、非 macOS は {false, false}）
+│       │   └── webview.rs # create_page_webview（initialization_script で SPA URL 変更検出スクリプト + __siteboardSetScale 関数を注入 / on_navigation / on_document_title_changed 登録: \x01 プレフィックスで SPA ナビゲーション検出）/ reload_page_webview（url パラメータを受け取り webview.navigate() でナビゲート）/ go_back_page_webview・go_forward_page_webview（eval で history.back/forward()）/ get_navigation_state_page_webview（macOS のみ with_webview + objc2::msg_send! で canGoBack/canGoForward 取得、非 macOS は {false, false}）/ set_page_webview_scale（eval で __siteboardSetScale(scale) を呼び出し CSS transform でビジュアルスケーリング）
 ├── src/                # React フロントエンド
 │   ├── renderer/       # React SPA
 │   │   ├── main.tsx    # React エントリーポイント
@@ -61,9 +61,9 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │   └── components/
 │   │       ├── Canvas/ # キャンバス管理
 │   │       ├── Artboard/ # ページレンダリング・操作制御
-│   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（canvasZoom prop で Webview 作成直後に setZoom 適用。url 空時は Webview 作成スキップ・PageUrlForm 表示。onUrlSubmit prop で空フレームへの初回 URL 設定）
+│   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（url 空時は Webview 作成スキップ・PageUrlForm 表示。onUrlSubmit prop で空フレームへの初回 URL 設定。canvasZoom prop は削除済み・スケール管理は Artboard 側に集約）
 │   │       │   ├── PageUrlForm.tsx # 空フレーム内の URL 入力フォーム（ズーム対応: calc(base / var(--canvas-zoom, 1))）
-│   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setZoom） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setZoom 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）/ onAddPage prop・handleUrlSubmit（setPageUrl 経由で空フレームに URL を設定）/ ResizeObserver で containerRef のサイズ変化を監視し computeDisplayModes() を呼び出す（window resize より汎用的、サイドバー幅変更にも対応）
+│   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setScale） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setScale 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）/ onAddPage prop・handleUrlSubmit（setPageUrl 経由で空フレームに URL を設定）/ ResizeObserver で containerRef のサイズ変化を監視し computeDisplayModes() を呼び出す（window resize より汎用的、サイドバー幅変更にも対応）
 │   │       │   └── PageTitleBar.tsx # PageTopBar（ChevronLeft/ChevronRight で戻る/進むボタン → タイトルスパン → リロード・ピン留め・閉じるボタンの順。onReload / onPinUrl は optional、空フレーム時 disabled。ピン留めボタンは isMoved && onPinUrl 条件でリロードボタン右に表示。canGoBack/canGoForward/onGoBack/onGoForward props でナビゲーション制御）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
 │   │       ├── Canvas/
 │   │       │   └── FloatingToolbar.tsx # キャンバス下端中央のフローティングツールバー（＋ボタンで空フレーム追加。z-40、外側 pointer-events-none / 内側 pointer-events-auto）
@@ -189,7 +189,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - **コマンド実行**: `src-tauri/src/commands/` で Rust コマンド定義、権限制御
 - **パーミッション**: `src-tauri/capabilities/default.json` で詳細制御
   - `core:window:allow-start-dragging`: `data-tauri-drag-region` 属性でのウィンドウドラッグを有効化（タブバー等で必須）
-  - `core:webview:allow-set-webview-zoom`: `webviewApi.setZoom()` でビューポートズーム補正を可能にする
+  - `core:webview:allow-set-webview-zoom`: 旧 `setZoom()` で必要だったパーミッション。現在は CSS transform injection（`setScale()`）に移行したため不要になった可能性あり
 - **WebView**: `titleBarStyle: Overlay, hiddenTitle: true` で macOS トラフィックライト対応
 
 ### Tauri IPC
@@ -207,6 +207,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - `go_forward_page_webview`: `eval("history.forward()")` で次のページに進む
 - `get_navigation_state_page_webview`: canGoBack/canGoForward を取得（macOS のみ `with_webview + objc2::msg_send!` で正確に取得、非 macOS は `{false, false}` を返す）
 - `capture_webview_screenshot`: WKWebView スナップショットを base64 PNG Data URL として取得（macOS のみ）
+- `set_page_webview_scale`: CSS transform でビジュアルスケーリング（`eval("window.__siteboardSetScale(scale)")` を呼び出す。zoom≒1.0 の場合はスタイルをクリーン除去）
 
 **Backend → Renderer** (emit):
 - `theme:changed`: OS テーマ変更時に isDark フラグを送信
@@ -217,7 +218,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - `updateAllBounds()`: 複数 Webview の位置・サイズを一括更新（show/hide なし、操作中のリアルタイム同期用）
 - `show()`, `hide()`, `destroy()`: 表示制御（IPC 不要）
 - `hideAll()`, `showAllWithBounds()`: 一括操作（複数 Webview の効率的な制御）
-- `setZoom(label, scaleFactor)`: Webview のページズームを設定（CSS `transform: scale()` と乖離するビューポートを補正）
+- `setScale(pageId, scaleFactor)`: CSS transform injection でビジュアルスケーリング（IPC 経由で `set_page_webview_scale` を呼び出す。ビューポートサイズを変更せずレイアウトリフロー不要。旧: `setZoom(label)` は削除済み）
 - `reload(pageId, url)`: Webview を追加時 URL にナビゲート（IPC 経由で `reload_page_webview` を呼び出す。`page.addedUrl ?? page.url` を渡す）
 - `goBack(pageId)` / `goForward(pageId)`: 前後のページに移動（IPC 経由）
 - `getNavigationState(pageId)`: `NavigationState { can_go_back, can_go_forward }` を取得（IPC 経由）

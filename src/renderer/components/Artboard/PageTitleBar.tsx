@@ -82,6 +82,11 @@ export function PageTopBar({
       }}
       onMouseDown={onMouseDown}
     >
+      <span className="min-w-0 flex-1 truncate text-foreground" title={url}>
+        {title || formatDisplayUrl(url)}
+        {isMoved && <span className="ml-1 text-muted">(Moved)</span>}
+      </span>
+
       <button
         className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         style={{
@@ -119,11 +124,6 @@ export function PageTopBar({
           }}
         />
       </button>
-
-      <span className="min-w-0 flex-1 truncate text-foreground" title={url}>
-        {title || formatDisplayUrl(url)}
-        {isMoved && <span className="ml-1 text-muted">(Moved)</span>}
-      </span>
 
       <button
         className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"

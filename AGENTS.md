@@ -64,7 +64,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（canvasZoom prop で Webview 作成直後に setZoom 適用。url 空時は Webview 作成スキップ・PageUrlForm 表示。onUrlSubmit prop で空フレームへの初回 URL 設定）
 │   │       │   ├── PageUrlForm.tsx # 空フレーム内の URL 入力フォーム（ズーム対応: calc(base / var(--canvas-zoom, 1))）
 │   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setZoom） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setZoom 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）/ onAddPage prop・handleUrlSubmit（setPageUrl 経由で空フレームに URL を設定）/ ResizeObserver で containerRef のサイズ変化を監視し computeDisplayModes() を呼び出す（window resize より汎用的、サイドバー幅変更にも対応）
-│   │       │   └── PageTitleBar.tsx # PageTopBar（タイトル左に ChevronLeft/ChevronRight で戻る/進むボタン、タイトル・リロード・ピン留め・閉じるボタン。onReload / onPinUrl は optional、空フレーム時 disabled。ピン留めボタンは isMoved && onPinUrl 条件でリロードボタン右に表示。canGoBack/canGoForward/onGoBack/onGoForward props でナビゲーション制御）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
+│   │       │   └── PageTitleBar.tsx # PageTopBar（ChevronLeft/ChevronRight で戻る/進むボタン → タイトルスパン → リロード・ピン留め・閉じるボタンの順。onReload / onPinUrl は optional、空フレーム時 disabled。ピン留めボタンは isMoved && onPinUrl 条件でリロードボタン右に表示。canGoBack/canGoForward/onGoBack/onGoForward props でナビゲーション制御）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
 │   │       ├── Canvas/
 │   │       │   └── FloatingToolbar.tsx # キャンバス下端中央のフローティングツールバー（＋ボタンで空フレーム追加。z-40、外側 pointer-events-none / 内側 pointer-events-auto）
 │   │       ├── TabBar/ # data-tauri-drag-region で実装
@@ -87,6 +87,8 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - `openIds` に基づいて開いているプロジェクトのみ表示
 - `@dnd-kit/react` を使用したドラッグ&ドロップ並び替え対応
 - 各タブはホバー時に閉じるボタン（×）を表示（`motion` の `variants` パターン、CSS `group` は使用しない）
+- アクティブタブは `border-b-transparent bg-surface` で識別（アンダーラインなし、背景色で強調）。非アクティブは `border-b-transparent text-muted`
+- ホームボタンはアクティブ時に `HouseFill` アイコン、非アクティブ時に `House` アイコンを使用
 - `useWindowControlsInset` で macOS トラフィックライト、Windows/Linux のコントロール領域に対応（`data-tauri-drag-region` 属性で実装）
 
 **Canvas**: サイドバーとアートボードを管理
@@ -237,6 +239,7 @@ IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、t
 - **タイトルバー制御**: macOS/Windows のコントロール領域は `data-tauri-drag-region` 属性で指定（`-webkit-app-region: drag` の代わり）。Tauri v2 では属性が子要素に自動継承されないため、コンテナ要素ごとに明示的に設定。ネイティブの `<button>` 等は自動的にドラッグが抑制される
 - **Webview 非同期制御**: Webview 作成は React StrictMode の二重マウントによる create/destroy 競合の対象。`PageFrame.tsx` で `isCreatingRef` フラグを使用して二重 create IPC を防止。`webviewApi` メソッドはすべて try-catch で保護し、Webview 未作成・既破棄時は no-op。詳細は MEMORY.md の「非同期制御パターン（Webview 作成）」を参照
 - **Screenshot Clipping**: Webview がアートボード端にかかる時、ネイティブ Webview を hide してスクリーンショット画像（DOM `<img>`）に切り替える。CSS の `overflow:hidden` でクリッピング可能。`DisplayMode` で状態遷移管理。ヒステリシス（HYSTERESIS_PX = 4px）で境界近辺での振動防止。`computeDisplayModes()` 内で DOM 属性を直接更新し、命令的に Webview show/hide を実行することで React state Bailout の罠を回避。`captureScreenshot` のガードは drag/resize 中のみ（pan/zoom 中は native Webview が表示されているため撮影可能）。詳細は MEMORY.md の「Screenshot Clipping の実装パターン」を参照
+- **usePageResize の Webview なしフレーム対応**: `usePageResize` はリサイズ中に `state.webviewEl`（Webview プレースホルダー）を直接 DOM 更新するが、付箋など Webview を持たないフレームでは `state.webviewEl` が null になる。その場合は `state.frameEl.style.height` を直接更新してリサイズ中のサイズ変化を反映する（`else` ブランチで実装）
 
 
 ## 主要ライブラリ

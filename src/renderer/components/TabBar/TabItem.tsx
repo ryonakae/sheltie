@@ -47,7 +47,7 @@ export const TabItem = memo(function TabItem({
       className={[
         'relative flex h-full cursor-pointer items-center gap-1 border-r border-b-2 border-border px-3 text-sm select-none',
         isActive
-          ? 'border-b-accent bg-surface text-foreground'
+          ? 'border-b-transparent bg-surface text-foreground'
           : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
         isDragging ? 'opacity-50' : '',
       ].join(' ')}

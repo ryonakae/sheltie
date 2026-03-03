@@ -42,9 +42,16 @@ export function StickyNoteFrame({
     // 編集開始時にストアの現在値で初期化
     setEditingContent(page.content ?? '');
     setIsEditing(true);
-    // state 更新後に focus するため rAF で遅延
-    requestAnimationFrame(() => textareaRef.current?.focus());
+    // state 更新後に focus し、表示文字列を全選択するため rAF で遅延
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.select();
+    });
   }, [page.content]);
+
+  const handleTextareaDoubleClick = useCallback(() => {
+    textareaRef.current?.select();
+  }, []);
 
   const handleBlur = useCallback(() => {
     setIsEditing(false);
@@ -153,10 +160,12 @@ export function StickyNoteFrame({
       {/* テキスト表示/編集エリア（usePageResize 互換のため data-webview-placeholder 属性を付与） */}
       <div
         data-webview-placeholder
-        className="relative flex-1 overflow-hidden"
+        className="relative overflow-hidden"
         style={{
           width: page.width,
           height: page.height,
+          boxSizing: 'border-box',
+          minHeight: 0,
         }}
         onDoubleClick={handleDoubleClick}
       >
@@ -167,13 +176,21 @@ export function StickyNoteFrame({
             style={{
               fontSize: 'calc(13px / var(--canvas-zoom, 1))',
               padding: 'calc(8px / var(--canvas-zoom, 1))',
+              height: '100%',
+              display: 'block',
+              boxSizing: 'border-box',
               color: '#333',
               lineHeight: 1.5,
+              minHeight: 0,
+              margin: 0,
+              border: 'none',
+              overflow: 'auto',
             }}
             value={editingContent}
             onChange={(e) => setEditingContent(e.target.value)}
             onBlur={handleBlur}
             onMouseDown={(e) => e.stopPropagation()}
+            onDoubleClick={handleTextareaDoubleClick}
           />
         ) : (
           <div
@@ -181,6 +198,7 @@ export function StickyNoteFrame({
             style={{
               fontSize: 'calc(13px / var(--canvas-zoom, 1))',
               padding: 'calc(8px / var(--canvas-zoom, 1))',
+              height: '100%',
               color: page.content ? '#333' : '#aaa',
               lineHeight: 1.5,
               cursor: 'text',

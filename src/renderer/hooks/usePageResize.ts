@@ -112,6 +112,8 @@ export function usePageResize({
       if (state.webviewEl) {
         state.webviewEl.style.width = `${newW}px`;
         state.webviewEl.style.height = `${newH}px`;
+      } else {
+        state.frameEl.style.height = `${newH}px`;
       }
       state.currentWidth = newW;
       state.currentHeight = newH;

@@ -4,24 +4,25 @@ import { memo, useCallback, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/renderer/components/Common/AppButton';
-import { PageResizeHandle } from '@/renderer/components/Siteboard/PageResizeHandle';
+import {
+  NodeResizeHandle,
+  type NodeResizeDirection,
+} from '@/renderer/components/Node/NodeResizeHandle';
 import { STICKY_NOTE_COLORS } from '@/renderer/constants';
 import { type Page } from '@/renderer/types/tab';
 
-type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
-
-interface StickyNoteFrameProps {
+interface StickyNoteNodeProps {
   page: Page;
   isActive: boolean;
   onActivate: (pageId: string) => void;
   onClose: (pageId: string) => void;
   onDragStart: (e: React.MouseEvent, pageId: string) => void;
-  onResizeStart: (e: React.MouseEvent, pageId: string, direction: ResizeDirection) => void;
+  onResizeStart: (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => void;
   onContentChange: (pageId: string, content: string) => void;
   onColorCycle: (pageId: string) => void;
 }
 
-export const StickyNoteFrame = memo(function StickyNoteFrame({
+export const StickyNoteNode = memo(function StickyNoteNode({
   page,
   isActive,
   onActivate,
@@ -30,7 +31,7 @@ export const StickyNoteFrame = memo(function StickyNoteFrame({
   onResizeStart,
   onContentChange,
   onColorCycle,
-}: StickyNoteFrameProps) {
+}: StickyNoteNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   // 編集中のテキスト内容（blur 時のみストアに反映）。編集開始時に page.content で初期化する
   const [editingContent, setEditingContent] = useState('');
@@ -65,7 +66,7 @@ export const StickyNoteFrame = memo(function StickyNoteFrame({
   const handleCloseBound = useCallback(() => onClose(page.id), [onClose, page.id]);
 
   const handleResizeStart = useCallback(
-    (e: React.MouseEvent, direction: ResizeDirection) => {
+    (e: React.MouseEvent, direction: NodeResizeDirection) => {
       handleActivate();
       onResizeStart(e, page.id, direction);
     },
@@ -230,8 +231,8 @@ export const StickyNoteFrame = memo(function StickyNoteFrame({
       </div>
 
       {/* リサイズハンドル（8方向） */}
-      {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeDirection[]).map((dir) => (
-        <PageResizeHandle key={dir} direction={dir} onMouseDown={handleResizeStart} />
+      {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as NodeResizeDirection[]).map((dir) => (
+        <NodeResizeHandle key={dir} direction={dir} onMouseDown={handleResizeStart} />
       ))}
     </div>
   );

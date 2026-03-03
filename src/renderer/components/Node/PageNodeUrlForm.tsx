@@ -5,11 +5,11 @@ import { useMemo, useState } from 'react';
 import { AppButton } from '@/renderer/components/Common/AppButton';
 import { normalizeUrl } from '@/renderer/lib/url-utils';
 
-interface PageUrlFormProps {
+interface PageNodeUrlFormProps {
   onSubmit: (url: string) => void;
 }
 
-export function PageUrlForm({ onSubmit }: PageUrlFormProps) {
+export function PageNodeUrlForm({ onSubmit }: PageNodeUrlFormProps) {
   const [value, setValue] = useState('');
   const normalizedUrl = useMemo(() => normalizeUrl(value), [value]);
   const isValid = normalizedUrl !== null;

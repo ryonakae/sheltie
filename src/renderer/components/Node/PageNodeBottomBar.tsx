@@ -3,7 +3,7 @@ import Smartphone from '@gravity-ui/icons/Smartphone';
 import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/renderer/components/Common/AppButton';
-import { TabletIcon } from '@/renderer/components/Siteboard/TabletIcon';
+import { NodeTabletIcon } from '@/renderer/components/Node/NodeTabletIcon';
 import {
   SIZE_PRESETS,
   TOOLBAR_BUTTON_PADDING,
@@ -20,17 +20,17 @@ type SvgComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
 const PRESET_ICONS: Record<string, SvgComponent> = {
   モバイル: Smartphone,
-  タブレット: TabletIcon,
+  タブレット: NodeTabletIcon,
   PC: Display,
 };
 
-export interface PageBottomBarProps {
+export interface PageNodeBottomBarProps {
   width: number;
   height: number;
   onResizePreset: (width: number, height: number) => void;
 }
 
-export function PageBottomBar({ width, height, onResizePreset }: PageBottomBarProps) {
+export function PageNodeBottomBar({ width, height, onResizePreset }: PageNodeBottomBarProps) {
   return (
     <div
       className="flex shrink-0 items-center border-b border-border-secondary bg-default select-none"

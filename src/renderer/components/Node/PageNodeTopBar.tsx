@@ -14,7 +14,7 @@ import {
   TOOLBAR_RADIUS,
 } from '@/renderer/constants';
 
-export interface PageTopBarProps {
+export interface PageNodeTopBarProps {
   title: string;
   url: string;
   isMoved: boolean;
@@ -35,7 +35,7 @@ function formatDisplayUrl(url: string) {
     .replace(/\/+$/g, '');
 }
 
-export function PageTopBar({
+export function PageNodeTopBar({
   title,
   url,
   isMoved,
@@ -47,7 +47,7 @@ export function PageTopBar({
   onPinUrl,
   onClose,
   onMouseDown,
-}: PageTopBarProps) {
+}: PageNodeTopBarProps) {
   return (
     <div
       className="flex shrink-0 cursor-grab items-center border-t border-border-secondary bg-default select-none active:cursor-grabbing"

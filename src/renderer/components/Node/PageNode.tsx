@@ -1,16 +1,17 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
-import { PageBottomBar } from '@/renderer/components/Siteboard/PageBottomBar';
-import { PageResizeHandle } from '@/renderer/components/Siteboard/PageResizeHandle';
-import { PageTopBar } from '@/renderer/components/Siteboard/PageTopBar';
-import { PageUrlForm } from '@/renderer/components/Siteboard/PageUrlForm';
+import {
+  NodeResizeHandle,
+  type NodeResizeDirection,
+} from '@/renderer/components/Node/NodeResizeHandle';
+import { PageNodeBottomBar } from '@/renderer/components/Node/PageNodeBottomBar';
+import { PageNodeTopBar } from '@/renderer/components/Node/PageNodeTopBar';
+import { PageNodeUrlForm } from '@/renderer/components/Node/PageNodeUrlForm';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import type { DisplayMode, Page } from '@/renderer/types/tab';
 import { isPageEmpty, isPageMoved } from '@/renderer/types/tab';
 
-type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
-
-interface PageFrameProps {
+interface PageNodeProps {
   page: Page;
   isActive: boolean;
   title: string;
@@ -29,7 +30,7 @@ interface PageFrameProps {
   onPinUrl: (pageId: string) => void;
   onClose: (pageId: string) => void;
   onDragStart: (e: React.MouseEvent, pageId: string) => void;
-  onResizeStart: (e: React.MouseEvent, pageId: string, direction: ResizeDirection) => void;
+  onResizeStart: (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => void;
   onResizePreset: (pageId: string, width: number, height: number) => void;
   onNavigated: (pageId: string, url: string, title: string) => void;
   onTitleUpdated: (pageId: string, title: string) => void;
@@ -40,7 +41,7 @@ interface PageFrameProps {
   onUrlSubmit: (pageId: string, url: string) => void;
 }
 
-export const PageFrame = memo(function PageFrame({
+export const PageNode = memo(function PageNode({
   page,
   isActive,
   title,
@@ -64,7 +65,7 @@ export const PageFrame = memo(function PageFrame({
   onWebviewCreated,
   onWebviewLoaded,
   onUrlSubmit,
-}: PageFrameProps) {
+}: PageNodeProps) {
   const placeholderRef = useRef<HTMLDivElement>(null);
   // Zustand の stale ラベルは参照しない（プロジェクト切替後の孤児 Webview 防止）
   const webviewLabelRef = useRef<string | null>(null);
@@ -95,13 +96,13 @@ export const PageFrame = memo(function PageFrame({
     let cancelled = false;
 
     const rect = placeholder.getBoundingClientRect();
-    console.log(`[PageFrame] Webview 作成開始: page.id=${page.id}`);
+    console.log(`[PageNode] Webview 作成開始: page.id=${page.id}`);
     webviewApi
       .create(page.id, initialUrlRef.current, rect.left, rect.top, rect.width, rect.height)
       .then((label) => {
         if (cancelled) {
           // StrictMode Cleanup 済み（cancelled=true）→ 孤児化防止のため即破棄してフラグ解除
-          console.log(`[PageFrame] cancelled=true → destroy(${label})`);
+          console.log(`[PageNode] cancelled=true → destroy(${label})`);
           void webviewApi.destroy(label);
           isCreatingRef.current = false;
           // createAttempt をインクリメントして次マウントで再試行
@@ -124,10 +125,10 @@ export const PageFrame = memo(function PageFrame({
         void webviewApi.show(label);
         // Zustand 更新後にフォールバック effect が念押し表示
         onWebviewCreated(page.id, label);
-        console.log(`[PageFrame] Webview 作成完了: label=${label}`);
+        console.log(`[PageNode] Webview 作成完了: label=${label}`);
       })
       .catch((err: unknown) => {
-        console.error('[PageFrame] Webview 作成に失敗:', err);
+        console.error('[PageNode] Webview 作成に失敗:', err);
         isCreatingRef.current = false;
       });
 
@@ -135,7 +136,7 @@ export const PageFrame = memo(function PageFrame({
       cancelled = true;
       // アンマウント時に Webview を破棄
       if (webviewLabelRef.current) {
-        console.log(`[PageFrame] アンマウント → destroy(${webviewLabelRef.current})`);
+        console.log(`[PageNode] アンマウント → destroy(${webviewLabelRef.current})`);
         void webviewApi.destroy(webviewLabelRef.current);
         webviewLabelRef.current = null;
       }
@@ -210,7 +211,7 @@ export const PageFrame = memo(function PageFrame({
   );
 
   const handleResizeStart = useCallback(
-    (e: React.MouseEvent, direction: ResizeDirection) => {
+    (e: React.MouseEvent, direction: NodeResizeDirection) => {
       handleActivate();
       onResizeStart(e, page.id, direction);
     },
@@ -233,7 +234,7 @@ export const PageFrame = memo(function PageFrame({
       data-page-id={page.id}
       onMouseDown={handleActivate}
     >
-      <PageTopBar
+      <PageNodeTopBar
         title={title}
         url={page.url}
         isMoved={isPageMoved(page)}
@@ -262,7 +263,7 @@ export const PageFrame = memo(function PageFrame({
         }}
       >
         {isPageEmpty(page) ? (
-          <PageUrlForm onSubmit={(url) => onUrlSubmit(page.id, url)} />
+          <PageNodeUrlForm onSubmit={(url) => onUrlSubmit(page.id, url)} />
         ) : (
           /* スクリーンショット画像: data-display-mode="screenshot" の時のみ表示（CSS で制御） */
           screenshotUrl && (
@@ -277,18 +278,18 @@ export const PageFrame = memo(function PageFrame({
         )}
       </div>
 
-      <PageBottomBar
+      <PageNodeBottomBar
         width={displayWidth}
         height={displayHeight}
         onResizePreset={handleResizePresetBound}
       />
 
       {/* リサイズハンドル（8方向） */}
-      {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeDirection[]).map((dir) => (
-        <PageResizeHandle key={dir} direction={dir} onMouseDown={handleResizeStart} />
+      {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as NodeResizeDirection[]).map((dir) => (
+        <NodeResizeHandle key={dir} direction={dir} onMouseDown={handleResizeStart} />
       ))}
     </div>
   );
 });
 
-export type { ResizeDirection };
+export type { NodeResizeDirection };

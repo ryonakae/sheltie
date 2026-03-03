@@ -57,21 +57,21 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │   │   ├── useSiteboardPan.ts # パン操作（onPanMove コールバック）。backgroundRef で背景グリッドを同期
 │   │   │   ├── useSiteboardZoom.ts # ズーム・パン操作（MIN_ZOOM=0.5, MAX_ZOOM=1.5）。backgroundRef で背景グリッドを同期
 │   │   │   ├── usePageDrag.ts # ページドラッグ
-│   │   │   └── usePageResize.ts # ページリサイズ
+│   │   │   ├── usePageResize.ts # ページリサイズ
+│   │   │   └── siteboard/
+│   │   │       ├── useSiteboardDisplayEngine.ts # displayMode 計算、スクリーンショット管理、interaction 中モード遷移制御
+│   │   │       ├── useSiteboardViewportEngine.ts # zoom/pan/drag/resize/reset と transform 適用を管理
+│   │   │       ├── useSiteboardNodeRuntime.ts # PageNode/StickyNoteNode 向けハンドラーとランタイム状態を管理
+│   │   │       └── types.ts # Siteboard hooks 間の共有型（InteractionType）
 │   │   ├── screens/
-│   │   │   ├── Home/
-│   │   │   │   └── index.tsx # HomeScreen（ホーム画面のルート）
-│   │   │   └── Project/
-│   │   │       └── index.tsx # ProjectScreen（プロジェクト画面のルート）
+│   │   │   ├── Home.tsx # HomeScreen（ホーム画面のルート）
+│   │   │   └── Project.tsx # ProjectScreen（プロジェクト画面のルート）
 │   │   └── components/
 │   │       ├── Home/ # ホーム画面で使用する部品（ProjectCard / RenameModal / DeleteDialog）
 │   │       ├── Project/ # ProjectScreen で使用する部品（Sidebar / ResizeHandle）
+│   │       ├── Node/ # Siteboard ノード部品（PageNode / StickyNoteNode / TopBar / BottomBar / UrlForm / ResizeHandle）
 │   │       ├── Siteboard/ # ページレンダリング・操作制御
-│   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（url 空時は Webview 作成スキップ・PageUrlForm 表示。onUrlSubmit prop で空フレームへの初回 URL 設定。canvasZoom prop は削除済み・スケール管理は Siteboard 側に集約）
-│   │       │   ├── PageUrlForm.tsx # 空フレーム内の URL 入力フォーム（ズーム対応: calc(base / var(--canvas-zoom, 1))）
-│   │       │   ├── Siteboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setScale） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setScale 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）/ onAddPage prop・handleUrlSubmit（setPageUrl 経由で空フレームに URL を設定）/ ResizeObserver で containerRef のサイズ変化を監視し computeDisplayModes() を呼び出す（window resize より汎用的、サイドバー幅変更にも対応）
-│   │       │   ├── PageTopBar.tsx # 戻る/進む/タイトル/リロード/ピン留め/閉じるを提供するトップバー
-│   │       │   ├── PageBottomBar.tsx # デバイスプリセット・サイズ表示
+│   │       │   ├── Siteboard.tsx # hooks の結線と描画に専念するオーケストレーター（Node 描画 / ツールバー / ズームUI）
 │   │       │   └── FloatingToolbar.tsx # Siteboard 下端中央のフローティングツールバー（＋ボタンで空フレーム追加。z-40、外側 pointer-events-none / 内側 pointer-events-auto）
 │   │       ├── TabBar/ # data-tauri-drag-region で実装
 │   │       └── Common/
@@ -83,7 +83,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 
 ### コンポーネント構成
 
-**HomeScreen**: プロジェクト一覧画面（`src/renderer/screens/Home/index.tsx`）
+**HomeScreen**: プロジェクト一覧画面（`src/renderer/screens/Home.tsx`）
 - `ProjectCard.tsx`: 各プロジェクトをカード表示（Dropdown で操作メニュー提供）
 - `RenameModal.tsx`: プロジェクト名変更用モーダル（HeroUI Modal）
 - `DeleteDialog.tsx`: 削除確認用ダイアログ（HeroUI AlertDialog）
@@ -96,23 +96,23 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - ホームボタンはアクティブ時に `HouseFill` アイコン、非アクティブ時に `House` アイコンを使用
 - `useWindowControlsInset` で macOS トラフィックライト、Windows/Linux のコントロール領域に対応（`data-tauri-drag-region` 属性で実装）
 
-**ProjectScreen**: サイドバーと Siteboard を管理（`src/renderer/screens/Project/index.tsx`）
+**ProjectScreen**: サイドバーと Siteboard を管理（`src/renderer/screens/Project.tsx`）
 - **Sidebar**: ページ一覧表示、ページごとに削除ボタン付き。`isPageMoved()` で (Moved) インジケーター表示。ページクリックで `onSelectPage` 呼び出し + `ensureFrameVisible`（`motion` アニメーション 260ms easeOutCubic、`useReducedMotion` 対応）でページをビューポート内に移動。ホバー状態管理は CSS `group` パターンから `motion` の `variants`（`whileHover="hover"`）パターンに移行。ページ追加ロジック（AddPageForm）は削除済み（FloatingToolbar に移設）
 - **FloatingToolbar**: Siteboard 下端中央に配置。＋ボタンで `handleAddEmptyPage` を呼び出し、空フレームをキャンバス中央に追加する
 - **ResizeHandle**: サイドバー幅調整可能（リサイズ中は DOM 直接操作でパフォーマンス最適化）
 - **Siteboard**: キャンバス領域に複数の Tauri Webview を配置、ドラッグ・リサイズ・ズーム・パン対応
 - **選択状態管理**: `ProjectScreen` が `selectedPageId` / `centeredPageId` ステートを保持し、`Sidebar` と `Siteboard` に props 経由で連携
-- **ページ追加フロー**: FloatingToolbar の＋ボタン → `handleAddEmptyPage`（ProjectScreen）→ `addPage`（url 省略）→ 空フレームがキャンバス中央に配置 → `PageUrlForm` で URL 入力・submit → `setPageUrl`（`url` + `addedUrl` + `title` を同時設定）→ `page.url` 変化で `PageFrame` effect が再実行して Webview 作成
+- **ページ追加フロー**: FloatingToolbar の＋ボタン → `handleAddEmptyPage`（ProjectScreen）→ `addPage`（url 省略）→ 空フレームがキャンバス中央に配置 → `PageNodeUrlForm` で URL 入力・submit → `setPageUrl`（`url` + `addedUrl` + `title` を同時設定）→ `page.url` 変化で `PageNode` effect が再実行して Webview 作成
 - **`getViewportCenterPos` / `centerOnNewPage`**: ProjectScreen に実装。`data-siteboard-container` を使ってビューポート中央座標を算出し、ズーム込み 400ms アニメーションで新規ページにフィット。`prefersReducedMotion` 対応
 
 **Siteboard**: ページレンダリング・ビューポート管理・操作制御
-- `SiteboardProps`: `selectedPageId`, `onSelectPage`, `onClearSelection`, `centeredPageId`, `onCenteredPageHandled`, `onAddPage` を受け取る。`navStates: Record<string, NavigationState>` を useState で管理し、`refreshNavigationState(pageId)` で同一値なら参照を維持しつつ更新。`handleGoBack`/`handleGoForward` で IPC 経由のナビゲーション操作
-- **再レンダー最適化**: `PageFrame` / `StickyNoteFrame` は `React.memo` でラップ。コールバック props はすべて `(pageId: string, ...) => void` シグネチャに統一（`onGoBack`, `onGoForward`, `onActivate`, `onReload`, `onPinUrl`, `onClose`, `onDragStart`, `onResizeStart`, `onResizePreset` など）。`Siteboard.tsx` の `pages.map()` 内ではインラインアロー関数を排除し、`useCallback` で生成した安定した関数参照を直接渡す。コンポーネント内部で `useCallback` + `page.id` バインドのローカルハンドラーを生成して子要素に渡す
+- `SiteboardProps`: `selectedPageId`, `onSelectPage`, `onClearSelection`, `centeredPageId`, `onCenteredPageHandled`, `onAddPage`, `onAddStickyNote` を受け取る。内部実装は `useSiteboardDisplayEngine` / `useSiteboardViewportEngine` / `useSiteboardNodeRuntime` の3 hooks に分割
+- **再レンダー最適化**: `PageNode` / `StickyNoteNode` は `React.memo` でラップ。コールバック props は `(pageId: string, ...) => void` シグネチャに統一し、`Siteboard.tsx` の `pages.map()` では安定した関数参照を直接渡す
 - 各ページを `<div data-webview-placeholder>` + Tauri Webview で DOM に描画
 - canvas 要素に transform (translate + scale) を設定してズーム・パン実装
 - ドラッグでページ移動、リサイズでサイズ変更（`updatePagePosition`/`updatePageSize` で Zustand 状態更新）
 - `centeredPageId` が設定されると対象ページの `computeDisplayModes` と `captureScreenshot` を rAF 後に実行
-- ボトムバー（`PageBottomBar`）のデバイスプリセットボタン（モバイル・タブレット・PC）でワンクリック高さ・幅変更
+- `PageNodeBottomBar` のデバイスプリセットボタン（モバイル・タブレット・PC）でワンクリック高さ・幅変更
 - マウスホイール or トラックパッドで操作（`updateViewport` で Zustand 状態更新）:
   - `Ctrl/Cmd + ホイール`: マウスカーソル中心にズーム
   - `ホイール（修飾キーなし）`: キャンバスをパン（スクロール移動）
@@ -158,9 +158,9 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - `createdAt`: 作成タイムスタンプ
 - `webviewLabel?`: Tauri Webview ラベル（ランタイム専用、永続化しない）
 
-**isPageEmpty()** (`src/renderer/types/tab.ts`): `page.url === ''` で空フレーム（URL 未設定）かどうかを判定するヘルパー関数。`PageFrame` で Webview 作成スキップ判定に使用。
+**isPageEmpty()** (`src/renderer/types/tab.ts`): `page.url === ''` で空フレーム（URL 未設定）かどうかを判定するヘルパー関数。`PageNode` で Webview 作成スキップ判定に使用。
 
-**isPageMoved()** (`src/renderer/types/tab.ts`): ページが追加時 URL から別ページに遷移したかを判定するヘルパー関数。`new URL(str).href` で比較し末尾スラッシュ等の正規化差異を吸収する。`PageTopBar` と `Sidebar` で共通使用。
+**isPageMoved()** (`src/renderer/types/tab.ts`): ページが追加時 URL から別ページに遷移したかを判定するヘルパー関数。`new URL(str).href` で比較し末尾スラッシュ等の正規化差異を吸収する。`PageNodeTopBar` と `Sidebar` で共通使用。
 
 **Viewport インターフェース** (`src/renderer/types/tab.ts:14-18`)
 - `zoom`: ズームレベル（初期値 1）
@@ -243,7 +243,7 @@ IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、t
 - **DOM 操作**: サイドバー幅調整のような高頻度アップデートはレンダリング外で行い、確定時のみ dispatch で同期
 - **ズーム対応 UI**: Siteboard 内の UI 要素（ボーダー、パディング、アイコンサイズなど）はズーム値に応じて動的にスケーリング必要。実装方法: `--canvas-zoom` CSS Custom Property をルート canvas 要素に設定し、各 UI 要素は `calc(base-size / var(--canvas-zoom, 1))` で自動スケーリング。これにより、ズーム・パン時に React 再レンダリングを回避
 - **タイトルバー制御**: macOS/Windows のコントロール領域は `data-tauri-drag-region` 属性で指定（`-webkit-app-region: drag` の代わり）。Tauri v2 では属性が子要素に自動継承されないため、コンテナ要素ごとに明示的に設定。ネイティブの `<button>` 等は自動的にドラッグが抑制される
-- **Webview 非同期制御**: Webview 作成は React StrictMode の二重マウントによる create/destroy 競合の対象。`PageFrame.tsx` で `isCreatingRef` フラグを使用して二重 create IPC を防止。`webviewApi` メソッドはすべて try-catch で保護し、Webview 未作成・既破棄時は no-op。詳細は MEMORY.md の「非同期制御パターン（Webview 作成）」を参照
+- **Webview 非同期制御**: Webview 作成は React StrictMode の二重マウントによる create/destroy 競合の対象。`PageNode.tsx` で `isCreatingRef` フラグを使用して二重 create IPC を防止。`webviewApi` メソッドはすべて try-catch で保護し、Webview 未作成・既破棄時は no-op。詳細は MEMORY.md の「非同期制御パターン（Webview 作成）」を参照
 - **Screenshot Clipping**: Webview が Siteboard 端にかかる時、ネイティブ Webview を hide してスクリーンショット画像（DOM `<img>`）に切り替える。CSS の `overflow:hidden` でクリッピング可能。`DisplayMode` で状態遷移管理。ヒステリシス（HYSTERESIS_PX = 4px）で境界近辺での振動防止。`computeDisplayModes()` 内で DOM 属性を直接更新し、命令的に Webview show/hide を実行することで React state Bailout の罠を回避。`captureScreenshot` のガードは drag/resize 中のみ（pan/zoom 中は native Webview が表示されているため撮影可能）。詳細は MEMORY.md の「Screenshot Clipping の実装パターン」を参照
 - **usePageResize の Webview なしフレーム対応**: `usePageResize` はリサイズ中に `state.webviewEl`（Webview プレースホルダー）を直接 DOM 更新するが、付箋など Webview を持たないフレームでは `state.webviewEl` が null になる。その場合は `state.frameEl.style.height` を直接更新してリサイズ中のサイズ変化を反映する（`else` ブランチで実装）
 

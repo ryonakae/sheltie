@@ -242,12 +242,12 @@ export const PageNode = memo(function PageNode({
 
   return (
     <div
-      className="absolute flex flex-col shadow-lg outline-offset-0"
+      className="absolute flex flex-col overflow-hidden shadow-lg outline-offset-0"
       style={{
         left: page.x,
         top: page.y,
         width: page.width,
-        borderRadius: zoomPx(8),
+        borderRadius: zoomPx(16),
         outline: isActive
           ? `${zoomPx(2)} solid var(--color-focus)`
           : `${zoomPx(1)} solid var(--color-border)`,

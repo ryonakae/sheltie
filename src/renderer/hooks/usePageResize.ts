@@ -6,6 +6,7 @@ type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 interface UsePageResizeOptions {
   zoom: React.RefObject<number>;
+  onResizeStart?: (pageId: string) => void;
   onResizeMove?: (pageId: string, width: number, height: number) => void;
   onResizeEnd: (pageId: string, width: number, height: number) => void;
   onInteractionChange: (active: boolean) => void;
@@ -13,6 +14,14 @@ interface UsePageResizeOptions {
   minWidth?: number;
   /** リサイズ最小高さ（デフォルト: PAGE_MIN_HEIGHT = 200） */
   minHeight?: number;
+  /** リサイズ中の幅・DOM 状態に応じた動的最小高さ */
+  resolveMinHeight?: (context: {
+    pageId: string;
+    frameEl: HTMLElement;
+    webviewEl: HTMLElement | null;
+    width: number;
+    direction: ResizeDirection;
+  }) => number;
 }
 
 interface ResizeState {
@@ -32,17 +41,23 @@ interface ResizeState {
  */
 export function usePageResize({
   zoom,
+  onResizeStart,
   onResizeMove,
   onResizeEnd,
   onInteractionChange,
   minWidth = PAGE_MIN_WIDTH,
   minHeight = PAGE_MIN_HEIGHT,
+  resolveMinHeight,
 }: UsePageResizeOptions) {
   const resizeState = useRef<ResizeState | null>(null);
   const onResizeMoveRef = useRef(onResizeMove);
+  const resolveMinHeightRef = useRef(resolveMinHeight);
   // レンダリング外で ref を更新（latest ref パターン: stale closure を回避）
   useEffect(() => {
     onResizeMoveRef.current = onResizeMove;
+  });
+  useEffect(() => {
+    resolveMinHeightRef.current = resolveMinHeight;
   });
 
   const startResize = useCallback(
@@ -70,10 +85,11 @@ export function usePageResize({
         currentWidth: initialWidth,
         currentHeight: initialHeight,
       };
+      onResizeStart?.(pageId);
       document.body.style.userSelect = 'none';
       onInteractionChange(true);
     },
-    [onInteractionChange],
+    [onInteractionChange, onResizeStart],
   );
 
   useEffect(() => {
@@ -93,16 +109,32 @@ export function usePageResize({
 
       // 方向に応じて位置とサイズを計算（整数に丸めてサブピクセルずれを防ぐ）
       if (dir.includes('e')) newW = Math.max(minWidth, Math.round(width + dx));
-      if (dir.includes('s')) newH = Math.max(minHeight, Math.round(height + dy));
       if (dir.includes('w')) {
         const clampedDx = Math.min(dx, width - minWidth);
         newW = Math.round(width - clampedDx);
         newX = Math.round(x + clampedDx);
       }
+      const dynamicMinHeight = Math.max(
+        minHeight,
+        resolveMinHeightRef.current?.({
+          pageId: state.pageId,
+          frameEl: state.frameEl,
+          webviewEl: state.webviewEl,
+          width: newW,
+          direction: dir,
+        }) ?? minHeight,
+      );
+      if (dir.includes('s')) newH = Math.max(dynamicMinHeight, Math.round(height + dy));
       if (dir.includes('n')) {
-        const clampedDy = Math.min(dy, height - minHeight);
+        const clampedDy = Math.min(dy, height - dynamicMinHeight);
         newH = Math.round(height - clampedDy);
         newY = Math.round(y + clampedDy);
+      }
+      if (newH < dynamicMinHeight) {
+        if (dir.includes('n') && !dir.includes('s')) {
+          newY = Math.round(y + (height - dynamicMinHeight));
+        }
+        newH = dynamicMinHeight;
       }
 
       state.frameEl.style.left = `${newX}px`;

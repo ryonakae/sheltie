@@ -78,6 +78,8 @@ export function Siteboard({
     computeInteractionModes,
     displayModes,
     handleInteractionChange,
+    handlePageResizeEnd,
+    handlePageResizeStart,
     interactionCursor,
     scheduleInteractionUpdate,
     scheduleZoomRestoreAfterReflow,
@@ -110,6 +112,8 @@ export function Siteboard({
     activeId,
     viewport: activeProject?.viewport,
     onInteractionChange: handleInteractionChange,
+    onPageResizeStart: handlePageResizeStart,
+    onPageResizeEnd: handlePageResizeEnd,
     scheduleInteractionUpdate,
     computeInteractionModes,
     computeDisplayModes,
@@ -131,6 +135,7 @@ export function Siteboard({
     handleRemovePage,
     handleResizePreset,
     handleResizeStart,
+    handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,
     handleStickyNoteContentChange,
     handleTitleUpdated,
@@ -191,6 +196,7 @@ export function Siteboard({
               onDragStart={handleDragStart}
               onResizeStart={startStickyNoteResize}
               onContentChange={handleStickyNoteContentChange}
+              onAutoHeightChange={handleStickyNoteAutoHeightChange}
               onColorCycle={handleStickyNoteColorCycle}
             />
           ) : (

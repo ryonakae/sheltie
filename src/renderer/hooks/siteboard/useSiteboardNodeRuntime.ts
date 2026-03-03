@@ -200,6 +200,15 @@ export function useSiteboardNodeRuntime({
     [activeId, cycleStickyNoteColor],
   );
 
+  const handleStickyNoteAutoHeightChange = useCallback(
+    (pageId: string, height: number) => {
+      const page = pages.find((p) => p.id === pageId);
+      if (!page || page.height === height) return;
+      updatePageSize(activeId, pageId, page.width, height);
+    },
+    [activeId, pages, updatePageSize],
+  );
+
   return {
     handleDragStart,
     handleGoBack,
@@ -210,6 +219,7 @@ export function useSiteboardNodeRuntime({
     handleRemovePage,
     handleResizePreset,
     handleResizeStart,
+    handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,
     handleStickyNoteContentChange,
     handleTitleUpdated,

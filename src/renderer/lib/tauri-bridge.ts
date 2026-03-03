@@ -113,6 +113,15 @@ export const webviewApi = {
     }
   },
 
+  /** ページ Webview の不透明度を設定する（macOS のみ有効。非対応 OS は no-op） */
+  async setOpacity(pageId: string, opacity: number): Promise<void> {
+    try {
+      await invoke('set_page_webview_opacity', { pageId, opacity });
+    } catch {
+      // no-op
+    }
+  },
+
   async destroy(label: string): Promise<void> {
     try {
       await getWebviewHandle(label).close();

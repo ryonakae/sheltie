@@ -5,7 +5,7 @@ import { twMerge } from 'tailwind-merge';
 import { AppButton } from '@/renderer/components/Common/AppButton';
 import { NodeTabletIcon } from '@/renderer/components/Node/NodeTabletIcon';
 import { SIZE_PRESETS } from '@/renderer/constants';
-import { zoomPx, zoomPxList } from '@/renderer/lib/canvas-zoom';
+import { zoomPx } from '@/renderer/lib/canvas-zoom';
 
 import type { ComponentType, SVGProps } from 'react';
 
@@ -35,7 +35,6 @@ export function PageNodeBottomBar({
     paddingInline: zoomPx(8),
     fontSize: zoomPx(11),
     lineHeight: zoomPx(15),
-    borderRadius: zoomPxList(0, 0, 8, 8),
   };
   const presetGroupStyle = { gap: zoomPx(2) };
   const presetButtonStyle = {

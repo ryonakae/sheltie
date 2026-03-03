@@ -1,10 +1,10 @@
 import Xmark from '@gravity-ui/icons/Xmark';
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/renderer/components/Common/AppButton';
 import { NodeResizeHandle } from '@/renderer/components/Node/NodeResizeHandle';
-import { STICKY_NOTE_COLORS } from '@/renderer/constants';
+import { STICKY_NOTE_COLORS, STICKY_NOTE_MIN_HEIGHT } from '@/renderer/constants';
 import type { NodeResizeDirection } from '@/renderer/hooks/siteboard/types';
 import { zoomPx } from '@/renderer/lib/canvas-zoom';
 import { type Page } from '@/renderer/types/tab';
@@ -18,6 +18,7 @@ interface StickyNoteNodeProps {
   onDragStart: (e: React.MouseEvent, pageId: string) => void;
   onResizeStart: (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => void;
   onContentChange: (pageId: string, content: string) => void;
+  onAutoHeightChange: (pageId: string, height: number) => void;
   onColorCycle: (pageId: string) => void;
 }
 
@@ -30,16 +31,29 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   onDragStart,
   onResizeStart,
   onContentChange,
+  onAutoHeightChange,
   onColorCycle,
 }: StickyNoteNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   // 編集中のテキスト内容（blur 時のみストアに反映）。編集開始時に page.content で初期化する
   const [editingContent, setEditingContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const contentMeasureRef = useRef<HTMLDivElement>(null);
 
   const colorIndex = page.colorIndex ?? 0;
   const color = STICKY_NOTE_COLORS[colorIndex];
   const nextColor = STICKY_NOTE_COLORS[(colorIndex + 1) % STICKY_NOTE_COLORS.length];
+  const noteContent = isEditing ? editingContent : (page.content ?? '');
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const measureEl = contentMeasureRef.current;
+    if (!measureEl) return;
+    const contentHeight = Math.ceil(measureEl.getBoundingClientRect().height);
+    const nextHeight = Math.max(STICKY_NOTE_MIN_HEIGHT, contentHeight);
+    if (nextHeight <= page.height) return;
+    onAutoHeightChange(page.id, nextHeight);
+  }, [editingContent, isEditing, onAutoHeightChange, page.height, page.id, page.width]);
 
   const handleDoubleClick = useCallback(() => {
     // 編集開始時にストアの現在値で初期化
@@ -95,7 +109,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   const noteBodyColorClassName = page.content ? 'text-[#333]' : 'text-[#aaa]';
   const noteHeaderActionButtonStyle = {
     padding: zoomPx(2),
-    borderRadius: zoomPx(2),
   };
   const closeIconStyle = {
     width: zoomPx(14),
@@ -109,7 +122,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         left: page.x,
         top: page.y,
         width: page.width,
-        borderRadius: zoomPx(8),
+        borderRadius: zoomPx(16),
         outline: isActive ? `${zoomPx(2)} solid var(--color-focus)` : 'none',
         borderWidth: zoomPx(1),
       }}
@@ -150,7 +163,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
               minWidth: zoomPx(18),
               height: zoomPx(18),
               minHeight: zoomPx(18),
-              borderRadius: zoomPx(2),
             }}
             onMouseDown={(e) => e.stopPropagation()}
             onPress={() => onColorCycle(page.id)}
@@ -184,6 +196,16 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         }}
         onDoubleClick={handleDoubleClick}
       >
+        <div
+          ref={contentMeasureRef}
+          data-sticky-note-content-measure
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0 box-border p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap opacity-0"
+          style={{ width: page.width }}
+        >
+          {noteContent || ' '}
+        </div>
+
         {isEditing ? (
           <textarea
             ref={textareaRef}

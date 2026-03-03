@@ -374,6 +374,50 @@ pub async fn update_page_webview_bounds(
     update_bounds_impl(&app, &page_id, x, y, width, height, zoom).await
 }
 
+/// ページ Webview の不透明度を設定する。
+///
+/// show/hide は setHidden ベースで表示復帰時の描画揺れが発生しやすいため、
+/// macOS では alpha 値を操作して表示状態を維持したままフェード復帰を可能にする。
+#[tauri::command]
+pub async fn set_page_webview_opacity(
+    app: AppHandle,
+    page_id: String,
+    opacity: f64,
+) -> Result<(), String> {
+    set_opacity_impl(app, page_id, opacity.clamp(0.0, 1.0)).await
+}
+
+#[cfg(target_os = "macos")]
+async fn set_opacity_impl(
+    app: AppHandle,
+    page_id: String,
+    opacity: f64,
+) -> Result<(), String> {
+    let label = format!("page-{}", page_id);
+    let wv = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+
+    wv.with_webview(move |platform_wv| {
+        let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
+        unsafe {
+            let _: () = objc2::msg_send![raw, setAlphaValue: opacity];
+        }
+    })
+    .map_err(|e| format!("with_webview エラー: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn set_opacity_impl(
+    _app: AppHandle,
+    _page_id: String,
+    _opacity: f64,
+) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 async fn update_bounds_impl(
     app: &AppHandle,

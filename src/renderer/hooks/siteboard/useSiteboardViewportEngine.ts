@@ -2,6 +2,8 @@ import { animate, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  STICKY_NOTE_MIN_HEIGHT,
+  STICKY_NOTE_MIN_WIDTH,
   ZOOM_ANIMATION_EASE,
   ZOOM_RESET_DURATION_SEC,
   ZOOM_RESET_TARGET,
@@ -23,6 +25,8 @@ interface UseSiteboardViewportEngineParams {
   activeId: string;
   viewport?: Viewport;
   onInteractionChange: (active: boolean, cursor: string, type: InteractionType) => void;
+  onPageResizeStart?: (pageId: string) => void;
+  onPageResizeEnd?: (pageId: string) => void;
   scheduleInteractionUpdate: () => void;
   computeInteractionModes: () => void;
   computeDisplayModes: () => void;
@@ -42,6 +46,8 @@ export function useSiteboardViewportEngine({
   activeId,
   viewport,
   onInteractionChange,
+  onPageResizeStart,
+  onPageResizeEnd,
   scheduleInteractionUpdate,
   computeInteractionModes,
   computeDisplayModes,
@@ -195,6 +201,12 @@ export function useSiteboardViewportEngine({
 
   const { startResize } = usePageResize({
     zoom: zoomRef,
+    onResizeStart: useCallback(
+      (pageId: string) => {
+        onPageResizeStart?.(pageId);
+      },
+      [onPageResizeStart],
+    ),
     onResizeMove: useCallback((pageId: string, width: number, height: number) => {
       setResizingSize({ pageId, width, height });
     }, []),
@@ -202,8 +214,9 @@ export function useSiteboardViewportEngine({
       (pageId, width, height) => {
         updatePageSize(activeId, pageId, width, height);
         setResizingSize(null);
+        onPageResizeEnd?.(pageId);
       },
-      [activeId, updatePageSize],
+      [activeId, onPageResizeEnd, updatePageSize],
     ),
     onInteractionChange: useCallback(
       (active) => onInteractionChange(active, 'default', 'resize'),
@@ -211,20 +224,45 @@ export function useSiteboardViewportEngine({
     ),
   });
 
+  const resolveStickyNoteMinHeight = useCallback(
+    ({ frameEl, width }: { frameEl: HTMLElement; width: number }) => {
+      const measureEl = frameEl.querySelector(
+        '[data-sticky-note-content-measure]',
+      ) as HTMLElement | null;
+      if (!measureEl) return STICKY_NOTE_MIN_HEIGHT;
+
+      const prevWidth = measureEl.style.width;
+      measureEl.style.width = `${Math.max(width, STICKY_NOTE_MIN_WIDTH)}px`;
+      const contentHeight = Math.ceil(measureEl.getBoundingClientRect().height);
+      measureEl.style.width = prevWidth;
+
+      return Math.max(STICKY_NOTE_MIN_HEIGHT, contentHeight);
+    },
+    [],
+  );
+
   const { startResize: startStickyNoteResize } = usePageResize({
     zoom: zoomRef,
+    onResizeStart: useCallback(
+      (pageId: string) => {
+        onPageResizeStart?.(pageId);
+      },
+      [onPageResizeStart],
+    ),
     onResizeEnd: useCallback(
       (pageId, width, height) => {
         updatePageSize(activeId, pageId, width, height);
+        onPageResizeEnd?.(pageId);
       },
-      [activeId, updatePageSize],
+      [activeId, onPageResizeEnd, updatePageSize],
     ),
     onInteractionChange: useCallback(
       (active) => onInteractionChange(active, 'default', 'resize'),
       [onInteractionChange],
     ),
-    minWidth: 150,
-    minHeight: 150,
+    minWidth: STICKY_NOTE_MIN_WIDTH,
+    minHeight: STICKY_NOTE_MIN_HEIGHT,
+    resolveMinHeight: resolveStickyNoteMinHeight,
   });
 
   useEffect(() => {

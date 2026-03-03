@@ -5,7 +5,7 @@ import Pin from '@gravity-ui/icons/Pin';
 import Xmark from '@gravity-ui/icons/Xmark';
 
 import { AppButton } from '@/renderer/components/Common/AppButton';
-import { zoomPx, zoomPxList } from '@/renderer/lib/canvas-zoom';
+import { zoomPx } from '@/renderer/lib/canvas-zoom';
 
 export interface PageNodeTopBarProps {
   title: string;
@@ -48,7 +48,6 @@ export function PageNodeTopBar({
     paddingInline: zoomPx(8),
     fontSize: zoomPx(12),
     lineHeight: zoomPx(16),
-    borderRadius: zoomPxList(8, 8, 0, 0),
   };
   const buttonStyle = {
     padding: zoomPx(2),

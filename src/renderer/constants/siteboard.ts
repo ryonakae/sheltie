@@ -1,6 +1,8 @@
 // リサイズとドラッグの操作上限
 export const PAGE_MIN_WIDTH = 320;
 export const PAGE_MIN_HEIGHT = 200;
+export const STICKY_NOTE_MIN_WIDTH = 150;
+export const STICKY_NOTE_MIN_HEIGHT = 150;
 export const DRAG_THRESHOLD = 3;
 
 // ズーム制御の境界とアニメーション
@@ -21,6 +23,7 @@ export const PRE_CAPTURE_MARGIN_PX = 50;
 export const CAPTURE_MIN_INTERVAL_MS = 1000;
 export const PRE_DISPLAY_MARGIN_PX = 50;
 export const SCREENSHOT_REFRESH_INTERVAL_MS = 2000;
+export const WEBVIEW_REVEAL_DELAY_MS = 100;
 
 // 付箋色
 export const STICKY_NOTE_COLORS = [

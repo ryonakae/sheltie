@@ -43,6 +43,10 @@ export const ZOOM_SENSITIVITY = 0.001;
 export const ZOOM_RESET_TARGET = 1;
 export const ZOOM_RESET_DURATION_SEC = 0.24;
 export const ZOOM_ANIMATION_EASE = [0.215, 0.61, 0.355, 1] as const;
+export const ZOOM_END_DEBOUNCE_MS = 250;
+export const WHEEL_PAN_END_DEBOUNCE_MS = 150;
+export const ZOOM_REFLOW_SETTLE_MS = 180;
+export const ZOOM_REFLOW_SETTLE_RAF_COUNT = 2;
 
 // ページ表示関連のヘッダー高さ
 export const PAGE_CHROME_HEIGHT = 48;

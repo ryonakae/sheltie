@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-interface UseArtboardPanOptions {
+interface UseSiteboardPanOptions {
   canvasRef: React.RefObject<HTMLDivElement | null>;
   backgroundRef?: React.RefObject<HTMLDivElement | null>;
   zoom: React.RefObject<number>;
@@ -16,7 +16,7 @@ interface UseArtboardPanOptions {
  * アートボードのパン操作（Space+ドラッグ / ミドルクリック+ドラッグ）を管理する Hook。
  * DOM 直接操作でパンを反映し、mouseup 時のみストアへ同期する。
  */
-export function useArtboardPan({
+export function useSiteboardPan({
   canvasRef,
   backgroundRef,
   zoom,
@@ -25,7 +25,7 @@ export function useArtboardPan({
   onPanEnd,
   onInteractionChange,
   onPanMove,
-}: UseArtboardPanOptions) {
+}: UseSiteboardPanOptions) {
   const isPanMode = useRef(false);
   const isDragging = useRef(false);
   const startMouse = useRef({ x: 0, y: 0 });
@@ -37,9 +37,9 @@ export function useArtboardPan({
     canvasRef.current.style.transform = `translate(${panX.current}px, ${panY.current}px) scale(${zoom.current})`;
     canvasRef.current.style.setProperty('--canvas-zoom', String(zoom.current));
     if (!backgroundRef?.current) return;
-    backgroundRef.current.style.setProperty('--artboard-dot-scale', String(zoom.current));
-    backgroundRef.current.style.setProperty('--artboard-bg-x', `${panX.current}px`);
-    backgroundRef.current.style.setProperty('--artboard-bg-y', `${panY.current}px`);
+    backgroundRef.current.style.setProperty('--siteboard-dot-scale', String(zoom.current));
+    backgroundRef.current.style.setProperty('--siteboard-bg-x', `${panX.current}px`);
+    backgroundRef.current.style.setProperty('--siteboard-bg-y', `${panY.current}px`);
   }, [backgroundRef, canvasRef, zoom, panX, panY]);
 
   const setCursor = useCallback((cursor: string) => {

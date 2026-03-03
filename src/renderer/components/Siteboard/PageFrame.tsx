@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
-import { PageBottomBar } from '@/renderer/components/Artboard/PageBottomBar';
-import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
-import { PageTopBar } from '@/renderer/components/Artboard/PageTopBar';
-import { PageUrlForm } from '@/renderer/components/Artboard/PageUrlForm';
+import { PageBottomBar } from '@/renderer/components/Siteboard/PageBottomBar';
+import { PageResizeHandle } from '@/renderer/components/Siteboard/PageResizeHandle';
+import { PageTopBar } from '@/renderer/components/Siteboard/PageTopBar';
+import { PageUrlForm } from '@/renderer/components/Siteboard/PageUrlForm';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import type { DisplayMode, Page } from '@/renderer/types/tab';
 import { isPageEmpty, isPageMoved } from '@/renderer/types/tab';
@@ -16,7 +16,7 @@ interface PageFrameProps {
   title: string;
   displayWidth: number;
   displayHeight: number;
-  /** ネイティブ Webview の表示モード（Artboard が intersection 判定で制御） */
+  /** ネイティブ Webview の表示モード（Siteboard が intersection 判定で制御） */
   displayMode: DisplayMode;
   /** スクリーンショット ObjectURL（screenshot モード時に表示） */
   screenshotUrl: string | null;
@@ -168,7 +168,7 @@ export const PageFrame = memo(function PageFrame({
 
   /**
    * displayMode が変化した時: ネイティブ Webview の show/hide と bounds 同期。
-   * 操作中のリアルタイム切り替えは Artboard 側の DOM 直接操作で行うため、
+   * 操作中のリアルタイム切り替えは Siteboard 側の DOM 直接操作で行うため、
    * この effect は静的状態の変化と操作完了後の再描画に対応する。
    */
   useEffect(() => {

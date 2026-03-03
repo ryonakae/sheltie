@@ -2,8 +2,8 @@ import Display from '@gravity-ui/icons/Display';
 import Smartphone from '@gravity-ui/icons/Smartphone';
 import { twMerge } from 'tailwind-merge';
 
-import { TabletIcon } from '@/renderer/components/Artboard/TabletIcon';
 import { AppButton } from '@/renderer/components/Common/AppButton';
+import { TabletIcon } from '@/renderer/components/Siteboard/TabletIcon';
 import {
   SIZE_PRESETS,
   TOOLBAR_BUTTON_PADDING,
@@ -59,7 +59,7 @@ export function PageBottomBar({ width, height, onResizePreset }: PageBottomBarPr
                 padding: TOOLBAR_BUTTON_PADDING,
                 borderRadius: 'calc(2px / var(--canvas-zoom, 1))',
               }}
-              tooltipMessage={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
+              // tooltipMessage={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
               onMouseDown={(e) => e.stopPropagation()}
               onPress={() => onResizePreset(preset.width, preset.height)}
               aria-label={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}

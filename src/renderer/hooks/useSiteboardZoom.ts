@@ -1,8 +1,14 @@
 import { useCallback, useEffect } from 'react';
 
-import { MIN_ZOOM, MAX_ZOOM, ZOOM_SENSITIVITY } from '@/renderer/constants';
+import {
+  MIN_ZOOM,
+  MAX_ZOOM,
+  ZOOM_SENSITIVITY,
+  ZOOM_END_DEBOUNCE_MS,
+  WHEEL_PAN_END_DEBOUNCE_MS,
+} from '@/renderer/constants';
 
-interface UseArtboardZoomOptions {
+interface UseSiteboardZoomOptions {
   containerRef: React.RefObject<HTMLDivElement | null>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   backgroundRef?: React.RefObject<HTMLDivElement | null>;
@@ -22,7 +28,7 @@ interface UseArtboardZoomOptions {
  * - ホイール（修飾キーなし）: deltaX/deltaY でパン（スクロール移動）
  * DOM 直接操作で反映し、操作停止後 debounce でストアへ同期する。
  */
-export function useArtboardZoom({
+export function useSiteboardZoom({
   containerRef,
   canvasRef,
   backgroundRef,
@@ -32,15 +38,15 @@ export function useArtboardZoom({
   onZoomEnd,
   onInteractionChange,
   onBoundsUpdate,
-}: UseArtboardZoomOptions) {
+}: UseSiteboardZoomOptions) {
   const applyTransform = useCallback(() => {
     if (!canvasRef.current) return;
     canvasRef.current.style.transform = `translate(${panX.current}px, ${panY.current}px) scale(${zoom.current})`;
     canvasRef.current.style.setProperty('--canvas-zoom', String(zoom.current));
     if (!backgroundRef?.current) return;
-    backgroundRef.current.style.setProperty('--artboard-dot-scale', String(zoom.current));
-    backgroundRef.current.style.setProperty('--artboard-bg-x', `${panX.current}px`);
-    backgroundRef.current.style.setProperty('--artboard-bg-y', `${panY.current}px`);
+    backgroundRef.current.style.setProperty('--siteboard-dot-scale', String(zoom.current));
+    backgroundRef.current.style.setProperty('--siteboard-bg-x', `${panX.current}px`);
+    backgroundRef.current.style.setProperty('--siteboard-bg-y', `${panY.current}px`);
   }, [backgroundRef, canvasRef, zoom, panX, panY]);
 
   useEffect(() => {
@@ -59,7 +65,8 @@ export function useArtboardZoom({
         onInteractionChange?.(true);
       }
 
-      if (e.ctrlKey || e.metaKey) {
+      const isZoomGesture = e.ctrlKey || e.metaKey;
+      if (isZoomGesture) {
         const rect = container.getBoundingClientRect();
         // コンテナ左上を基準としたマウス座標
         const mx = e.clientX - rect.left;
@@ -85,14 +92,18 @@ export function useArtboardZoom({
       applyTransform();
       onBoundsUpdate?.();
 
-      // ホイール操作が止まってから 150ms 後にストアへ同期して操作終了を通知
+      // ホイール操作が止まってから debounce 後にストアへ同期して操作終了を通知
+      // ズームは切替チラつき抑制のため長め、ホイールパンは従来どおり短めにする
+      const interactionEndDebounceMs = isZoomGesture
+        ? ZOOM_END_DEBOUNCE_MS
+        : WHEEL_PAN_END_DEBOUNCE_MS;
       if (commitTimer) clearTimeout(commitTimer);
       commitTimer = setTimeout(() => {
         commitTimer = null;
         isInteracting = false;
         onZoomEnd(zoom.current, panX.current, panY.current);
         onInteractionChange?.(false);
-      }, 150);
+      }, interactionEndDebounceMs);
     };
 
     // { passive: false } で preventDefault が効くようにする

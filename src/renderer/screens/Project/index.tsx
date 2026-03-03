@@ -3,10 +3,10 @@ import ChevronsExpandHorizontal from '@gravity-ui/icons/ChevronsExpandHorizontal
 import { animate, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Artboard } from '@/renderer/components/Artboard/Artboard';
-import { ResizeHandle } from '@/renderer/components/Canvas/ResizeHandle';
-import { Sidebar } from '@/renderer/components/Canvas/Sidebar';
 import { AppButton } from '@/renderer/components/Common/AppButton';
+import { ResizeHandle } from '@/renderer/components/Project/ResizeHandle';
+import { Sidebar } from '@/renderer/components/Project/Sidebar';
+import { Siteboard } from '@/renderer/components/Siteboard/Siteboard';
 import {
   DEFAULT_PAGE_HEIGHT,
   DEFAULT_PAGE_WIDTH,
@@ -30,10 +30,10 @@ function getViewportCenterPos(
   targetWidth: number,
   targetHeight: number,
 ): { x: number; y: number } | null {
-  const artboard = document.querySelector<HTMLElement>('[data-artboard-container]');
-  if (!artboard) return null;
+  const siteboard = document.querySelector<HTMLElement>('[data-siteboard-container]');
+  if (!siteboard) return null;
 
-  const rect = artboard.getBoundingClientRect();
+  const rect = siteboard.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0 || viewportZoom <= 0) return null;
 
   // ビューポート中央のワールド座標（要素左上を起点とするため半サイズ分ずらす）
@@ -45,7 +45,7 @@ function getViewportCenterPos(
   };
 }
 
-export function Canvas() {
+export function ProjectScreen() {
   const activeProject = useProjectStore(selectActiveProject);
   const activeId = useProjectStore((s) => s.activeId);
   const updateSidebarWidth = useProjectStore((s) => s.updateSidebarWidth);
@@ -120,9 +120,9 @@ export function Canvas() {
    */
   const centerOnNewPage = useCallback(
     (page: Pick<Page, 'id' | 'x' | 'y' | 'width' | 'height'>, onComplete?: () => void) => {
-      const artboard = document.querySelector<HTMLElement>('[data-artboard-container]');
-      if (!artboard || !viewport) return;
-      const rect = artboard.getBoundingClientRect();
+      const siteboard = document.querySelector<HTMLElement>('[data-siteboard-container]');
+      if (!siteboard || !viewport) return;
+      const rect = siteboard.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
       const pageHeightWithChrome = page.height + PAGE_CHROME_HEIGHT;
@@ -305,7 +305,7 @@ export function Canvas() {
           {isSidebarVisible ? <ChevronsCollapseHorizontal /> : <ChevronsExpandHorizontal />}
         </AppButton>
       </div>
-      <Artboard
+      <Siteboard
         selectedPageId={selectedPageId}
         onSelectPage={handleSelectPage}
         onClearSelection={handleClearSelection}

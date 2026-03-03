@@ -128,11 +128,10 @@ export const webviewApi = {
     );
   },
 
-  /** CSS transform injection でビジュアルスケーリングを適用する。
-   * pageZoom と異なりビューポートサイズを変更せず、レイアウトリフローも発生しない。 */
-  async setScale(pageId: string, scaleFactor: number): Promise<void> {
+  /** Tauri Webview のネイティブズームを適用する。 */
+  async setZoom(pageId: string, scaleFactor: number): Promise<void> {
     try {
-      await invoke('set_page_webview_scale', { pageId, scale: scaleFactor });
+      await getWebviewHandle(`page-${pageId}`).setZoom(scaleFactor);
     } catch {
       // Webview 未作成・既破棄時は no-op
     }

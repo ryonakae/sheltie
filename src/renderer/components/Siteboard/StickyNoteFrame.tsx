@@ -3,8 +3,8 @@ import Xmark from '@gravity-ui/icons/Xmark';
 import { memo, useCallback, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
-import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
 import { AppButton } from '@/renderer/components/Common/AppButton';
+import { PageResizeHandle } from '@/renderer/components/Siteboard/PageResizeHandle';
 import { STICKY_NOTE_COLORS } from '@/renderer/constants';
 import { type Page } from '@/renderer/types/tab';
 

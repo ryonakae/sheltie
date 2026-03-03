@@ -37,9 +37,9 @@ type FrameRect = {
 };
 
 /** ページ本体（タイトルバー含む）を基準にセンタリングするため、必要に応じて実 DOM 幾何を取得する */
-function getPageFrameRect(artboard: HTMLElement, pageId: string | undefined): FrameRect | null {
+function getPageFrameRect(siteboard: HTMLElement, pageId: string | undefined): FrameRect | null {
   if (!pageId) return null;
-  const frame = artboard.querySelector<HTMLElement>(`[data-page-id="${pageId}"]`);
+  const frame = siteboard.querySelector<HTMLElement>(`[data-page-id="${pageId}"]`);
   if (!frame) return null;
 
   const rect = frame.getBoundingClientRect();
@@ -77,14 +77,14 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
 
   const ensureFrameVisible = useCallback(
     (target: CenterTarget, onCentered?: () => void) => {
-      const artboard = document.querySelector<HTMLElement>('[data-artboard-container]');
-      if (!artboard || !viewport) return;
-      const rect = artboard.getBoundingClientRect();
+      const siteboard = document.querySelector<HTMLElement>('[data-siteboard-container]');
+      if (!siteboard || !viewport) return;
+      const rect = siteboard.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0 || viewport.zoom <= 0) return;
 
       const nextPanX = viewport.panX;
       const nextPanY = viewport.panY;
-      const frameRect = getPageFrameRect(artboard, target.id);
+      const frameRect = getPageFrameRect(siteboard, target.id);
 
       const left = frameRect ? frameRect.left - rect.left : target.x * viewport.zoom + nextPanX;
       const top = frameRect ? frameRect.top - rect.top : target.y * viewport.zoom + nextPanY;

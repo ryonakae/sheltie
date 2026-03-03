@@ -2,20 +2,20 @@
 @import '@heroui/styles';
 
 /* アートボードのドットパターン背景。ダークモードは CSS 変数でテーマを切り替える */
-@utility artboard-bg {
-  --artboard-dot-scale: 1;
-  --artboard-bg-x: 0px;
-  --artboard-bg-y: 0px;
-  --artboard-dot-size: 1px;
+@utility siteboard-bg {
+  --siteboard-dot-scale: 1;
+  --siteboard-bg-x: 0px;
+  --siteboard-bg-y: 0px;
+  --siteboard-dot-size: 1px;
   background-color: #f9fafb;
   background-image: radial-gradient(
     circle,
-    #d1d5db calc(var(--artboard-dot-size) * var(--artboard-dot-scale)),
-    transparent calc(var(--artboard-dot-size) * var(--artboard-dot-scale))
+    #d1d5db calc(var(--siteboard-dot-size) * var(--siteboard-dot-scale)),
+    transparent calc(var(--siteboard-dot-size) * var(--siteboard-dot-scale))
   );
   background-repeat: repeat;
-  background-size: calc(24px * var(--artboard-dot-scale)) calc(24px * var(--artboard-dot-scale));
-  background-position: var(--artboard-bg-x) var(--artboard-bg-y);
+  background-size: calc(24px * var(--siteboard-dot-scale)) calc(24px * var(--siteboard-dot-scale));
+  background-position: var(--siteboard-bg-x) var(--siteboard-bg-y);
 
   @variant dark {
     background-color: #18181b;

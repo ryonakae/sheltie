@@ -6,8 +6,8 @@ import { motion } from 'motion/react';
 import { useState } from 'react';
 
 import { AppButton } from '@/renderer/components/Common/AppButton';
-import { DeleteDialog } from '@/renderer/components/HomeScreen/DeleteDialog';
-import { RenameModal } from '@/renderer/components/HomeScreen/RenameModal';
+import { DeleteDialog } from '@/renderer/components/Home/DeleteDialog';
+import { RenameModal } from '@/renderer/components/Home/RenameModal';
 import type { Project } from '@/renderer/types/tab';
 
 interface ProjectCardProps {

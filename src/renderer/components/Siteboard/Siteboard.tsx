@@ -3,10 +3,10 @@ import { AnimatePresence, animate, motion, useReducedMotion } from 'motion/react
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { InteractionOverlay } from '@/renderer/components/Artboard/InteractionOverlay';
-import { PageFrame, type ResizeDirection } from '@/renderer/components/Artboard/PageFrame';
-import { StickyNoteFrame } from '@/renderer/components/Artboard/StickyNoteFrame';
-import { FloatingToolbar } from '@/renderer/components/Canvas/FloatingToolbar';
+import { FloatingToolbar } from '@/renderer/components/Siteboard/FloatingToolbar';
+import { InteractionOverlay } from '@/renderer/components/Siteboard/InteractionOverlay';
+import { PageFrame, type ResizeDirection } from '@/renderer/components/Siteboard/PageFrame';
+import { StickyNoteFrame } from '@/renderer/components/Siteboard/StickyNoteFrame';
 import {
   HYSTERESIS_PX,
   NATIVE_SAFE_MARGIN_PX,
@@ -15,20 +15,22 @@ import {
   CAPTURE_MIN_INTERVAL_MS,
   SCREENSHOT_REFRESH_INTERVAL_MS,
   ZOOM_ANIMATION_EASE,
+  ZOOM_REFLOW_SETTLE_MS,
+  ZOOM_REFLOW_SETTLE_RAF_COUNT,
   ZOOM_RESET_DURATION_SEC,
   ZOOM_RESET_TARGET,
 } from '@/renderer/constants';
-import { useArtboardPan } from '@/renderer/hooks/useArtboardPan';
-import { useArtboardZoom } from '@/renderer/hooks/useArtboardZoom';
 import { usePageDrag } from '@/renderer/hooks/usePageDrag';
 import { usePageResize } from '@/renderer/hooks/usePageResize';
+import { useSiteboardPan } from '@/renderer/hooks/useSiteboardPan';
+import { useSiteboardZoom } from '@/renderer/hooks/useSiteboardZoom';
 import type { NavigationState } from '@/renderer/lib/tauri-bridge';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
 import type { DisplayMode } from '@/renderer/types/tab';
 import { isStickyNote } from '@/renderer/types/tab';
 
-interface ArtboardProps {
+interface SiteboardProps {
   selectedPageId: string | null;
   onSelectPage: (pageId: string) => void;
   onClearSelection: () => void;
@@ -38,7 +40,7 @@ interface ArtboardProps {
   onAddStickyNote: () => void;
 }
 
-export function Artboard({
+export function Siteboard({
   selectedPageId,
   onSelectPage,
   onClearSelection,
@@ -46,7 +48,7 @@ export function Artboard({
   onCenteredPageHandled,
   onAddPage,
   onAddStickyNote,
-}: ArtboardProps) {
+}: SiteboardProps) {
   const activeProject = useProjectStore(selectActiveProject);
   const activeId = useProjectStore((s) => s.activeId);
   // 操作終了後の確定ズーム値（PageFrame の canvasZoom prop に渡す。操作中は computeInteractionModes が制御）
@@ -144,6 +146,15 @@ export function Artboard({
   const interactionRafRef = useRef<number | null>(null);
   /** 操作開始時の container rect キャッシュ（パン/ズーム中は変化しない） */
   const containerRectRef = useRef<DOMRect | null>(null);
+  /** pan/zoom 中にスクリーンショット優先表示へ切り替えるモード */
+  const interactionSnapshotModeRef = useRef(false);
+  /** スクリーンショット準備待ちのページID（準備完了次第 native → screenshot へ差し替え） */
+  const pendingSnapshotSwapRef = useRef<Set<string>>(new Set());
+  /** ズーム完了後に native 復帰を遅延するフラグ（リフロー完了待ち） */
+  const deferNativeRestoreRef = useRef(false);
+  const zoomRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomRestoreRafRef = useRef<number | null>(null);
+  const zoomRestoreTokenRef = useRef(0);
 
   /**
    * ページ矩形がキャンバス端から PRE_CAPTURE_MARGIN_PX 以内に入った瞬間にスクリーンショットを撮影。
@@ -204,25 +215,31 @@ export function Artboard({
         continue;
       }
       const pr = el.getBoundingClientRect();
+      const currentMode = (wrapper.getAttribute('data-display-mode') ?? 'native') as DisplayMode;
 
+      let nextMode: DisplayMode;
       if (
         pr.right <= cr.left ||
         pr.left >= cr.right ||
         pr.bottom <= cr.top ||
         pr.top >= cr.bottom
       ) {
-        modes[page.id] = 'hidden';
+        nextMode = 'hidden';
       } else if (
         pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
         pr.right <= cr.right - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX &&
         pr.top >= cr.top + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
         pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX
       ) {
-        modes[page.id] = 'native';
+        nextMode = 'native';
       } else {
         // スクリーンショット準備済みなら screenshot、まだなら native を維持（フリッカー防止）
-        modes[page.id] = screenshotReadyRef.current[page.id] ? 'screenshot' : 'native';
+        nextMode = screenshotReadyRef.current[page.id] ? 'screenshot' : 'native';
       }
+      if (deferNativeRestoreRef.current && currentMode === 'screenshot' && nextMode === 'native') {
+        nextMode = 'screenshot';
+      }
+      modes[page.id] = nextMode;
 
       // handleInteractionChange で設定した DOM 属性を確実にリセット（React state Bailout に依存しない）
       wrapper.setAttribute('data-display-mode', modes[page.id]);
@@ -231,8 +248,8 @@ export function Artboard({
       if (page.webviewLabel) {
         if (modes[page.id] === 'native') {
           void webviewApi.updateBounds(page.webviewLabel, pr.left, pr.top, pr.width, pr.height);
-          // CSS transform injection でビジュアルスケーリング（ビューポートサイズは変更しない）
-          void webviewApi.setScale(page.id, zoomRef.current);
+          // ネイティブ Webview ズームを適用
+          void webviewApi.setZoom(page.id, zoomRef.current);
           void webviewApi.show(page.webviewLabel);
         } else {
           void webviewApi.hide(page.webviewLabel);
@@ -263,11 +280,87 @@ export function Artboard({
     }
   }, [pages, checkPreCapture]);
 
+  const cancelZoomRestore = useCallback(() => {
+    zoomRestoreTokenRef.current += 1;
+    if (zoomRestoreTimerRef.current) {
+      clearTimeout(zoomRestoreTimerRef.current);
+      zoomRestoreTimerRef.current = null;
+    }
+    if (zoomRestoreRafRef.current !== null) {
+      cancelAnimationFrame(zoomRestoreRafRef.current);
+      zoomRestoreRafRef.current = null;
+    }
+    deferNativeRestoreRef.current = false;
+  }, []);
+
+  const prewarmWebviewsForZoomRestore = useCallback(() => {
+    if (!canvasRef.current) return;
+
+    const currentZoom = zoomRef.current;
+    const boundsEntries: { label: string; x: number; y: number; w: number; h: number }[] = [];
+
+    for (const page of pages) {
+      if (!page.webviewLabel) continue;
+      const wrapper = canvasRef.current.querySelector(
+        `[data-page-id="${page.id}"]`,
+      ) as HTMLElement | null;
+      const el = wrapper?.querySelector('[data-webview-placeholder]') as HTMLElement | null;
+      if (!wrapper || !el) continue;
+
+      const pr = el.getBoundingClientRect();
+      boundsEntries.push({
+        label: page.webviewLabel,
+        x: pr.left,
+        y: pr.top,
+        w: pr.width,
+        h: pr.height,
+      });
+      void webviewApi.setZoom(page.id, currentZoom);
+    }
+
+    if (boundsEntries.length > 0) {
+      void webviewApi.updateAllBounds(boundsEntries);
+    }
+  }, [pages]);
+
+  const scheduleZoomRestoreAfterReflow = useCallback(() => {
+    zoomRestoreTokenRef.current += 1;
+    const token = zoomRestoreTokenRef.current;
+    if (zoomRestoreTimerRef.current) {
+      clearTimeout(zoomRestoreTimerRef.current);
+      zoomRestoreTimerRef.current = null;
+    }
+    if (zoomRestoreRafRef.current !== null) {
+      cancelAnimationFrame(zoomRestoreRafRef.current);
+      zoomRestoreRafRef.current = null;
+    }
+    deferNativeRestoreRef.current = true;
+    prewarmWebviewsForZoomRestore();
+    zoomRestoreTimerRef.current = setTimeout(() => {
+      zoomRestoreTimerRef.current = null;
+      let remainingRaf = ZOOM_REFLOW_SETTLE_RAF_COUNT;
+      const waitRaf = () => {
+        if (token !== zoomRestoreTokenRef.current) return;
+        if (remainingRaf > 0) {
+          remainingRaf -= 1;
+          zoomRestoreRafRef.current = requestAnimationFrame(waitRaf);
+          return;
+        }
+        zoomRestoreRafRef.current = null;
+        if (activeInteractionsRef.current.size > 0) return;
+        if (!deferNativeRestoreRef.current) return;
+        deferNativeRestoreRef.current = false;
+        computeDisplayModes();
+      };
+      zoomRestoreRafRef.current = requestAnimationFrame(waitRaf);
+    }, ZOOM_REFLOW_SETTLE_MS);
+  }, [computeDisplayModes, prewarmWebviewsForZoomRestore]);
+
   const applyBackgroundGrid = useCallback(() => {
     if (!containerRef.current) return;
-    containerRef.current.style.setProperty('--artboard-dot-scale', String(zoomRef.current));
-    containerRef.current.style.setProperty('--artboard-bg-x', `${panXRef.current}px`);
-    containerRef.current.style.setProperty('--artboard-bg-y', `${panYRef.current}px`);
+    containerRef.current.style.setProperty('--siteboard-dot-scale', String(zoomRef.current));
+    containerRef.current.style.setProperty('--siteboard-bg-x', `${panXRef.current}px`);
+    containerRef.current.style.setProperty('--siteboard-bg-y', `${panYRef.current}px`);
   }, []);
 
   const applyCanvasTransform = useCallback(() => {
@@ -292,12 +385,54 @@ export function Artboard({
     const cr = containerRectRef.current;
     if (!cr || !canvasRef.current) return;
 
-    // ズーム値が変化した時のみ全 Webview に setScale を適用（パン中はズーム値が変わらないため不要な呼び出しを防ぐ）
+    if (interactionSnapshotModeRef.current) {
+      const currentZoom = zoomRef.current;
+      const shouldApplyZoom = currentZoom !== lastAppliedZoomRef.current;
+      if (shouldApplyZoom) {
+        lastAppliedZoomRef.current = currentZoom;
+      }
+
+      const pendingBoundsEntries: { label: string; x: number; y: number; w: number; h: number }[] =
+        [];
+      for (const page of pages) {
+        if (!pendingSnapshotSwapRef.current.has(page.id)) continue;
+        if (!page.webviewLabel) {
+          pendingSnapshotSwapRef.current.delete(page.id);
+          continue;
+        }
+
+        const wrapper = canvasRef.current.querySelector(
+          `[data-page-id="${page.id}"]`,
+        ) as HTMLElement | null;
+        const el = wrapper?.querySelector('[data-webview-placeholder]') as HTMLElement | null;
+        if (!el || !wrapper) continue;
+
+        const pr = el.getBoundingClientRect();
+        pendingBoundsEntries.push({
+          label: page.webviewLabel,
+          x: pr.left,
+          y: pr.top,
+          w: pr.width,
+          h: pr.height,
+        });
+
+        if (shouldApplyZoom) {
+          void webviewApi.setZoom(page.id, currentZoom);
+        }
+      }
+
+      if (pendingBoundsEntries.length > 0) {
+        void webviewApi.updateAllBounds(pendingBoundsEntries);
+      }
+      return;
+    }
+
+    // ズーム値が変化した時のみ全 Webview に setZoom を適用（パン中はズーム値が変わらないため不要な呼び出しを防ぐ）
     const currentZoom = zoomRef.current;
     if (currentZoom !== lastAppliedZoomRef.current) {
       lastAppliedZoomRef.current = currentZoom;
       for (const page of pages) {
-        void webviewApi.setScale(page.id, currentZoom);
+        void webviewApi.setZoom(page.id, currentZoom);
       }
     }
 
@@ -417,6 +552,7 @@ export function Artboard({
     if (prefersReducedMotion) {
       zoomResetAnimationRef.current?.stop();
       zoomResetAnimationRef.current = null;
+      cancelZoomRestore();
       zoomRef.current = ZOOM_RESET_TARGET;
       setUiZoom(ZOOM_RESET_TARGET);
       applyCanvasTransform();
@@ -425,6 +561,7 @@ export function Artboard({
         panX: panXRef.current,
         panY: panYRef.current,
       });
+      scheduleZoomRestoreAfterReflow();
       return;
     }
 
@@ -451,16 +588,17 @@ export function Artboard({
           panX: panXRef.current,
           panY: panYRef.current,
         });
-        requestAnimationFrame(() => computeDisplayModes());
+        scheduleZoomRestoreAfterReflow();
       },
     });
     zoomResetAnimationRef.current = controls;
   }, [
     activeId,
     applyCanvasTransform,
-    computeDisplayModes,
+    cancelZoomRestore,
     computeInteractionModes,
     prefersReducedMotion,
+    scheduleZoomRestoreAfterReflow,
     updateViewport,
   ]);
 
@@ -507,12 +645,26 @@ export function Artboard({
         return { ...prev, [pageId]: objectUrl };
       });
 
+      if (interactionSnapshotModeRef.current && pendingSnapshotSwapRef.current.has(pageId)) {
+        const page = pages.find((p) => p.id === pageId);
+        const wrapper = canvasRef.current?.querySelector(
+          `[data-page-id="${pageId}"]`,
+        ) as HTMLElement | null;
+        if (wrapper) {
+          wrapper.setAttribute('data-display-mode', 'screenshot');
+        }
+        if (page?.webviewLabel) {
+          void webviewApi.hide(page.webviewLabel);
+        }
+        pendingSnapshotSwapRef.current.delete(pageId);
+      }
+
       // pan/zoom 中は computeInteractionModes が表示制御するため再計算しない（競合防止）
       if (activeInteractionsRef.current.size === 0) {
         computeDisplayModes();
       }
     },
-    [computeDisplayModes],
+    [computeDisplayModes, pages],
   );
 
   // captureScreenshot が変わるたびに ref を同期（checkPreCapture からの循環依存回避）
@@ -530,10 +682,13 @@ export function Artboard({
   const handleInteractionChange = useCallback(
     (active: boolean, cursor = 'default', type: InteractionType = 'drag') => {
       if (active) {
+        cancelZoomRestore();
         activeInteractionsRef.current.add(type);
         setInteractionCursor(cursor);
 
         if (type === 'drag' || type === 'resize') {
+          interactionSnapshotModeRef.current = false;
+          pendingSnapshotSwapRef.current.clear();
           // ページ操作: 従来通り全 Webview を hide してスクリーンショットに切り替え
           void webviewApi.hideAll(getAllWebviewLabels());
           if (canvasRef.current) {
@@ -549,12 +704,49 @@ export function Artboard({
             }
           }
         } else {
-          // pan/zoom: container rect をキャッシュして選択的に Webview を制御（完全に内側は native 維持）
+          // pan/zoom: スクリーンショット優先へ切り替え、未準備ページは準備完了まで native を維持
+          interactionSnapshotModeRef.current = true;
+          pendingSnapshotSwapRef.current.clear();
           containerRectRef.current = containerRef.current?.getBoundingClientRect() ?? null;
+          if (canvasRef.current) {
+            for (const page of pages) {
+              const wrapper = canvasRef.current.querySelector(
+                `[data-page-id="${page.id}"]`,
+              ) as HTMLElement | null;
+              if (!wrapper) continue;
+
+              if (!page.webviewLabel) {
+                wrapper.setAttribute('data-display-mode', 'hidden');
+                continue;
+              }
+
+              if (screenshotReadyRef.current[page.id]) {
+                wrapper.setAttribute('data-display-mode', 'screenshot');
+                void webviewApi.hide(page.webviewLabel);
+                continue;
+              }
+
+              wrapper.setAttribute('data-display-mode', 'native');
+              pendingSnapshotSwapRef.current.add(page.id);
+              if (!captureInFlightRef.current[page.id]) {
+                captureInFlightRef.current[page.id] = true;
+                lastCaptureTimeRef.current[page.id] = Date.now();
+                void captureScreenshotRef.current?.(page.id).finally(() => {
+                  captureInFlightRef.current[page.id] = false;
+                });
+              }
+            }
+          }
           computeInteractionModes();
         }
       } else {
         activeInteractionsRef.current.delete(type);
+        const hasPanOrZoom =
+          activeInteractionsRef.current.has('pan') || activeInteractionsRef.current.has('zoom');
+        if (!hasPanOrZoom) {
+          interactionSnapshotModeRef.current = false;
+          pendingSnapshotSwapRef.current.clear();
+        }
 
         if (activeInteractionsRef.current.size === 0) {
           if (interactionRafRef.current !== null) {
@@ -565,15 +757,26 @@ export function Artboard({
           setInteractionCursor(null);
           prevModesRef.current = {};
           nearEdgeRef.current = {};
-          computeDisplayModes();
+          if (type === 'zoom') {
+            scheduleZoomRestoreAfterReflow();
+          } else {
+            computeDisplayModes();
+          }
         }
       }
     },
-    [getAllWebviewLabels, computeDisplayModes, computeInteractionModes, pages],
+    [
+      cancelZoomRestore,
+      getAllWebviewLabels,
+      computeDisplayModes,
+      computeInteractionModes,
+      pages,
+      scheduleZoomRestoreAfterReflow,
+    ],
   );
 
   // パン操作
-  const { isPanMode } = useArtboardPan({
+  const { isPanMode } = useSiteboardPan({
     canvasRef,
     backgroundRef: containerRef,
     zoom: zoomRef,
@@ -591,7 +794,7 @@ export function Artboard({
   });
 
   // ズーム操作
-  useArtboardZoom({
+  useSiteboardZoom({
     containerRef,
     canvasRef,
     backgroundRef: containerRef,
@@ -674,9 +877,10 @@ export function Artboard({
     const nextZoom = activeProject?.viewport.zoom ?? 1;
     const nextPanX = activeProject?.viewport.panX ?? 0;
     const nextPanY = activeProject?.viewport.panY ?? 0;
+    const zoomChanged = zoomRef.current !== nextZoom;
 
     const shouldUpdate =
-      zoomRef.current !== nextZoom || panXRef.current !== nextPanX || panYRef.current !== nextPanY;
+      zoomChanged || panXRef.current !== nextPanX || panYRef.current !== nextPanY;
     if (!shouldUpdate) return;
 
     zoomRef.current = nextZoom;
@@ -686,9 +890,18 @@ export function Artboard({
 
     if (!canvasRef.current) return;
     applyCanvasTransform();
-    requestAnimationFrame(() => computeDisplayModes());
+    if (zoomChanged) {
+      scheduleZoomRestoreAfterReflow();
+    } else {
+      requestAnimationFrame(() => computeDisplayModes());
+    }
     setUiZoom(nextZoom);
-  }, [activeProject?.viewport, applyCanvasTransform, computeDisplayModes]);
+  }, [
+    activeProject?.viewport,
+    applyCanvasTransform,
+    computeDisplayModes,
+    scheduleZoomRestoreAfterReflow,
+  ]);
 
   useEffect(() => {
     setUiZoom(viewportZoom);
@@ -698,10 +911,11 @@ export function Artboard({
     return () => {
       zoomResetAnimationRef.current?.stop();
       zoomResetAnimationRef.current = null;
+      cancelZoomRestore();
     };
-  }, []);
+  }, [cancelZoomRestore]);
 
-  // Artboard コンテナのサイズ変更時に displayMode を再計算
+  // Siteboard コンテナのサイズ変更時に displayMode を再計算
   // ウィンドウリサイズ・サイドバー幅変更の両方に対応
   useEffect(() => {
     const el = containerRef.current;
@@ -723,6 +937,9 @@ export function Artboard({
         interactionRafRef.current = null;
       }
       containerRectRef.current = null;
+      cancelZoomRestore();
+      interactionSnapshotModeRef.current = false;
+      pendingSnapshotSwapRef.current.clear();
       setInteractionCursor(null);
       prevModesRef.current = {};
       nearEdgeRef.current = {};
@@ -730,7 +947,7 @@ export function Artboard({
     };
     window.addEventListener('blur', handleBlur);
     return () => window.removeEventListener('blur', handleBlur);
-  }, [computeDisplayModes]);
+  }, [cancelZoomRestore, computeDisplayModes]);
 
   useEffect(() => {
     if (!centeredPageId) {
@@ -759,6 +976,8 @@ export function Artboard({
       // drag/resize 中は Webview が hide → 撮影不可
       if (activeInteractionsRef.current.has('drag') || activeInteractionsRef.current.has('resize'))
         return;
+      // pan/zoom 中はスクリーンショット優先モードのため定期更新しない
+      if (interactionSnapshotModeRef.current) return;
       if (!canvasRef.current) return;
 
       const now = Date.now();
@@ -816,9 +1035,9 @@ export function Artboard({
       if (title) {
         setPageTitles((prev) => ({ ...prev, [pageId]: title }));
       }
-      // ページナビゲーション後に CSS transform スケールを再適用（initialization_script は定義のみで呼び出さない）
+      // ページナビゲーション後にズームを再適用
       if (Math.abs(zoomRef.current - 1.0) >= 0.005) {
-        void webviewApi.setScale(pageId, zoomRef.current);
+        void webviewApi.setZoom(pageId, zoomRef.current);
       }
       // ナビゲーション完了後にスクリーンショットを更新（500ms 遅延でロード完了を待つ）
       setTimeout(() => void captureScreenshot(pageId), 500);
@@ -856,8 +1075,8 @@ export function Artboard({
   const handleWebviewCreated = useCallback(
     (pageId: string, label: string) => {
       setPageWebviewLabel(activeId, pageId, label);
-      // 作成直後に CSS transform スケールを適用
-      void webviewApi.setScale(pageId, zoomRef.current);
+      // 作成直後にズームを適用
+      void webviewApi.setZoom(pageId, zoomRef.current);
       // Webview 作成完了後に displayMode を再計算（初期表示位置の判定）
       requestAnimationFrame(() => computeDisplayModes());
       void refreshNavigationState(pageId);
@@ -891,6 +1110,7 @@ export function Artboard({
       delete nearEdgeRef.current[pageId];
       delete captureInFlightRef.current[pageId];
       delete lastCaptureTimeRef.current[pageId];
+      pendingSnapshotSwapRef.current.delete(pageId);
       removePage(activeId, pageId);
     },
     [onClearSelection, removePage, activeId, selectedPageId],
@@ -942,7 +1162,7 @@ export function Artboard({
     [cycleStickyNoteColor, activeId],
   );
 
-  const handleArtboardMouseDown = useCallback(
+  const handleSiteboardMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       // 左クリック以外では選択解除しない
       if (e.button !== 0) return;
@@ -958,9 +1178,9 @@ export function Artboard({
   return (
     <div
       ref={containerRef}
-      data-artboard-container
-      className="relative flex-1 overflow-hidden artboard-bg"
-      onMouseDown={handleArtboardMouseDown}
+      data-siteboard-container
+      className="relative flex-1 overflow-hidden siteboard-bg"
+      onMouseDown={handleSiteboardMouseDown}
     >
       {/* 操作中オーバーレイ */}
       {interactionCursor && <InteractionOverlay cursor={interactionCursor} />}

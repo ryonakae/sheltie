@@ -1,8 +1,8 @@
 import { Toast } from '@heroui/react';
 
-import { Canvas } from '@/renderer/components/Canvas/Canvas';
-import { HomeScreen } from '@/renderer/components/HomeScreen/HomeScreen';
 import { TabBar } from '@/renderer/components/TabBar/TabBar';
+import { HomeScreen } from '@/renderer/screens/Home';
+import { ProjectScreen } from '@/renderer/screens/Project';
 import { selectIsHome, useProjectStore } from '@/renderer/store/tab-store';
 
 export default function App() {
@@ -17,7 +17,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col select-none">
       <TabBar />
-      {isHome ? <HomeScreen /> : <Canvas key={activeId} />}
+      {isHome ? <HomeScreen /> : <ProjectScreen key={activeId} />}
       <Toast.Provider placement="bottom" />
     </div>
   );

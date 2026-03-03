@@ -2,7 +2,7 @@ import Plus from '@gravity-ui/icons/Plus';
 import { motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { ProjectCard } from '@/renderer/components/HomeScreen/ProjectCard';
+import { ProjectCard } from '@/renderer/components/Home/ProjectCard';
 import { useProjectStore } from '@/renderer/store/tab-store';
 
 export function HomeScreen() {

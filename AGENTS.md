@@ -36,7 +36,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │       │   ├── mod.rs  # モジュール定義
 │       │   ├── store.rs # load_project_state / save_project_state / close_ready
 │       │   ├── theme.rs # load_theme / set_theme / get_platform_info
-│       │   └── webview.rs # create_page_webview（initialization_script で SPA URL 変更検出スクリプト + __siteboardSetScale 関数を注入 / on_navigation / on_document_title_changed 登録: \x01 プレフィックスで SPA ナビゲーション検出）/ reload_page_webview（url パラメータを受け取り webview.navigate() でナビゲート）/ go_back_page_webview・go_forward_page_webview（eval で history.back/forward()）/ get_navigation_state_page_webview（macOS のみ with_webview + objc2::msg_send! で canGoBack/canGoForward 取得、非 macOS は {false, false}）/ set_page_webview_scale（eval で __siteboardSetScale(scale) を呼び出し CSS transform でビジュアルスケーリング）
+│       │   └── webview.rs # create_page_webview（initialization_script で SPA URL 変更検出スクリプトを注入 / on_navigation / on_document_title_changed 登録: \x01 プレフィックスで SPA ナビゲーション検出）/ reload_page_webview（url パラメータを受け取り webview.navigate() でナビゲート）/ go_back_page_webview・go_forward_page_webview（eval で history.back/forward()）/ get_navigation_state_page_webview（macOS のみ with_webview + objc2::msg_send! で canGoBack/canGoForward 取得、非 macOS は {false, false}）
 ├── src/                # React フロントエンド
 │   ├── renderer/       # React SPA
 │   │   ├── main.tsx    # React エントリーポイント
@@ -54,21 +54,27 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 │   │   │   └── theme-store.ts # Zustand テーマストア
 │   │   ├── hooks/
 │   │   │   ├── useWindowControlsInset.ts # getPlatformInfo() 非同期に更新
-│   │   │   ├── useArtboardPan.ts # パン操作（onPanMove コールバック）。backgroundRef で背景グリッドを同期
-│   │   │   ├── useArtboardZoom.ts # ズーム・パン操作（MIN_ZOOM=0.5, MAX_ZOOM=1.5）。backgroundRef で背景グリッドを同期
+│   │   │   ├── useSiteboardPan.ts # パン操作（onPanMove コールバック）。backgroundRef で背景グリッドを同期
+│   │   │   ├── useSiteboardZoom.ts # ズーム・パン操作（MIN_ZOOM=0.5, MAX_ZOOM=1.5）。backgroundRef で背景グリッドを同期
 │   │   │   ├── usePageDrag.ts # ページドラッグ
 │   │   │   └── usePageResize.ts # ページリサイズ
+│   │   ├── screens/
+│   │   │   ├── Home/
+│   │   │   │   └── index.tsx # HomeScreen（ホーム画面のルート）
+│   │   │   └── Project/
+│   │   │       └── index.tsx # ProjectScreen（プロジェクト画面のルート）
 │   │   └── components/
-│   │       ├── Canvas/ # キャンバス管理
-│   │       ├── Artboard/ # ページレンダリング・操作制御
-│   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（url 空時は Webview 作成スキップ・PageUrlForm 表示。onUrlSubmit prop で空フレームへの初回 URL 設定。canvasZoom prop は削除済み・スケール管理は Artboard 側に集約）
+│   │       ├── Home/ # ホーム画面で使用する部品（ProjectCard / RenameModal / DeleteDialog）
+│   │       ├── Project/ # ProjectScreen で使用する部品（Sidebar / ResizeHandle）
+│   │       ├── Siteboard/ # ページレンダリング・操作制御
+│   │       │   ├── PageFrame.tsx # プレースホルダー div + Tauri Webview（url 空時は Webview 作成スキップ・PageUrlForm 表示。onUrlSubmit prop で空フレームへの初回 URL 設定。canvasZoom prop は削除済み・スケール管理は Siteboard 側に集約）
 │   │       │   ├── PageUrlForm.tsx # 空フレーム内の URL 入力フォーム（ズーム対応: calc(base / var(--canvas-zoom, 1))）
-│   │       │   ├── Artboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setScale） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setScale 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）/ onAddPage prop・handleUrlSubmit（setPageUrl 経由で空フレームに URL を設定）/ ResizeObserver で containerRef のサイズ変化を監視し computeDisplayModes() を呼び出す（window resize より汎用的、サイドバー幅変更にも対応）
-│   │       │   └── PageTitleBar.tsx # PageTopBar（ChevronLeft/ChevronRight で戻る/進むボタン → タイトルスパン → リロード・ピン留め・閉じるボタンの順。onReload / onPinUrl は optional、空フレーム時 disabled。ピン留めボタンは isMoved && onPinUrl 条件でリロードボタン右に表示。canGoBack/canGoForward/onGoBack/onGoForward props でナビゲーション制御）/ PageBottomBar（デバイスプリセット・サイズ表示）に分割。isMoved prop でページ移動を (Moved) 表示。ツールバーのボーダーは上下のみ（border-t / border-b）。左右ボーダーは外側 PageFrame の outline に任せる
-│   │       ├── Canvas/
-│   │       │   └── FloatingToolbar.tsx # キャンバス下端中央のフローティングツールバー（＋ボタンで空フレーム追加。z-40、外側 pointer-events-none / 内側 pointer-events-auto）
+│   │       │   ├── Siteboard.tsx # InteractionType 型 / computeDisplayModes（DOM 属性直接更新＋命令的 Webview 制御＋native 復帰時 setScale） / computeInteractionModes（pan/zoom 中毎フレーム判定・PRE_DISPLAY_MARGIN_PX=50px・ズーム変更時 setScale 一括適用） / scheduleInteractionUpdate（rAF スロットリング） / checkPreCapture＋EagerCapture（プリキャプチャ） / 定期リフレッシュ（SCREENSHOT_REFRESH_INTERVAL_MS=2000ms、pan/zoom 中も撮影可能）/ onAddPage prop・handleUrlSubmit（setPageUrl 経由で空フレームに URL を設定）/ ResizeObserver で containerRef のサイズ変化を監視し computeDisplayModes() を呼び出す（window resize より汎用的、サイドバー幅変更にも対応）
+│   │       │   ├── PageTopBar.tsx # 戻る/進む/タイトル/リロード/ピン留め/閉じるを提供するトップバー
+│   │       │   ├── PageBottomBar.tsx # デバイスプリセット・サイズ表示
+│   │       │   └── FloatingToolbar.tsx # Siteboard 下端中央のフローティングツールバー（＋ボタンで空フレーム追加。z-40、外側 pointer-events-none / 内側 pointer-events-auto）
 │   │       ├── TabBar/ # data-tauri-drag-region で実装
-│   │       └── HomeScreen/ # プロジェクト一覧
+│   │       └── Common/
 │   └── shared/
 │       └── types.ts    # ThemeMode のみ（window.* グローバル宣言削除）
 ├── vite.config.mts     # Vite 設定（safari14 以上でビルド; BigInt リテラル対応に必須）
@@ -77,8 +83,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 
 ### コンポーネント構成
 
-**HomeScreen**: プロジェクト一覧画面（ホーム表示時）
-- `HomeScreen.tsx`: プロジェクト一覧のカードグリッドレイアウト
+**HomeScreen**: プロジェクト一覧画面（`src/renderer/screens/Home/index.tsx`）
 - `ProjectCard.tsx`: 各プロジェクトをカード表示（Dropdown で操作メニュー提供）
 - `RenameModal.tsx`: プロジェクト名変更用モーダル（HeroUI Modal）
 - `DeleteDialog.tsx`: 削除確認用ダイアログ（HeroUI AlertDialog）
@@ -91,18 +96,18 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - ホームボタンはアクティブ時に `HouseFill` アイコン、非アクティブ時に `House` アイコンを使用
 - `useWindowControlsInset` で macOS トラフィックライト、Windows/Linux のコントロール領域に対応（`data-tauri-drag-region` 属性で実装）
 
-**Canvas**: サイドバーとアートボードを管理
+**ProjectScreen**: サイドバーと Siteboard を管理（`src/renderer/screens/Project/index.tsx`）
 - **Sidebar**: ページ一覧表示、ページごとに削除ボタン付き。`isPageMoved()` で (Moved) インジケーター表示。ページクリックで `onSelectPage` 呼び出し + `ensureFrameVisible`（`motion` アニメーション 260ms easeOutCubic、`useReducedMotion` 対応）でページをビューポート内に移動。ホバー状態管理は CSS `group` パターンから `motion` の `variants`（`whileHover="hover"`）パターンに移行。ページ追加ロジック（AddPageForm）は削除済み（FloatingToolbar に移設）
-- **FloatingToolbar**: キャンバス下端中央に配置。＋ボタンで `handleAddEmptyPage` を呼び出し、空フレームをキャンバス中央に追加する
+- **FloatingToolbar**: Siteboard 下端中央に配置。＋ボタンで `handleAddEmptyPage` を呼び出し、空フレームをキャンバス中央に追加する
 - **ResizeHandle**: サイドバー幅調整可能（リサイズ中は DOM 直接操作でパフォーマンス最適化）
-- **Artboard**: キャンバス領域に複数の Tauri Webview を配置、ドラッグ・リサイズ・ズーム・パン対応
-- **選択状態管理**: `Canvas` が `selectedPageId` / `centeredPageId` ステートを保持し、`Sidebar` と `Artboard` に props 経由で連携
-- **ページ追加フロー**: FloatingToolbar の＋ボタン → `handleAddEmptyPage`（Canvas）→ `addPage`（url 省略）→ 空フレームがキャンバス中央に配置 → `PageUrlForm` で URL 入力・submit → `setPageUrl`（`url` + `addedUrl` + `title` を同時設定）→ `page.url` 変化で `PageFrame` effect が再実行して Webview 作成
-- **`getViewportCenterPos` / `centerOnNewPage`**: Canvas に実装。`data-artboard-container` を使ってビューポート中央座標を算出し、ズーム込み 400ms アニメーションで新規ページにフィット。`prefersReducedMotion` 対応
+- **Siteboard**: キャンバス領域に複数の Tauri Webview を配置、ドラッグ・リサイズ・ズーム・パン対応
+- **選択状態管理**: `ProjectScreen` が `selectedPageId` / `centeredPageId` ステートを保持し、`Sidebar` と `Siteboard` に props 経由で連携
+- **ページ追加フロー**: FloatingToolbar の＋ボタン → `handleAddEmptyPage`（ProjectScreen）→ `addPage`（url 省略）→ 空フレームがキャンバス中央に配置 → `PageUrlForm` で URL 入力・submit → `setPageUrl`（`url` + `addedUrl` + `title` を同時設定）→ `page.url` 変化で `PageFrame` effect が再実行して Webview 作成
+- **`getViewportCenterPos` / `centerOnNewPage`**: ProjectScreen に実装。`data-siteboard-container` を使ってビューポート中央座標を算出し、ズーム込み 400ms アニメーションで新規ページにフィット。`prefersReducedMotion` 対応
 
-**Artboard**: ページレンダリング・ビューポート管理・操作制御
-- `ArtboardProps`: `selectedPageId`, `onSelectPage`, `onClearSelection`, `centeredPageId`, `onCenteredPageHandled`, `onAddPage` を受け取る。`navStates: Record<string, NavigationState>` を useState で管理し、`refreshNavigationState(pageId)` で同一値なら参照を維持しつつ更新。`handleGoBack`/`handleGoForward` で IPC 経由のナビゲーション操作
-- **再レンダー最適化**: `PageFrame` / `StickyNoteFrame` は `React.memo` でラップ。コールバック props はすべて `(pageId: string, ...) => void` シグネチャに統一（`onGoBack`, `onGoForward`, `onActivate`, `onReload`, `onPinUrl`, `onClose`, `onDragStart`, `onResizeStart`, `onResizePreset` など）。`Artboard.tsx` の `pages.map()` 内ではインラインアロー関数を排除し、`useCallback` で生成した安定した関数参照を直接渡す。コンポーネント内部で `useCallback` + `page.id` バインドのローカルハンドラーを生成して子要素に渡す
+**Siteboard**: ページレンダリング・ビューポート管理・操作制御
+- `SiteboardProps`: `selectedPageId`, `onSelectPage`, `onClearSelection`, `centeredPageId`, `onCenteredPageHandled`, `onAddPage` を受け取る。`navStates: Record<string, NavigationState>` を useState で管理し、`refreshNavigationState(pageId)` で同一値なら参照を維持しつつ更新。`handleGoBack`/`handleGoForward` で IPC 経由のナビゲーション操作
+- **再レンダー最適化**: `PageFrame` / `StickyNoteFrame` は `React.memo` でラップ。コールバック props はすべて `(pageId: string, ...) => void` シグネチャに統一（`onGoBack`, `onGoForward`, `onActivate`, `onReload`, `onPinUrl`, `onClose`, `onDragStart`, `onResizeStart`, `onResizePreset` など）。`Siteboard.tsx` の `pages.map()` 内ではインラインアロー関数を排除し、`useCallback` で生成した安定した関数参照を直接渡す。コンポーネント内部で `useCallback` + `page.id` バインドのローカルハンドラーを生成して子要素に渡す
 - 各ページを `<div data-webview-placeholder>` + Tauri Webview で DOM に描画
 - canvas 要素に transform (translate + scale) を設定してズーム・パン実装
 - ドラッグでページ移動、リサイズでサイズ変更（`updatePagePosition`/`updatePageSize` で Zustand 状態更新）
@@ -111,16 +116,16 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 - マウスホイール or トラックパッドで操作（`updateViewport` で Zustand 状態更新）:
   - `Ctrl/Cmd + ホイール`: マウスカーソル中心にズーム
   - `ホイール（修飾キーなし）`: キャンバスをパン（スクロール移動）
-- ページをクリックで選択（`onSelectPage` で Canvas が selectedPageId を管理）・ドラッグでページ移動。`bringPageToFront` は tab-store に定義があるが現在は Artboard から直接呼ばれていない
+- ページをクリックで選択（`onSelectPage` で ProjectScreen が selectedPageId を管理）・ドラッグでページ移動。`bringPageToFront` は tab-store に定義があるが現在は Siteboard から直接呼ばれていない
 - 操作モード制御：`InteractionType` (`'pan' | 'zoom' | 'drag' | 'resize'`) で操作タイプを分類
   - **ページ操作（drag / resize）**: 開始時に全 Webview を `hideAll()` で非表示。操作完了時に `computeDisplayModes()` で座標同期、DOM 属性更新、命令的 Webview 制御で再表示
-  - **キャンバス操作（pan / zoom）**: 開始時に `containerRectRef` へ container rect をキャッシュし `computeInteractionModes()` を即時実行。pan/zoom 中は `scheduleInteractionUpdate()` が rAF（1フレーム1回）で `computeInteractionModes()` を呼び出し、アートボード端から `NATIVE_SAFE_MARGIN_PX=50px` 以上離れているページは native 維持（`updateAllBounds()` で位置同期）、端から 50px 以内またはアートボード外はスクリーンショット準備済みなら screenshot、それ以外は hidden に切り替え。操作終了時に `computeDisplayModes()` で最終判定
+  - **キャンバス操作（pan / zoom）**: 開始時に `containerRectRef` へ container rect をキャッシュし `computeInteractionModes()` を即時実行。pan/zoom 中は `scheduleInteractionUpdate()` が rAF（1フレーム1回）で `computeInteractionModes()` を呼び出し、Siteboard 端から `NATIVE_SAFE_MARGIN_PX=50px` 以上離れているページは native 維持（`updateAllBounds()` で位置同期）、端から 50px 以内または Siteboard 外はスクリーンショット準備済みなら screenshot、それ以外は hidden に切り替え。操作終了時に `computeDisplayModes()` で最終判定
   - 操作中の遷移ルール（`computeInteractionModes`）: `native → screenshot/hidden` は許可。`screenshot/hidden → native` は禁止（show() 遅延によるフリッカー回避、操作終了後の `computeDisplayModes()` で復帰）
   - `activeInteractionsRef` (`Set<InteractionType>`) で複数操作の同時性を管理（ホイール debounce と他操作の競合防止）
   - blur 時は `activeInteractionsRef.current.clear()` で全操作タイプを一括クリア（旧: 'drag' のみクリアするバグあり）
-- アートボードコンテナは `data-artboard-container` 属性を付与（`Sidebar` の `getViewportCenterPos` がページ追加時の配置計算に使用）
-- アートボード背景のドットグリッドは `--artboard-dot-scale` / `--artboard-bg-x` / `--artboard-bg-y` CSS Custom Property で制御。`useArtboardPan` / `useArtboardZoom` の `backgroundRef` 経由でパン・ズームに追従（React 再レンダリング不要）
-- **Screenshot Clipping**: Webview がアートボード端から `NATIVE_SAFE_MARGIN_PX=50px` 以内に差し掛かると screenshot モードに切り替え（CSS `overflow:hidden` でクリッピング可能）。完全にアートボード外なら hidden。状態遷移は `DisplayMode` (`'native' | 'screenshot' | 'hidden'`) で管理。ヒステリシス 4px で境界振動防止（native 判定: `pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX` 等）。**プリキャプチャ機能**（`checkPreCapture()`, `PRE_CAPTURE_MARGIN_PX = 50px`, `CAPTURE_MIN_INTERVAL_MS = 1000ms`）: ページ矩形がキャンバス端から 50px 以内に入った瞬間にスクリーンショットを撮り直し、`screenshot` モード遷移時に最新の画像を表示。エッジトリガー方式でゾーン外→内の遷移時のみ発火し、過剰撮影を防止。**Eager Capture**: `computeDisplayModes()` で native モードだが `screenshotReadyRef` が false のページを自動撮影開始。**定期リフレッシュ**（`SCREENSHOT_REFRESH_INTERVAL_MS = 2000ms`）: 2秒ごとに native モードのページのスクリーンショットを自動更新し、Webview 内スクロール等による画像の陳腐化を防止。pan/zoom 中は native Webview が表示されているため撮影可能（drag/resize 中のみスキップ）。**命令的制御**: `computeDisplayModes()` で `wrapper.setAttribute('data-display-mode', ...)` と `webviewApi.show()/hide()` を直接実行し、React state Bailout（前フレームと同じモードなら effect が発火しない）の罠を回避
+- Siteboard コンテナは `data-siteboard-container` 属性を付与（`Sidebar` の `getViewportCenterPos` がページ追加時の配置計算に使用）
+- Siteboard 背景のドットグリッドは `--siteboard-dot-scale` / `--siteboard-bg-x` / `--siteboard-bg-y` CSS Custom Property で制御。`useSiteboardPan` / `useSiteboardZoom` の `backgroundRef` 経由でパン・ズームに追従（React 再レンダリング不要）
+- **Screenshot Clipping**: Webview が Siteboard 端から `NATIVE_SAFE_MARGIN_PX=50px` 以内に差し掛かると screenshot モードに切り替え（CSS `overflow:hidden` でクリッピング可能）。完全に Siteboard 外なら hidden。状態遷移は `DisplayMode` (`'native' | 'screenshot' | 'hidden'`) で管理。ヒステリシス 4px で境界振動防止（native 判定: `pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX` 等）。**プリキャプチャ機能**（`checkPreCapture()`, `PRE_CAPTURE_MARGIN_PX = 50px`, `CAPTURE_MIN_INTERVAL_MS = 1000ms`）: ページ矩形がキャンバス端から 50px 以内に入った瞬間にスクリーンショットを撮り直し、`screenshot` モード遷移時に最新の画像を表示。エッジトリガー方式でゾーン外→内の遷移時のみ発火し、過剰撮影を防止。**Eager Capture**: `computeDisplayModes()` で native モードだが `screenshotReadyRef` が false のページを自動撮影開始。**定期リフレッシュ**（`SCREENSHOT_REFRESH_INTERVAL_MS = 2000ms`）: 2秒ごとに native モードのページのスクリーンショットを自動更新し、Webview 内スクロール等による画像の陳腐化を防止。pan/zoom 中は native Webview が表示されているため撮影可能（drag/resize 中のみスキップ）。**命令的制御**: `computeDisplayModes()` で `wrapper.setAttribute('data-display-mode', ...)` と `webviewApi.show()/hide()` を直接実行し、React state Bailout（前フレームと同じモードなら effect が発火しない）の罠を回避
 - Webview イベント（`navigate`, `document-title-changed`）で URL・タイトル更新をリッスン。SPA の `history.pushState`/`replaceState` は `on_navigation` では検出できないため、`initialization_script` で注入したスクリプトが `document.title` に `\x01` プレフィックスを付与して `on_document_title_changed` 経由で Rust に通知し、`page-navigated-{pageId}` イベントとして emit する
 
 **状態管理**: Zustand による共有状態管理
@@ -155,7 +160,7 @@ Tauri v2 の Rust バックエンド + React フロントエンド構成で実�
 
 **isPageEmpty()** (`src/renderer/types/tab.ts`): `page.url === ''` で空フレーム（URL 未設定）かどうかを判定するヘルパー関数。`PageFrame` で Webview 作成スキップ判定に使用。
 
-**isPageMoved()** (`src/renderer/types/tab.ts`): ページが追加時 URL から別ページに遷移したかを判定するヘルパー関数。`new URL(str).href` で比較し末尾スラッシュ等の正規化差異を吸収する。`PageTitleBar` と `Sidebar` で共通使用。
+**isPageMoved()** (`src/renderer/types/tab.ts`): ページが追加時 URL から別ページに遷移したかを判定するヘルパー関数。`new URL(str).href` で比較し末尾スラッシュ等の正規化差異を吸収する。`PageTopBar` と `Sidebar` で共通使用。
 
 **Viewport インターフェース** (`src/renderer/types/tab.ts:14-18`)
 - `zoom`: ズームレベル（初期値 1）
@@ -189,7 +194,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - **コマンド実行**: `src-tauri/src/commands/` で Rust コマンド定義、権限制御
 - **パーミッション**: `src-tauri/capabilities/default.json` で詳細制御
   - `core:window:allow-start-dragging`: `data-tauri-drag-region` 属性でのウィンドウドラッグを有効化（タブバー等で必須）
-  - `core:webview:allow-set-webview-zoom`: 旧 `setZoom()` で必要だったパーミッション。現在は CSS transform injection（`setScale()`）に移行したため不要になった可能性あり
+  - `core:webview:allow-set-webview-zoom`: `setZoom()` によるズーム制御で必要
 - **WebView**: `titleBarStyle: Overlay, hiddenTitle: true` で macOS トラフィックライト対応
 
 ### Tauri IPC
@@ -207,7 +212,6 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - `go_forward_page_webview`: `eval("history.forward()")` で次のページに進む
 - `get_navigation_state_page_webview`: canGoBack/canGoForward を取得（macOS のみ `with_webview + objc2::msg_send!` で正確に取得、非 macOS は `{false, false}` を返す）
 - `capture_webview_screenshot`: WKWebView スナップショットを base64 PNG Data URL として取得（macOS のみ）
-- `set_page_webview_scale`: CSS transform でビジュアルスケーリング（`eval("window.__siteboardSetScale(scale)")` を呼び出す。zoom≒1.0 の場合はスタイルをクリーン除去）
 
 **Backend → Renderer** (emit):
 - `theme:changed`: OS テーマ変更時に isDark フラグを送信
@@ -218,7 +222,7 @@ Tauri v2 のセキュリティベストプラクティスを適用していま�
 - `updateAllBounds()`: 複数 Webview の位置・サイズを一括更新（show/hide なし、操作中のリアルタイム同期用）
 - `show()`, `hide()`, `destroy()`: 表示制御（IPC 不要）
 - `hideAll()`, `showAllWithBounds()`: 一括操作（複数 Webview の効率的な制御）
-- `setScale(pageId, scaleFactor)`: CSS transform injection でビジュアルスケーリング（IPC 経由で `set_page_webview_scale` を呼び出す。ビューポートサイズを変更せずレイアウトリフロー不要。旧: `setZoom(label)` は削除済み）
+- `setZoom(pageId, scaleFactor)`: Webview API の `setZoom()` でネイティブズームを適用
 - `reload(pageId, url)`: Webview を追加時 URL にナビゲート（IPC 経由で `reload_page_webview` を呼び出す。`page.addedUrl ?? page.url` を渡す）
 - `goBack(pageId)` / `goForward(pageId)`: 前後のページに移動（IPC 経由）
 - `getNavigationState(pageId)`: `NavigationState { can_go_back, can_go_forward }` を取得（IPC 経由）
@@ -237,10 +241,10 @@ IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています（api、t
 - **Lint, Format**: 実装完了時に `npm run lint`, `npm run format:check`, `npm run typecheck` を実行し、エラーが出ないようにすること
 - **状態管理**: グローバル共有状態は Zustand を使用。コンポーネントローカル状態は `useState` で十分
 - **DOM 操作**: サイドバー幅調整のような高頻度アップデートはレンダリング外で行い、確定時のみ dispatch で同期
-- **ズーム対応 UI**: アートボード内の UI 要素（ボーダー、パディング、アイコンサイズなど）はズーム値に応じて動的にスケーリング必要。実装方法: `--canvas-zoom` CSS Custom Property をルート canvas 要素に設定し、各 UI 要素は `calc(base-size / var(--canvas-zoom, 1))` で自動スケーリング。これにより、ズーム・パン時に React 再レンダリングを回避
+- **ズーム対応 UI**: Siteboard 内の UI 要素（ボーダー、パディング、アイコンサイズなど）はズーム値に応じて動的にスケーリング必要。実装方法: `--canvas-zoom` CSS Custom Property をルート canvas 要素に設定し、各 UI 要素は `calc(base-size / var(--canvas-zoom, 1))` で自動スケーリング。これにより、ズーム・パン時に React 再レンダリングを回避
 - **タイトルバー制御**: macOS/Windows のコントロール領域は `data-tauri-drag-region` 属性で指定（`-webkit-app-region: drag` の代わり）。Tauri v2 では属性が子要素に自動継承されないため、コンテナ要素ごとに明示的に設定。ネイティブの `<button>` 等は自動的にドラッグが抑制される
 - **Webview 非同期制御**: Webview 作成は React StrictMode の二重マウントによる create/destroy 競合の対象。`PageFrame.tsx` で `isCreatingRef` フラグを使用して二重 create IPC を防止。`webviewApi` メソッドはすべて try-catch で保護し、Webview 未作成・既破棄時は no-op。詳細は MEMORY.md の「非同期制御パターン（Webview 作成）」を参照
-- **Screenshot Clipping**: Webview がアートボード端にかかる時、ネイティブ Webview を hide してスクリーンショット画像（DOM `<img>`）に切り替える。CSS の `overflow:hidden` でクリッピング可能。`DisplayMode` で状態遷移管理。ヒステリシス（HYSTERESIS_PX = 4px）で境界近辺での振動防止。`computeDisplayModes()` 内で DOM 属性を直接更新し、命令的に Webview show/hide を実行することで React state Bailout の罠を回避。`captureScreenshot` のガードは drag/resize 中のみ（pan/zoom 中は native Webview が表示されているため撮影可能）。詳細は MEMORY.md の「Screenshot Clipping の実装パターン」を参照
+- **Screenshot Clipping**: Webview が Siteboard 端にかかる時、ネイティブ Webview を hide してスクリーンショット画像（DOM `<img>`）に切り替える。CSS の `overflow:hidden` でクリッピング可能。`DisplayMode` で状態遷移管理。ヒステリシス（HYSTERESIS_PX = 4px）で境界近辺での振動防止。`computeDisplayModes()` 内で DOM 属性を直接更新し、命令的に Webview show/hide を実行することで React state Bailout の罠を回避。`captureScreenshot` のガードは drag/resize 中のみ（pan/zoom 中は native Webview が表示されているため撮影可能）。詳細は MEMORY.md の「Screenshot Clipping の実装パターン」を参照
 - **usePageResize の Webview なしフレーム対応**: `usePageResize` はリサイズ中に `state.webviewEl`（Webview プレースホルダー）を直接 DOM 更新するが、付箋など Webview を持たないフレームでは `state.webviewEl` が null になる。その場合は `state.frameEl.style.height` を直接更新してリサイズ中のサイズ変化を反映する（`else` ブランチで実装）
 
 

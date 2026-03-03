@@ -6,7 +6,6 @@ use commands::{
     webview::{
         capture_webview_screenshot, create_page_webview, get_navigation_state_page_webview,
         go_back_page_webview, go_forward_page_webview, reload_page_webview,
-        set_page_webview_scale,
     },
 };
 
@@ -37,7 +36,6 @@ pub fn run() {
             go_back_page_webview,
             go_forward_page_webview,
             get_navigation_state_page_webview,
-            set_page_webview_scale,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri アプリの起動中にエラーが発生しました");

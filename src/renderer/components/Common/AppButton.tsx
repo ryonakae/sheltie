@@ -48,7 +48,9 @@ export function AppButton({
       : className;
 
   const tooltipContent = tooltipMessage ? (
-    <Tooltip.Content placement={tooltipPlacement}>{tooltipMessage}</Tooltip.Content>
+    <Tooltip.Content placement={tooltipPlacement} className="bg-background-inverse text-background">
+      {tooltipMessage}
+    </Tooltip.Content>
   ) : null;
 
   const button = (

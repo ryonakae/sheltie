@@ -19,10 +19,7 @@ export const WHEEL_PAN_END_DEBOUNCE_MS = 150;
 // スクショ切替の判定しきい値
 export const HYSTERESIS_PX = 4;
 export const NATIVE_SAFE_MARGIN_PX = 50;
-export const PRE_CAPTURE_MARGIN_PX = 50;
-export const CAPTURE_MIN_INTERVAL_MS = 1000;
 export const PRE_DISPLAY_MARGIN_PX = 50;
-export const SCREENSHOT_REFRESH_INTERVAL_MS = 2000;
 export const WEBVIEW_REVEAL_DELAY_MS = 100;
 
 // 付箋色

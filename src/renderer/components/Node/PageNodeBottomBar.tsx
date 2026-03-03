@@ -37,10 +37,6 @@ export function PageNodeBottomBar({
     lineHeight: zoomPx(15),
   };
   const presetGroupStyle = { gap: zoomPx(2) };
-  const presetButtonStyle = {
-    padding: zoomPx(2),
-    borderRadius: zoomPx(2),
-  };
   const presetIconStyle = {
     width: zoomPx(14),
     height: zoomPx(14),
@@ -62,8 +58,6 @@ export function PageNodeBottomBar({
                   'shrink-0 hover:bg-default-hover',
                   isActive ? 'text-accent' : 'text-muted hover:text-foreground',
                 )}
-                style={presetButtonStyle}
-                // tooltipMessage={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
                 onMouseDown={(e) => e.stopPropagation()}
                 onPress={() => onResizePreset(preset.width, preset.height)}
                 aria-label={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}

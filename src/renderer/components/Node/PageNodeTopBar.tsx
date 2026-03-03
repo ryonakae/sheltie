@@ -49,10 +49,6 @@ export function PageNodeTopBar({
     fontSize: zoomPx(12),
     lineHeight: zoomPx(16),
   };
-  const buttonStyle = {
-    padding: zoomPx(2),
-    borderRadius: zoomPx(2),
-  };
   const iconStyle = {
     width: zoomPx(14),
     height: zoomPx(14),
@@ -75,7 +71,6 @@ export function PageNodeTopBar({
             size="xs"
             scaleWithCanvasZoom
             className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            style={buttonStyle}
             isDisabled={!onGoBack || !canGoBack}
             onMouseDown={(e) => e.stopPropagation()}
             onPress={onGoBack}
@@ -88,7 +83,6 @@ export function PageNodeTopBar({
             size="xs"
             scaleWithCanvasZoom
             className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            style={buttonStyle}
             isDisabled={!onGoForward || !canGoForward}
             onMouseDown={(e) => e.stopPropagation()}
             onPress={onGoForward}
@@ -101,7 +95,6 @@ export function PageNodeTopBar({
             size="xs"
             scaleWithCanvasZoom
             className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            style={buttonStyle}
             isDisabled={!onReload}
             onMouseDown={(e) => e.stopPropagation()}
             onPress={onReload}
@@ -117,7 +110,6 @@ export function PageNodeTopBar({
           size="xs"
           scaleWithCanvasZoom
           className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
-          style={buttonStyle}
           tooltipMessage="表示中のページをデフォルトに固定"
           onMouseDown={(e) => e.stopPropagation()}
           onPress={onPinUrl}
@@ -131,7 +123,6 @@ export function PageNodeTopBar({
         size="xs"
         scaleWithCanvasZoom
         className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
-        style={buttonStyle}
         onMouseDown={(e) => e.stopPropagation()}
         onPress={onClose}
         aria-label="ページを閉じる"

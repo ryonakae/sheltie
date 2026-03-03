@@ -97,7 +97,7 @@ export function useSiteboardNodeRuntime({
   const handleNavigated = useCallback(
     (pageId: string, url: string, title: string) => {
       updatePageUrl(activeId, pageId, url, title);
-      setTimeout(() => void captureScreenshot(pageId), 500);
+      setTimeout(() => void captureScreenshot(pageId), 1000);
       void refreshNavigationState(pageId);
     },
     [activeId, captureScreenshot, refreshNavigationState, updatePageUrl],
@@ -142,6 +142,13 @@ export function useSiteboardNodeRuntime({
       void refreshNavigationState(pageId);
     },
     [captureScreenshot, refreshNavigationState],
+  );
+
+  const handleScrollEnded = useCallback(
+    (pageId: string) => {
+      void captureScreenshot(pageId);
+    },
+    [captureScreenshot],
   );
 
   const handleRemovePage = useCallback(
@@ -224,6 +231,7 @@ export function useSiteboardNodeRuntime({
     handleStickyNoteContentChange,
     handleTitleUpdated,
     handleUrlSubmit,
+    handleScrollEnded,
     handleWebviewCreated,
     handleWebviewLoaded,
     navStates: visibleNavStates,

@@ -1,5 +1,35 @@
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 
+/// CSS Viewport Units（svh/lvh）の基準サイズを CSS viewport と一致させる。
+///
+/// `_setLayoutMode: 2` + `_setViewScale` により vh/dvh は正しく論理サイズを返すが、
+/// svh/lvh は WKWebView の viewport inset 設定に基づいて計算されるため、
+/// `setMinimumViewportInset:maximumViewportInset:` に zero insets を渡すことで
+/// 「ブラウザクロームがない」ことを明示し、svh = lvh = CSS viewport height にする（macOS 13.0+）。
+#[cfg(target_os = "macos")]
+unsafe fn set_css_viewport_unit_sizes(raw: *mut objc2::runtime::AnyObject) {
+    use objc2_foundation::NSEdgeInsets;
+
+    // macOS 13.0+ の公開 API。ブラウザクロームがないため insets をゼロに設定する。
+    let supports_inset: bool = objc2::msg_send![
+        raw,
+        respondsToSelector: objc2::sel!(setMinimumViewportInset:maximumViewportInset:)
+    ];
+    if supports_inset {
+        let zero = NSEdgeInsets {
+            top: 0.0,
+            left: 0.0,
+            bottom: 0.0,
+            right: 0.0,
+        };
+        let _: () = objc2::msg_send![
+            raw,
+            setMinimumViewportInset: zero,
+            maximumViewportInset: zero
+        ];
+    }
+}
+
 /// WKWebView のスクリーンショットをキャプチャし、base64 PNG Data URL として返す。
 ///
 /// 現在は macOS のみサポート。WKWebView が表示中（native モード）の時に呼び出すこと。
@@ -229,6 +259,8 @@ pub async fn reload_page_webview(app: AppHandle, page_id: String, url: String) -
 /// _WKLayoutModeDynamicSizeComputedFromViewScale（layoutMode=2）と組み合わせることで
 /// CSS viewport = frame.size / viewScale となり、frame が縮小されても
 /// WKWebView は常に論理サイズを認識し、最小フォントサイズ問題も回避できる。
+/// 併せて set_css_viewport_unit_sizes で svh/lvh/dvh/vh の基準サイズを論理サイズに同期し、
+/// 物理 frame サイズからの乖離を防ぐ（新旧 API の両方をサポート）。
 #[tauri::command]
 pub async fn create_page_webview(
     app: AppHandle,
@@ -290,10 +322,30 @@ pub async fn create_page_webview(
   window.addEventListener('popstate', onUrlChange);
 })();"#;
 
+    // scrollend（Safari 26.2+）+ debounced scroll のハイブリッドでスクロール完了を検知し、
+    // \x02 プレフィックスで on_document_title_changed 経由で通知する
+    let scroll_detection_script = r#"(function() {
+  var t = null, orig = '', DELAY = 150;
+  function notify() {
+    orig = document.title;
+    document.title = '\x02scroll-end';
+    requestAnimationFrame(function() { document.title = orig; });
+  }
+  if ('onscrollend' in window) {
+    window.addEventListener('scrollend', notify, { passive: true });
+  } else {
+    window.addEventListener('scroll', function() {
+      if (t) clearTimeout(t);
+      t = setTimeout(notify, DELAY);
+    }, { passive: true, capture: true });
+  }
+})();"#;
+
     window
         .add_child(
             tauri::webview::WebviewBuilder::new(&label_clone, WebviewUrl::External(parsed_url))
                 .initialization_script(spa_url_detection_script)
+                .initialization_script(scroll_detection_script)
                 .on_navigation({
                     let ah = app_handle.clone();
                     let pid = pid.clone();
@@ -311,11 +363,18 @@ pub async fn create_page_webview(
                     let ah = app_handle.clone();
                     let pid = pid.clone();
                     move |_webview, title| {
-                        // \x01 プレフィックスは initialization_script からの SPA URL 変更通知
+                        // \x01: initialization_script からの SPA URL 変更通知
+                        // \x02: initialization_script からのスクロール完了通知
                         if let Some(url) = title.strip_prefix('\u{0001}') {
                             ah.emit(
                                 &format!("page-navigated-{pid}"),
                                 serde_json::json!({ "url": url }),
+                            )
+                            .ok();
+                        } else if title.starts_with('\u{0002}') {
+                            ah.emit(
+                                &format!("page-scroll-ended-{pid}"),
+                                serde_json::json!({}),
                             )
                             .ok();
                         } else {
@@ -337,7 +396,8 @@ pub async fn create_page_webview(
     // WKWebView が認識するレイアウトサイズは論理サイズ（page.width/height）を維持できる。
     // setBoundsSize: と異なり、この方式では CSS レベルではなくコンポジティング段階でスケーリングされるため
     // 最小フォントサイズ制約が発動しない。
-    // layoutMode は作成時のみ設定し、update 時は _setViewScale: のみ更新する。
+    // さらに set_css_viewport_unit_sizes で svh/lvh の基準も CSS viewport に揃える。
+    // layoutMode は作成時のみ設定し、update 時は viewScale + viewport insets を更新する。
     #[cfg(target_os = "macos")]
     {
         if let Some(wv) = app.get_webview(&label) {
@@ -347,6 +407,7 @@ pub async fn create_page_webview(
                     // _WKLayoutModeDynamicSizeComputedFromViewScale = 2
                     let _: () = objc2::msg_send![raw, _setLayoutMode: 2i64];
                     let _: () = objc2::msg_send![raw, _setViewScale: zoom];
+                    set_css_viewport_unit_sizes(raw);
                 }
             })
             .ok();
@@ -361,6 +422,8 @@ pub async fn create_page_webview(
 /// frame は画面上の物理的な表示領域（zoom 済みサイズ）。
 /// _setViewScale により CSS viewport = frame.size / zoom となるため、
 /// zoom < 1.0 の時もレイアウト崩れなくページを縮小表示できる。
+/// 同時に set_css_viewport_unit_sizes で svh/lvh/dvh/vh の基準サイズを論理サイズへ更新し、
+/// frame の物理サイズとの乖離を防ぐ（新旧 API の両方をサポート）。
 #[tauri::command]
 pub async fn update_page_webview_bounds(
     app: AppHandle,
@@ -444,6 +507,7 @@ async fn update_bounds_impl(
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
         unsafe {
             let _: () = objc2::msg_send![raw, _setViewScale: zoom];
+            set_css_viewport_unit_sizes(raw);
         }
     })
     .map_err(|e| format!("with_webview エラー: {e}"))?;

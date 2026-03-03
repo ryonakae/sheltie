@@ -74,6 +74,7 @@ export const webviewApi = {
   /**
    * Webview の frame（物理サイズ）と viewScale をアトミックに更新する。
    * _WKLayoutModeDynamicSizeComputedFromViewScale により CSS viewport = frame.size / zoom となる。
+   * Rust 側で viewport units 用サイズも論理サイズに同期するため、svh/lvh/dvh も一貫する。
    */
   async updateBounds(
     pageId: string,
@@ -138,6 +139,7 @@ export const webviewApi = {
   /**
    * 複数 Webview の frame + viewScale を一括更新する（show/hide なし、操作中のリアルタイム同期用）。
    * pageId から label に変換して Rust コマンドに渡す。
+   * 各 entry は viewport units 用の論理サイズ同期も同時に実行される。
    */
   async updateAllBounds(
     entries: {
@@ -257,6 +259,10 @@ export const webviewApi = {
   /** Rust → JS: タイトル変更イベントをリッスン */
   onPageTitleChanged: (pageId: string, callback: (payload: { title: string }) => void) =>
     listen<{ title: string }>(`page-title-changed-${pageId}`, (event) => callback(event.payload)),
+
+  /** Rust → JS: Webview 内スクロール完了イベントをリッスン */
+  onPageScrollEnded: (pageId: string, callback: () => void) =>
+    listen(`page-scroll-ended-${pageId}`, () => callback()),
 };
 
 // ── 型定義 ───────────────────────────────────────────────────────

@@ -40,6 +40,8 @@ interface PageNodeProps {
   onWebviewCreated: (pageId: string, label: string) => void;
   /** Webview のロード完了通知（スクリーンショットキャプチャのトリガー） */
   onWebviewLoaded: (pageId: string) => void;
+  /** Webview 内スクロール完了通知（スクリーンショットキャプチャのトリガー） */
+  onScrollEnded: (pageId: string) => void;
   /** 空フレームに URL が入力・submit された時のコールバック */
   onUrlSubmit: (pageId: string, url: string) => void;
 }
@@ -70,6 +72,7 @@ export const PageNode = memo(function PageNode({
   onTitleUpdated,
   onWebviewCreated,
   onWebviewLoaded,
+  onScrollEnded,
   onUrlSubmit,
 }: PageNodeProps) {
   const placeholderRef = useRef<HTMLDivElement>(null);
@@ -162,7 +165,7 @@ export const PageNode = memo(function PageNode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page.id, page.url, createAttempt]);
 
-  // Rust → JS イベント: ナビゲーション・タイトル変更をリッスン
+  // Rust → JS イベント: ナビゲーション・タイトル変更・スクロール完了をリッスン
   useEffect(() => {
     const unlistenNav = webviewApi.onPageNavigated(page.id, ({ url }) => {
       onNavigated(page.id, url, '');
@@ -175,12 +178,16 @@ export const PageNode = memo(function PageNode({
         onWebviewLoaded(page.id);
       }
     });
+    const unlistenScroll = webviewApi.onPageScrollEnded(page.id, () => {
+      onScrollEnded(page.id);
+    });
 
     return () => {
       void unlistenNav.then((f) => f());
       void unlistenTitle.then((f) => f());
+      void unlistenScroll.then((f) => f());
     };
-  }, [page.id, onNavigated, onTitleUpdated, onWebviewLoaded]);
+  }, [page.id, onNavigated, onScrollEnded, onTitleUpdated, onWebviewLoaded]);
 
   /**
    * displayMode が変化した時: ネイティブ Webview の show/hide と bounds 同期。

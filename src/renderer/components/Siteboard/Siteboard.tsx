@@ -140,6 +140,7 @@ export function Siteboard({
     handleStickyNoteContentChange,
     handleTitleUpdated,
     handleUrlSubmit,
+    handleScrollEnded,
     handleWebviewCreated,
     handleWebviewLoaded,
     navStates,
@@ -227,6 +228,7 @@ export function Siteboard({
               onTitleUpdated={handleTitleUpdated}
               onWebviewCreated={handleWebviewCreated}
               onWebviewLoaded={handleWebviewLoaded}
+              onScrollEnded={handleScrollEnded}
               onUrlSubmit={handleUrlSubmit}
             />
           ),

@@ -19,14 +19,20 @@ export function FloatingToolbar({ onAddPage, onAddStickyNote }: FloatingToolbarP
           className="flex items-center rounded-xl border border-border p-1 shadow-md"
         >
           <AppButton
+            size="lg"
             tooltipMessage="Webページを追加"
             onPress={onAddPage}
             aria-label="Webページを追加"
           >
-            <Plus />
+            <Plus className="size-5" />
           </AppButton>
-          <AppButton tooltipMessage="付箋を追加" onPress={onAddStickyNote} aria-label="付箋を追加">
-            <Sticker />
+          <AppButton
+            size="lg"
+            tooltipMessage="付箋を追加"
+            onPress={onAddStickyNote}
+            aria-label="付箋を追加"
+          >
+            <Sticker className="size-5" />
           </AppButton>
         </Surface>
       </div>

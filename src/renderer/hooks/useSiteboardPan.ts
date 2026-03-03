@@ -111,6 +111,9 @@ export function useSiteboardPan({
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      isDragging.current = false;
+      isPanMode.current = false;
+      document.body.style.cursor = '';
     };
   }, [applyTransform, setCursor, zoom, panX, panY, onPanEnd, onInteractionChange, onPanMove]);
 

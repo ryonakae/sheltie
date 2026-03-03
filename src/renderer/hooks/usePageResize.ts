@@ -137,6 +137,8 @@ export function usePageResize({
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      resizeState.current = null;
+      document.body.style.userSelect = '';
     };
   }, [zoom, onResizeEnd, onInteractionChange, minWidth, minHeight]);
 

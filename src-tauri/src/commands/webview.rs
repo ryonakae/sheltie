@@ -224,6 +224,11 @@ pub async fn reload_page_webview(app: AppHandle, page_id: String, url: String) -
 ///
 /// 作成後の位置・サイズ・表示制御は JS 側の Webview API で行う（IPC 不要）。
 /// ナビゲーション/タイトル変更イベントは Rust から JS にイベント送信する。
+///
+/// zoom は WKWebView の _viewScale として設定する。
+/// _WKLayoutModeDynamicSizeComputedFromViewScale（layoutMode=2）と組み合わせることで
+/// CSS viewport = frame.size / viewScale となり、frame が縮小されても
+/// WKWebView は常に論理サイズを認識し、最小フォントサイズ問題も回避できる。
 #[tauri::command]
 pub async fn create_page_webview(
     app: AppHandle,
@@ -233,6 +238,7 @@ pub async fn create_page_webview(
     y: f64,
     width: f64,
     height: f64,
+    zoom: f64,
 ) -> Result<String, String> {
     let label = format!("page-{}", page_id);
 
@@ -326,5 +332,155 @@ pub async fn create_page_webview(
         )
         .map_err(|e| format!("Webview の作成に失敗しました: {e}"))?;
 
+    // macOS: _WKLayoutModeDynamicSizeComputedFromViewScale（layoutMode=2）+ _setViewScale: zoom を設定。
+    // これにより CSS viewport = frame.size / viewScale となり、frame が物理的に縮小されても
+    // WKWebView が認識するレイアウトサイズは論理サイズ（page.width/height）を維持できる。
+    // setBoundsSize: と異なり、この方式では CSS レベルではなくコンポジティング段階でスケーリングされるため
+    // 最小フォントサイズ制約が発動しない。
+    // layoutMode は作成時のみ設定し、update 時は _setViewScale: のみ更新する。
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(wv) = app.get_webview(&label) {
+            wv.with_webview(move |platform_wv| {
+                let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
+                unsafe {
+                    // _WKLayoutModeDynamicSizeComputedFromViewScale = 2
+                    let _: () = objc2::msg_send![raw, _setLayoutMode: 2i64];
+                    let _: () = objc2::msg_send![raw, _setViewScale: zoom];
+                }
+            })
+            .ok();
+        }
+    }
+
     Ok(label)
+}
+
+/// ページ Webview の位置・サイズ（frame）と viewScale をアトミックに更新する。
+///
+/// frame は画面上の物理的な表示領域（zoom 済みサイズ）。
+/// _setViewScale により CSS viewport = frame.size / zoom となるため、
+/// zoom < 1.0 の時もレイアウト崩れなくページを縮小表示できる。
+#[tauri::command]
+pub async fn update_page_webview_bounds(
+    app: AppHandle,
+    page_id: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    zoom: f64,
+) -> Result<(), String> {
+    update_bounds_impl(&app, &page_id, x, y, width, height, zoom).await
+}
+
+#[cfg(target_os = "macos")]
+async fn update_bounds_impl(
+    app: &AppHandle,
+    page_id: &str,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    zoom: f64,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let label = format!("page-{}", page_id);
+    let wv = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+
+    wv.set_position(LogicalPosition::new(x, y))
+        .map_err(|e| format!("setPosition エラー: {e}"))?;
+    wv.set_size(LogicalSize::new(width, height))
+        .map_err(|e| format!("setSize エラー: {e}"))?;
+
+    wv.with_webview(move |platform_wv| {
+        let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
+        unsafe {
+            let _: () = objc2::msg_send![raw, _setViewScale: zoom];
+        }
+    })
+    .map_err(|e| format!("with_webview エラー: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn update_bounds_impl(
+    app: &AppHandle,
+    page_id: &str,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    _zoom: f64,
+) -> Result<(), String> {
+    let label = format!("page-{}", page_id);
+    let wv = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    wv.set_position(LogicalPosition::new(x, y))
+        .map_err(|e| format!("setPosition エラー: {e}"))?;
+    wv.set_size(LogicalSize::new(width, height))
+        .map_err(|e| format!("setSize エラー: {e}"))?;
+    Ok(())
+}
+
+/// 複数ページ Webview の frame + viewScale を一括更新する（操作中のリアルタイム同期用）。
+#[derive(serde::Deserialize)]
+pub struct BoundsEntry {
+    pub page_id: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub zoom: f64,
+}
+
+#[tauri::command]
+pub async fn batch_update_page_webview_bounds(
+    app: AppHandle,
+    entries: Vec<BoundsEntry>,
+) -> Result<(), String> {
+    // エラーは個別に無視（一括更新中の孤児 Webview 対策）
+    for e in entries {
+        let _ = update_bounds_impl(
+            &app,
+            &e.page_id,
+            e.x,
+            e.y,
+            e.width,
+            e.height,
+            e.zoom,
+        )
+        .await;
+    }
+    Ok(())
+}
+
+/// パン操作専用: 複数 Webview の位置のみを一括更新する。
+///
+/// パン中は size や zoom は変化しないため set_size / _setViewScale をスキップし
+/// IPC メッセージ数を削減することで追従遅延を軽減する。
+#[derive(serde::Deserialize)]
+pub struct PositionEntry {
+    pub page_id: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[tauri::command]
+pub async fn batch_update_webview_positions(
+    app: AppHandle,
+    entries: Vec<PositionEntry>,
+) -> Result<(), String> {
+    for e in entries {
+        let label = format!("page-{}", e.page_id);
+        if let Some(wv) = app.get_webview(&label) {
+            wv.set_position(LogicalPosition::new(e.x, e.y)).ok();
+        }
+    }
+    Ok(())
 }

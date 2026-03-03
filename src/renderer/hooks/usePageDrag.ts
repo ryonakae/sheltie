@@ -90,6 +90,8 @@ export function usePageDrag({ zoom, onDragEnd, onInteractionChange }: UsePageDra
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      dragState.current = null;
+      document.body.style.userSelect = '';
     };
   }, [zoom, onDragEnd, onInteractionChange]);
 

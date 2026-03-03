@@ -1,15 +1,14 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-  NodeResizeHandle,
-  type NodeResizeDirection,
-} from '@/renderer/components/Node/NodeResizeHandle';
+import { NodeResizeHandle } from '@/renderer/components/Node/NodeResizeHandle';
 import { PageNodeBottomBar } from '@/renderer/components/Node/PageNodeBottomBar';
 import { PageNodeTopBar } from '@/renderer/components/Node/PageNodeTopBar';
 import { PageNodeUrlForm } from '@/renderer/components/Node/PageNodeUrlForm';
+import type { NodeResizeDirection } from '@/renderer/hooks/siteboard/types';
+import { zoomPx } from '@/renderer/lib/canvas-zoom';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
-import type { DisplayMode, Page } from '@/renderer/types/tab';
 import { isPageEmpty, isPageMoved } from '@/renderer/types/tab';
+import type { DisplayMode, Page } from '@/renderer/types/tab';
 
 interface PageNodeProps {
   page: Page;
@@ -21,8 +20,12 @@ interface PageNodeProps {
   displayMode: DisplayMode;
   /** スクリーンショット ObjectURL（screenshot モード時に表示） */
   screenshotUrl: string | null;
+  hideTopNavControls: boolean;
+  hideBottomPresetControls: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  /** 現在の zoom 値を返す関数（ref 経由で取得するため再レンダーを引き起こさない） */
+  getZoom: () => number;
   onGoBack: (pageId: string) => void;
   onGoForward: (pageId: string) => void;
   onActivate: (pageId: string) => void;
@@ -49,8 +52,11 @@ export const PageNode = memo(function PageNode({
   displayHeight,
   displayMode,
   screenshotUrl,
+  hideTopNavControls,
+  hideBottomPresetControls,
   canGoBack,
   canGoForward,
+  getZoom,
   onGoBack,
   onGoForward,
   onActivate,
@@ -98,7 +104,15 @@ export const PageNode = memo(function PageNode({
     const rect = placeholder.getBoundingClientRect();
     console.log(`[PageNode] Webview 作成開始: page.id=${page.id}`);
     webviewApi
-      .create(page.id, initialUrlRef.current, rect.left, rect.top, rect.width, rect.height)
+      .create(
+        page.id,
+        initialUrlRef.current,
+        rect.left,
+        rect.top,
+        rect.width,
+        rect.height,
+        getZoom(),
+      )
       .then((label) => {
         if (cancelled) {
           // StrictMode Cleanup 済み（cancelled=true）→ 孤児化防止のため即破棄してフラグ解除
@@ -116,11 +130,12 @@ export const PageNode = memo(function PageNode({
         // ネイティブ表示を Zustand 更新より先に試みる（初期化完了タイミングを最大化）
         const currentRect = placeholder.getBoundingClientRect();
         void webviewApi.updateBounds(
-          label,
+          page.id,
           currentRect.left,
           currentRect.top,
           currentRect.width,
           currentRect.height,
+          getZoom(),
         );
         void webviewApi.show(label);
         // Zustand 更新後にフォールバック effect が念押し表示
@@ -178,13 +193,20 @@ export const PageNode = memo(function PageNode({
 
     if (displayMode === 'native') {
       const rect = placeholderRef.current.getBoundingClientRect();
-      void webviewApi.updateBounds(label, rect.left, rect.top, rect.width, rect.height);
+      void webviewApi.updateBounds(
+        page.id,
+        rect.left,
+        rect.top,
+        rect.width,
+        rect.height,
+        getZoom(),
+      );
       void webviewApi.show(label);
     } else {
       void webviewApi.hide(label);
     }
     // page.webviewLabel: setPageWebviewLabel 後に effect を再実行して初期表示を念押し
-  }, [displayMode, page.x, page.y, page.width, page.height, page.webviewLabel]);
+  }, [displayMode, getZoom, page.id, page.x, page.y, page.width, page.height, page.webviewLabel]);
 
   // page.id は UUID で不変のため、親の関数参照が安定していればこれらも安定する
   const handleActivate = useCallback(() => onActivate(page.id), [onActivate, page.id]);
@@ -220,16 +242,15 @@ export const PageNode = memo(function PageNode({
 
   return (
     <div
-      className="absolute flex flex-col shadow-lg"
+      className="absolute flex flex-col shadow-lg outline-offset-0"
       style={{
         left: page.x,
         top: page.y,
         width: page.width,
-        borderRadius: 'calc(8px / var(--canvas-zoom, 1))',
+        borderRadius: zoomPx(8),
         outline: isActive
-          ? 'calc(2px / var(--canvas-zoom, 1)) solid var(--color-focus)'
-          : 'calc(1px / var(--canvas-zoom, 1)) solid var(--color-border)',
-        outlineOffset: 0,
+          ? `${zoomPx(2)} solid var(--color-focus)`
+          : `${zoomPx(1)} solid var(--color-border)`,
       }}
       data-page-id={page.id}
       onMouseDown={handleActivate}
@@ -244,6 +265,7 @@ export const PageNode = memo(function PageNode({
         onGoForward={isPageEmpty(page) ? undefined : handleGoForwardBound}
         onReload={isPageEmpty(page) ? undefined : handleReloadBound}
         onPinUrl={isPageMoved(page) ? handlePinUrlBound : undefined}
+        hideNavigationControls={hideTopNavControls}
         onClose={handleCloseBound}
         onMouseDown={handleTitleBarMouseDown}
       />
@@ -255,11 +277,10 @@ export const PageNode = memo(function PageNode({
       <div
         ref={placeholderRef}
         data-webview-placeholder
-        className="relative bg-background"
+        className="relative rounded-none bg-background"
         style={{
           width: page.width,
           height: page.height,
-          borderRadius: 0,
         }}
       >
         {isPageEmpty(page) ? (
@@ -281,6 +302,7 @@ export const PageNode = memo(function PageNode({
       <PageNodeBottomBar
         width={displayWidth}
         height={displayHeight}
+        hidePresetControls={hideBottomPresetControls}
         onResizePreset={handleResizePresetBound}
       />
 
@@ -291,5 +313,3 @@ export const PageNode = memo(function PageNode({
     </div>
   );
 });
-
-export type { NodeResizeDirection };

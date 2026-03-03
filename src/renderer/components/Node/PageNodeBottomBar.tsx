@@ -4,15 +4,8 @@ import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/renderer/components/Common/AppButton';
 import { NodeTabletIcon } from '@/renderer/components/Node/NodeTabletIcon';
-import {
-  SIZE_PRESETS,
-  TOOLBAR_BUTTON_PADDING,
-  TOOLBAR_GAP,
-  TOOLBAR_HEIGHT,
-  TOOLBAR_ICON_SIZE,
-  TOOLBAR_PADDING,
-  TOOLBAR_RADIUS,
-} from '@/renderer/constants';
+import { SIZE_PRESETS } from '@/renderer/constants';
+import { zoomPx, zoomPxList } from '@/renderer/lib/canvas-zoom';
 
 import type { ComponentType, SVGProps } from 'react';
 
@@ -27,52 +20,59 @@ const PRESET_ICONS: Record<string, SvgComponent> = {
 export interface PageNodeBottomBarProps {
   width: number;
   height: number;
+  hidePresetControls: boolean;
   onResizePreset: (width: number, height: number) => void;
 }
 
-export function PageNodeBottomBar({ width, height, onResizePreset }: PageNodeBottomBarProps) {
+export function PageNodeBottomBar({
+  width,
+  height,
+  hidePresetControls,
+  onResizePreset,
+}: PageNodeBottomBarProps) {
+  const bottomBarStyle = {
+    height: zoomPx(32),
+    paddingInline: zoomPx(8),
+    fontSize: zoomPx(11),
+    lineHeight: zoomPx(15),
+    borderRadius: zoomPxList(0, 0, 8, 8),
+  };
+  const presetGroupStyle = { gap: zoomPx(2) };
+  const presetButtonStyle = {
+    padding: zoomPx(2),
+    borderRadius: zoomPx(2),
+  };
+  const presetIconStyle = {
+    width: zoomPx(14),
+    height: zoomPx(14),
+  };
+
   return (
-    <div
-      className="flex shrink-0 items-center border-b border-border-secondary bg-default select-none"
-      style={{
-        height: TOOLBAR_HEIGHT,
-        paddingInline: TOOLBAR_PADDING,
-        gap: TOOLBAR_GAP,
-        fontSize: 'calc(11px / var(--canvas-zoom, 1))',
-        lineHeight: 'calc(15px / var(--canvas-zoom, 1))',
-        borderRadius: `0 0 ${TOOLBAR_RADIUS} ${TOOLBAR_RADIUS}`,
-      }}
-    >
-      <div className="flex shrink-0 items-center" style={{ gap: TOOLBAR_BUTTON_PADDING }}>
-        {SIZE_PRESETS.map((preset) => {
-          const isActive = width === preset.width && height === preset.height;
-          const Icon = PRESET_ICONS[preset.label];
-          return (
-            <AppButton
-              size="xs"
-              key={preset.label}
-              className={twMerge(
-                'shrink-0 hover:bg-default-hover',
-                isActive ? 'text-accent' : 'text-muted hover:text-foreground',
-              )}
-              style={{
-                padding: TOOLBAR_BUTTON_PADDING,
-                borderRadius: 'calc(2px / var(--canvas-zoom, 1))',
-              }}
-              // tooltipMessage={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
-              onMouseDown={(e) => e.stopPropagation()}
-              onPress={() => onResizePreset(preset.width, preset.height)}
-              aria-label={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
-            >
-              <Icon
-                style={{
-                  width: TOOLBAR_ICON_SIZE,
-                  height: TOOLBAR_ICON_SIZE,
-                }}
-              />
-            </AppButton>
-          );
-        })}
+    <div className="flex shrink-0 items-center bg-default select-none" style={bottomBarStyle}>
+      <div className="flex shrink-0 items-center" style={presetGroupStyle}>
+        {!hidePresetControls &&
+          SIZE_PRESETS.map((preset) => {
+            const isActive = width === preset.width && height === preset.height;
+            const Icon = PRESET_ICONS[preset.label];
+            return (
+              <AppButton
+                size="xs"
+                scaleWithCanvasZoom
+                key={preset.label}
+                className={twMerge(
+                  'shrink-0 hover:bg-default-hover',
+                  isActive ? 'text-accent' : 'text-muted hover:text-foreground',
+                )}
+                style={presetButtonStyle}
+                // tooltipMessage={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
+                onMouseDown={(e) => e.stopPropagation()}
+                onPress={() => onResizePreset(preset.width, preset.height)}
+                aria-label={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
+              >
+                <Icon style={presetIconStyle} />
+              </AppButton>
+            );
+          })}
       </div>
 
       <span className="ml-auto shrink-0 text-muted">

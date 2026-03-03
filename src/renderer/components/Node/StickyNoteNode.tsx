@@ -1,19 +1,18 @@
-import Sticker from '@gravity-ui/icons/Sticker';
 import Xmark from '@gravity-ui/icons/Xmark';
 import { memo, useCallback, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/renderer/components/Common/AppButton';
-import {
-  NodeResizeHandle,
-  type NodeResizeDirection,
-} from '@/renderer/components/Node/NodeResizeHandle';
+import { NodeResizeHandle } from '@/renderer/components/Node/NodeResizeHandle';
 import { STICKY_NOTE_COLORS } from '@/renderer/constants';
+import type { NodeResizeDirection } from '@/renderer/hooks/siteboard/types';
+import { zoomPx } from '@/renderer/lib/canvas-zoom';
 import { type Page } from '@/renderer/types/tab';
 
 interface StickyNoteNodeProps {
   page: Page;
   isActive: boolean;
+  hideColorCycleButton: boolean;
   onActivate: (pageId: string) => void;
   onClose: (pageId: string) => void;
   onDragStart: (e: React.MouseEvent, pageId: string) => void;
@@ -25,6 +24,7 @@ interface StickyNoteNodeProps {
 export const StickyNoteNode = memo(function StickyNoteNode({
   page,
   isActive,
+  hideColorCycleButton,
   onActivate,
   onClose,
   onDragStart,
@@ -75,22 +75,32 @@ export const StickyNoteNode = memo(function StickyNoteNode({
 
   const noteClassName = twMerge(
     'absolute flex flex-col shadow-lg',
+    'border-solid outline-offset-0',
     color.bgClass,
     isActive ? '' : 'border',
     color.borderClass,
   );
   const noteHeaderClassName = twMerge(
-    'flex shrink-0 cursor-grab items-center gap-1 active:cursor-grabbing',
+    'flex shrink-0 cursor-grab items-center active:cursor-grabbing',
     color.borderClass,
   );
   const noteColorButtonClassName = twMerge(
-    'flex shrink-0 cursor-pointer items-center justify-center rounded-sm',
+    'flex shrink-0 cursor-pointer items-center justify-center',
     'border',
     nextColor.borderClass,
     nextColor.bgClass,
     nextColor.textClass,
     'hover:opacity-80',
   );
+  const noteBodyColorClassName = page.content ? 'text-[#333]' : 'text-[#aaa]';
+  const noteHeaderActionButtonStyle = {
+    padding: zoomPx(2),
+    borderRadius: zoomPx(2),
+  };
+  const closeIconStyle = {
+    width: zoomPx(14),
+    height: zoomPx(14),
+  };
 
   return (
     <div
@@ -99,11 +109,9 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         left: page.x,
         top: page.y,
         width: page.width,
-        borderRadius: 'calc(8px / var(--canvas-zoom, 1))',
-        outline: isActive ? 'calc(2px / var(--canvas-zoom, 1)) solid var(--color-focus)' : 'none',
-        borderWidth: isActive ? undefined : 'calc(1px / var(--canvas-zoom, 1))',
-        borderStyle: isActive ? undefined : 'solid',
-        outlineOffset: 0,
+        borderRadius: zoomPx(8),
+        outline: isActive ? `${zoomPx(2)} solid var(--color-focus)` : 'none',
+        borderWidth: zoomPx(1),
       }}
       data-page-id={page.id}
       onMouseDown={handleActivate}
@@ -112,11 +120,12 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       <div
         className={noteHeaderClassName}
         style={{
-          height: 'calc(28px / var(--canvas-zoom, 1))',
-          paddingLeft: 'calc(8px / var(--canvas-zoom, 1))',
-          paddingRight: 'calc(4px / var(--canvas-zoom, 1))',
-          borderBottomWidth: 'calc(1px / var(--canvas-zoom, 1))',
+          height: zoomPx(32),
+          paddingInlineStart: zoomPx(8),
+          paddingInlineEnd: zoomPx(4),
+          borderBottomWidth: zoomPx(1),
           borderBottomStyle: 'solid',
+          gap: zoomPx(2),
         }}
         onMouseDown={(e) => {
           // テキスト選択・ボタン操作以外でドラッグ開始
@@ -124,89 +133,61 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         }}
       >
         <span
-          className="min-w-0 flex-1 truncate select-none"
-          style={{
-            fontSize: 'calc(11px / var(--canvas-zoom, 1))',
-            color: '#555',
-            fontWeight: 500,
-          }}
+          className="min-w-0 flex-1 truncate font-medium text-[#555] select-none"
+          style={{ fontSize: zoomPx(11) }}
         >
           Sticky Note
         </span>
 
         {/* 色切り替えボタン（次の色をプレビュー表示） */}
-        <AppButton
-          size="xs"
-          className={noteColorButtonClassName}
-          style={{
-            width: 'calc(18px / var(--canvas-zoom, 1))',
-            height: 'calc(18px / var(--canvas-zoom, 1))',
-            borderWidth: 'calc(1px / var(--canvas-zoom, 1))',
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPress={() => onColorCycle(page.id)}
-          aria-label="色を切り替え"
-        >
-          <Sticker
-            className={nextColor.textClass}
+        {!hideColorCycleButton && (
+          <AppButton
+            size="xs"
+            scaleWithCanvasZoom
+            className={noteColorButtonClassName}
             style={{
-              width: 'calc(10px / var(--canvas-zoom, 1))',
-              height: 'calc(10px / var(--canvas-zoom, 1))',
+              width: zoomPx(18),
+              minWidth: zoomPx(18),
+              height: zoomPx(18),
+              minHeight: zoomPx(18),
+              borderRadius: zoomPx(2),
             }}
-          />
-        </AppButton>
+            onMouseDown={(e) => e.stopPropagation()}
+            onPress={() => onColorCycle(page.id)}
+            aria-label="色を切り替え"
+          >
+            <span />
+          </AppButton>
+        )}
 
         {/* 閉じるボタン */}
         <AppButton
           size="xs"
-          className="flex shrink-0 cursor-pointer items-center justify-center rounded-sm hover:opacity-80"
-          style={{
-            width: 'calc(18px / var(--canvas-zoom, 1))',
-            height: 'calc(18px / var(--canvas-zoom, 1))',
-            color: '#888',
-          }}
+          scaleWithCanvasZoom
+          className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
+          style={noteHeaderActionButtonStyle}
           onMouseDown={(e) => e.stopPropagation()}
           onPress={handleCloseBound}
           aria-label="付箋を削除"
         >
-          <Xmark
-            style={{
-              width: 'calc(12px / var(--canvas-zoom, 1))',
-              height: 'calc(12px / var(--canvas-zoom, 1))',
-            }}
-          />
+          <Xmark style={closeIconStyle} />
         </AppButton>
       </div>
 
       {/* テキスト表示/編集エリア（usePageResize 互換のため data-webview-placeholder 属性を付与） */}
       <div
         data-webview-placeholder
-        className="relative overflow-hidden"
+        className="relative box-border min-h-0 overflow-hidden"
         style={{
           width: page.width,
           height: page.height,
-          boxSizing: 'border-box',
-          minHeight: 0,
         }}
         onDoubleClick={handleDoubleClick}
       >
         {isEditing ? (
           <textarea
             ref={textareaRef}
-            className="size-full resize-none bg-transparent focus:outline-none"
-            style={{
-              fontSize: 'calc(13px / var(--canvas-zoom, 1))',
-              padding: 'calc(8px / var(--canvas-zoom, 1))',
-              height: '100%',
-              display: 'block',
-              boxSizing: 'border-box',
-              color: '#333',
-              lineHeight: 1.5,
-              minHeight: 0,
-              margin: 0,
-              border: 'none',
-              overflow: 'auto',
-            }}
+            className="m-0 box-border block size-full min-h-0 resize-none overflow-auto border-0 bg-transparent p-2 text-[18px] leading-normal text-[#333] focus:outline-none"
             value={editingContent}
             onChange={(e) => setEditingContent(e.target.value)}
             onBlur={handleBlur}
@@ -215,15 +196,10 @@ export const StickyNoteNode = memo(function StickyNoteNode({
           />
         ) : (
           <div
-            className="size-full wrap-break-word whitespace-pre-wrap select-none"
-            style={{
-              fontSize: 'calc(13px / var(--canvas-zoom, 1))',
-              padding: 'calc(8px / var(--canvas-zoom, 1))',
-              height: '100%',
-              color: page.content ? '#333' : '#aaa',
-              lineHeight: 1.5,
-              cursor: 'text',
-            }}
+            className={twMerge(
+              'size-full cursor-text p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap select-none',
+              noteBodyColorClassName,
+            )}
           >
             {page.content || 'ダブルクリックで編集'}
           </div>

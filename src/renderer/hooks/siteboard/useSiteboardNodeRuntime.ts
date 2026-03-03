@@ -1,7 +1,7 @@
 import { toast } from '@heroui/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
-import type { NodeResizeDirection } from '@/renderer/components/Node/PageNode';
+import type { NodeResizeDirection } from '@/renderer/hooks/siteboard/types';
 import type { NavigationState } from '@/renderer/lib/tauri-bridge';
 import { webviewApi } from '@/renderer/lib/tauri-bridge';
 import type { Page } from '@/renderer/types/tab';
@@ -12,7 +12,6 @@ interface UseSiteboardNodeRuntimeParams {
   selectedPageId: string | null;
   onSelectPage: (pageId: string) => void;
   onClearSelection: () => void;
-  zoomRef: React.RefObject<number>;
   startDrag: (e: React.MouseEvent, pageId: string) => void;
   startResize: (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => void;
   updatePageUrl: (projectId: string, pageId: string, url: string, title: string) => void;
@@ -26,7 +25,6 @@ interface UseSiteboardNodeRuntimeParams {
   cycleStickyNoteColor: (projectId: string, pageId: string) => void;
   computeDisplayModes: () => void;
   captureScreenshot: (pageId: string) => Promise<void>;
-  cleanupPageArtifacts: (pageId: string) => void;
 }
 
 export function useSiteboardNodeRuntime({
@@ -35,7 +33,6 @@ export function useSiteboardNodeRuntime({
   selectedPageId,
   onSelectPage,
   onClearSelection,
-  zoomRef,
   startDrag,
   startResize,
   updatePageUrl,
@@ -49,17 +46,19 @@ export function useSiteboardNodeRuntime({
   cycleStickyNoteColor,
   computeDisplayModes,
   captureScreenshot,
-  cleanupPageArtifacts,
 }: UseSiteboardNodeRuntimeParams) {
-  const [pageTitles, setPageTitles] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    for (const page of pages) {
-      initial[page.id] = page.title;
-    }
-    return initial;
-  });
-
   const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
+
+  const visibleNavStates = useMemo(() => {
+    const pageIds = new Set(pages.map((page) => page.id));
+    const next: Record<string, NavigationState> = {};
+    for (const [pageId, value] of Object.entries(navStates)) {
+      if (pageIds.has(pageId)) {
+        next[pageId] = value;
+      }
+    }
+    return next;
+  }, [navStates, pages]);
 
   const refreshNavigationState = useCallback(async (pageId: string) => {
     const state = await webviewApi.getNavigationState(pageId);
@@ -76,6 +75,17 @@ export function useSiteboardNodeRuntime({
     });
   }, []);
 
+  const removeNavigationState = useCallback((pageId: string) => {
+    setNavStates((prev) => {
+      if (!(pageId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[pageId];
+      return next;
+    });
+  }, []);
+
   const handleGoBack = useCallback((pageId: string) => {
     void webviewApi.goBack(pageId);
   }, []);
@@ -87,25 +97,16 @@ export function useSiteboardNodeRuntime({
   const handleNavigated = useCallback(
     (pageId: string, url: string, title: string) => {
       updatePageUrl(activeId, pageId, url, title);
-      if (title) {
-        setPageTitles((prev) => ({ ...prev, [pageId]: title }));
-      }
-
-      if (Math.abs(zoomRef.current - 1.0) >= 0.005) {
-        void webviewApi.setZoom(pageId, zoomRef.current);
-      }
-
       setTimeout(() => void captureScreenshot(pageId), 500);
       void refreshNavigationState(pageId);
     },
-    [activeId, captureScreenshot, refreshNavigationState, updatePageUrl, zoomRef],
+    [activeId, captureScreenshot, refreshNavigationState, updatePageUrl],
   );
 
   const handleTitleUpdated = useCallback(
     (pageId: string, title: string) => {
       if (!title) return;
       updatePageTitle(activeId, pageId, title);
-      setPageTitles((prev) => ({ ...prev, [pageId]: title }));
       void refreshNavigationState(pageId);
     },
     [activeId, refreshNavigationState, updatePageTitle],
@@ -129,11 +130,10 @@ export function useSiteboardNodeRuntime({
   const handleWebviewCreated = useCallback(
     (pageId: string, label: string) => {
       setPageWebviewLabel(activeId, pageId, label);
-      void webviewApi.setZoom(pageId, zoomRef.current);
       requestAnimationFrame(() => computeDisplayModes());
       void refreshNavigationState(pageId);
     },
-    [activeId, computeDisplayModes, refreshNavigationState, setPageWebviewLabel, zoomRef],
+    [activeId, computeDisplayModes, refreshNavigationState, setPageWebviewLabel],
   );
 
   const handleWebviewLoaded = useCallback(
@@ -149,10 +149,10 @@ export function useSiteboardNodeRuntime({
       if (selectedPageId === pageId) {
         onClearSelection();
       }
-      cleanupPageArtifacts(pageId);
+      removeNavigationState(pageId);
       removePage(activeId, pageId);
     },
-    [activeId, cleanupPageArtifacts, onClearSelection, removePage, selectedPageId],
+    [activeId, onClearSelection, removeNavigationState, removePage, selectedPageId],
   );
 
   const handleReloadPage = useCallback(
@@ -216,7 +216,6 @@ export function useSiteboardNodeRuntime({
     handleUrlSubmit,
     handleWebviewCreated,
     handleWebviewLoaded,
-    navStates,
-    pageTitles,
+    navStates: visibleNavStates,
   };
 }

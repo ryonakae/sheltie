@@ -6,6 +6,7 @@ import { PageNode } from '@/renderer/components/Node/PageNode';
 import { StickyNoteNode } from '@/renderer/components/Node/StickyNoteNode';
 import { FloatingToolbar } from '@/renderer/components/Siteboard/FloatingToolbar';
 import { InteractionOverlay } from '@/renderer/components/Siteboard/InteractionOverlay';
+import { LOW_ZOOM_HIDE_THRESHOLD } from '@/renderer/constants';
 import { useSiteboardDisplayEngine } from '@/renderer/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardNodeRuntime } from '@/renderer/hooks/siteboard/useSiteboardNodeRuntime';
 import { useSiteboardViewportEngine } from '@/renderer/hooks/siteboard/useSiteboardViewportEngine';
@@ -73,7 +74,6 @@ export function Siteboard({
   const {
     captureScreenshot,
     cancelZoomRestore,
-    cleanupPageArtifacts,
     computeDisplayModes,
     computeInteractionModes,
     displayModes,
@@ -90,6 +90,8 @@ export function Siteboard({
     centeredPageId,
     onCenteredPageHandled,
   });
+
+  const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
 
   const {
     handleResetZoom,
@@ -117,6 +119,7 @@ export function Siteboard({
     updatePagePosition,
     updatePageSize,
   });
+  const hideCompactControls = Math.round(uiZoom * 100) <= Math.round(LOW_ZOOM_HIDE_THRESHOLD * 100);
 
   const {
     handleDragStart,
@@ -135,14 +138,12 @@ export function Siteboard({
     handleWebviewCreated,
     handleWebviewLoaded,
     navStates,
-    pageTitles,
   } = useSiteboardNodeRuntime({
     activeId,
     pages,
     selectedPageId,
     onSelectPage,
     onClearSelection,
-    zoomRef,
     startDrag,
     startResize,
     updatePageUrl,
@@ -156,7 +157,6 @@ export function Siteboard({
     cycleStickyNoteColor,
     computeDisplayModes,
     captureScreenshot,
-    cleanupPageArtifacts,
   });
 
   const handleSiteboardMouseDown = useCallback(
@@ -178,17 +178,14 @@ export function Siteboard({
     >
       {interactionCursor && <InteractionOverlay cursor={interactionCursor} />}
 
-      <div
-        ref={canvasRef}
-        className="absolute inset-0"
-        style={{ transformOrigin: '0 0', willChange: 'transform' }}
-      >
+      <div ref={canvasRef} className="absolute inset-0 origin-top-left will-change-transform">
         {pages.map((page) =>
           isStickyNote(page) ? (
             <StickyNoteNode
               key={page.id}
               page={page}
               isActive={page.id === selectedPageId}
+              hideColorCycleButton={hideCompactControls}
               onActivate={onSelectPage}
               onClose={handleRemovePage}
               onDragStart={handleDragStart}
@@ -201,13 +198,16 @@ export function Siteboard({
               key={page.id}
               page={page}
               isActive={page.id === selectedPageId}
-              title={pageTitles[page.id] ?? page.title}
+              title={page.title}
               displayWidth={resizingSize?.pageId === page.id ? resizingSize.width : page.width}
               displayHeight={resizingSize?.pageId === page.id ? resizingSize.height : page.height}
               displayMode={displayModes[page.id] ?? 'native'}
               screenshotUrl={screenshotUrls[page.id] ?? null}
+              hideTopNavControls={hideCompactControls}
+              hideBottomPresetControls={hideCompactControls}
               canGoBack={navStates[page.id]?.can_go_back ?? false}
               canGoForward={navStates[page.id]?.can_go_forward ?? false}
+              getZoom={getZoom}
               onGoBack={handleGoBack}
               onGoForward={handleGoForward}
               onActivate={onSelectPage}

@@ -4,8 +4,10 @@ use commands::{
     store::{close_ready, load_project_state, save_project_state},
     theme::{get_platform_info, load_theme, set_theme},
     webview::{
+        batch_update_page_webview_bounds, batch_update_webview_positions,
         capture_webview_screenshot, create_page_webview, get_navigation_state_page_webview,
         go_back_page_webview, go_forward_page_webview, reload_page_webview,
+        update_page_webview_bounds,
     },
 };
 
@@ -36,6 +38,9 @@ pub fn run() {
             go_back_page_webview,
             go_forward_page_webview,
             get_navigation_state_page_webview,
+            update_page_webview_bounds,
+            batch_update_page_webview_bounds,
+            batch_update_webview_positions,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri アプリの起動中にエラーが発生しました");

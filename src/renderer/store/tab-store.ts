@@ -7,7 +7,9 @@ import {
   DEFAULT_STICKY_NOTE_WIDTH,
   DEFAULT_VIEWPORT,
   HOME_ID,
+  MAX_ZOOM,
   MAX_VERTICAL_SEARCH_STEPS,
+  MIN_ZOOM,
   PAGE_GAP,
   SIDEBAR_DEFAULT_WIDTH,
 } from '@/renderer/constants';
@@ -80,6 +82,10 @@ function resolveNextActiveId(removedIndex: number, remainingIds: string[]): stri
   const leftNeighbor = remainingIds[removedIndex - 1];
   const rightNeighbor = remainingIds[removedIndex];
   return leftNeighbor ?? rightNeighbor ?? HOME_ID;
+}
+
+function clampZoom(zoom: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
 interface ProjectActions {
@@ -319,7 +325,11 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     set((state) => ({
       projects: state.projects.map((p) => {
         if (p.id !== projectId) return p;
-        return { ...p, viewport: { ...p.viewport, ...viewport } };
+        const nextViewport =
+          typeof viewport.zoom === 'number'
+            ? { ...viewport, zoom: clampZoom(viewport.zoom) }
+            : viewport;
+        return { ...p, viewport: { ...p.viewport, ...nextViewport } };
       }),
     })),
 
@@ -451,6 +461,12 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       // webviewLabel はランタイム専用のため、復元時に必ずクリアする
       projects: restoredState.projects.map((p) => ({
         ...p,
+        viewport: {
+          ...p.viewport,
+          zoom: clampZoom(
+            typeof p.viewport?.zoom === 'number' ? p.viewport.zoom : DEFAULT_VIEWPORT.zoom,
+          ),
+        },
         pages: p.pages.map(({ webviewLabel: _wl, ...pg }) => pg),
       })),
       openIds: restoredState.openIds,

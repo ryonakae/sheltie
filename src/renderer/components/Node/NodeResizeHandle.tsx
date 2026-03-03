@@ -1,53 +1,79 @@
-import {
-  PAGE_RESIZE_CORNER_SIZE,
-  PAGE_RESIZE_HANDLE_OFFSET,
-  PAGE_RESIZE_HANDLE_SIZE,
-} from '@/renderer/constants';
-
-type NodeResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+import type { NodeResizeDirection } from '@/renderer/hooks/siteboard/types';
+import { zoomPx } from '@/renderer/lib/canvas-zoom';
 
 interface NodeResizeHandleProps {
   direction: NodeResizeDirection;
   onMouseDown: (e: React.MouseEvent, direction: NodeResizeDirection) => void;
 }
 
-const CURSOR_MAP: Record<NodeResizeDirection, string> = {
-  n: 'ns-resize',
-  s: 'ns-resize',
-  e: 'ew-resize',
-  w: 'ew-resize',
-  ne: 'nesw-resize',
-  nw: 'nwse-resize',
-  se: 'nwse-resize',
-  sw: 'nesw-resize',
+const CURSOR_CLASS_MAP: Record<NodeResizeDirection, string> = {
+  n: 'cursor-ns-resize',
+  s: 'cursor-ns-resize',
+  e: 'cursor-ew-resize',
+  w: 'cursor-ew-resize',
+  ne: 'cursor-nesw-resize',
+  nw: 'cursor-nwse-resize',
+  se: 'cursor-nwse-resize',
+  sw: 'cursor-nesw-resize',
 };
-
-const EDGE_SIZE = PAGE_RESIZE_HANDLE_SIZE;
-const EDGE_OFFSET = PAGE_RESIZE_HANDLE_OFFSET;
-const CORNER_SIZE = PAGE_RESIZE_CORNER_SIZE;
 
 /** ハンドルの位置スタイル（calc() でズームに関係なく一定のヒット領域を確保） */
 const POSITION_STYLE: Record<NodeResizeDirection, React.CSSProperties> = {
-  n: { top: 0, left: EDGE_OFFSET, right: EDGE_OFFSET, height: EDGE_SIZE },
+  n: {
+    top: 0,
+    left: zoomPx(12),
+    right: zoomPx(12),
+    height: zoomPx(12),
+  },
   s: {
     bottom: 0,
-    left: EDGE_OFFSET,
-    right: EDGE_OFFSET,
-    height: EDGE_SIZE,
+    left: zoomPx(12),
+    right: zoomPx(12),
+    height: zoomPx(12),
   },
-  e: { top: EDGE_OFFSET, bottom: EDGE_OFFSET, right: 0, width: EDGE_SIZE },
-  w: { top: EDGE_OFFSET, bottom: EDGE_OFFSET, left: 0, width: EDGE_SIZE },
-  ne: { top: 0, right: 0, width: CORNER_SIZE, height: CORNER_SIZE },
-  nw: { top: 0, left: 0, width: CORNER_SIZE, height: CORNER_SIZE },
-  se: { bottom: 0, right: 0, width: CORNER_SIZE, height: CORNER_SIZE },
-  sw: { bottom: 0, left: 0, width: CORNER_SIZE, height: CORNER_SIZE },
+  e: {
+    top: zoomPx(12),
+    bottom: zoomPx(12),
+    right: 0,
+    width: zoomPx(12),
+  },
+  w: {
+    top: zoomPx(12),
+    bottom: zoomPx(12),
+    left: 0,
+    width: zoomPx(12),
+  },
+  ne: {
+    top: 0,
+    right: 0,
+    width: zoomPx(12),
+    height: zoomPx(12),
+  },
+  nw: {
+    top: 0,
+    left: 0,
+    width: zoomPx(12),
+    height: zoomPx(12),
+  },
+  se: {
+    bottom: 0,
+    right: 0,
+    width: zoomPx(12),
+    height: zoomPx(12),
+  },
+  sw: {
+    bottom: 0,
+    left: 0,
+    width: zoomPx(12),
+    height: zoomPx(12),
+  },
 };
 
 export function NodeResizeHandle({ direction, onMouseDown }: NodeResizeHandleProps) {
   return (
     <div
-      className="absolute z-20"
-      style={{ ...POSITION_STYLE[direction], cursor: CURSOR_MAP[direction] }}
+      className={`absolute z-20 ${CURSOR_CLASS_MAP[direction]}`}
+      style={POSITION_STYLE[direction]}
       onMouseDown={(e) => {
         e.stopPropagation();
         onMouseDown(e, direction);
@@ -55,5 +81,3 @@ export function NodeResizeHandle({ direction, onMouseDown }: NodeResizeHandlePro
     />
   );
 }
-
-export type { NodeResizeDirection };

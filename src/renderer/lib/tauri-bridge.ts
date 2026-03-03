@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
-import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
 import { listen } from '@tauri-apps/api/event';
 import { Webview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-import type { ProjectState, ThemeMode } from '@/shared/types';
+import type { ProjectState } from '@/renderer/types/tab';
+import type { ThemeMode } from '@/shared/types';
 
 // ── プロジェクト状態 ─────────────────────────────────────────────
 
@@ -59,22 +59,39 @@ export const webviewApi = {
     y: number,
     width: number,
     height: number,
-  ): Promise<string> => invoke('create_page_webview', { pageId, url, x, y, width, height }),
+    zoom: number,
+  ): Promise<string> =>
+    invoke('create_page_webview', {
+      pageId,
+      url,
+      x,
+      y,
+      width,
+      height,
+      zoom,
+    }),
 
-  /** Webview の位置・サイズを更新 */
+  /**
+   * Webview の frame（物理サイズ）と viewScale をアトミックに更新する。
+   * _WKLayoutModeDynamicSizeComputedFromViewScale により CSS viewport = frame.size / zoom となる。
+   */
   async updateBounds(
-    label: string,
+    pageId: string,
     x: number,
     y: number,
     width: number,
     height: number,
+    zoom: number,
   ): Promise<void> {
     try {
-      const wv = getWebviewHandle(label);
-      await Promise.all([
-        wv.setPosition(new LogicalPosition(x, y)),
-        wv.setSize(new LogicalSize(width, height)),
-      ]);
+      await invoke('update_page_webview_bounds', {
+        pageId,
+        x,
+        y,
+        width,
+        height,
+        zoom,
+      });
     } catch {
       // Webview 未作成・既破棄時は no-op
     }
@@ -109,32 +126,74 @@ export const webviewApi = {
     await Promise.all(labels.map((l) => this.hide(l)));
   },
 
-  /** 複数 Webview の座標を一括更新（show/hide なし、操作中のリアルタイム同期用） */
+  /**
+   * 複数 Webview の frame + viewScale を一括更新する（show/hide なし、操作中のリアルタイム同期用）。
+   * pageId から label に変換して Rust コマンドに渡す。
+   */
   async updateAllBounds(
-    entries: { label: string; x: number; y: number; w: number; h: number }[],
+    entries: {
+      pageId: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      zoom: number;
+    }[],
   ): Promise<void> {
-    await Promise.all(entries.map(({ label, x, y, w, h }) => this.updateBounds(label, x, y, w, h)));
+    if (entries.length === 0) return;
+    try {
+      await invoke('batch_update_page_webview_bounds', {
+        entries: entries.map(({ pageId, x, y, w, h, zoom }) => ({
+          pageId,
+          x,
+          y,
+          width: w,
+          height: h,
+          zoom,
+        })),
+      });
+    } catch {
+      // no-op
+    }
   },
 
-  /** 複数 Webview の座標を更新してから一括表示（操作完了時） */
+  /**
+   * パン操作専用: 複数 Webview の位置のみを一括更新する。
+   * パン中は size や zoom は変化しないため、より軽量な IPC コマンドを使用して追従遅延を軽減する。
+   */
+  async updateAllPositions(
+    entries: {
+      pageId: string;
+      x: number;
+      y: number;
+    }[],
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    try {
+      await invoke('batch_update_webview_positions', { entries });
+    } catch {
+      // no-op
+    }
+  },
+
+  /** 複数 Webview の frame + viewScale を更新してから一括表示（操作完了時） */
   async showAllWithBounds(
-    entries: { label: string; x: number; y: number; w: number; h: number }[],
+    entries: {
+      pageId: string;
+      label: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      zoom: number;
+    }[],
   ): Promise<void> {
     await Promise.all(
-      entries.map(async ({ label, x, y, w, h }) => {
-        await this.updateBounds(label, x, y, w, h);
+      entries.map(async ({ pageId, label, x, y, w, h, zoom }) => {
+        await this.updateBounds(pageId, x, y, w, h, zoom);
         await this.show(label);
       }),
     );
-  },
-
-  /** Tauri Webview のネイティブズームを適用する。 */
-  async setZoom(pageId: string, scaleFactor: number): Promise<void> {
-    try {
-      await getWebviewHandle(`page-${pageId}`).setZoom(scaleFactor);
-    } catch {
-      // Webview 未作成・既破棄時は no-op
-    }
   },
 
   /** ページ Webview のブラウザ履歴を1つ戻る */

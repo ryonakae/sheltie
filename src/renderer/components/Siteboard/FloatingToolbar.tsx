@@ -12,10 +12,7 @@ interface FloatingToolbarProps {
 export function FloatingToolbar({ onAddPage, onAddStickyNote }: FloatingToolbarProps) {
   return (
     /* ツールバー全体の配置レイヤー: pointer-events-none で Siteboard の操作を妨げない */
-    <div
-      className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center"
-      style={{ zIndex: 40 }}
-    >
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-40 flex justify-center">
       <div className="pointer-events-auto">
         <Surface
           variant="default"

@@ -280,6 +280,8 @@ export function ProjectScreen() {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      isResizing.current = false;
+      document.body.style.userSelect = '';
     };
   }, [updateSidebarWidth, activeId]);
 

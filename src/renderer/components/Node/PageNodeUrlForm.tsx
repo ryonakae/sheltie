@@ -3,6 +3,7 @@ import { FieldError, Input, TextField } from '@heroui/react';
 import { useMemo, useState } from 'react';
 
 import { AppButton } from '@/renderer/components/Common/AppButton';
+import { zoomPx } from '@/renderer/lib/canvas-zoom';
 import { normalizeUrl } from '@/renderer/lib/url-utils';
 
 interface PageNodeUrlFormProps {
@@ -27,14 +28,14 @@ export function PageNodeUrlForm({ onSubmit }: PageNodeUrlFormProps) {
         onSubmit={handleSubmit}
         className="flex flex-col items-center"
         style={{
-          gap: 'calc(12px / var(--canvas-zoom, 1))',
-          width: 'calc(280px / var(--canvas-zoom, 1))',
+          gap: zoomPx(12),
+          width: zoomPx(280),
         }}
       >
         <Globe
           style={{
-            width: 'calc(28px / var(--canvas-zoom, 1))',
-            height: 'calc(28px / var(--canvas-zoom, 1))',
+            width: zoomPx(28),
+            height: zoomPx(28),
             color: 'var(--color-muted)',
           }}
         />
@@ -47,7 +48,7 @@ export function PageNodeUrlForm({ onSubmit }: PageNodeUrlFormProps) {
           <Input
             autoFocus
             placeholder="https://example.com"
-            style={{ fontSize: 'calc(14px / var(--canvas-zoom, 1))' }}
+            style={{ fontSize: zoomPx(14) }}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 (e.target as HTMLInputElement).blur();
@@ -55,9 +56,7 @@ export function PageNodeUrlForm({ onSubmit }: PageNodeUrlFormProps) {
             }}
           />
           {hasValue && !isValid && (
-            <FieldError style={{ fontSize: 'calc(12px / var(--canvas-zoom, 1))' }}>
-              有効なURLを入力してください
-            </FieldError>
+            <FieldError style={{ fontSize: zoomPx(12) }}>有効なURLを入力してください</FieldError>
           )}
         </TextField>
         <AppButton
@@ -65,7 +64,7 @@ export function PageNodeUrlForm({ onSubmit }: PageNodeUrlFormProps) {
           type="submit"
           variant="primary"
           isDisabled={!isValid}
-          style={{ fontSize: 'calc(14px / var(--canvas-zoom, 1))' }}
+          style={{ fontSize: zoomPx(14) }}
         >
           開く
         </AppButton>

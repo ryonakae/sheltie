@@ -1,3 +1,9 @@
+import {
+  PAGE_RESIZE_CORNER_SIZE,
+  PAGE_RESIZE_HANDLE_OFFSET,
+  PAGE_RESIZE_HANDLE_SIZE,
+} from '@/renderer/constants';
+
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 interface PageResizeHandleProps {
@@ -16,10 +22,9 @@ const CURSOR_MAP: Record<ResizeDirection, string> = {
   sw: 'nesw-resize',
 };
 
-const Z = 'var(--canvas-zoom, 1)';
-const EDGE_SIZE = `calc(12px / ${Z})`;
-const EDGE_OFFSET = `calc(12px / ${Z})`;
-const CORNER_SIZE = `calc(12px / ${Z})`;
+const EDGE_SIZE = PAGE_RESIZE_HANDLE_SIZE;
+const EDGE_OFFSET = PAGE_RESIZE_HANDLE_OFFSET;
+const CORNER_SIZE = PAGE_RESIZE_CORNER_SIZE;
 
 /** ハンドルの位置スタイル（calc() でズームに関係なく一定のヒット領域を確保） */
 const POSITION_STYLE: Record<ResizeDirection, React.CSSProperties> = {

@@ -3,15 +3,16 @@ import { isSortable } from '@dnd-kit/react/sortable';
 import House from '@gravity-ui/icons/House';
 import HouseFill from '@gravity-ui/icons/HouseFill';
 import Plus from '@gravity-ui/icons/Plus';
-import { Button } from '@heroui/react';
 import { motion } from 'motion/react';
+import { twMerge } from 'tailwind-merge';
 import { useShallow } from 'zustand/react/shallow';
 
-import { HOME_ID } from '@/renderer/types/tab';
-import { useProjectStore } from '@/renderer/store/tab-store';
-import { useWindowControlsInset } from '@/renderer/hooks/useWindowControlsInset';
+import { AppButton } from '@/renderer/components/Common/AppButton';
 import { TabItem } from '@/renderer/components/TabBar/TabItem';
 import { ThemeToggle } from '@/renderer/components/TabBar/ThemeToggle';
+import { HOME_ID } from '@/renderer/constants';
+import { useWindowControlsInset } from '@/renderer/hooks/useWindowControlsInset';
+import { useProjectStore } from '@/renderer/store/tab-store';
 
 export function TabBar() {
   const {
@@ -52,12 +53,12 @@ export function TabBar() {
     >
       {/* ホームボタン: クリックでホームキャンバスに切り替え */}
       <motion.button
-        className={[
+        className={twMerge(
           'flex shrink-0 cursor-pointer items-center border-r border-b-2 border-border px-3 select-none',
           isHomeActive
             ? 'border-b-transparent bg-surface text-foreground'
             : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
-        ].join(' ')}
+        )}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         transition={{ duration: 0.15 }}
@@ -95,16 +96,13 @@ export function TabBar() {
             />
           ))}
           {/* タブ追加ボタン: 最後のタブのすぐ右に配置 */}
-          <Button
-            isIconOnly
-            variant="ghost"
-            size="sm"
+          <AppButton
             className="mx-1 self-center"
             aria-label="プロジェクトを追加"
             onPress={() => createProject()}
           >
             <Plus className="size-4" />
-          </Button>
+          </AppButton>
         </div>
       </DragDropProvider>
 

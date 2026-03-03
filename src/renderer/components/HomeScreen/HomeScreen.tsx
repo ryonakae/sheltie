@@ -1,10 +1,9 @@
-import { motion } from 'motion/react';
 import Plus from '@gravity-ui/icons/Plus';
+import { motion } from 'motion/react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useProjectStore } from '@/renderer/store/tab-store';
-
 import { ProjectCard } from '@/renderer/components/HomeScreen/ProjectCard';
+import { useProjectStore } from '@/renderer/store/tab-store';
 
 export function HomeScreen() {
   const { projects, createProject, openProject } = useProjectStore(

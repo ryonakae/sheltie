@@ -1,10 +1,11 @@
 import Display from '@gravity-ui/icons/Display';
 import Moon from '@gravity-ui/icons/Moon';
 import Sun from '@gravity-ui/icons/Sun';
-import { Button, Dropdown, Label, Separator } from '@heroui/react';
+import { Dropdown, Label, Separator } from '@heroui/react';
 
-import type { ThemeMode } from '@/shared/types';
+import { AppButton } from '@/renderer/components/Common/AppButton';
 import { useThemeStore } from '@/renderer/store/theme-store';
+import type { ThemeMode } from '@/shared/types';
 
 export function ThemeToggle() {
   const { isDark, setMode } = useThemeStore();
@@ -13,9 +14,9 @@ export function ThemeToggle() {
 
   return (
     <Dropdown>
-      <Button isIconOnly variant="ghost" size="sm" aria-label="テーマを変更">
+      <AppButton aria-label="テーマを変更">
         <CurrentIcon className="size-4" />
-      </Button>
+      </AppButton>
       <Dropdown.Popover>
         <Dropdown.Menu
           onAction={(key) => {

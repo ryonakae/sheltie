@@ -1,8 +1,8 @@
-import { memo, useCallback } from 'react';
-
 import { useSortable } from '@dnd-kit/react/sortable';
 import Xmark from '@gravity-ui/icons/Xmark';
 import { motion } from 'motion/react';
+import { memo, useCallback } from 'react';
+import { twMerge } from 'tailwind-merge';
 
 import type { Project } from '@/renderer/types/tab';
 
@@ -44,13 +44,13 @@ export const TabItem = memo(function TabItem({
   return (
     <motion.div
       ref={ref}
-      className={[
+      className={twMerge(
         'relative flex h-full cursor-pointer items-center gap-1 border-r border-b-2 border-border px-3 text-sm select-none',
         isActive
           ? 'border-b-transparent bg-surface text-foreground'
           : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
         isDragging ? 'opacity-50' : '',
-      ].join(' ')}
+      )}
       whileHover="hover"
       initial="rest"
       variants={containerVariants}

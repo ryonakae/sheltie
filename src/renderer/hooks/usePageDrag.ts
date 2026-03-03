@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+import { DRAG_THRESHOLD } from '@/renderer/constants';
+
 interface UsePageDragOptions {
   zoom: React.RefObject<number>;
   onDragEnd: (pageId: string, x: number, y: number) => void;
@@ -16,8 +18,6 @@ interface DragState {
 }
 
 /** mousedown から実際の移動とみなす最小距離（px） */
-const DRAG_THRESHOLD = 3;
-
 /**
  * アートボード内のページをドラッグ移動する Hook。
  * タイトルバーの mousedown → mousemove（DOM 直接操作）→ mouseup（ストア同期）の流れ。

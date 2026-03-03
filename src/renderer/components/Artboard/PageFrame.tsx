@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
-import type { Page } from '@/renderer/types/tab';
-import type { DisplayMode } from '@/renderer/types/tab';
-import { isPageEmpty, isPageMoved } from '@/renderer/types/tab';
-import { webviewApi } from '@/renderer/lib/tauri-bridge';
+import { PageBottomBar } from '@/renderer/components/Artboard/PageBottomBar';
 import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
-import { PageBottomBar, PageTopBar } from '@/renderer/components/Artboard/PageTitleBar';
+import { PageTopBar } from '@/renderer/components/Artboard/PageTopBar';
 import { PageUrlForm } from '@/renderer/components/Artboard/PageUrlForm';
+import { webviewApi } from '@/renderer/lib/tauri-bridge';
+import type { DisplayMode, Page } from '@/renderer/types/tab';
+import { isPageEmpty, isPageMoved } from '@/renderer/types/tab';
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
@@ -20,19 +20,17 @@ interface PageFrameProps {
   displayMode: DisplayMode;
   /** スクリーンショット ObjectURL（screenshot モード時に表示） */
   screenshotUrl: string | null;
-  /** キャンバスのズームレベル（Webview のページズームに適用してビューポートを論理サイズに復元） */
-  canvasZoom: number;
   canGoBack: boolean;
   canGoForward: boolean;
-  onGoBack: () => void;
-  onGoForward: () => void;
-  onActivate: () => void;
-  onReload: () => void;
-  onPinUrl: () => void;
-  onClose: () => void;
-  onDragStart: (e: React.MouseEvent) => void;
-  onResizeStart: (e: React.MouseEvent, direction: ResizeDirection) => void;
-  onResizePreset: (width: number, height: number) => void;
+  onGoBack: (pageId: string) => void;
+  onGoForward: (pageId: string) => void;
+  onActivate: (pageId: string) => void;
+  onReload: (pageId: string) => void;
+  onPinUrl: (pageId: string) => void;
+  onClose: (pageId: string) => void;
+  onDragStart: (e: React.MouseEvent, pageId: string) => void;
+  onResizeStart: (e: React.MouseEvent, pageId: string, direction: ResizeDirection) => void;
+  onResizePreset: (pageId: string, width: number, height: number) => void;
   onNavigated: (pageId: string, url: string, title: string) => void;
   onTitleUpdated: (pageId: string, title: string) => void;
   onWebviewCreated: (pageId: string, label: string) => void;
@@ -42,7 +40,7 @@ interface PageFrameProps {
   onUrlSubmit: (pageId: string, url: string) => void;
 }
 
-export function PageFrame({
+export const PageFrame = memo(function PageFrame({
   page,
   isActive,
   title,
@@ -50,7 +48,6 @@ export function PageFrame({
   displayHeight,
   displayMode,
   screenshotUrl,
-  canvasZoom,
   canGoBack,
   canGoForward,
   onGoBack,
@@ -124,8 +121,6 @@ export function PageFrame({
           currentRect.width,
           currentRect.height,
         );
-        // キャンバスズームに合わせてビューポートを論理サイズに復元
-        void webviewApi.setZoom(label, canvasZoom);
         void webviewApi.show(label);
         // Zustand 更新後にフォールバック effect が念押し表示
         onWebviewCreated(page.id, label);
@@ -183,29 +178,43 @@ export function PageFrame({
     if (displayMode === 'native') {
       const rect = placeholderRef.current.getBoundingClientRect();
       void webviewApi.updateBounds(label, rect.left, rect.top, rect.width, rect.height);
-      // キャンバスズームに合わせてビューポートを論理サイズに復元（Artboard の命令的制御が主経路、こちらはフォールバック）
-      void webviewApi.setZoom(label, canvasZoom);
       void webviewApi.show(label);
     } else {
       void webviewApi.hide(label);
     }
     // page.webviewLabel: setPageWebviewLabel 後に effect を再実行して初期表示を念押し
-  }, [displayMode, page.x, page.y, page.width, page.height, page.webviewLabel, canvasZoom]);
+  }, [displayMode, page.x, page.y, page.width, page.height, page.webviewLabel]);
+
+  // page.id は UUID で不変のため、親の関数参照が安定していればこれらも安定する
+  const handleActivate = useCallback(() => onActivate(page.id), [onActivate, page.id]);
+  const handleGoBackBound = useCallback(() => onGoBack(page.id), [onGoBack, page.id]);
+  const handleGoForwardBound = useCallback(() => onGoForward(page.id), [onGoForward, page.id]);
+  const handleReloadBound = useCallback(() => onReload(page.id), [onReload, page.id]);
+  const handlePinUrlBound = useCallback(() => onPinUrl(page.id), [onPinUrl, page.id]);
+  const handleCloseBound = useCallback(() => onClose(page.id), [onClose, page.id]);
+  const handleDragStartBound = useCallback(
+    (e: React.MouseEvent) => onDragStart(e, page.id),
+    [onDragStart, page.id],
+  );
+  const handleResizePresetBound = useCallback(
+    (w: number, h: number) => onResizePreset(page.id, w, h),
+    [onResizePreset, page.id],
+  );
 
   const handleTitleBarMouseDown = useCallback(
     (e: React.MouseEvent) => {
       // onActivate は外側 div の onMouseDown バブリングで呼ばれるため重複して呼ばない
-      onDragStart(e);
+      handleDragStartBound(e);
     },
-    [onDragStart],
+    [handleDragStartBound],
   );
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent, direction: ResizeDirection) => {
-      onActivate();
-      onResizeStart(e, direction);
+      handleActivate();
+      onResizeStart(e, page.id, direction);
     },
-    [onActivate, onResizeStart],
+    [handleActivate, onResizeStart, page.id],
   );
 
   return (
@@ -222,7 +231,7 @@ export function PageFrame({
         outlineOffset: 0,
       }}
       data-page-id={page.id}
-      onMouseDown={onActivate}
+      onMouseDown={handleActivate}
     >
       <PageTopBar
         title={title}
@@ -230,11 +239,11 @@ export function PageFrame({
         isMoved={isPageMoved(page)}
         canGoBack={isPageEmpty(page) ? false : canGoBack}
         canGoForward={isPageEmpty(page) ? false : canGoForward}
-        onGoBack={isPageEmpty(page) ? undefined : onGoBack}
-        onGoForward={isPageEmpty(page) ? undefined : onGoForward}
-        onReload={isPageEmpty(page) ? undefined : onReload}
-        onPinUrl={isPageMoved(page) ? onPinUrl : undefined}
-        onClose={onClose}
+        onGoBack={isPageEmpty(page) ? undefined : handleGoBackBound}
+        onGoForward={isPageEmpty(page) ? undefined : handleGoForwardBound}
+        onReload={isPageEmpty(page) ? undefined : handleReloadBound}
+        onPinUrl={isPageMoved(page) ? handlePinUrlBound : undefined}
+        onClose={handleCloseBound}
         onMouseDown={handleTitleBarMouseDown}
       />
 
@@ -268,7 +277,11 @@ export function PageFrame({
         )}
       </div>
 
-      <PageBottomBar width={displayWidth} height={displayHeight} onResizePreset={onResizePreset} />
+      <PageBottomBar
+        width={displayWidth}
+        height={displayHeight}
+        onResizePreset={handleResizePresetBound}
+      />
 
       {/* リサイズハンドル（8方向） */}
       {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeDirection[]).map((dir) => (
@@ -276,6 +289,6 @@ export function PageFrame({
       ))}
     </div>
   );
-}
+});
 
 export type { ResizeDirection };

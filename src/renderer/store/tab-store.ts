@@ -7,12 +7,11 @@ import {
   DEFAULT_STICKY_NOTE_WIDTH,
   DEFAULT_VIEWPORT,
   HOME_ID,
-} from '@/renderer/types/tab';
-import type { Page, Project, ProjectState, Viewport } from '@/renderer/types/tab';
-
-const SIDEBAR_DEFAULT_WIDTH = 240;
-const PAGE_GAP = 100;
-const MAX_VERTICAL_SEARCH_STEPS = 60;
+  MAX_VERTICAL_SEARCH_STEPS,
+  PAGE_GAP,
+  SIDEBAR_DEFAULT_WIDTH,
+} from '@/renderer/constants';
+import { type Page, type Project, type ProjectState, type Viewport } from '@/renderer/types/tab';
 
 function createProject(count: number): Project {
   return {

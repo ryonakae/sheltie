@@ -1,16 +1,11 @@
-import { type MouseEvent, forwardRef, useCallback, useEffect, useRef } from 'react';
-
 import Xmark from '@gravity-ui/icons/Xmark';
 import { animate, motion, useReducedMotion } from 'motion/react';
+import { type MouseEvent, forwardRef, useCallback, useEffect, useRef } from 'react';
+import { twMerge } from 'tailwind-merge';
 
+import { PAGE_CHROME_HEIGHT, STICKY_NOTE_COLORS } from '@/renderer/constants';
 import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
-import {
-  STICKY_NOTE_COLORS,
-  type Page,
-  isPageEmpty,
-  isPageMoved,
-  isStickyNote,
-} from '@/renderer/types/tab';
+import { type Page, isPageEmpty, isPageMoved, isStickyNote } from '@/renderer/types/tab';
 
 interface SidebarProps {
   initialWidth: number;
@@ -29,8 +24,6 @@ const removeButtonVariants = {
   rest: { opacity: 0 },
   hover: { opacity: 1 },
 } as const;
-
-const PAGE_CHROME_HEIGHT = 48; // PageTopBar + PageBottomBar の合計（world 座標ベース）
 
 type CenterTarget = Pick<Page, 'id' | 'x' | 'y' | 'width' | 'height'>;
 
@@ -189,9 +182,10 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
             return (
               <motion.li
                 key={page.id}
-                className={`flex items-start gap-1.5 rounded-md px-2 py-1.5 text-sm ${
-                  isSelected ? 'bg-default-hover/80' : ''
-                } hover:bg-default-hover`}
+                className={twMerge(
+                  'flex items-start gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-default-hover',
+                  isSelected ? 'bg-default-hover/80' : '',
+                )}
                 variants={pageListItemVariants}
                 initial="rest"
                 whileHover="hover"
@@ -206,11 +200,11 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-1 truncate text-foreground">
                       <span
-                        className="inline-block size-2.5 shrink-0 rounded-full border"
-                        style={{
-                          backgroundColor: STICKY_NOTE_COLORS[page.colorIndex ?? 0].bg,
-                          borderColor: STICKY_NOTE_COLORS[page.colorIndex ?? 0].border,
-                        }}
+                        className={twMerge(
+                          'inline-block size-2.5 shrink-0 rounded-full border',
+                          STICKY_NOTE_COLORS[page.colorIndex ?? 0].bgClass,
+                          STICKY_NOTE_COLORS[page.colorIndex ?? 0].borderClass,
+                        )}
                       />
                       {page.title}
                     </p>

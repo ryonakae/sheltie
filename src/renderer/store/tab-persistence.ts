@@ -1,7 +1,6 @@
+import { SAVE_DEBOUNCE_MS } from '@/renderer/constants';
 import { api } from '@/renderer/lib/tauri-bridge';
 import { useProjectStore } from '@/renderer/store/tab-store';
-
-const SAVE_DEBOUNCE_MS = 500;
 
 // HMR で setupProjectPersistence() が再実行されても多重登録を防ぐためのガード
 let initialized = false;

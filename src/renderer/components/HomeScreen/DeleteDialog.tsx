@@ -1,9 +1,9 @@
+import { AlertDialog } from '@heroui/react';
 import { useState } from 'react';
 
-import { AlertDialog, Button } from '@heroui/react';
-
-import type { Project } from '@/renderer/types/tab';
+import { AppButton } from '@/renderer/components/Common/AppButton';
 import { useProjectStore } from '@/renderer/store/tab-store';
+import type { Project } from '@/renderer/types/tab';
 
 interface DeleteDialogProps {
   project: Project;
@@ -37,12 +37,17 @@ export function DeleteDialog({ project, isOpen, onOpenChange }: DeleteDialogProp
             </p>
           </AlertDialog.Body>
           <AlertDialog.Footer>
-            <Button slot="close" variant="tertiary">
+            <AppButton slot="close" isIconOnly={false} variant="tertiary">
               キャンセル
-            </Button>
-            <Button variant="danger" isDisabled={isDeleting} onPress={handleDelete}>
+            </AppButton>
+            <AppButton
+              variant="danger"
+              isIconOnly={false}
+              isDisabled={isDeleting}
+              onPress={handleDelete}
+            >
               削除
-            </Button>
+            </AppButton>
           </AlertDialog.Footer>
         </AlertDialog.Dialog>
       </AlertDialog.Container>

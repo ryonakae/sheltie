@@ -1,8 +1,8 @@
+import Globe from '@gravity-ui/icons/Globe';
+import { FieldError, Input, TextField } from '@heroui/react';
 import { useMemo, useState } from 'react';
 
-import Globe from '@gravity-ui/icons/Globe';
-import { Button, FieldError, Input, TextField } from '@heroui/react';
-
+import { AppButton } from '@/renderer/components/Common/AppButton';
 import { normalizeUrl } from '@/renderer/lib/url-utils';
 
 interface PageUrlFormProps {
@@ -60,14 +60,15 @@ export function PageUrlForm({ onSubmit }: PageUrlFormProps) {
             </FieldError>
           )}
         </TextField>
-        <Button
+        <AppButton
+          isIconOnly={false}
           type="submit"
-          size="sm"
+          variant="primary"
           isDisabled={!isValid}
           style={{ fontSize: 'calc(14px / var(--canvas-zoom, 1))' }}
         >
           開く
-        </Button>
+        </AppButton>
       </form>
     </div>
   );

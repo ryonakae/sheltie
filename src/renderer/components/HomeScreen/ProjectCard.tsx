@@ -1,15 +1,14 @@
-import { useState } from 'react';
-
 import EllipsisVertical from '@gravity-ui/icons/EllipsisVertical';
 import Pencil from '@gravity-ui/icons/Pencil';
 import TrashBin from '@gravity-ui/icons/TrashBin';
-import { Button, Card, Dropdown, Label, Separator } from '@heroui/react';
+import { Card, Dropdown, Label, Separator } from '@heroui/react';
 import { motion } from 'motion/react';
+import { useState } from 'react';
 
-import type { Project } from '@/renderer/types/tab';
-
+import { AppButton } from '@/renderer/components/Common/AppButton';
 import { DeleteDialog } from '@/renderer/components/HomeScreen/DeleteDialog';
 import { RenameModal } from '@/renderer/components/HomeScreen/RenameModal';
+import type { Project } from '@/renderer/types/tab';
 
 interface ProjectCardProps {
   project: Project;
@@ -35,15 +34,9 @@ export function ProjectCard({ project, onOpen }: ProjectCardProps) {
             {/* コンテキストメニューのクリックがカードのクリックに伝播しないように stopPropagation */}
             <div onClick={(e) => e.stopPropagation()}>
               <Dropdown>
-                <Button
-                  isIconOnly
-                  variant="ghost"
-                  size="sm"
-                  aria-label="プロジェクトメニュー"
-                  className="size-6 shrink-0"
-                >
+                <AppButton aria-label="プロジェクトメニュー" className="size-6 shrink-0">
                   <EllipsisVertical className="size-3.5" />
-                </Button>
+                </AppButton>
                 <Dropdown.Popover>
                   <Dropdown.Menu
                     onAction={(key) => {

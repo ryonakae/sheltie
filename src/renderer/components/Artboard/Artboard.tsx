@@ -1,36 +1,32 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
 import { toast } from '@heroui/react';
 import { AnimatePresence, animate, motion, useReducedMotion } from 'motion/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
-import { webviewApi } from '@/renderer/lib/tauri-bridge';
-import type { NavigationState } from '@/renderer/lib/tauri-bridge';
-import { useArtboardPan } from '@/renderer/hooks/useArtboardPan';
-import { useArtboardZoom } from '@/renderer/hooks/useArtboardZoom';
-import { usePageDrag } from '@/renderer/hooks/usePageDrag';
-import { usePageResize } from '@/renderer/hooks/usePageResize';
 import { InteractionOverlay } from '@/renderer/components/Artboard/InteractionOverlay';
 import { PageFrame, type ResizeDirection } from '@/renderer/components/Artboard/PageFrame';
 import { StickyNoteFrame } from '@/renderer/components/Artboard/StickyNoteFrame';
 import { FloatingToolbar } from '@/renderer/components/Canvas/FloatingToolbar';
+import {
+  HYSTERESIS_PX,
+  NATIVE_SAFE_MARGIN_PX,
+  PRE_CAPTURE_MARGIN_PX,
+  PRE_DISPLAY_MARGIN_PX,
+  CAPTURE_MIN_INTERVAL_MS,
+  SCREENSHOT_REFRESH_INTERVAL_MS,
+  ZOOM_ANIMATION_EASE,
+  ZOOM_RESET_DURATION_SEC,
+  ZOOM_RESET_TARGET,
+} from '@/renderer/constants';
+import { useArtboardPan } from '@/renderer/hooks/useArtboardPan';
+import { useArtboardZoom } from '@/renderer/hooks/useArtboardZoom';
+import { usePageDrag } from '@/renderer/hooks/usePageDrag';
+import { usePageResize } from '@/renderer/hooks/usePageResize';
+import type { NavigationState } from '@/renderer/lib/tauri-bridge';
+import { webviewApi } from '@/renderer/lib/tauri-bridge';
+import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
 import type { DisplayMode } from '@/renderer/types/tab';
 import { isStickyNote } from '@/renderer/types/tab';
-
-/** intersection 判定のヒステリシスマージン（境界近辺でのモード振動を防ぐ） */
-const HYSTERESIS_PX = 4;
-/** スクリーンショットのプリキャプチャを開始するキャンバス端からの距離（px） */
-const PRE_CAPTURE_MARGIN_PX = 50;
-/** プリキャプチャの最小実行間隔（ms）、過剰撮影防止 */
-const CAPTURE_MIN_INTERVAL_MS = 1000;
-/** プリディスプレイゾーン: キャンバス端の外側 50px。hidden→screenshot の切り替え境界 */
-const PRE_DISPLAY_MARGIN_PX = 50;
-/** native ページのスクリーンショット定期リフレッシュ間隔（ms）。Webview 内スクロール等に対応 */
-const SCREENSHOT_REFRESH_INTERVAL_MS = 2000;
-const ZOOM_RESET_TARGET = 1;
-const ZOOM_RESET_DURATION_SEC = 0.24;
-const ZOOM_ANIMATION_EASE = [0.215, 0.61, 0.355, 1] as const;
 
 interface ArtboardProps {
   selectedPageId: string | null;
@@ -217,10 +213,10 @@ export function Artboard({
       ) {
         modes[page.id] = 'hidden';
       } else if (
-        pr.left >= cr.left - HYSTERESIS_PX &&
-        pr.right <= cr.right + HYSTERESIS_PX &&
-        pr.top >= cr.top - HYSTERESIS_PX &&
-        pr.bottom <= cr.bottom + HYSTERESIS_PX
+        pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
+        pr.right <= cr.right - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX &&
+        pr.top >= cr.top + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
+        pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX
       ) {
         modes[page.id] = 'native';
       } else {
@@ -235,8 +231,8 @@ export function Artboard({
       if (page.webviewLabel) {
         if (modes[page.id] === 'native') {
           void webviewApi.updateBounds(page.webviewLabel, pr.left, pr.top, pr.width, pr.height);
-          // キャンバスズームに合わせて Webview のページズームを設定（ビューポートを論理サイズに復元）
-          void webviewApi.setZoom(page.webviewLabel, zoomRef.current);
+          // CSS transform injection でビジュアルスケーリング（ビューポートサイズは変更しない）
+          void webviewApi.setScale(page.id, zoomRef.current);
           void webviewApi.show(page.webviewLabel);
         } else {
           void webviewApi.hide(page.webviewLabel);
@@ -296,14 +292,12 @@ export function Artboard({
     const cr = containerRectRef.current;
     if (!cr || !canvasRef.current) return;
 
-    // ズーム値が変化した時のみ全 Webview に setZoom を適用（パン中はズーム値が変わらないため不要な呼び出しを防ぐ）
+    // ズーム値が変化した時のみ全 Webview に setScale を適用（パン中はズーム値が変わらないため不要な呼び出しを防ぐ）
     const currentZoom = zoomRef.current;
     if (currentZoom !== lastAppliedZoomRef.current) {
       lastAppliedZoomRef.current = currentZoom;
       for (const page of pages) {
-        if (page.webviewLabel) {
-          void webviewApi.setZoom(page.webviewLabel, currentZoom);
-        }
+        void webviewApi.setScale(page.id, currentZoom);
       }
     }
 
@@ -330,13 +324,13 @@ export function Artboard({
       const isOutsideCanvas =
         pr.right <= cr.left || pr.left >= cr.right || pr.bottom <= cr.top || pr.top >= cr.bottom;
 
-      // 完全にキャンバス内か判定（ヒステリシス付き）
+      // 安全マージン内（端から50px以上内側）か判定（ヒステリシス付き）
       const isFullyInside =
         !isOutsideCanvas &&
-        pr.left >= cr.left - HYSTERESIS_PX &&
-        pr.right <= cr.right + HYSTERESIS_PX &&
-        pr.top >= cr.top - HYSTERESIS_PX &&
-        pr.bottom <= cr.bottom + HYSTERESIS_PX;
+        pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
+        pr.right <= cr.right - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX &&
+        pr.top >= cr.top + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
+        pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX;
 
       if (currentMode === 'native') {
         if (isOutsideExpanded) {
@@ -822,6 +816,10 @@ export function Artboard({
       if (title) {
         setPageTitles((prev) => ({ ...prev, [pageId]: title }));
       }
+      // ページナビゲーション後に CSS transform スケールを再適用（initialization_script は定義のみで呼び出さない）
+      if (Math.abs(zoomRef.current - 1.0) >= 0.005) {
+        void webviewApi.setScale(pageId, zoomRef.current);
+      }
       // ナビゲーション完了後にスクリーンショットを更新（500ms 遅延でロード完了を待つ）
       setTimeout(() => void captureScreenshot(pageId), 500);
       void refreshNavigationState(pageId);
@@ -858,8 +856,8 @@ export function Artboard({
   const handleWebviewCreated = useCallback(
     (pageId: string, label: string) => {
       setPageWebviewLabel(activeId, pageId, label);
-      // 作成直後にキャンバスのズームレベルを適用（ビューポートを論理サイズに合わせる）
-      void webviewApi.setZoom(label, zoomRef.current);
+      // 作成直後に CSS transform スケールを適用
+      void webviewApi.setScale(pageId, zoomRef.current);
       // Webview 作成完了後に displayMode を再計算（初期表示位置の判定）
       requestAnimationFrame(() => computeDisplayModes());
       void refreshNavigationState(pageId);
@@ -923,6 +921,13 @@ export function Artboard({
     [setPageUrl, activeId],
   );
 
+  const handleResizePreset = useCallback(
+    (pageId: string, width: number, height: number) => {
+      updatePageSize(activeId, pageId, width, height);
+    },
+    [updatePageSize, activeId],
+  );
+
   const handleStickyNoteContentChange = useCallback(
     (pageId: string, content: string) => {
       updateStickyNoteContent(activeId, pageId, content);
@@ -972,10 +977,10 @@ export function Artboard({
               key={page.id}
               page={page}
               isActive={page.id === selectedPageId}
-              onActivate={() => onSelectPage(page.id)}
-              onClose={() => handleRemovePage(page.id)}
-              onDragStart={(e) => handleDragStart(e, page.id)}
-              onResizeStart={(e, direction) => startStickyNoteResize(e, page.id, direction)}
+              onActivate={onSelectPage}
+              onClose={handleRemovePage}
+              onDragStart={handleDragStart}
+              onResizeStart={startStickyNoteResize}
               onContentChange={handleStickyNoteContentChange}
               onColorCycle={handleStickyNoteColorCycle}
             />
@@ -989,20 +994,17 @@ export function Artboard({
               displayHeight={resizingSize?.pageId === page.id ? resizingSize.height : page.height}
               displayMode={displayModes[page.id] ?? 'native'}
               screenshotUrl={screenshotUrls[page.id] ?? null}
-              canvasZoom={viewportZoom}
               canGoBack={navStates[page.id]?.can_go_back ?? false}
               canGoForward={navStates[page.id]?.can_go_forward ?? false}
-              onGoBack={() => handleGoBack(page.id)}
-              onGoForward={() => handleGoForward(page.id)}
-              onActivate={() => {
-                onSelectPage(page.id);
-              }}
-              onReload={() => handleReloadPage(page.id)}
-              onPinUrl={() => handlePinPageUrl(page.id)}
-              onClose={() => handleRemovePage(page.id)}
-              onDragStart={(e) => handleDragStart(e, page.id)}
-              onResizeStart={(e, direction) => handleResizeStart(e, page.id, direction)}
-              onResizePreset={(w, h) => updatePageSize(activeId, page.id, w, h)}
+              onGoBack={handleGoBack}
+              onGoForward={handleGoForward}
+              onActivate={onSelectPage}
+              onReload={handleReloadPage}
+              onPinUrl={handlePinPageUrl}
+              onClose={handleRemovePage}
+              onDragStart={handleDragStart}
+              onResizeStart={handleResizeStart}
+              onResizePreset={handleResizePreset}
               onNavigated={handleNavigated}
               onTitleUpdated={handleTitleUpdated}
               onWebviewCreated={handleWebviewCreated}

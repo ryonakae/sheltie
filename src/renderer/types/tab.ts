@@ -1,5 +1,3 @@
-export const HOME_ID = '__home__' as const;
-
 /** ネイティブ Webview の表示モード */
 export type DisplayMode = 'native' | 'screenshot' | 'hidden';
 
@@ -33,31 +31,11 @@ export interface Viewport {
   panY: number;
 }
 
-export const DEFAULT_VIEWPORT: Viewport = { zoom: 1, panX: 0, panY: 0 };
-export const DEFAULT_PAGE_WIDTH = 375;
-export const DEFAULT_PAGE_HEIGHT = 812;
-export const DEFAULT_STICKY_NOTE_WIDTH = 200;
-export const DEFAULT_STICKY_NOTE_HEIGHT = 200;
-
-/** 付箋のカラーパレット */
-export const STICKY_NOTE_COLORS = [
-  { bg: '#FFF9C4', border: '#FBC02D' }, // 薄黄色
-  { bg: '#FCE4EC', border: '#E91E63' }, // 薄ピンク
-  { bg: '#E0F7FA', border: '#00ACC1' }, // 薄水色
-  { bg: '#E8F5E9', border: '#43A047' }, // 薄緑
-] as const;
-
 export interface SizePreset {
   label: string;
   width: number;
   height: number;
 }
-
-export const SIZE_PRESETS: readonly SizePreset[] = [
-  { label: 'モバイル', width: 375, height: 812 },
-  { label: 'タブレット', width: 768, height: 1024 },
-  { label: 'PC', width: 1280, height: 800 },
-];
 
 export interface Project {
   id: string;

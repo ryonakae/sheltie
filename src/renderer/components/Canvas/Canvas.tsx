@@ -1,26 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-
-import { animate, useReducedMotion } from 'motion/react';
-import { Button, Tooltip } from '@heroui/react';
 import ChevronsCollapseHorizontal from '@gravity-ui/icons/ChevronsCollapseHorizontal';
 import ChevronsExpandHorizontal from '@gravity-ui/icons/ChevronsExpandHorizontal';
+import { animate, useReducedMotion } from 'motion/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
+import { Artboard } from '@/renderer/components/Artboard/Artboard';
+import { ResizeHandle } from '@/renderer/components/Canvas/ResizeHandle';
+import { Sidebar } from '@/renderer/components/Canvas/Sidebar';
+import { AppButton } from '@/renderer/components/Common/AppButton';
 import {
   DEFAULT_PAGE_HEIGHT,
   DEFAULT_PAGE_WIDTH,
   DEFAULT_STICKY_NOTE_HEIGHT,
   DEFAULT_STICKY_NOTE_WIDTH,
-  type Page,
-} from '@/renderer/types/tab';
-import { Artboard } from '@/renderer/components/Artboard/Artboard';
-import { ResizeHandle } from '@/renderer/components/Canvas/ResizeHandle';
-import { Sidebar } from '@/renderer/components/Canvas/Sidebar';
-
-const SIDEBAR_MIN_WIDTH = 160;
-const SIDEBAR_MAX_WIDTH = 384;
-const SIDEBAR_DEFAULT_WIDTH = 240;
-const PAGE_CHROME_HEIGHT = 48;
+  CANVAS_CENTER_ANIMATION_DURATION_SEC,
+  CANVAS_CENTER_ANIMATION_EASE,
+  PAGE_CHROME_HEIGHT,
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+} from '@/renderer/constants';
+import { selectActiveProject, useProjectStore } from '@/renderer/store/tab-store';
+import { type Page } from '@/renderer/types/tab';
 
 /** 現在のビューポート中央のワールド座標を起点とした、指定サイズの要素の配置位置を算出する */
 function getViewportCenterPos(
@@ -165,11 +165,9 @@ export function Canvas() {
         onComplete?.();
       };
 
-      const DURATION = 0.4;
-      const EASE = [0.215, 0.61, 0.355, 1] as const;
       const xControls = animate(viewport.panX, targetPanX, {
-        duration: DURATION,
-        ease: EASE,
+        duration: CANVAS_CENTER_ANIMATION_DURATION_SEC,
+        ease: CANVAS_CENTER_ANIMATION_EASE,
         onUpdate: (v: number) => {
           latestState.x = v;
           updateAll();
@@ -177,8 +175,8 @@ export function Canvas() {
         onComplete: handleComplete,
       });
       const yControls = animate(viewport.panY, targetPanY, {
-        duration: DURATION,
-        ease: EASE,
+        duration: CANVAS_CENTER_ANIMATION_DURATION_SEC,
+        ease: CANVAS_CENTER_ANIMATION_EASE,
         onUpdate: (v: number) => {
           latestState.y = v;
           updateAll();
@@ -186,8 +184,8 @@ export function Canvas() {
         onComplete: handleComplete,
       });
       const zoomControls = animate(viewport.zoom, targetZoom, {
-        duration: DURATION,
-        ease: EASE,
+        duration: CANVAS_CENTER_ANIMATION_DURATION_SEC,
+        ease: CANVAS_CENTER_ANIMATION_EASE,
         onUpdate: (v: number) => {
           latestState.zoom = v;
           updateAll();
@@ -298,20 +296,14 @@ export function Canvas() {
         <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
       )}
       <div className="absolute bottom-4 left-4 z-30">
-        <Tooltip>
-          <Button
-            isIconOnly
-            size="sm"
-            variant="ghost"
-            onPress={toggleSidebar}
-            aria-label={isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}
-          >
-            {isSidebarVisible ? <ChevronsCollapseHorizontal /> : <ChevronsExpandHorizontal />}
-          </Button>
-          <Tooltip.Content placement="top">
-            <p>{isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}</p>
-          </Tooltip.Content>
-        </Tooltip>
+        <AppButton
+          size="sm"
+          tooltipMessage={isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}
+          onPress={toggleSidebar}
+          aria-label={isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}
+        >
+          {isSidebarVisible ? <ChevronsCollapseHorizontal /> : <ChevronsExpandHorizontal />}
+        </AppButton>
       </div>
       <Artboard
         selectedPageId={selectedPageId}

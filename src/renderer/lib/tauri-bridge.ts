@@ -1,11 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
+import { listen } from '@tauri-apps/api/event';
 import { Webview } from '@tauri-apps/api/webview';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
-import type { ProjectState } from '@/shared/types';
-import type { ThemeMode } from '@/shared/types';
+import type { ProjectState, ThemeMode } from '@/shared/types';
 
 // ── プロジェクト状態 ─────────────────────────────────────────────
 
@@ -129,10 +128,11 @@ export const webviewApi = {
     );
   },
 
-  /** Webview 内のページズームレベルを設定する（キャンバスズームとビューポートを同期させるために使用） */
-  async setZoom(label: string, scaleFactor: number): Promise<void> {
+  /** CSS transform injection でビジュアルスケーリングを適用する。
+   * pageZoom と異なりビューポートサイズを変更せず、レイアウトリフローも発生しない。 */
+  async setScale(pageId: string, scaleFactor: number): Promise<void> {
     try {
-      await getWebviewHandle(label).setZoom(scaleFactor);
+      await invoke('set_page_webview_scale', { pageId, scale: scaleFactor });
     } catch {
       // Webview 未作成・既破棄時は no-op
     }

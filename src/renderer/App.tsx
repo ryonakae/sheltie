@@ -15,7 +15,7 @@ export default function App() {
   if (!isLoaded) return null;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col select-none">
       <TabBar />
       {isHome ? <HomeScreen /> : <Canvas key={activeId} />}
       <Toast.Provider placement="bottom" />

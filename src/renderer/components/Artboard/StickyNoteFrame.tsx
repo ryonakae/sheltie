@@ -1,25 +1,27 @@
-import { useCallback, useRef, useState } from 'react';
-
 import Sticker from '@gravity-ui/icons/Sticker';
 import Xmark from '@gravity-ui/icons/Xmark';
+import { memo, useCallback, useRef, useState } from 'react';
+import { twMerge } from 'tailwind-merge';
 
-import { STICKY_NOTE_COLORS, type Page } from '@/renderer/types/tab';
 import { PageResizeHandle } from '@/renderer/components/Artboard/PageResizeHandle';
+import { AppButton } from '@/renderer/components/Common/AppButton';
+import { STICKY_NOTE_COLORS } from '@/renderer/constants';
+import { type Page } from '@/renderer/types/tab';
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 interface StickyNoteFrameProps {
   page: Page;
   isActive: boolean;
-  onActivate: () => void;
-  onClose: () => void;
-  onDragStart: (e: React.MouseEvent) => void;
-  onResizeStart: (e: React.MouseEvent, direction: ResizeDirection) => void;
+  onActivate: (pageId: string) => void;
+  onClose: (pageId: string) => void;
+  onDragStart: (e: React.MouseEvent, pageId: string) => void;
+  onResizeStart: (e: React.MouseEvent, pageId: string, direction: ResizeDirection) => void;
   onContentChange: (pageId: string, content: string) => void;
   onColorCycle: (pageId: string) => void;
 }
 
-export function StickyNoteFrame({
+export const StickyNoteFrame = memo(function StickyNoteFrame({
   page,
   isActive,
   onActivate,
@@ -58,43 +60,66 @@ export function StickyNoteFrame({
     onContentChange(page.id, editingContent);
   }, [page.id, editingContent, onContentChange]);
 
+  // page.id は UUID で不変のため、親の関数参照が安定していればこれらも安定する
+  const handleActivate = useCallback(() => onActivate(page.id), [onActivate, page.id]);
+  const handleCloseBound = useCallback(() => onClose(page.id), [onClose, page.id]);
+
   const handleResizeStart = useCallback(
     (e: React.MouseEvent, direction: ResizeDirection) => {
-      onActivate();
-      onResizeStart(e, direction);
+      handleActivate();
+      onResizeStart(e, page.id, direction);
     },
-    [onActivate, onResizeStart],
+    [handleActivate, onResizeStart, page.id],
+  );
+
+  const noteClassName = twMerge(
+    'absolute flex flex-col shadow-lg',
+    color.bgClass,
+    isActive ? '' : 'border',
+    color.borderClass,
+  );
+  const noteHeaderClassName = twMerge(
+    'flex shrink-0 cursor-grab items-center gap-1 active:cursor-grabbing',
+    color.borderClass,
+  );
+  const noteColorButtonClassName = twMerge(
+    'flex shrink-0 cursor-pointer items-center justify-center rounded-sm',
+    'border',
+    nextColor.borderClass,
+    nextColor.bgClass,
+    nextColor.textClass,
+    'hover:opacity-80',
   );
 
   return (
     <div
-      className="absolute flex flex-col shadow-lg"
+      className={noteClassName}
       style={{
         left: page.x,
         top: page.y,
         width: page.width,
-        backgroundColor: color.bg,
         borderRadius: 'calc(8px / var(--canvas-zoom, 1))',
-        outline: isActive
-          ? 'calc(2px / var(--canvas-zoom, 1)) solid var(--color-focus)'
-          : `calc(1px / var(--canvas-zoom, 1)) solid ${color.border}`,
+        outline: isActive ? 'calc(2px / var(--canvas-zoom, 1)) solid var(--color-focus)' : 'none',
+        borderWidth: isActive ? undefined : 'calc(1px / var(--canvas-zoom, 1))',
+        borderStyle: isActive ? undefined : 'solid',
         outlineOffset: 0,
       }}
       data-page-id={page.id}
-      onMouseDown={onActivate}
+      onMouseDown={handleActivate}
     >
       {/* タイトルバー（ドラッグハンドル） */}
       <div
-        className="flex shrink-0 cursor-grab items-center gap-1 active:cursor-grabbing"
+        className={noteHeaderClassName}
         style={{
           height: 'calc(28px / var(--canvas-zoom, 1))',
           paddingLeft: 'calc(8px / var(--canvas-zoom, 1))',
           paddingRight: 'calc(4px / var(--canvas-zoom, 1))',
-          borderBottom: `calc(1px / var(--canvas-zoom, 1)) solid ${color.border}`,
+          borderBottomWidth: 'calc(1px / var(--canvas-zoom, 1))',
+          borderBottomStyle: 'solid',
         }}
         onMouseDown={(e) => {
           // テキスト選択・ボタン操作以外でドラッグ開始
-          onDragStart(e);
+          onDragStart(e, page.id);
         }}
       >
         <span
@@ -109,43 +134,38 @@ export function StickyNoteFrame({
         </span>
 
         {/* 色切り替えボタン（次の色をプレビュー表示） */}
-        <button
-          className="flex shrink-0 cursor-pointer items-center justify-center rounded-sm hover:opacity-80"
+        <AppButton
+          size="xs"
+          className={noteColorButtonClassName}
           style={{
             width: 'calc(18px / var(--canvas-zoom, 1))',
             height: 'calc(18px / var(--canvas-zoom, 1))',
-            backgroundColor: nextColor.bg,
-            border: `calc(1px / var(--canvas-zoom, 1)) solid ${nextColor.border}`,
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onColorCycle(page.id);
+            borderWidth: 'calc(1px / var(--canvas-zoom, 1))',
           }}
           onMouseDown={(e) => e.stopPropagation()}
+          onPress={() => onColorCycle(page.id)}
           aria-label="色を切り替え"
         >
           <Sticker
+            className={nextColor.textClass}
             style={{
               width: 'calc(10px / var(--canvas-zoom, 1))',
               height: 'calc(10px / var(--canvas-zoom, 1))',
-              color: nextColor.border,
             }}
           />
-        </button>
+        </AppButton>
 
         {/* 閉じるボタン */}
-        <button
+        <AppButton
+          size="xs"
           className="flex shrink-0 cursor-pointer items-center justify-center rounded-sm hover:opacity-80"
           style={{
             width: 'calc(18px / var(--canvas-zoom, 1))',
             height: 'calc(18px / var(--canvas-zoom, 1))',
             color: '#888',
           }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
           onMouseDown={(e) => e.stopPropagation()}
+          onPress={handleCloseBound}
           aria-label="付箋を削除"
         >
           <Xmark
@@ -154,7 +174,7 @@ export function StickyNoteFrame({
               height: 'calc(12px / var(--canvas-zoom, 1))',
             }}
           />
-        </button>
+        </AppButton>
       </div>
 
       {/* テキスト表示/編集エリア（usePageResize 互換のため data-webview-placeholder 属性を付与） */}
@@ -215,4 +235,4 @@ export function StickyNoteFrame({
       ))}
     </div>
   );
-}
+});

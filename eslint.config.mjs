@@ -4,6 +4,7 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import eslintConfigPrettier from 'eslint-config-prettier/flat';
 import globals from 'globals';
+import importPlugin from 'eslint-plugin-import';
 import betterTailwindcss from 'eslint-plugin-better-tailwindcss';
 import reactHooks from 'eslint-plugin-react-hooks';
 
@@ -37,20 +38,75 @@ export default tseslint.config(
   // Renderer プロセス（ブラウザ環境）
   {
     files: ['src/renderer/**/*.{ts,tsx}', 'src/shared/**/*.ts'],
+    plugins: {
+      import: importPlugin,
+    },
     languageOptions: {
       globals: {
         ...globals.browser,
       },
     },
+    settings: {
+      'import/parsers': {
+        '@typescript-eslint/parser': ['.ts', '.tsx', '.d.ts', '.mts', '.cts'],
+      },
+      'import/resolver': {
+        typescript: {
+          alwaysTryTypes: true,
+          project: './tsconfig.json',
+        },
+        node: {
+          extensions: ['.js', '.jsx', '.ts', '.tsx', '.d.ts', '.mjs', '.cjs', '.mts', '.cts'],
+        },
+      },
+    },
+    rules: {
+      'import/order': [
+        'warn',
+        {
+          groups: [
+            'builtin',
+            'external',
+            'internal',
+            'parent',
+            'sibling',
+            'index',
+            'object',
+            'type',
+          ],
+          pathGroups: [{ pattern: '@/**', group: 'internal', position: 'after' }],
+          pathGroupsExcludedImportTypes: ['builtin'],
+          'newlines-between': 'always',
+          alphabetize: {
+            order: 'asc',
+            caseInsensitive: true,
+          },
+          warnOnUnassignedImports: true,
+        },
+      ],
+      'import/no-unresolved': 'error',
+      'import/no-duplicates': 'error',
+      'import/no-named-as-default': 'off',
+      'import/no-named-as-default-member': 'off',
+      'import/default': 'off',
+      'import/namespace': 'off',
+    },
   },
 
-  // 設定ファイル（Node.js 環境）
+  // 設定ファイル側は import-plugin の誤検知を抑制
   {
-    files: ['*.config.ts', '*.config.mts', '*.config.mjs'],
-    languageOptions: {
-      globals: {
-        ...globals.node,
-      },
+    files: ['*.config.ts', '*.config.mts', '*.config.mjs', 'vite.config.mts'],
+    plugins: {
+      import: importPlugin,
+    },
+    rules: {
+      'import/no-unresolved': 'off',
+      'import/order': 'off',
+      'import/no-duplicates': 'off',
+      'import/no-named-as-default': 'off',
+      'import/no-named-as-default-member': 'off',
+      'import/default': 'off',
+      'import/namespace': 'off',
     },
   },
 

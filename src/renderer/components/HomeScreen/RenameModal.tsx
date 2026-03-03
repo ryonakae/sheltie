@@ -1,9 +1,9 @@
+import { Input, Label, Modal, TextField } from '@heroui/react';
 import { useState } from 'react';
 
-import { Button, Input, Label, Modal, TextField } from '@heroui/react';
-
-import type { Project } from '@/renderer/types/tab';
+import { AppButton } from '@/renderer/components/Common/AppButton';
 import { useProjectStore } from '@/renderer/store/tab-store';
+import type { Project } from '@/renderer/types/tab';
 
 interface RenameModalProps {
   project: Project;
@@ -45,12 +45,17 @@ export function RenameModal({ project, isOpen, onOpenChange }: RenameModalProps)
               </TextField>
             </Modal.Body>
             <Modal.Footer>
-              <Button slot="close" variant="tertiary">
+              <AppButton slot="close" isIconOnly={false} variant="tertiary">
                 キャンセル
-              </Button>
-              <Button type="submit" isDisabled={!name.trim()}>
+              </AppButton>
+              <AppButton
+                type="submit"
+                isIconOnly={false}
+                variant="primary"
+                isDisabled={!name.trim()}
+              >
                 変更
-              </Button>
+              </AppButton>
             </Modal.Footer>
           </form>
         </Modal.Dialog>

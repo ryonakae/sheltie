@@ -1,8 +1,6 @@
 import { useCallback, useEffect } from 'react';
 
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 1.5;
-const ZOOM_SENSITIVITY = 0.001;
+import { MIN_ZOOM, MAX_ZOOM, ZOOM_SENSITIVITY } from '@/renderer/constants';
 
 interface UseArtboardZoomOptions {
   containerRef: React.RefObject<HTMLDivElement | null>;

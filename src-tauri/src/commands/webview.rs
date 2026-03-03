@@ -220,6 +220,26 @@ pub async fn reload_page_webview(app: AppHandle, page_id: String, url: String) -
         .map_err(|e| format!("ナビゲーションに失敗: {e}"))
 }
 
+/// CSS transform injection でビジュアルスケーリングを適用する。
+/// pageZoom と異なりビューポートサイズを変更せず、レイアウトリフローも発生しない。
+#[tauri::command]
+pub async fn set_page_webview_scale(
+    app: AppHandle,
+    page_id: String,
+    scale: f64,
+) -> Result<(), String> {
+    let label = format!("page-{}", page_id);
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    webview
+        .eval(&format!(
+            "window.__siteboardSetScale&&window.__siteboardSetScale({})",
+            scale
+        ))
+        .map_err(|e| format!("eval エラー: {e}"))
+}
+
 /// ページ用のネイティブ Webview を作成しイベントハンドラーを登録する。
 ///
 /// 作成後の位置・サイズ・表示制御は JS 側の Webview API で行う（IPC 不要）。
@@ -259,6 +279,8 @@ pub async fn create_page_webview(
     // initialization_script を注入して URL 変更を on_document_title_changed 経由で通知する。
     // on_navigation は WKWebView の decidePolicyForNavigationAction にマッピングされており、
     // pushState/replaceState では発火しないため、この代替手段が必要。
+    // __siteboardSetScale: CSS transform でビジュアルスケーリングのみ行い、ビューポートサイズを変更しない。
+    // pageZoom と異なりレイアウトリフローが発生せず、拡大縮小禁止サイトでも表示が崩れない。
     let spa_url_detection_script = r#"(function() {
   var lastUrl = location.href;
   function onUrlChange() {
@@ -282,6 +304,21 @@ pub async fn create_page_webview(
     return r;
   };
   window.addEventListener('popstate', onUrlChange);
+  window.__siteboardSetScale = function(s) {
+    var h = document.documentElement;
+    if (!h) return;
+    if (Math.abs(s - 1) < 0.005) {
+      h.style.removeProperty('transform');
+      h.style.removeProperty('transform-origin');
+      h.style.removeProperty('width');
+      h.style.removeProperty('overflow-x');
+    } else {
+      h.style.setProperty('transform', 'scale(' + s + ')', 'important');
+      h.style.setProperty('transform-origin', 'top left', 'important');
+      h.style.setProperty('width', (100 / s) + '%', 'important');
+      h.style.setProperty('overflow-x', 'hidden', 'important');
+    }
+  };
 })();"#;
 
     window

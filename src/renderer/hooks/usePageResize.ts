@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+import { PAGE_MIN_HEIGHT, PAGE_MIN_WIDTH } from '@/renderer/constants';
 
-const PAGE_MIN_WIDTH = 320;
-const PAGE_MIN_HEIGHT = 200;
+type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 interface UsePageResizeOptions {
   zoom: React.RefObject<number>;

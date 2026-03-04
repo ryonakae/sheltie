@@ -1,6 +1,6 @@
 # ドメインモデル
 
-主な型定義は `src/renderer/types/tab.ts`。
+主な型定義は `src/types/index.ts`（`ThemeMode`・ドメインモデル・ヘルパー関数をすべて集約）。
 
 ## 型
 
@@ -22,7 +22,7 @@
 
 ## 主要定数
 
-`src/renderer/constants/project.ts`
+`src/constants/project.ts`
 
 - `HOME_ID = '__home__'`
 - `DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 }`
@@ -30,7 +30,7 @@
 - `DEFAULT_PAGE_HEIGHT = 812`
 - `SIZE_PRESETS = [モバイル, タブレット, PC]`
 
-`src/renderer/constants/siteboard.ts`
+`src/constants/siteboard.ts`
 
 - ズーム: `MIN_ZOOM = 0.2`, `MAX_ZOOM = 1.5`
 - しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 50`

@@ -10,13 +10,12 @@ src-tauri/
   src/lib.rs
   src/commands/{store,theme,webview}.rs
 src/
-  renderer/
-    components/
-    hooks/
-    lib/
-    screens/
-    store/
-    types/
+  components/
+  hooks/
+  lib/
+  screens/
+  store/
+  types/
 ```
 
 ## フロントエンド責務

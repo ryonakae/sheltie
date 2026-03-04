@@ -7,7 +7,7 @@
 - ライブラリ/API 仕様の確認は Context7 を使う。
 - import は `@/` エイリアスを使い、相対パス `../` は使わない。
 - TypeScript の `strict` 前提で、未使用変数・引数を残さない。
-- 実装完了時に `lint` / `format:check` / `typecheck` を実行する。
+- 実装完了時に `lint` / `format` / `typecheck` を実行する。
 
 ## SHOULD
 

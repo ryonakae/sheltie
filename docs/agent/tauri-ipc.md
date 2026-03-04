@@ -1,6 +1,6 @@
 # Tauri IPC 契約
 
-実装の正本は `src-tauri/src/lib.rs` と `src/renderer/lib/tauri-bridge.ts`。
+実装の正本は `src-tauri/src/lib.rs` と `src/lib/tauri-bridge.ts`。
 この文書は契約の読みやすい要約。
 
 ## Renderer -> Backend（invoke）

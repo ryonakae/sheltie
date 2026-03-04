@@ -3,11 +3,11 @@
 この文書は Siteboard の表示制御と Webview ランタイムの正本。
 対象実装は主に以下。
 
-- `src/renderer/components/Siteboard/Siteboard.tsx`
-- `src/renderer/hooks/siteboard/useSiteboardDisplayEngine.ts`
-- `src/renderer/hooks/siteboard/useSiteboardViewportEngine.ts`
-- `src/renderer/hooks/siteboard/useSiteboardNodeRuntime.ts`
-- `src/renderer/components/Node/PageNode.tsx`
+- `src/components/Siteboard/Siteboard.tsx`
+- `src/hooks/siteboard/useSiteboardDisplayEngine.ts`
+- `src/hooks/siteboard/useSiteboardViewportEngine.ts`
+- `src/hooks/siteboard/useSiteboardNodeRuntime.ts`
+- `src/components/Node/PageNode.tsx`
 
 ## 表示モード
 

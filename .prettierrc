@@ -8,5 +8,5 @@
   "arrowParens": "always",
   "endOfLine": "lf",
   "plugins": ["prettier-plugin-tailwindcss"],
-  "tailwindStylesheet": "./src/renderer/index.css"
+  "tailwindStylesheet": "./src/index.css"
 }

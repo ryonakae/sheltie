@@ -87,7 +87,6 @@ typings/
 
 # Vite
 .vite/
-src/renderer/.vite/
 dist/
 
 # Tauri

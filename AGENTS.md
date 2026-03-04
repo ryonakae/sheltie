@@ -19,7 +19,7 @@ Rust バックエンドと Vite React フロントエンドで構成されてい
 - import は `@/` エイリアスを使用し、`../` 相対パスは使わない。
 - Siteboard の表示モード・Webview 制御を変更する場合は `docs/agent/siteboard-runtime.md` を必ず更新する。
 - IPC コマンドを追加・変更する場合は `docs/agent/tauri-ipc.md` を必ず更新する。
-- 実装完了時は `npm run lint` `npm run format:check` `npm run typecheck` を実行する。
+- 実装完了時は `npm run lint` `npm run format` `npm run typecheck` を実行する。
 - テストフレームワークは未導入のため、最低限の動作確認手順を PR 説明に残す。
 - 変わりやすい一時情報は書かず、恒久ルールだけを残す。
 
@@ -30,8 +30,8 @@ npm run dev          # 開発モード起動（Tauri CLI + Vite HMR）
 npm run build        # アプリをビルド
 npm run lint         # ESLint
 npm run lint:fix     # ESLint 自動修正
-npm run format       # Prettier 書き込み
-npm run format:check # Prettier 検査
+npm run format:fix     # Prettier 書き込み
+npm run format         # Prettier 検査
 npm run typecheck    # TypeScript 型チェック
 ```
 

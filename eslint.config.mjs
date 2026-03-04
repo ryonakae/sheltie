@@ -11,7 +11,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 export default tseslint.config(
   // ビルド成果物・エージェントスクリプト・Rust ビルド成果物を除外
   {
-    ignores: ['.vite/', 'out/', 'dist/', 'src/renderer/.vite/', '.agents/', 'src-tauri/'],
+    ignores: ['.vite/', 'out/', 'dist/', '.agents/', 'src-tauri/'],
   },
 
   eslint.configs.recommended,
@@ -29,15 +29,16 @@ export default tseslint.config(
   // Tailwind CSS エントリーポイントを指定してクラス順序チェックを有効化
   {
     settings: {
+      callees: ['classnames', 'clsx', 'ctl'],
       'better-tailwindcss': {
-        entryPoint: 'src/renderer/index.css',
+        entryPoint: 'src/index.css',
       },
     },
   },
 
   // Renderer プロセス（ブラウザ環境）
   {
-    files: ['src/renderer/**/*.{ts,tsx}', 'src/shared/**/*.ts'],
+    files: ['src/**/*.{ts,tsx}'],
     plugins: {
       import: importPlugin,
     },

@@ -21,11 +21,6 @@
     "resolveJsonModule": true,
     "jsx": "react-jsx"
   },
-  "include": [
-    "src/renderer/**/*.ts",
-    "src/renderer/**/*.tsx",
-    "src/shared/**/*.ts",
-    "vite.config.mts"
-  ],
-  "exclude": ["src-tauri", "src/main", "src/preload"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.mts"],
+  "exclude": ["src-tauri"]
 }

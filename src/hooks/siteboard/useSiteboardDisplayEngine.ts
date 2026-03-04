@@ -58,6 +58,7 @@ export function useSiteboardDisplayEngine({
   const nativeRevealTimersRef = useRef<Record<string, number>>({});
   const nativeRevealTokenRef = useRef<Record<string, number>>({});
   const resizingPageIdRef = useRef<string | null>(null);
+  const contextMenuPageIdRef = useRef<string | null>(null);
 
   const screenshotUrlsRef = useRef<Record<string, string>>({});
   const knownPageIdsRef = useRef<Set<string>>(new Set());
@@ -154,6 +155,11 @@ export function useSiteboardDisplayEngine({
         nextMode = 'native';
       } else {
         nextMode = screenshotReadyRef.current[page.id] ? 'screenshot' : 'native';
+      }
+
+      // コンテキストメニュー表示中のページは native に復帰させない
+      if (contextMenuPageIdRef.current === page.id && nextMode === 'native') {
+        nextMode = screenshotReadyRef.current[page.id] ? 'screenshot' : 'hidden';
       }
 
       const currentAttr = wrapper.getAttribute('data-display-mode') ?? 'native';
@@ -743,6 +749,58 @@ export function useSiteboardDisplayEngine({
     ],
   );
 
+  const handleContextMenuOpen = useCallback(
+    async (pageId: string) => {
+      contextMenuPageIdRef.current = pageId;
+      cancelNativeReveal(pageId);
+
+      const page = pages.find((p) => p.id === pageId);
+
+      // スクリーンショット未準備時は Webview が visible なうちに撮影を完了させてから hide する
+      if (!screenshotReadyRef.current[pageId] && page?.webviewLabel) {
+        if (!captureInFlightRef.current[pageId]) {
+          captureInFlightRef.current[pageId] = true;
+          lastCaptureTimeRef.current[pageId] = Date.now();
+          try {
+            await captureScreenshotRef.current?.(pageId, {
+              forceDuringInteraction: true,
+            });
+          } finally {
+            captureInFlightRef.current[pageId] = false;
+          }
+        }
+      }
+
+      // 撮影完了後（または既にスクリーンショットがある場合）にモード切替 + hide
+      const wrapper = canvasRef.current?.querySelector(
+        `[data-page-id="${pageId}"]`,
+      ) as HTMLElement | null;
+
+      const newMode: DisplayMode = screenshotReadyRef.current[pageId] ? 'screenshot' : 'hidden';
+      if (wrapper) {
+        wrapper.setAttribute('data-display-mode', newMode);
+      }
+
+      setDisplayModes((prev) => {
+        if (prev[pageId] === newMode) return prev;
+        return { ...prev, [pageId]: newMode };
+      });
+
+      if (page?.webviewLabel) {
+        if (isMacOsRef.current) {
+          void webviewApi.setOpacity(pageId, 0);
+        }
+        void webviewApi.hide(page.webviewLabel);
+      }
+    },
+    [canvasRef, cancelNativeReveal, pages],
+  );
+
+  const handleContextMenuClose = useCallback(() => {
+    contextMenuPageIdRef.current = null;
+    computeDisplayModes();
+  }, [computeDisplayModes]);
+
   const cleanupPageArtifacts = useCallback(
     (pageId: string) => {
       cancelNativeReveal(pageId);
@@ -860,6 +918,8 @@ export function useSiteboardDisplayEngine({
     computeDisplayModes,
     computeInteractionModes,
     displayModes,
+    handleContextMenuClose,
+    handleContextMenuOpen,
     handleInteractionChange,
     handlePageResizeEnd,
     handlePageResizeStart,

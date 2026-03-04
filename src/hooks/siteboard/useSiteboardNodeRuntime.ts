@@ -1,5 +1,5 @@
 import { toast } from '@heroui/react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import type { NavigationState } from '@/lib/tauri-bridge';
@@ -49,6 +49,12 @@ export function useSiteboardNodeRuntime({
 }: UseSiteboardNodeRuntimeParams) {
   const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
 
+  // goBack/goForward 操作中フラグ。操作中は handleNavigated の楽観的更新をスキップする
+  const isGoingBackRef = useRef(false);
+  const isGoingForwardRef = useRef(false);
+  // handleNavigated の呼び出し回数（pageId 別）。初回は初期 URL ロードのためスキップ
+  const navigatedCountRef = useRef<Record<string, number>>({});
+
   const visibleNavStates = useMemo(() => {
     const pageIds = new Set(pages.map((page) => page.id));
     const next: Record<string, NavigationState> = {};
@@ -64,14 +70,20 @@ export function useSiteboardNodeRuntime({
     const state = await webviewApi.getNavigationState(pageId);
     setNavStates((prev) => {
       const existing = prev[pageId];
+      // ネイティブ API が true を返した場合はそれを採用。
+      // false の場合は既存の楽観的更新値を維持（SPA では canGoBack/canGoForward が常に false のため）
+      const merged: NavigationState = {
+        can_go_back: state.can_go_back || (existing?.can_go_back ?? false),
+        can_go_forward: state.can_go_forward || (existing?.can_go_forward ?? false),
+      };
       if (
         existing &&
-        existing.can_go_back === state.can_go_back &&
-        existing.can_go_forward === state.can_go_forward
+        existing.can_go_back === merged.can_go_back &&
+        existing.can_go_forward === merged.can_go_forward
       ) {
         return prev;
       }
-      return { ...prev, [pageId]: state };
+      return { ...prev, [pageId]: merged };
     });
   }, []);
 
@@ -86,19 +98,65 @@ export function useSiteboardNodeRuntime({
     });
   }, []);
 
-  const handleGoBack = useCallback((pageId: string) => {
-    void webviewApi.goBack(pageId);
-  }, []);
+  const handleGoBack = useCallback(
+    (pageId: string) => {
+      isGoingBackRef.current = true;
+      void webviewApi.goBack(pageId);
+      // 楽観的更新: 戻った後は少なくとも1つ進める
+      setNavStates((prev) => ({
+        ...prev,
+        [pageId]: {
+          can_go_back: prev[pageId]?.can_go_back ?? false,
+          can_go_forward: true,
+        },
+      }));
+      setTimeout(() => {
+        isGoingBackRef.current = false;
+        void refreshNavigationState(pageId);
+      }, 300);
+    },
+    [refreshNavigationState],
+  );
 
-  const handleGoForward = useCallback((pageId: string) => {
-    void webviewApi.goForward(pageId);
-  }, []);
+  const handleGoForward = useCallback(
+    (pageId: string) => {
+      isGoingForwardRef.current = true;
+      void webviewApi.goForward(pageId);
+      // 楽観的更新: 進んだ後は少なくとも1つ戻れる
+      setNavStates((prev) => ({
+        ...prev,
+        [pageId]: {
+          can_go_back: true,
+          can_go_forward: prev[pageId]?.can_go_forward ?? false,
+        },
+      }));
+      setTimeout(() => {
+        isGoingForwardRef.current = false;
+        void refreshNavigationState(pageId);
+      }, 300);
+    },
+    [refreshNavigationState],
+  );
 
   const handleNavigated = useCallback(
     (pageId: string, url: string, title: string) => {
       updatePageUrl(activeId, pageId, url, title);
       setTimeout(() => void captureScreenshot(pageId), 1000);
+
+      const count = (navigatedCountRef.current[pageId] ?? 0) + 1;
+      navigatedCountRef.current[pageId] = count;
+
+      // 初回は初期 URL ロードなので楽観的更新をスキップ。
+      // goBack/goForward 操作中も各ハンドラー側で更新済みのためスキップ
+      if (count >= 2 && !isGoingBackRef.current && !isGoingForwardRef.current) {
+        setNavStates((prev) => ({
+          ...prev,
+          [pageId]: { can_go_back: true, can_go_forward: false },
+        }));
+      }
+
       void refreshNavigationState(pageId);
+      setTimeout(() => void refreshNavigationState(pageId), 300);
     },
     [activeId, captureScreenshot, refreshNavigationState, updatePageUrl],
   );
@@ -157,6 +215,7 @@ export function useSiteboardNodeRuntime({
         onClearSelection();
       }
       removeNavigationState(pageId);
+      delete navigatedCountRef.current[pageId];
       removePage(activeId, pageId);
     },
     [activeId, onClearSelection, removeNavigationState, removePage, selectedPageId],

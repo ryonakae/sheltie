@@ -16,7 +16,7 @@ export function FloatingToolbar({ onAddPage, onAddStickyNote }: FloatingToolbarP
       <div className="pointer-events-auto">
         <Surface
           variant="default"
-          className="flex items-center rounded-xl border border-border p-1 shadow-md"
+          className="flex items-center rounded-full border border-border p-1 shadow-md"
         >
           <AppButton
             size="lg"

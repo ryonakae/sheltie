@@ -1,4 +1,3 @@
-import Xmark from '@gravity-ui/icons/Xmark';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
@@ -14,7 +13,7 @@ interface StickyNoteNodeProps {
   isActive: boolean;
   hideColorCycleButton: boolean;
   onActivate: (pageId: string) => void;
-  onClose: (pageId: string) => void;
+  onContextMenu: (e: React.MouseEvent, pageId: string) => void;
   onDragStart: (e: React.MouseEvent, pageId: string) => void;
   onResizeStart: (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => void;
   onContentChange: (pageId: string, content: string) => void;
@@ -27,7 +26,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   isActive,
   hideColorCycleButton,
   onActivate,
-  onClose,
+  onContextMenu,
   onDragStart,
   onResizeStart,
   onContentChange,
@@ -77,7 +76,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
 
   // page.id は UUID で不変のため、親の関数参照が安定していればこれらも安定する
   const handleActivate = useCallback(() => onActivate(page.id), [onActivate, page.id]);
-  const handleCloseBound = useCallback(() => onClose(page.id), [onClose, page.id]);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent, direction: NodeResizeDirection) => {
@@ -107,14 +105,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
     'hover:opacity-80',
   );
   const noteBodyColorClassName = page.content ? 'text-[#333]' : 'text-[#aaa]';
-  const noteHeaderActionButtonStyle = {
-    padding: zoomPx(2),
-  };
-  const closeIconStyle = {
-    width: zoomPx(14),
-    height: zoomPx(14),
-  };
-
   return (
     <div
       className={noteClassName}
@@ -128,6 +118,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       }}
       data-page-id={page.id}
       onMouseDown={handleActivate}
+      onContextMenu={(e) => onContextMenu(e, page.id)}
     >
       {/* タイトルバー（ドラッグハンドル） */}
       <div
@@ -171,19 +162,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
             <span />
           </AppButton>
         )}
-
-        {/* 閉じるボタン */}
-        <AppButton
-          size="xs"
-          scaleWithCanvasZoom
-          className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
-          style={noteHeaderActionButtonStyle}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPress={handleCloseBound}
-          aria-label="付箋を削除"
-        >
-          <Xmark style={closeIconStyle} />
-        </AppButton>
       </div>
 
       {/* テキスト表示/編集エリア（usePageResize 互換のため data-webview-placeholder 属性を付与） */}

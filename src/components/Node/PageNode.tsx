@@ -31,7 +31,7 @@ interface PageNodeProps {
   onActivate: (pageId: string) => void;
   onReload: (pageId: string) => void;
   onPinUrl: (pageId: string) => void;
-  onClose: (pageId: string) => void;
+  onContextMenu: (e: React.MouseEvent, pageId: string) => void;
   onDragStart: (e: React.MouseEvent, pageId: string) => void;
   onResizeStart: (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => void;
   onResizePreset: (pageId: string, width: number, height: number) => void;
@@ -64,7 +64,7 @@ export const PageNode = memo(function PageNode({
   onActivate,
   onReload,
   onPinUrl,
-  onClose,
+  onContextMenu,
   onDragStart,
   onResizeStart,
   onResizePreset,
@@ -221,7 +221,6 @@ export const PageNode = memo(function PageNode({
   const handleGoForwardBound = useCallback(() => onGoForward(page.id), [onGoForward, page.id]);
   const handleReloadBound = useCallback(() => onReload(page.id), [onReload, page.id]);
   const handlePinUrlBound = useCallback(() => onPinUrl(page.id), [onPinUrl, page.id]);
-  const handleCloseBound = useCallback(() => onClose(page.id), [onClose, page.id]);
   const handleDragStartBound = useCallback(
     (e: React.MouseEvent) => onDragStart(e, page.id),
     [onDragStart, page.id],
@@ -261,6 +260,7 @@ export const PageNode = memo(function PageNode({
       }}
       data-page-id={page.id}
       onMouseDown={handleActivate}
+      onContextMenu={(e) => onContextMenu(e, page.id)}
     >
       <PageNodeTopBar
         title={title}
@@ -273,7 +273,6 @@ export const PageNode = memo(function PageNode({
         onReload={isPageEmpty(page) ? undefined : handleReloadBound}
         onPinUrl={isPageMoved(page) ? handlePinUrlBound : undefined}
         hideNavigationControls={hideTopNavControls}
-        onClose={handleCloseBound}
         onMouseDown={handleTitleBarMouseDown}
       />
 

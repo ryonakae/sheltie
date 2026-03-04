@@ -94,11 +94,21 @@ export function useSiteboardViewportEngine({
     const nextContainerRect = containerRef.current.getBoundingClientRect();
     if (nextContainerRect.width <= 0 || nextContainerRect.height <= 0) return;
 
+    const startZoom = zoomRef.current;
+    const startPanX = panXRef.current;
+    const startPanY = panYRef.current;
+    // ビューポート中央を focal point としてパン補正する
+    const cx = nextContainerRect.width / 2;
+    const cy = nextContainerRect.height / 2;
+
     if (prefersReducedMotion) {
       zoomResetAnimationRef.current?.stop();
       zoomResetAnimationRef.current = null;
       cancelZoomRestore();
+      const scaleRatio = ZOOM_RESET_TARGET / startZoom;
       zoomRef.current = ZOOM_RESET_TARGET;
+      panXRef.current = cx - (cx - startPanX) * scaleRatio;
+      panYRef.current = cy - (cy - startPanY) * scaleRatio;
       setUiZoom(ZOOM_RESET_TARGET);
       applyCanvasTransform();
       updateViewport(activeId, {
@@ -112,18 +122,24 @@ export function useSiteboardViewportEngine({
 
     zoomResetAnimationRef.current?.stop();
 
-    const controls = animate(zoomRef.current, ZOOM_RESET_TARGET, {
+    const controls = animate(startZoom, ZOOM_RESET_TARGET, {
       duration: ZOOM_RESET_DURATION_SEC,
       ease: ZOOM_ANIMATION_EASE,
       onUpdate: (nextZoom) => {
+        const scaleRatio = nextZoom / startZoom;
         zoomRef.current = nextZoom;
+        panXRef.current = cx - (cx - startPanX) * scaleRatio;
+        panYRef.current = cy - (cy - startPanY) * scaleRatio;
         applyCanvasTransform();
         computeInteractionModes();
         setUiZoom(nextZoom);
       },
       onComplete: () => {
         zoomResetAnimationRef.current = null;
+        const scaleRatio = ZOOM_RESET_TARGET / startZoom;
         zoomRef.current = ZOOM_RESET_TARGET;
+        panXRef.current = cx - (cx - startPanX) * scaleRatio;
+        panYRef.current = cy - (cy - startPanY) * scaleRatio;
         setUiZoom(ZOOM_RESET_TARGET);
         applyCanvasTransform();
         updateViewport(activeId, {

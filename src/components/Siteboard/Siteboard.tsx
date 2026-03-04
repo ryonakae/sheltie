@@ -1,13 +1,15 @@
-import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { ContextMenu } from '@/components/Common/ContextMenu';
 import { PageNode } from '@/components/Node/PageNode';
 import { StickyNoteNode } from '@/components/Node/StickyNoteNode';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
 import { InteractionOverlay } from '@/components/Siteboard/InteractionOverlay';
+import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
 import { LOW_ZOOM_HIDE_THRESHOLD } from '@/constants';
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
+import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
 import { useSiteboardViewportEngine } from '@/hooks/siteboard/useSiteboardViewportEngine';
 import { selectActiveProject, useProjectStore } from '@/store/tab-store';
@@ -77,6 +79,8 @@ export function Siteboard({
     computeDisplayModes,
     computeInteractionModes,
     displayModes,
+    handleContextMenuClose: handleContextMenuCloseDisplay,
+    handleContextMenuOpen,
     handleInteractionChange,
     handlePageResizeEnd,
     handlePageResizeStart,
@@ -165,11 +169,55 @@ export function Siteboard({
     captureScreenshot,
   });
 
+  useSiteboardKeyboard({ selectedPageId, onRemovePage: handleRemovePage });
+
+  const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(
+    null,
+  );
+
+  const handleNodeContextMenu = useCallback(
+    (e: React.MouseEvent, pageId: string) => {
+      e.preventDefault();
+      onSelectPage(pageId);
+
+      const page = pages.find((p) => p.id === pageId);
+      if (page && !isStickyNote(page)) {
+        // WebPage ノード: スクリーンショット撮影完了後にメニューを表示（未撮影時の白画面防止）
+        // rAF でスクリーンショット差し替えの React レンダー＋ブラウザ描画を確定させてからメニューを表示
+        void handleContextMenuOpen(pageId).then(() => {
+          requestAnimationFrame(() => {
+            setContextMenu({ pageId, x: e.clientX, y: e.clientY });
+          });
+        });
+      } else {
+        // 付箋ノード: Webview なし、即時表示
+        setContextMenu({ pageId, x: e.clientX, y: e.clientY });
+      }
+    },
+    [handleContextMenuOpen, onSelectPage, pages],
+  );
+
+  const handleContextMenuClose = useCallback(() => {
+    setContextMenu(null);
+    handleContextMenuCloseDisplay();
+  }, [handleContextMenuCloseDisplay]);
+
+  const handleContextMenuAction = useCallback(
+    (actionId: string) => {
+      if (actionId === 'remove' && contextMenu) {
+        handleContextMenuCloseDisplay();
+        handleRemovePage(contextMenu.pageId);
+      }
+    },
+    [contextMenu, handleContextMenuCloseDisplay, handleRemovePage],
+  );
+
   const handleSiteboardMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (e.button !== 0) return;
       if (isPanMode.current) return;
       if ((e.target as HTMLElement).closest('[data-page-id]')) return;
+      setContextMenu(null);
       onClearSelection();
     },
     [isPanMode, onClearSelection],
@@ -193,7 +241,7 @@ export function Siteboard({
               isActive={page.id === selectedPageId}
               hideColorCycleButton={hideCompactControls}
               onActivate={onSelectPage}
-              onClose={handleRemovePage}
+              onContextMenu={handleNodeContextMenu}
               onDragStart={handleDragStart}
               onResizeStart={startStickyNoteResize}
               onContentChange={handleStickyNoteContentChange}
@@ -220,7 +268,7 @@ export function Siteboard({
               onActivate={onSelectPage}
               onReload={handleReloadPage}
               onPinUrl={handlePinPageUrl}
-              onClose={handleRemovePage}
+              onContextMenu={handleNodeContextMenu}
               onDragStart={handleDragStart}
               onResizeStart={handleResizeStart}
               onResizePreset={handleResizePreset}
@@ -243,26 +291,17 @@ export function Siteboard({
 
       <FloatingToolbar onAddPage={onAddPage} onAddStickyNote={onAddStickyNote} />
 
-      <motion.button
-        type="button"
-        className="absolute right-3 bottom-3 z-20 rounded-md border border-border bg-default px-2 py-1 text-xs text-foreground shadow-md"
-        onClick={handleResetZoom}
-        whileHover={{ y: -1, scale: 1.04 }}
-        whileTap={{ scale: 0.96 }}
-        aria-label="ズームを100%に戻す"
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={Math.round(uiZoom * 100)}
-            initial={{ opacity: 0.2, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.12 }}
-          >
-            {Math.round(uiZoom * 100)}%
-          </motion.span>
-        </AnimatePresence>
-      </motion.button>
+      <ZoomIndicator zoom={uiZoom} onReset={handleResetZoom} />
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[{ id: 'remove', label: 'ノードを削除', variant: 'danger' }]}
+          onAction={handleContextMenuAction}
+          onClose={handleContextMenuClose}
+        />
+      )}
     </div>
   );
 }

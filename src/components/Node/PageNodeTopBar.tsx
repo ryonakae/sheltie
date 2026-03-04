@@ -2,7 +2,6 @@ import ArrowRotateRight from '@gravity-ui/icons/ArrowRotateRight';
 import ChevronLeft from '@gravity-ui/icons/ChevronLeft';
 import ChevronRight from '@gravity-ui/icons/ChevronRight';
 import Pin from '@gravity-ui/icons/Pin';
-import Xmark from '@gravity-ui/icons/Xmark';
 
 import { AppButton } from '@/components/Common/AppButton';
 import { zoomPx } from '@/lib/canvas-zoom';
@@ -18,7 +17,6 @@ export interface PageNodeTopBarProps {
   onReload?: () => void;
   onPinUrl?: () => void;
   hideNavigationControls: boolean;
-  onClose: () => void;
   onMouseDown: (e: React.MouseEvent) => void;
 }
 
@@ -40,7 +38,6 @@ export function PageNodeTopBar({
   onReload,
   onPinUrl,
   hideNavigationControls,
-  onClose,
   onMouseDown,
 }: PageNodeTopBarProps) {
   const topBarStyle = {
@@ -118,17 +115,6 @@ export function PageNodeTopBar({
           <Pin style={iconStyle} />
         </AppButton>
       )}
-
-      <AppButton
-        size="xs"
-        scaleWithCanvasZoom
-        className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
-        onMouseDown={(e) => e.stopPropagation()}
-        onPress={onClose}
-        aria-label="ページを閉じる"
-      >
-        <Xmark style={iconStyle} />
-      </AppButton>
     </div>
   );
 }

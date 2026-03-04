@@ -1,8 +1,8 @@
-import Xmark from '@gravity-ui/icons/Xmark';
 import { animate, motion, useReducedMotion } from 'motion/react';
-import { type MouseEvent, forwardRef, useCallback, useEffect, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
+import { ContextMenu } from '@/components/Common/ContextMenu';
 import { PAGE_CHROME_HEIGHT, STICKY_NOTE_COLORS } from '@/constants';
 import { selectActiveProject, useProjectStore } from '@/store/tab-store';
 import { type Page, isPageEmpty, isPageMoved, isStickyNote } from '@/types';
@@ -11,19 +11,10 @@ interface SidebarProps {
   initialWidth: number;
   selectedPageId: string | null;
   onSelectPage: (pageId: string) => void;
+  onRemovePage: (pageId: string) => void;
   /** サイドバー選択時にセンタリング完了したら呼ぶ */
   onCentered?: (pageId: string) => void;
 }
-
-const pageListItemVariants = {
-  rest: {},
-  hover: {},
-} as const;
-
-const removeButtonVariants = {
-  rest: { opacity: 0 },
-  hover: { opacity: 1 },
-} as const;
 
 type CenterTarget = Pick<Page, 'id' | 'x' | 'y' | 'width' | 'height'>;
 
@@ -54,12 +45,11 @@ function getPageFrameRect(siteboard: HTMLElement, pageId: string | undefined): F
 }
 
 export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
-  { initialWidth, selectedPageId, onSelectPage, onCentered },
+  { initialWidth, selectedPageId, onSelectPage, onRemovePage, onCentered },
   ref,
 ) {
   const activeProject = useProjectStore(selectActiveProject);
   const activeId = useProjectStore((s) => s.activeId);
-  const removePage = useProjectStore((s) => s.removePage);
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = activeProject?.viewport;
   const centeringAnimationRef = useRef<Array<{ stop: () => void }>>([]);
@@ -74,6 +64,29 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
     centeringAnimationRef.current.forEach((animation) => animation.stop());
     centeringAnimationRef.current = [];
   }, []);
+
+  const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(
+    null,
+  );
+
+  const handleItemContextMenu = useCallback((e: React.MouseEvent, pageId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ pageId, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleContextMenuClose = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleContextMenuAction = useCallback(
+    (actionId: string) => {
+      if (actionId === 'remove' && contextMenu) {
+        onRemovePage(contextMenu.pageId);
+      }
+    },
+    [contextMenu, onRemovePage],
+  );
 
   const ensureFrameVisible = useCallback(
     (target: CenterTarget, onCentered?: () => void) => {
@@ -186,13 +199,11 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                   'flex items-start gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-default-hover',
                   isSelected ? 'bg-default-hover/80' : '',
                 )}
-                variants={pageListItemVariants}
-                initial="rest"
-                whileHover="hover"
                 onClick={() => {
                   onSelectPage(page.id);
                   ensureFrameVisible(page, () => onCentered?.(page.id));
                 }}
+                onContextMenu={(e) => handleItemContextMenu(e, page.id)}
                 aria-current={isSelected ? 'true' : undefined}
               >
                 {sticky ? (
@@ -228,22 +239,20 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                     </p>
                   </div>
                 )}
-                <motion.button
-                  variants={removeButtonVariants}
-                  initial="rest"
-                  className="shrink-0 rounded-sm p-0.5 text-muted hover:bg-background-tertiary hover:text-foreground"
-                  onClick={(event: MouseEvent<HTMLButtonElement>) => {
-                    event.stopPropagation();
-                    removePage(activeId, page.id);
-                  }}
-                  aria-label="ページを削除"
-                >
-                  <Xmark className="size-3.5" />
-                </motion.button>
               </motion.li>
             );
           })}
         </ul>
+      )}
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[{ id: 'remove', label: 'ノードを削除', variant: 'danger' }]}
+          onAction={handleContextMenuAction}
+          onClose={handleContextMenuClose}
+        />
       )}
     </aside>
   );

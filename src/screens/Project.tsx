@@ -51,6 +51,7 @@ export function ProjectScreen() {
   const updateSidebarWidth = useProjectStore((s) => s.updateSidebarWidth);
   const addPage = useProjectStore((s) => s.addPage);
   const addStickyNote = useProjectStore((s) => s.addStickyNote);
+  const removePage = useProjectStore((s) => s.removePage);
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = activeProject?.viewport;
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -94,6 +95,13 @@ export function ProjectScreen() {
   const handleClearSelection = useCallback(() => {
     setSelectedPageId(null);
   }, []);
+
+  const handleRemovePage = useCallback(
+    (pageId: string) => {
+      removePage(activeId, pageId);
+    },
+    [removePage, activeId],
+  );
 
   const handleCenteredPage = useCallback((pageId: string) => {
     setCenteredPageId(pageId);
@@ -292,6 +300,7 @@ export function ProjectScreen() {
         initialWidth={isSidebarVisible ? sidebarWidth : 0}
         selectedPageId={selectedPageId}
         onSelectPage={handleSelectPage}
+        onRemovePage={handleRemovePage}
         onCentered={handleCenteredPage}
       />
       {isSidebarVisible && (

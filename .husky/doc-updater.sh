@@ -45,7 +45,7 @@ fi
 
 export DOC_UPDATER_RUNNING=1
 if [ -z "${CLAUDECODE:-}" ]; then
-  claude --agent doc-updater --model sonnet \
+  claude --agent doc-updater --model haiku \
     -p "git pre-commitフックから呼び出されています。ステージされたファイル: ${STAGED_LIST}。${RENAME_CTX}git diff --cached の内容を確認し、必要に応じてドキュメントを更新してください。リネーム・削除がある場合はドキュメント内のパス参照も更新してください。更新した場合は git add で更新ファイルをステージしてください。" \
     --allowedTools 'Read,Write,Edit,Bash(git diff*),Bash(git add*),Grep,Glob' \
     2>&1 | tail -5

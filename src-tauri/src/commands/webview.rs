@@ -1,32 +1,145 @@
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 
-/// CSS Viewport Units（svh/lvh）の基準サイズを CSS viewport と一致させる。
-///
-/// `_setLayoutMode: 2` + `_setViewScale` により vh/dvh は正しく論理サイズを返すが、
-/// svh/lvh は WKWebView の viewport inset 設定に基づいて計算されるため、
-/// `setMinimumViewportInset:maximumViewportInset:` に zero insets を渡すことで
-/// 「ブラウザクロームがない」ことを明示し、svh = lvh = CSS viewport height にする（macOS 13.0+）。
 #[cfg(target_os = "macos")]
-unsafe fn set_css_viewport_unit_sizes(raw: *mut objc2::runtime::AnyObject) {
+fn sanitize_zoom(zoom: f64) -> f64 {
+    if zoom.is_finite() && zoom > 0.0 {
+        zoom
+    } else {
+        1.0
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_objc_void_guarded<F>(context: &str, f: F)
+where
+    F: FnOnce(),
+{
+    // macOS の private selector は OS バージョン差分で ObjC 例外を投げる場合があるため、
+    // 起動直後クラッシュを防ぐために補正処理をスキップして継続する。
+    if let Err(exception) = objc2::exception::catch(std::panic::AssertUnwindSafe(f)) {
+        let detail = exception
+            .as_ref()
+            .map(|e| format!("{e:?}"))
+            .unwrap_or_else(|| "nil exception".to_string());
+        log::warn!(
+            "Objective-C 呼び出し `{context}` で例外が発生したため補正をスキップしました: {detail}"
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_objc_bool_guarded<F>(context: &str, f: F) -> bool
+where
+    F: FnOnce() -> bool,
+{
+    match objc2::exception::catch(std::panic::AssertUnwindSafe(f)) {
+        Ok(value) => value,
+        Err(exception) => {
+            let detail = exception
+                .as_ref()
+                .map(|e| format!("{e:?}"))
+                .unwrap_or_else(|| "nil exception".to_string());
+            log::warn!(
+                "Objective-C 呼び出し `{context}` で例外が発生したため `false` を返します: {detail}"
+            );
+            false
+        }
+    }
+}
+
+/// frame/zoom から CSS viewport の論理サイズを計算する。
+///
+/// 無効な zoom 値で NaN/Inf になるのを防ぐ。
+#[cfg(target_os = "macos")]
+fn compute_css_viewport_size_for_units(width: f64, height: f64, zoom: f64) -> (f64, f64) {
+    let safe_zoom = sanitize_zoom(zoom);
+    (width / safe_zoom, height / safe_zoom)
+}
+
+/// CSS Viewport Units（svh/lvh）の基準サイズを CSS viewport（論理サイズ）に合わせる。
+///
+/// `_setLayoutMode: 2` + `_setViewScale` は vh/dvh のみに効き、svh/lvh は
+/// "unobscured size" を参照するため、viewport insets を使って補正する。
+///
+/// WebKit 内部の計算:
+///   `minimumUnobscuredSize = frame - maximumViewportInset` → svh
+///   `maximumUnobscuredSize = frame - minimumViewportInset` → lvh
+///
+/// `inset = physical - logical`（zoom < 1 で負値）を渡すと:
+///   `unobscuredSize = physical - (physical - logical) = logical` ✓
+///
+/// 優先度 1: `_recalculateViewportSizesWithMinimumViewportInset:maximumViewportInset:throwOnInvalidInput:`
+///   WebKit 内部で `setFrameSize:` から `throwOnInvalidInput: NO` で呼ばれるメソッドを直接呼ぶことで、
+///   公開 API の負値バリデーション（macOS 26.2 で強化）をスキップして負 inset を設定できる。
+///
+/// 優先度 2: `setMinimumViewportInset:maximumViewportInset:` (macOS 13.0+)
+///   公開 API。inset が非負（zoom >= 1）の場合のみ有効。
+#[cfg(target_os = "macos")]
+unsafe fn set_css_viewport_unit_sizes(
+    raw: *mut objc2::runtime::AnyObject,
+    physical_width: f64,
+    physical_height: f64,
+    logical_width: f64,
+    logical_height: f64,
+) {
     use objc2_foundation::NSEdgeInsets;
 
-    // macOS 13.0+ の公開 API。ブラウザクロームがないため insets をゼロに設定する。
-    let supports_inset: bool = objc2::msg_send![
-        raw,
-        respondsToSelector: objc2::sel!(setMinimumViewportInset:maximumViewportInset:)
-    ];
-    if supports_inset {
-        let zero = NSEdgeInsets {
-            top: 0.0,
-            left: 0.0,
-            bottom: 0.0,
-            right: 0.0,
-        };
-        let _: () = objc2::msg_send![
-            raw,
-            setMinimumViewportInset: zero,
-            maximumViewportInset: zero
-        ];
+    // zoom < 1 のとき inset は負値（logical > physical）になる
+    let inset_right = physical_width - logical_width;
+    let inset_bottom = physical_height - logical_height;
+    let inset = NSEdgeInsets {
+        top: 0.0,
+        left: 0.0,
+        bottom: inset_bottom,
+        right: inset_right,
+    };
+
+    // 優先度 1: 内部メソッドを throwOnInvalidInput: NO で呼び、負 inset バリデーションをスキップ
+    let recalc_sel = objc2::sel!(
+        _recalculateViewportSizesWithMinimumViewportInset:maximumViewportInset:throwOnInvalidInput:
+    );
+    let supports_recalc = run_objc_bool_guarded(
+        "respondsToSelector(_recalculateViewportSizes...)",
+        || unsafe { objc2::msg_send![raw, respondsToSelector: recalc_sel] },
+    );
+    if supports_recalc {
+        run_objc_void_guarded(
+            "_recalculateViewportSizesWithMinimumViewportInset:maximumViewportInset:throwOnInvalidInput:",
+            || unsafe {
+                let _: () = objc2::msg_send![
+                    raw,
+                    _recalculateViewportSizesWithMinimumViewportInset: inset,
+                    maximumViewportInset: inset,
+                    throwOnInvalidInput: false
+                ];
+            },
+        );
+        return;
+    }
+
+    // 優先度 2: 公開 API（inset が非負の場合のみ呼ぶ。負値は NSInvalidArgumentException）
+    if inset_right >= 0.0 && inset_bottom >= 0.0 {
+        let supports_inset = run_objc_bool_guarded(
+            "respondsToSelector(setMinimumViewportInset:maximumViewportInset:)",
+            || unsafe {
+                objc2::msg_send![
+                    raw,
+                    respondsToSelector: objc2::sel!(setMinimumViewportInset:maximumViewportInset:)
+                ]
+            },
+        );
+        if supports_inset {
+            run_objc_void_guarded(
+                "setMinimumViewportInset:maximumViewportInset:",
+                || unsafe {
+                    let _: () = objc2::msg_send![
+                        raw,
+                        setMinimumViewportInset: inset,
+                        maximumViewportInset: inset
+                    ];
+                },
+            );
+        }
     }
 }
 
@@ -400,15 +513,25 @@ pub async fn create_page_webview(
     // layoutMode は作成時のみ設定し、update 時は viewScale + viewport insets を更新する。
     #[cfg(target_os = "macos")]
     {
+        let safe_zoom = sanitize_zoom(zoom);
+        let (css_viewport_width, css_viewport_height) =
+            compute_css_viewport_size_for_units(width, height, safe_zoom);
+
         if let Some(wv) = app.get_webview(&label) {
             wv.with_webview(move |platform_wv| {
                 let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
-                unsafe {
+                run_objc_void_guarded("_setLayoutMode + _setViewScale + viewport insets", || unsafe {
                     // _WKLayoutModeDynamicSizeComputedFromViewScale = 2
                     let _: () = objc2::msg_send![raw, _setLayoutMode: 2i64];
-                    let _: () = objc2::msg_send![raw, _setViewScale: zoom];
-                    set_css_viewport_unit_sizes(raw);
-                }
+                    let _: () = objc2::msg_send![raw, _setViewScale: safe_zoom];
+                    set_css_viewport_unit_sizes(
+                        raw,
+                        width,
+                        height,
+                        css_viewport_width,
+                        css_viewport_height,
+                    );
+                });
             })
             .ok();
         }
@@ -463,9 +586,9 @@ async fn set_opacity_impl(
 
     wv.with_webview(move |platform_wv| {
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
-        unsafe {
+        run_objc_void_guarded("setAlphaValue:", || unsafe {
             let _: () = objc2::msg_send![raw, setAlphaValue: opacity];
-        }
+        });
     })
     .map_err(|e| format!("with_webview エラー: {e}"))?;
 
@@ -503,12 +626,15 @@ async fn update_bounds_impl(
     wv.set_size(LogicalSize::new(width, height))
         .map_err(|e| format!("setSize エラー: {e}"))?;
 
+    let safe_zoom = sanitize_zoom(zoom);
+    let (css_viewport_width, css_viewport_height) =
+        compute_css_viewport_size_for_units(width, height, safe_zoom);
     wv.with_webview(move |platform_wv| {
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
-        unsafe {
-            let _: () = objc2::msg_send![raw, _setViewScale: zoom];
-            set_css_viewport_unit_sizes(raw);
-        }
+        run_objc_void_guarded("_setViewScale + viewport insets", || unsafe {
+            let _: () = objc2::msg_send![raw, _setViewScale: safe_zoom];
+            set_css_viewport_unit_sizes(raw, width, height, css_viewport_width, css_viewport_height);
+        });
     })
     .map_err(|e| format!("with_webview エラー: {e}"))?;
 

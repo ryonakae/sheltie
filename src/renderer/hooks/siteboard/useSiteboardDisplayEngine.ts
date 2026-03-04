@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   HYSTERESIS_PX,
+  NATIVE_SAFE_MARGIN_BOTTOM_PX,
   NATIVE_SAFE_MARGIN_PX,
   PRE_DISPLAY_MARGIN_PX,
   WEBVIEW_REVEAL_DELAY_MS,
@@ -148,7 +149,7 @@ export function useSiteboardDisplayEngine({
         pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
         pr.right <= cr.right - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX &&
         pr.top >= cr.top + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
-        pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX
+        pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_BOTTOM_PX + HYSTERESIS_PX
       ) {
         nextMode = 'native';
       } else {
@@ -345,7 +346,7 @@ export function useSiteboardDisplayEngine({
         pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
         pr.right <= cr.right - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX &&
         pr.top >= cr.top + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
-        pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX;
+        pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_BOTTOM_PX + HYSTERESIS_PX;
 
       if (currentMode === 'native') {
         if (isOutsideExpanded) {

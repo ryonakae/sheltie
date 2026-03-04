@@ -14,7 +14,14 @@ use commands::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri_plugin_prevent_default::Flags;
+
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_prevent_default::Builder::new()
+                .with_flags(Flags::CONTEXT_MENU)
+                .build(),
+        )
         .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             if cfg!(debug_assertions) {

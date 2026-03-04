@@ -54,3 +54,10 @@ IPC 契約は `tauri-ipc.md` を参照。
 - ビルド: `npm run build`
 
 Tauri Plugin Store は `tauri.conf.json` ではなく `src-tauri/src/lib.rs` で登録する。
+
+## 登録済み Tauri プラグイン
+
+| プラグイン | 用途 | 備考 |
+|---|---|---|
+| `tauri-plugin-store` | プロジェクト状態の永続化 | |
+| `tauri-plugin-prevent-default` | メインウィンドウのデフォルトコンテキストメニュー無効化 | `Flags::CONTEXT_MENU` のみ指定。DevTools は維持。子 Webview（外部サイト）は対象外 |

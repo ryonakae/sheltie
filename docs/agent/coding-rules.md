@@ -39,6 +39,13 @@
 - コンテキストメニューは `components/Common/ContextMenu` を使い createPortal で body 直下に描画する。
 - `removePage` の呼び出しは `screens/Project.tsx` に集約し、`Sidebar` と `Siteboard` には `onRemovePage` prop として渡す。
 
+## リサイズハンドルとカーソル制御
+
+- `NodeResizeHandle` のカーソルは Tailwind cursor クラスでなく **inline style** で設定する（CSS 優先度問題の回避）。
+- e/w ハンドルはネイティブ Webview に覆われるため、ハンドル要素を **外側 -4px 拡張**（16px 幅）して Webview 外に突き出す。
+- リサイズ中の `InteractionOverlay` カーソルは `useSiteboardViewportEngine` が `onInteractionChange(direction)` 経由で `RESIZE_CURSOR_MAP` から解決して渡す。
+- `overflow-hidden` + `border-radius` をノード外側 div に設定するとコーナーハンドルがクリッピングされる。**`overflow-hidden` は TopBar/BottomBar などの子要素側に移動し、外側 div には設定しない。**
+
 ## アニメーション
 
 - `AnimatePresence mode="wait"` + `key={value}` パターンは高頻度更新（ズームレベル・カウンター等）に使わない。exit アニメーション（120ms）完了待ちにより中間値がすべてスキップされ表示がフリーズする。

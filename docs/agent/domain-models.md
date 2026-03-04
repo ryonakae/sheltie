@@ -35,6 +35,10 @@
 - ズーム: `MIN_ZOOM = 0.2`, `MAX_ZOOM = 1.5`
 - しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 50`
 
+`src/hooks/siteboard/types.ts`
+
+- `RESIZE_CURSOR_MAP`: 8 方向の `ResizeDirection` → CSS cursor 値のマップ
+
 ## 不変条件
 
 - `webviewLabel` はランタイム専用で永続化しない。

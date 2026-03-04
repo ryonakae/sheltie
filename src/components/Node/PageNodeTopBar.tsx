@@ -45,6 +45,7 @@ export function PageNodeTopBar({
     paddingInline: zoomPx(8),
     fontSize: zoomPx(12),
     lineHeight: zoomPx(16),
+    borderRadius: `${zoomPx(16)} ${zoomPx(16)} 0 0`,
   };
   const iconStyle = {
     width: zoomPx(14),
@@ -53,7 +54,7 @@ export function PageNodeTopBar({
 
   return (
     <div
-      className="flex shrink-0 cursor-grab items-center bg-default select-none active:cursor-grabbing"
+      className="flex shrink-0 cursor-grab items-center overflow-hidden bg-default select-none active:cursor-grabbing"
       style={topBarStyle}
       onMouseDown={onMouseDown}
     >

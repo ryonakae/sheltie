@@ -14,7 +14,7 @@ import { useSiteboardPan } from '@/hooks/useSiteboardPan';
 import { useSiteboardZoom } from '@/hooks/useSiteboardZoom';
 import type { Viewport } from '@/types';
 
-import type { InteractionType } from './types';
+import { RESIZE_CURSOR_MAP, type InteractionType, type NodeResizeDirection } from './types';
 
 interface UseSiteboardViewportEngineParams {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -235,7 +235,10 @@ export function useSiteboardViewportEngine({
       [activeId, onPageResizeEnd, updatePageSize],
     ),
     onInteractionChange: useCallback(
-      (active) => onInteractionChange(active, 'default', 'resize'),
+      (active: boolean, direction?: NodeResizeDirection) => {
+        const cursor = active && direction ? RESIZE_CURSOR_MAP[direction] : 'default';
+        onInteractionChange(active, cursor, 'resize');
+      },
       [onInteractionChange],
     ),
   });
@@ -273,7 +276,10 @@ export function useSiteboardViewportEngine({
       [activeId, onPageResizeEnd, updatePageSize],
     ),
     onInteractionChange: useCallback(
-      (active) => onInteractionChange(active, 'default', 'resize'),
+      (active: boolean, direction?: NodeResizeDirection) => {
+        const cursor = active && direction ? RESIZE_CURSOR_MAP[direction] : 'default';
+        onInteractionChange(active, cursor, 'resize');
+      },
       [onInteractionChange],
     ),
     minWidth: STICKY_NOTE_MIN_WIDTH,

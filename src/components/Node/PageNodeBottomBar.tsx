@@ -35,6 +35,7 @@ export function PageNodeBottomBar({
     paddingInline: zoomPx(8),
     fontSize: zoomPx(11),
     lineHeight: zoomPx(15),
+    borderRadius: `0 0 ${zoomPx(16)} ${zoomPx(16)}`,
   };
   const presetGroupStyle = { gap: zoomPx(2) };
   const presetIconStyle = {
@@ -43,7 +44,10 @@ export function PageNodeBottomBar({
   };
 
   return (
-    <div className="flex shrink-0 items-center bg-default select-none" style={bottomBarStyle}>
+    <div
+      className="flex shrink-0 items-center overflow-hidden bg-default select-none"
+      style={bottomBarStyle}
+    >
       <div className="flex shrink-0 items-center" style={presetGroupStyle}>
         {!hidePresetControls &&
           SIZE_PRESETS.map((preset) => {

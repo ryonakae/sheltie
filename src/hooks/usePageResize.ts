@@ -9,7 +9,7 @@ interface UsePageResizeOptions {
   onResizeStart?: (pageId: string) => void;
   onResizeMove?: (pageId: string, width: number, height: number) => void;
   onResizeEnd: (pageId: string, width: number, height: number) => void;
-  onInteractionChange: (active: boolean) => void;
+  onInteractionChange: (active: boolean, direction?: ResizeDirection) => void;
   /** リサイズ最小幅（デフォルト: PAGE_MIN_WIDTH = 320） */
   minWidth?: number;
   /** リサイズ最小高さ（デフォルト: PAGE_MIN_HEIGHT = 200） */
@@ -87,7 +87,7 @@ export function usePageResize({
       };
       onResizeStart?.(pageId);
       document.body.style.userSelect = 'none';
-      onInteractionChange(true);
+      onInteractionChange(true, direction);
     },
     [onInteractionChange, onResizeStart],
   );

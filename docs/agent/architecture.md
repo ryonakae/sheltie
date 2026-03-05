@@ -22,6 +22,7 @@ src/
 
 - `screens/Home.tsx`: プロジェクト一覧。
 - `screens/Project.tsx`: Sidebar + Siteboard の統括。
+- `components/Project/Sidebar.tsx`: ページ一覧（ノード種別アイコン + タイトル/説明）。アイコンは `@gravity-ui/icons` の `Globe`（Webページ）/ `SquareDashed`（空フレーム）/ `Sticker`（付箋、`STICKY_NOTE_COLORS[colorIndex].textClass` で付箋色を表現）。
 - `components/Common/ContextMenu.tsx`: createPortal で body 直下に fixed 配置するコンテキストメニュー（クリック外・Escape・スクロールで閉じる）。
 - `components/Siteboard/Siteboard.tsx`: 描画と hook 結線。
 - `components/Siteboard/FloatingToolbar.tsx`: ページ/付箋追加ボタン群（右下固定）。

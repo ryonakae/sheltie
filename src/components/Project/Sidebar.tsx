@@ -1,3 +1,6 @@
+import Globe from '@gravity-ui/icons/Globe';
+import SquareDashed from '@gravity-ui/icons/SquareDashed';
+import Sticker from '@gravity-ui/icons/Sticker';
 import { animate, motion, useReducedMotion } from 'motion/react';
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
@@ -196,7 +199,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
               <motion.li
                 key={page.id}
                 className={twMerge(
-                  'flex items-start gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-default-hover',
+                  'flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-default-hover',
                   isSelected ? 'bg-default-hover/80' : '',
                 )}
                 onClick={() => {
@@ -207,24 +210,25 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                 aria-current={isSelected ? 'true' : undefined}
               >
                 {sticky ? (
-                  /* 付箋: カラードット + タイトル + テキストプレビュー */
+                  <Sticker
+                    className={twMerge(
+                      'mt-0.5 size-4 shrink-0',
+                      STICKY_NOTE_COLORS[page.colorIndex ?? 0].textClass,
+                    )}
+                  />
+                ) : isPageEmpty(page) ? (
+                  <SquareDashed className="mt-0.5 size-4 shrink-0 text-muted/60" />
+                ) : (
+                  <Globe className="mt-0.5 size-4 shrink-0 text-muted" />
+                )}
+                {sticky ? (
                   <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1 truncate text-foreground">
-                      <span
-                        className={twMerge(
-                          'inline-block size-2.5 shrink-0 rounded-full border',
-                          STICKY_NOTE_COLORS[page.colorIndex ?? 0].bgClass,
-                          STICKY_NOTE_COLORS[page.colorIndex ?? 0].borderClass,
-                        )}
-                      />
-                      {page.title}
-                    </p>
+                    <p className="truncate text-foreground">{page.title}</p>
                     <p className="truncate text-xs text-muted">
                       {page.content ? page.content.slice(0, 40) : 'テキストなし'}
                     </p>
                   </div>
                 ) : (
-                  /* Webページ: タイトル + URL */
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-foreground" title={page.title || page.url}>
                       {page.title || '新規ページ'}

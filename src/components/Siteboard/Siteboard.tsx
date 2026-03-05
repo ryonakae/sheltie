@@ -38,9 +38,12 @@ export function Siteboard({
   const activeId = useProjectStore((s) => s.activeId);
 
   const {
+    undoActiveProject,
+    redoActiveProject,
     updateViewport,
     updatePagePosition,
     updatePageSize,
+    updatePageSizeWithoutHistory,
     updatePageUrl,
     updatePageTitle,
     removePage,
@@ -52,12 +55,15 @@ export function Siteboard({
   } = useProjectStore(
     useShallow((s) => ({
       cycleStickyNoteColor: s.cycleStickyNoteColor,
+      redoActiveProject: s.redoActiveProject,
       pinPageUrl: s.pinPageUrl,
       removePage: s.removePage,
       setPageUrl: s.setPageUrl,
       setPageWebviewLabel: s.setPageWebviewLabel,
+      undoActiveProject: s.undoActiveProject,
       updatePagePosition: s.updatePagePosition,
       updatePageSize: s.updatePageSize,
+      updatePageSizeWithoutHistory: s.updatePageSizeWithoutHistory,
       updatePageTitle: s.updatePageTitle,
       updatePageUrl: s.updatePageUrl,
       updateStickyNoteContent: s.updateStickyNoteContent,
@@ -163,13 +169,19 @@ export function Siteboard({
     setPageUrl,
     pinPageUrl,
     updatePageSize,
+    updatePageSizeWithoutHistory,
     updateStickyNoteContent,
     cycleStickyNoteColor,
     computeDisplayModes,
     captureScreenshot,
   });
 
-  useSiteboardKeyboard({ selectedPageId, onRemovePage: handleRemovePage });
+  useSiteboardKeyboard({
+    selectedPageId,
+    onRemovePage: handleRemovePage,
+    onUndo: undoActiveProject,
+    onRedo: redoActiveProject,
+  });
 
   const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(
     null,

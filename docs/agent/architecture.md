@@ -36,7 +36,8 @@ src/
 - `useSiteboardDisplayEngine`: `DisplayMode` 判定、Webview 表示/非表示、スクリーンショット管理。
 - `useSiteboardViewportEngine`: ズーム・パン・ドラッグ・リサイズの入力処理。
 - `useSiteboardNodeRuntime`: ページノード単位の Webview 生成/破棄とイベント処理。
-- `useSiteboardKeyboard`: Delete/Backspace キーで選択中ノードを削除（input/textarea/contentEditable 内はスキップ）。
+- `useSiteboardKeyboard`: Delete/Backspace・Undo/Redo のショートカットを処理し、共通編集コマンドへ委譲（input/textarea/contentEditable 内はスキップ）。
+- `lib/edit-commands.ts`: キーボード操作と Tauri メニュー操作を共通の `undo` / `redo` / `delete` コマンドに統一する。
 
 詳細仕様は `siteboard-runtime.md` を参照。
 
@@ -45,6 +46,7 @@ src/
 - `commands/store.rs`: プロジェクト状態の読み書き。
 - `commands/theme.rs`: テーマ設定、プラットフォーム情報。
 - `commands/webview.rs`: ページ Webview 作成、位置更新、ナビゲーション、スクリーンショット。
+- `src-tauri/src/lib.rs`: Edit メニュー（Undo/Redo/Delete）とメニューイベントの `edit-command` 配信を管理。
 
 IPC 契約は `tauri-ipc.md` を参照。
 

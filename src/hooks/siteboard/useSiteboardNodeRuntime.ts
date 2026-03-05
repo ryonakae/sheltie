@@ -21,6 +21,12 @@ interface UseSiteboardNodeRuntimeParams {
   setPageUrl: (projectId: string, pageId: string, url: string) => void;
   pinPageUrl: (projectId: string, pageId: string) => void;
   updatePageSize: (projectId: string, pageId: string, width: number, height: number) => void;
+  updatePageSizeWithoutHistory: (
+    projectId: string,
+    pageId: string,
+    width: number,
+    height: number,
+  ) => void;
   updateStickyNoteContent: (projectId: string, pageId: string, content: string) => void;
   cycleStickyNoteColor: (projectId: string, pageId: string) => void;
   computeDisplayModes: () => void;
@@ -42,6 +48,7 @@ export function useSiteboardNodeRuntime({
   setPageUrl,
   pinPageUrl,
   updatePageSize,
+  updatePageSizeWithoutHistory,
   updateStickyNoteContent,
   cycleStickyNoteColor,
   computeDisplayModes,
@@ -270,9 +277,9 @@ export function useSiteboardNodeRuntime({
     (pageId: string, height: number) => {
       const page = pages.find((p) => p.id === pageId);
       if (!page || page.height === height) return;
-      updatePageSize(activeId, pageId, page.width, height);
+      updatePageSizeWithoutHistory(activeId, pageId, page.width, height);
     },
-    [activeId, pages, updatePageSize],
+    [activeId, pages, updatePageSizeWithoutHistory],
   );
 
   return {

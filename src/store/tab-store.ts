@@ -15,6 +15,15 @@ import {
 } from '@/constants';
 import { type Page, type Project, type ProjectState, type Viewport } from '@/types';
 
+const PAGE_HISTORY_LIMIT = 100;
+
+interface ProjectPageHistory {
+  past: Page[][];
+  future: Page[][];
+}
+
+type ProjectPageHistories = Record<string, ProjectPageHistory>;
+
 function createProject(count: number): Project {
   return {
     id: crypto.randomUUID(),
@@ -88,6 +97,33 @@ function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
+function clonePages(pages: Page[]): Page[] {
+  return pages.map((page) => ({ ...page }));
+}
+
+function getProjectHistory(histories: ProjectPageHistories, projectId: string): ProjectPageHistory {
+  return histories[projectId] ?? { past: [], future: [] };
+}
+
+function pushProjectHistory(
+  histories: ProjectPageHistories,
+  projectId: string,
+  pages: Page[],
+): ProjectPageHistories {
+  const history = getProjectHistory(histories, projectId);
+  const nextPast = [...history.past, clonePages(pages)];
+  if (nextPast.length > PAGE_HISTORY_LIMIT) {
+    nextPast.splice(0, nextPast.length - PAGE_HISTORY_LIMIT);
+  }
+  return {
+    ...histories,
+    [projectId]: {
+      past: nextPast,
+      future: [],
+    },
+  };
+}
+
 interface ProjectActions {
   /** 新規プロジェクトを作成してタブバーに開く */
   createProject: () => void;
@@ -116,6 +152,13 @@ interface ProjectActions {
   updatePagePosition: (projectId: string, pageId: string, x: number, y: number) => void;
   /** ページのサイズを更新する（リサイズ完了時） */
   updatePageSize: (projectId: string, pageId: string, width: number, height: number) => void;
+  /** 履歴を積まずにページサイズを更新する（付箋の自動高さ調整用） */
+  updatePageSizeWithoutHistory: (
+    projectId: string,
+    pageId: string,
+    width: number,
+    height: number,
+  ) => void;
   /** ページの URL とタイトルを更新する（webview のナビゲーション後） */
   updatePageUrl: (projectId: string, pageId: string, url: string, title: string) => void;
   /** ページタイトルを更新する（Webview のタイトル変更時） */
@@ -137,6 +180,10 @@ interface ProjectActions {
   pinPageUrl: (projectId: string, pageId: string) => void;
   /** ネイティブ Webview 作成後にラベルをページに紐付ける（ランタイムのみ・永続化不要） */
   setPageWebviewLabel: (projectId: string, pageId: string, label: string) => void;
+  /** アクティブプロジェクトのページ履歴を 1 手戻す */
+  undoActiveProject: () => void;
+  /** アクティブプロジェクトのページ履歴を 1 手進める */
+  redoActiveProject: () => void;
   /** 永続化モジュール専用: 起動時に保存済み状態を復元する */
   _restoreState: (state: ProjectState) => void;
   /** 永続化モジュール専用: 復元完了フラグを立てる */
@@ -145,6 +192,33 @@ interface ProjectActions {
 
 interface ProjectStore extends ProjectState, ProjectActions {
   isLoaded: boolean;
+  pageHistories: ProjectPageHistories;
+}
+
+function replaceProjectPages(
+  state: ProjectStore,
+  projectId: string,
+  updater: (pages: Page[]) => Page[] | null,
+  historyMode: 'record' | 'skip' = 'record',
+): ProjectStore | Pick<ProjectStore, 'projects' | 'pageHistories'> {
+  const projectIndex = state.projects.findIndex((project) => project.id === projectId);
+  if (projectIndex === -1) return state;
+
+  const project = state.projects[projectIndex];
+  const nextPages = updater(project.pages);
+  if (!nextPages) return state;
+
+  const nextProjects = [...state.projects];
+  nextProjects[projectIndex] = { ...project, pages: nextPages };
+
+  if (historyMode === 'skip') {
+    return { projects: nextProjects, pageHistories: state.pageHistories };
+  }
+
+  return {
+    projects: nextProjects,
+    pageHistories: pushProjectHistory(state.pageHistories, projectId, project.pages),
+  };
 }
 
 export const useProjectStore = create<ProjectStore>()((set) => ({
@@ -152,6 +226,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   openIds: [],
   activeId: HOME_ID,
   isLoaded: false,
+  pageHistories: {},
 
   createProject: () =>
     set((state) => {
@@ -190,10 +265,12 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       if (state.activeId === id) {
         newActiveId = resolveNextActiveId(openIdx, remainingOpenIds);
       }
+      const { [id]: _removed, ...remainingHistories } = state.pageHistories;
       return {
         projects: state.projects.filter((p) => p.id !== id),
         openIds: remainingOpenIds,
         activeId: newActiveId,
+        pageHistories: remainingHistories,
       };
     }),
 
@@ -214,9 +291,8 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   addPage: (projectId, url = '', options) => {
     let createdPage: Page | null = null;
 
-    set((state) => {
-      const nextState = state.projects.map((p) => {
-        if (p.id !== projectId) return p;
+    set((state) =>
+      replaceProjectPages(state, projectId, (pages) => {
         let title = '新規ページ';
         if (url) {
           try {
@@ -225,7 +301,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
             title = url;
           }
         }
-        const nextPage: Page = {
+        const newPageBase: Page = {
           id: crypto.randomUUID(),
           url,
           title,
@@ -237,58 +313,79 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           createdAt: Date.now(),
         };
         const positioned = findNonOverlappingPosition(
-          p.pages,
+          pages,
           options?.x ?? 0,
           options?.y ?? 0,
-          nextPage.width,
-          nextPage.height,
+          newPageBase.width,
+          newPageBase.height,
         );
         const newPage = {
-          ...nextPage,
+          ...newPageBase,
           x: positioned.x,
           y: positioned.y,
         };
         createdPage = newPage;
-        return {
-          ...p,
-          pages: [...p.pages, newPage],
-        };
-      });
-      return { projects: nextState };
-    });
+        return [...pages, newPage];
+      }),
+    );
 
     return createdPage;
   },
 
   removePage: (projectId, pageId) =>
-    set((state) => ({
-      projects: state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return { ...p, pages: p.pages.filter((pg) => pg.id !== pageId) };
+    set((state) =>
+      replaceProjectPages(state, projectId, (pages) => {
+        if (!pages.some((page) => page.id === pageId)) return null;
+        return pages.filter((page) => page.id !== pageId);
       }),
-    })),
+    ),
 
   updatePagePosition: (projectId, pageId, x, y) =>
-    set((state) => ({
-      projects: state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return {
-          ...p,
-          pages: p.pages.map((pg) => (pg.id === pageId ? { ...pg, x, y } : pg)),
-        };
+    set((state) =>
+      replaceProjectPages(state, projectId, (pages) => {
+        let changed = false;
+        const nextPages = pages.map((page) => {
+          if (page.id !== pageId) return page;
+          if (page.x === x && page.y === y) return page;
+          changed = true;
+          return { ...page, x, y };
+        });
+        return changed ? nextPages : null;
       }),
-    })),
+    ),
 
   updatePageSize: (projectId, pageId, width, height) =>
-    set((state) => ({
-      projects: state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return {
-          ...p,
-          pages: p.pages.map((pg) => (pg.id === pageId ? { ...pg, width, height } : pg)),
-        };
+    set((state) =>
+      replaceProjectPages(state, projectId, (pages) => {
+        let changed = false;
+        const nextPages = pages.map((page) => {
+          if (page.id !== pageId) return page;
+          if (page.width === width && page.height === height) return page;
+          changed = true;
+          return { ...page, width, height };
+        });
+        return changed ? nextPages : null;
       }),
-    })),
+    ),
+
+  updatePageSizeWithoutHistory: (projectId, pageId, width, height) =>
+    set((state) =>
+      replaceProjectPages(
+        state,
+        projectId,
+        (pages) => {
+          let changed = false;
+          const nextPages = pages.map((page) => {
+            if (page.id !== pageId) return page;
+            if (page.width === width && page.height === height) return page;
+            changed = true;
+            return { ...page, width, height };
+          });
+          return changed ? nextPages : null;
+        },
+        'skip',
+      ),
+    ),
 
   updatePageUrl: (projectId, pageId, url, title) =>
     set((state) => ({
@@ -371,9 +468,8 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   addStickyNote: (projectId, options) => {
     let createdPage: Page | null = null;
 
-    set((state) => {
-      const nextState = state.projects.map((p) => {
-        if (p.id !== projectId) return p;
+    set((state) =>
+      replaceProjectPages(state, projectId, (pages) => {
         const nextPage: Page = {
           id: crypto.randomUUID(),
           type: 'stickynote',
@@ -388,7 +484,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           createdAt: Date.now(),
         };
         const positioned = findNonOverlappingPosition(
-          p.pages,
+          pages,
           options?.x ?? 0,
           options?.y ?? 0,
           nextPage.width,
@@ -396,54 +492,54 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         );
         const newPage = { ...nextPage, x: positioned.x, y: positioned.y };
         createdPage = newPage;
-        return { ...p, pages: [...p.pages, newPage] };
-      });
-      return { projects: nextState };
-    });
+        return [...pages, newPage];
+      }),
+    );
 
     return createdPage;
   },
 
   updateStickyNoteContent: (projectId, pageId, content) =>
-    set((state) => ({
-      projects: state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return {
-          ...p,
-          pages: p.pages.map((pg) => (pg.id === pageId ? { ...pg, content } : pg)),
-        };
+    set((state) =>
+      replaceProjectPages(state, projectId, (pages) => {
+        let changed = false;
+        const nextPages = pages.map((page) => {
+          if (page.id !== pageId) return page;
+          if ((page.content ?? '') === content) return page;
+          changed = true;
+          return { ...page, content };
+        });
+        return changed ? nextPages : null;
       }),
-    })),
+    ),
 
   cycleStickyNoteColor: (projectId, pageId) =>
-    set((state) => ({
-      projects: state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return {
-          ...p,
-          pages: p.pages.map((pg) => {
-            if (pg.id !== pageId) return pg;
-            return { ...pg, colorIndex: ((pg.colorIndex ?? 0) + 1) % 4 };
-          }),
-        };
+    set((state) =>
+      replaceProjectPages(state, projectId, (pages) => {
+        let changed = false;
+        const nextPages = pages.map((page) => {
+          if (page.id !== pageId) return page;
+          changed = true;
+          return { ...page, colorIndex: ((page.colorIndex ?? 0) + 1) % 4 };
+        });
+        return changed ? nextPages : null;
       }),
-    })),
+    ),
 
   pinPageUrl: (projectId, pageId) =>
-    set((state) => ({
-      projects: state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return {
-          ...p,
-          pages: p.pages.map((pg) => {
-            if (pg.id !== pageId) return pg;
-            // 既に addedUrl と url が同一なら参照を維持して不要な再レンダリングを防ぐ
-            if (!pg.url || pg.addedUrl === pg.url) return pg;
-            return { ...pg, addedUrl: pg.url };
-          }),
-        };
+    set((state) =>
+      replaceProjectPages(state, projectId, (pages) => {
+        let changed = false;
+        const nextPages = pages.map((page) => {
+          if (page.id !== pageId) return page;
+          // 既に addedUrl と url が同一なら参照を維持して不要な再レンダリングを防ぐ
+          if (!page.url || page.addedUrl === page.url) return page;
+          changed = true;
+          return { ...page, addedUrl: page.url };
+        });
+        return changed ? nextPages : null;
       }),
-    })),
+    ),
 
   setPageWebviewLabel: (projectId, pageId, label) =>
     set((state) => ({
@@ -451,10 +547,74 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         if (p.id !== projectId) return p;
         return {
           ...p,
-          pages: p.pages.map((pg) => (pg.id === pageId ? { ...pg, webviewLabel: label } : pg)),
+          pages: p.pages.map((pg) => {
+            if (pg.id !== pageId || pg.webviewLabel === label) return pg;
+            return { ...pg, webviewLabel: label };
+          }),
         };
       }),
     })),
+
+  undoActiveProject: () =>
+    set((state) => {
+      if (state.activeId === HOME_ID) return state;
+      const projectId = state.activeId;
+      const history = state.pageHistories[projectId];
+      if (!history || history.past.length === 0) return state;
+
+      const projectIndex = state.projects.findIndex((project) => project.id === projectId);
+      if (projectIndex === -1) return state;
+
+      const project = state.projects[projectIndex];
+      const previousPages = history.past[history.past.length - 1];
+      const nextPast = history.past.slice(0, -1);
+      const nextFuture = [...history.future, clonePages(project.pages)];
+      const nextProjects = [...state.projects];
+      nextProjects[projectIndex] = { ...project, pages: clonePages(previousPages) };
+
+      return {
+        projects: nextProjects,
+        pageHistories: {
+          ...state.pageHistories,
+          [projectId]: {
+            past: nextPast,
+            future: nextFuture,
+          },
+        },
+      };
+    }),
+
+  redoActiveProject: () =>
+    set((state) => {
+      if (state.activeId === HOME_ID) return state;
+      const projectId = state.activeId;
+      const history = state.pageHistories[projectId];
+      if (!history || history.future.length === 0) return state;
+
+      const projectIndex = state.projects.findIndex((project) => project.id === projectId);
+      if (projectIndex === -1) return state;
+
+      const project = state.projects[projectIndex];
+      const nextPages = history.future[history.future.length - 1];
+      const nextFuture = history.future.slice(0, -1);
+      const nextPast = [...history.past, clonePages(project.pages)];
+      if (nextPast.length > PAGE_HISTORY_LIMIT) {
+        nextPast.splice(0, nextPast.length - PAGE_HISTORY_LIMIT);
+      }
+      const nextProjects = [...state.projects];
+      nextProjects[projectIndex] = { ...project, pages: clonePages(nextPages) };
+
+      return {
+        projects: nextProjects,
+        pageHistories: {
+          ...state.pageHistories,
+          [projectId]: {
+            past: nextPast,
+            future: nextFuture,
+          },
+        },
+      };
+    }),
 
   _restoreState: (restoredState) =>
     set({
@@ -471,6 +631,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       })),
       openIds: restoredState.openIds,
       activeId: restoredState.activeId,
+      pageHistories: {},
     }),
 
   _setLoaded: () => set({ isLoaded: true }),

@@ -54,7 +54,7 @@ export function PageNodeTopBar({
 
   return (
     <div
-      className="flex shrink-0 cursor-grab items-center overflow-hidden bg-default select-none active:cursor-grabbing"
+      className="flex shrink-0 cursor-grab items-center overflow-hidden bg-default active:cursor-grabbing"
       style={topBarStyle}
       onMouseDown={onMouseDown}
     >

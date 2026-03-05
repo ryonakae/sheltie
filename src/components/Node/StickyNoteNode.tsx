@@ -34,10 +34,12 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   onColorCycle,
 }: StickyNoteNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
-  // 編集中のテキスト内容（blur 時のみストアに反映）。編集開始時に page.content で初期化する
+  // 編集中テキスト。ストア反映は 500ms デバウンス + blur 時 flush で行う。
   const [editingContent, setEditingContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentMeasureRef = useRef<HTMLDivElement>(null);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCommittedContentRef = useRef(page.content ?? '');
 
   const colorIndex = page.colorIndex ?? 0;
   const color = STICKY_NOTE_COLORS[colorIndex];
@@ -54,9 +56,56 @@ export const StickyNoteNode = memo(function StickyNoteNode({
     onAutoHeightChange(page.id, nextHeight);
   }, [editingContent, isEditing, onAutoHeightChange, page.height, page.id, page.width]);
 
+  useEffect(() => {
+    if (!isEditing) {
+      lastCommittedContentRef.current = page.content ?? '';
+    }
+  }, [isEditing, page.content]);
+
+  const commitContent = useCallback(
+    (content: string) => {
+      if (lastCommittedContentRef.current === content) return;
+      lastCommittedContentRef.current = content;
+      onContentChange(page.id, content);
+    },
+    [onContentChange, page.id],
+  );
+
+  useEffect(() => {
+    if (!isEditing) return;
+    if (editingContent === lastCommittedContentRef.current) return;
+
+    if (commitTimerRef.current) {
+      clearTimeout(commitTimerRef.current);
+    }
+    commitTimerRef.current = setTimeout(() => {
+      commitTimerRef.current = null;
+      commitContent(editingContent);
+    }, 500);
+
+    return () => {
+      if (commitTimerRef.current) {
+        clearTimeout(commitTimerRef.current);
+        commitTimerRef.current = null;
+      }
+    };
+  }, [commitContent, editingContent, isEditing]);
+
+  useEffect(
+    () => () => {
+      if (commitTimerRef.current) {
+        clearTimeout(commitTimerRef.current);
+        commitTimerRef.current = null;
+      }
+    },
+    [],
+  );
+
   const handleDoubleClick = useCallback(() => {
+    const nextContent = page.content ?? '';
     // 編集開始時にストアの現在値で初期化
-    setEditingContent(page.content ?? '');
+    setEditingContent(nextContent);
+    lastCommittedContentRef.current = nextContent;
     setIsEditing(true);
     // state 更新後に focus し、表示文字列を全選択するため rAF で遅延
     requestAnimationFrame(() => {
@@ -70,9 +119,13 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   }, []);
 
   const handleBlur = useCallback(() => {
+    if (commitTimerRef.current) {
+      clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+    commitContent(editingContent);
     setIsEditing(false);
-    onContentChange(page.id, editingContent);
-  }, [page.id, editingContent, onContentChange]);
+  }, [commitContent, editingContent]);
 
   // page.id は UUID で不変のため、親の関数参照が安定していればこれらも安定する
   const handleActivate = useCallback(() => onActivate(page.id), [onActivate, page.id]);
@@ -137,7 +190,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         }}
       >
         <span
-          className="min-w-0 flex-1 truncate font-medium text-[#555] select-none"
+          className="min-w-0 flex-1 truncate font-medium text-[#555]"
           style={{ fontSize: zoomPx(11) }}
         >
           Sticky Note
@@ -197,7 +250,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         ) : (
           <div
             className={twMerge(
-              'size-full cursor-text p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap select-none',
+              'size-full cursor-text p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap',
               noteBodyColorClassName,
             )}
           >

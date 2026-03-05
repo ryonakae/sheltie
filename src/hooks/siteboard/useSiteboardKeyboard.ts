@@ -1,36 +1,70 @@
 import { useEffect } from 'react';
 
+import { registerEditCommandHandlers, runEditCommand } from '@/lib/edit-commands';
+
 interface UseSiteboardKeyboardParams {
   selectedPageId: string | null;
   onRemovePage: (pageId: string) => void;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 /**
- * Delete / Backspace キーで選択中ノードを削除する。
- * input / textarea / contenteditable 内ではスキップ（useSiteboardPan と同パターン）。
+ * Siteboard の編集ショートカットを処理する。
+ * - Delete / Backspace: 選択中ノード削除
+ * - Cmd/Ctrl + Z: Undo
+ * - Cmd/Ctrl + Shift + Z: Redo
  */
-export function useSiteboardKeyboard({ selectedPageId, onRemovePage }: UseSiteboardKeyboardParams) {
+export function useSiteboardKeyboard({
+  selectedPageId,
+  onRemovePage,
+  onUndo,
+  onRedo,
+}: UseSiteboardKeyboardParams) {
+  useEffect(() => {
+    return registerEditCommandHandlers({
+      delete: () => {
+        if (!selectedPageId) return false;
+        onRemovePage(selectedPageId);
+        return true;
+      },
+      redo: () => {
+        onRedo();
+        return true;
+      },
+      undo: () => {
+        onUndo();
+        return true;
+      },
+    });
+  }, [onRedo, onRemovePage, onUndo, selectedPageId]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const isModifierPressed = e.metaKey || e.ctrlKey;
+      const lowerKey = e.key.toLowerCase();
 
-      const target = e.target as HTMLElement;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target.isContentEditable
-      ) {
+      if (isModifierPressed && !e.altKey && lowerKey === 'z') {
+        const handled = e.shiftKey ? runEditCommand('redo') : runEditCommand('undo');
+        if (handled) {
+          e.preventDefault();
+        }
         return;
       }
 
-      if (!selectedPageId) return;
-      e.preventDefault();
-      onRemovePage(selectedPageId);
+      if (e.altKey || isModifierPressed) return;
+      if (e.key !== 'Delete' && e.key !== 'Backspace') {
+        return;
+      }
+
+      if (runEditCommand('delete')) {
+        e.preventDefault();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedPageId, onRemovePage]);
+  }, []);
 }

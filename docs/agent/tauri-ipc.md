@@ -35,6 +35,7 @@
 - `page-navigated-{pageId}`: URL 変更通知
 - `page-title-changed-{pageId}`: タイトル変更通知
 - `page-scroll-ended-{pageId}`: Webview 内スクロール完了通知
+- `edit-command`: メニューバー操作の編集コマンド通知（`undo` / `redo` / `delete`）
 
 ## JS ブリッジ API（`webviewApi`）
 
@@ -43,6 +44,7 @@
 - `setOpacity`, `reload`, `goBack`, `goForward`, `getNavigationState`
 - `captureScreenshot`
 - `onPageNavigated`, `onPageTitleChanged`, `onPageScrollEnded`
+- `onEditCommand`
 
 ## プラットフォーム差分
 

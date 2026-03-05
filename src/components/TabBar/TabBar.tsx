@@ -54,7 +54,7 @@ export function TabBar() {
       {/* ホームボタン: クリックでホームキャンバスに切り替え */}
       <motion.button
         className={twMerge(
-          'ml-2 flex shrink-0 cursor-pointer items-center border-r border-b-2 border-border px-3 select-none',
+          'ml-2 flex shrink-0 cursor-pointer items-center border-r border-b-2 border-border px-3',
           isHomeActive
             ? 'border-b-transparent bg-surface text-foreground'
             : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',

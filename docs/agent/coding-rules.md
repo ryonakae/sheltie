@@ -33,9 +33,12 @@
 
 ## ノード操作 UI
 
-- ノード右上の閉じるボタン（インライン Xmark）は設けない。削除は以下の 2 経路に統一する:
+- ノード右上の閉じるボタン（インライン Xmark）は設けない。削除は以下の 3 経路に統一する:
   1. Delete / Backspace キー（`useSiteboardKeyboard` で処理。テキスト入力フォーカス中はスキップ）
-  2. ノードまたはサイドバーアイテムの右クリック → コンテキストメニュー「ノードを削除」
+  2. メニューバー `Edit -> Delete`（Tauri メニューイベントを `edit-command` として受信）
+  3. ノードまたはサイドバーアイテムの右クリック → コンテキストメニュー「ノードを削除」
+- Undo/Redo は `CmdOrCtrl+Z` / `CmdOrCtrl+Shift+Z` とメニューバー `Edit -> Undo / Redo` を同じ `edit-command` 経路で処理する。
+- キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `components/Common/ContextMenu` を使い createPortal で body 直下に描画する。
 - `removePage` の呼び出しは `screens/Project.tsx` に集約し、`Sidebar` と `Siteboard` には `onRemovePage` prop として渡す。
 
@@ -45,6 +48,7 @@
 - e/w ハンドルはネイティブ Webview に覆われるため、ハンドル要素を **外側 -4px 拡張**（16px 幅）して Webview 外に突き出す。
 - リサイズ中の `InteractionOverlay` カーソルは `useSiteboardViewportEngine` が `onInteractionChange(direction)` 経由で `RESIZE_CURSOR_MAP` から解決して渡す。
 - `overflow-hidden` + `border-radius` をノード外側 div に設定するとコーナーハンドルがクリッピングされる。**`overflow-hidden` は TopBar/BottomBar などの子要素側に移動し、外側 div には設定しない。**
+- `onMouseDown` で `e.stopPropagation()` を呼ぶハンドラーには **必ず `if (e.button !== 0) return;` を先頭に置く**。右クリック（button=2）時に伝播を止めると `contextmenu` イベントが親コンポーネントに届かなくなる。`startDrag` / `startResize` も同様。
 
 ## アニメーション
 

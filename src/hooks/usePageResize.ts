@@ -62,6 +62,7 @@ export function usePageResize({
 
   const startResize = useCallback(
     (e: React.MouseEvent, pageId: string, direction: ResizeDirection) => {
+      if (e.button !== 0) return;
       const frameEl = (e.currentTarget as HTMLElement).closest('[data-page-id]') as HTMLElement;
       if (!frameEl) return;
 

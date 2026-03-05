@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { Webview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
+import type { EditCommand } from '@/lib/edit-commands';
 import type { ProjectState, ThemeMode } from '@/types';
 
 // ── プロジェクト状態 ─────────────────────────────────────────────
@@ -270,6 +271,9 @@ export type NavigationState = {
   can_go_back: boolean;
   can_go_forward: boolean;
 };
+
+export const onEditCommand = (callback: (command: EditCommand) => void) =>
+  listen<EditCommand>('edit-command', (event) => callback(event.payload));
 
 // ── プラットフォーム情報 ──────────────────────────────────────────
 

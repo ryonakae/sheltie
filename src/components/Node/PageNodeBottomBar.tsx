@@ -44,10 +44,7 @@ export function PageNodeBottomBar({
   };
 
   return (
-    <div
-      className="flex shrink-0 items-center overflow-hidden bg-default select-none"
-      style={bottomBarStyle}
-    >
+    <div className="flex shrink-0 items-center overflow-hidden bg-default" style={bottomBarStyle}>
       <div className="flex shrink-0 items-center" style={presetGroupStyle}>
         {!hidePresetControls &&
           SIZE_PRESETS.map((preset) => {

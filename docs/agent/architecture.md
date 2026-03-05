@@ -28,8 +28,9 @@ src/
 - `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン（右下固定、クリックでズームリセット）。
 - `components/Siteboard/InteractionOverlay.tsx`: 操作中カーソル上書き用オーバーレイ。
 - `hooks/siteboard/*`: 表示制御・ビューポート・ノードランタイム・キーボード操作を分担。
-- `store/tab-store.ts`: プロジェクト・ページ・ビューポート状態。
+- `store/tab-store.ts`: プロジェクト・ページ・ビューポート状態と、プロジェクト単位ページ履歴（Undo/Redo）を管理。
 - `store/theme-store.ts`: テーマ状態。
+- `main.tsx`: `edit-command` リスナーを起動時に 1 回だけ登録し、Tauri メニュー操作を共通編集コマンドに接続。
 
 ## Siteboard の責務分離
 

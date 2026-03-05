@@ -15,7 +15,7 @@
 | `workflow.md` | 実装〜検証の手順 | すべてのタスク開始時 |
 | `coding-rules.md` | コーディング規約 | 実装時 |
 | `architecture.md` | 全体構成と責務 | 設計変更・影響範囲確認時 |
-| `domain-models.md` | 型・定数・不変条件 | 型変更・store変更時 |
+| `domain-models.md` | 型・定数・不変条件 | 型変更・store変更時（Undo/Redo 履歴含む） |
 | `tauri-ipc.md` | IPC 契約 | Rust/bridge/イベント変更時 |
 | `siteboard-runtime.md` | Siteboard 表示・操作仕様 | Siteboard/Webview 変更時 |
 

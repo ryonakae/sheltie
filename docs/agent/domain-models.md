@@ -12,6 +12,12 @@
 - `Viewport`: `zoom`, `panX`, `panY`
 - `Project`: `id`, `title`, `sidebarWidth`, `createdAt`, `pages`, `viewport`
 - `ProjectState`: `projects`, `openIds`, `activeId`
+- `ProjectStore`（`tab-store.ts` 内部）
+  - `ProjectState` + actions + ランタイム状態
+  - ランタイム状態: `isLoaded`, `pageHistories`
+- `ProjectPageHistory`（`tab-store.ts` 内部）
+  - `past`: 直前までの `Page[]` スナップショット配列
+  - `future`: Redo 用の `Page[]` スナップショット配列
 
 ## ヘルパー
 
@@ -39,8 +45,15 @@
 
 - `RESIZE_CURSOR_MAP`: 8 方向の `ResizeDirection` → CSS cursor 値のマップ
 
+`src/store/tab-store.ts`
+
+- `PAGE_HISTORY_LIMIT = 100`（プロジェクトごとのページ履歴保持上限）
+
 ## 不変条件
 
 - `webviewLabel` はランタイム専用で永続化しない。
 - 付箋ページは `PageType` と `content` / `colorIndex` を利用する。
 - 空フレーム（`url === ''`）は Webview 未作成状態を許容する。
+- `pageHistories` はランタイム専用で永続化しない（`_restoreState` で必ず初期化）。
+- Undo/Redo は `activeId` のプロジェクトにのみ適用し、`HOME_ID` では no-op。
+- ページ配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updatePageSizeWithoutHistory` を使って履歴を積まない。

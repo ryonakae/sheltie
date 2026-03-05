@@ -35,7 +35,7 @@
 - `page-navigated-{pageId}`: URL 変更通知
 - `page-title-changed-{pageId}`: タイトル変更通知
 - `page-scroll-ended-{pageId}`: Webview 内スクロール完了通知
-- `edit-command`: メニューバー操作の編集コマンド通知（`undo` / `redo` / `delete`）
+- `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
 
 ## JS ブリッジ API（`webviewApi`）
 
@@ -44,7 +44,7 @@
 - `setOpacity`, `reload`, `goBack`, `goForward`, `getNavigationState`
 - `captureScreenshot`
 - `onPageNavigated`, `onPageTitleChanged`, `onPageScrollEnded`
-- `onEditCommand`
+- `onEditCommand`（`EditCommand = 'undo' | 'redo' | 'delete'`）
 
 ## プラットフォーム差分
 
@@ -56,3 +56,4 @@
 
 - コマンド名/引数/戻り値を変更したら、Rust 側・bridge 側・このドキュメントを同時更新する。
 - イベント名を変更したら listener 側（`PageNode` / runtime hooks）も同時更新する。
+- `edit-command` の payload 仕様や発火元（メニュー ID）を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/edit-commands.ts` を同時更新する。

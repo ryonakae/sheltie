@@ -96,6 +96,7 @@ export function Siteboard({
     screenshotUrls,
   } = useSiteboardDisplayEngine({
     pages,
+    projectId: activeId ?? '',
     containerRef,
     canvasRef,
     zoomRef,
@@ -268,7 +269,7 @@ export function Siteboard({
               title={page.title}
               displayWidth={resizingSize?.pageId === page.id ? resizingSize.width : page.width}
               displayHeight={resizingSize?.pageId === page.id ? resizingSize.height : page.height}
-              displayMode={displayModes[page.id] ?? 'native'}
+              displayMode={displayModes[page.id] ?? 'hidden'}
               screenshotUrl={screenshotUrls[page.id] ?? null}
               hideTopNavControls={hideCompactControls}
               hideBottomPresetControls={hideCompactControls}

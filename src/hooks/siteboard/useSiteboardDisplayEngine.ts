@@ -1,3 +1,4 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
@@ -9,6 +10,7 @@ import {
 } from '@/constants';
 import { getPlatformInfo, webviewApi } from '@/lib/tauri-bridge';
 import type { DisplayMode, Page } from '@/types';
+import { isWebPage } from '@/types';
 
 import type { InteractionType } from './types';
 
@@ -17,6 +19,7 @@ const SCREENSHOT_CLIPPING_ENABLED = true;
 
 interface UseSiteboardDisplayEngineParams {
   pages: Page[];
+  projectId: string;
   containerRef: React.RefObject<HTMLDivElement | null>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   zoomRef: React.RefObject<number>;
@@ -31,6 +34,7 @@ interface CaptureScreenshotOptions {
 
 export function useSiteboardDisplayEngine({
   pages,
+  projectId,
   containerRef,
   canvasRef,
   zoomRef,
@@ -429,8 +433,9 @@ export function useSiteboardDisplayEngine({
       )
         return;
 
-      const dataUrl = await webviewApi.captureScreenshot(pageId);
-      if (!dataUrl) return;
+      // PNG ファイルに保存し、ファイルパスを受け取る（IPC で base64 転送なし）
+      const filePath = await webviewApi.saveScreenshot(pageId, projectId);
+      if (!filePath) return;
 
       if (
         !forceDuringInteraction &&
@@ -438,12 +443,11 @@ export function useSiteboardDisplayEngine({
       )
         return;
 
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
+      // convertFileSrc でアセットプロトコル URL に変換し、キャッシュバストのため timestamp を付与
+      const assetUrl = `${convertFileSrc(filePath)}?t=${Date.now()}`;
 
       const img = new Image();
-      img.src = objectUrl;
+      img.src = assetUrl;
       try {
         await img.decode();
       } catch {
@@ -453,9 +457,7 @@ export function useSiteboardDisplayEngine({
       screenshotReadyRef.current[pageId] = true;
 
       setScreenshotUrls((prev) => {
-        const oldUrl = prev[pageId];
-        if (oldUrl) URL.revokeObjectURL(oldUrl);
-        return { ...prev, [pageId]: objectUrl };
+        return { ...prev, [pageId]: assetUrl };
       });
 
       if (interactionSnapshotModeRef.current && pendingSnapshotSwapRef.current.has(pageId)) {
@@ -480,7 +482,7 @@ export function useSiteboardDisplayEngine({
         computeDisplayModes();
       }
     },
-    [canvasRef, computeDisplayModes, pages],
+    [canvasRef, computeDisplayModes, pages, projectId],
   );
 
   const getAllWebviewLabels = useCallback(() => {
@@ -811,8 +813,6 @@ export function useSiteboardDisplayEngine({
         return next;
       });
       setScreenshotUrls((prev) => {
-        const oldUrl = prev[pageId];
-        if (oldUrl) URL.revokeObjectURL(oldUrl);
         const next = { ...prev };
         delete next[pageId];
         return next;
@@ -824,8 +824,10 @@ export function useSiteboardDisplayEngine({
       if (resizingPageIdRef.current === pageId) {
         resizingPageIdRef.current = null;
       }
+      // スクリーンショットファイルをクリーンアップ
+      void webviewApi.deleteScreenshot(pageId, projectId);
     },
-    [cancelNativeReveal],
+    [cancelNativeReveal, projectId],
   );
 
   useEffect(() => {
@@ -845,6 +847,34 @@ export function useSiteboardDisplayEngine({
   useEffect(() => {
     screenshotUrlsRef.current = screenshotUrls;
   }, [screenshotUrls]);
+
+  // 起動時に保存済みスクリーンショットをファイルシステムから復元する。
+  // screenshotReadyRef を true に設定することで、右クリック時の白画面や
+  // 起動直後の Webview がサイドバーに重なる問題を防ぐ。
+  useEffect(() => {
+    const webPageIds = pages.filter((p) => isWebPage(p) && p.url).map((p) => p.id);
+    if (webPageIds.length === 0) return;
+
+    let cancelled = false;
+    void webviewApi.getExistingScreenshotPaths(projectId, webPageIds).then((entries) => {
+      if (cancelled || entries.length === 0) return;
+
+      const restoredUrls: Record<string, string> = {};
+      for (const [pageId, filePath] of entries) {
+        screenshotReadyRef.current[pageId] = true;
+        restoredUrls[pageId] = `${convertFileSrc(filePath)}?t=restored`;
+      }
+      setScreenshotUrls((prev) => ({ ...prev, ...restoredUrls }));
+      // 復元後にモード判定を再実行し、端のページが screenshot モードで表示されるようにする
+      requestAnimationFrame(() => computeDisplayModes());
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // 初回マウント時のみ実行（projectId は起動後に変化しない）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -904,9 +934,6 @@ export function useSiteboardDisplayEngine({
     return () => {
       cancelAllNativeReveals();
       resizingPageIdRef.current = null;
-      for (const url of Object.values(screenshotUrlsRef.current)) {
-        URL.revokeObjectURL(url);
-      }
     };
   }, [cancelAllNativeReveals]);
 

@@ -219,10 +219,9 @@ fn take_wkwebview_snapshot(
     }
 }
 
-/// NSImage ポインタを PNG base64 Data URL に変換する。
+/// NSImage ポインタを PNG バイト列に変換する。
 #[cfg(target_os = "macos")]
-fn encode_nsimage_to_base64(image: *mut objc2::runtime::AnyObject) -> Result<String, String> {
-    use base64::Engine as _;
+fn nsimage_to_png_bytes(image: *mut objc2::runtime::AnyObject) -> Result<Vec<u8>, String> {
     use objc2::runtime::{AnyClass, AnyObject};
 
     unsafe {
@@ -255,9 +254,17 @@ fn encode_nsimage_to_base64(image: *mut objc2::runtime::AnyObject) -> Result<Str
         let length: usize = objc2::msg_send![png_data, length];
 
         let slice = std::slice::from_raw_parts(bytes, length);
-        let encoded = base64::engine::general_purpose::STANDARD.encode(slice);
-        Ok(format!("data:image/png;base64,{encoded}"))
+        Ok(slice.to_vec())
     }
+}
+
+/// NSImage ポインタを PNG base64 Data URL に変換する。
+#[cfg(target_os = "macos")]
+fn encode_nsimage_to_base64(image: *mut objc2::runtime::AnyObject) -> Result<String, String> {
+    use base64::Engine as _;
+    let bytes = nsimage_to_png_bytes(image)?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:image/png;base64,{encoded}"))
 }
 
 /// ページ Webview のブラウザ履歴を1つ戻る。
@@ -715,6 +722,135 @@ pub async fn batch_update_webview_positions(
         if let Some(wv) = app.get_webview(&label) {
             wv.set_position(LogicalPosition::new(e.x, e.y)).ok();
         }
+    }
+    Ok(())
+}
+
+/// WKWebView のスクリーンショットを PNG ファイルに保存し、ファイルパスを返す。
+///
+/// 保存先: app_data_dir/screenshots/{project_id}/{page_id}.png（既存ファイルは上書き）
+/// macOS のみサポート。WKWebView が表示中（native モード）の時に呼び出すこと。
+#[tauri::command]
+pub async fn save_webview_screenshot(
+    app: AppHandle,
+    page_id: String,
+    project_id: String,
+) -> Result<String, String> {
+    save_screenshot_impl(app, page_id, project_id).await
+}
+
+#[cfg(target_os = "macos")]
+async fn save_screenshot_impl(
+    app: AppHandle,
+    page_id: String,
+    project_id: String,
+) -> Result<String, String> {
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::oneshot;
+    use block2::RcBlock;
+    use objc2::runtime::AnyObject;
+
+    let label = format!("page-{}", page_id);
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+
+    let (tx, rx) = oneshot::channel::<Result<Vec<u8>, String>>();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+
+    webview
+        .with_webview(move |platform_wv| {
+            let raw_ptr = platform_wv.inner() as *mut AnyObject;
+
+            let block = RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
+                let result = if image.is_null() {
+                    Err("NSImage が null です（Webview が非表示の可能性があります）".to_string())
+                } else {
+                    nsimage_to_png_bytes(image)
+                };
+                if let Ok(mut guard) = tx.lock() {
+                    if let Some(sender) = guard.take() {
+                        let _ = sender.send(result);
+                    }
+                }
+            });
+
+            unsafe {
+                let nil: *mut AnyObject = std::ptr::null_mut();
+                let _: () = objc2::msg_send![raw_ptr, takeSnapshotWithConfiguration: nil, completionHandler: &*block];
+            }
+        })
+        .map_err(|e| format!("with_webview エラー: {e}"))?;
+
+    let png_bytes = rx
+        .await
+        .map_err(|_| "スクリーンショットチャネルが閉じられました".to_string())??;
+
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir 取得エラー: {e}"))?;
+    let screenshots_dir = data_dir.join("screenshots").join(&project_id);
+    std::fs::create_dir_all(&screenshots_dir)
+        .map_err(|e| format!("ディレクトリ作成エラー: {e}"))?;
+    let file_path = screenshots_dir.join(format!("{page_id}.png"));
+    std::fs::write(&file_path, &png_bytes)
+        .map_err(|e| format!("ファイル保存エラー: {e}"))?;
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn save_screenshot_impl(
+    _app: AppHandle,
+    _page_id: String,
+    _project_id: String,
+) -> Result<String, String> {
+    Err("この OS ではサポートされていません".to_string())
+}
+
+/// 複数ページの既存スクリーンショットパスを一括取得する（起動時の復元用）。
+///
+/// 存在するファイルのみ `(page_id, absolute_path)` のペアで返す。
+#[tauri::command]
+pub async fn get_existing_screenshot_paths(
+    app: AppHandle,
+    project_id: String,
+    page_ids: Vec<String>,
+) -> Result<Vec<(String, String)>, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir 取得エラー: {e}"))?;
+    let screenshots_dir = data_dir.join("screenshots").join(&project_id);
+    let mut results = Vec::new();
+    for page_id in page_ids {
+        let path = screenshots_dir.join(format!("{page_id}.png"));
+        if path.exists() {
+            results.push((page_id, path.to_string_lossy().to_string()));
+        }
+    }
+    Ok(results)
+}
+
+/// ページのスクリーンショットファイルを削除する（ページ削除時のクリーンアップ用）。
+#[tauri::command]
+pub async fn delete_screenshot(
+    app: AppHandle,
+    page_id: String,
+    project_id: String,
+) -> Result<(), String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir 取得エラー: {e}"))?;
+    let file_path = data_dir
+        .join("screenshots")
+        .join(&project_id)
+        .join(format!("{page_id}.png"));
+    if file_path.exists() {
+        std::fs::remove_file(&file_path)
+            .map_err(|e| format!("ファイル削除エラー: {e}"))?;
     }
     Ok(())
 }

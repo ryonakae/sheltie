@@ -21,6 +21,13 @@
 - 表示モード遷移・スクリーンショット切替・操作中の制約は `siteboard-runtime.md` を正本とする。
 - IPC の追加・変更は `tauri-ipc.md` と実装を同時に更新する。
 
+## ファイルシステム / アセットプロトコル
+
+- `convertFileSrc(filePath)` でローカルファイルパスを `asset://` URL に変換してフロントエンドから読み込める。
+- **前提条件**: `Cargo.toml` に `protocol-asset` feature、`tauri.conf.json` に `app.security.assetProtocol.enable = true` と scope の両方が必要。片方欠けても動作しない。
+- `core:asset:default` は Tauri v2 の有効な capabilities パーミッションではないため使わない。
+- キャッシュバスティングが必要な場合は `convertFileSrc(path) + '?t=' + Date.now()` を使う。
+
 ## UI/スタイル
 
 - スタイルは Tailwind CSS v4 を利用する。

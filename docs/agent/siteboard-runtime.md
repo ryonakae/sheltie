@@ -60,6 +60,29 @@
 
 付箋ノードは Webview を持たないため、コンテキストメニュー開時に `handleContextMenuOpen` は呼ばない（Siteboard.tsx の `isStickyNote(page)` チェックで分岐）。
 
+## スクリーンショット永続化
+
+スクリーンショットは PNG ファイルとしてディスクに保存する（macOS のみ）。
+
+**保存先**: `~/Library/Application Support/com.siteboard.app/screenshots/{projectId}/{pageId}.png`
+
+**フロー（撮影時）**:
+1. Rust `save_webview_screenshot(pageId, projectId)` → WKWebView スナップショット → PNG → ファイル保存 → ファイルパス返却
+2. JS: `convertFileSrc(filePath) + '?t=Date.now()'` でアセット URL 生成 → `<img src>` に設定
+3. `screenshotReadyRef.current[pageId] = true` をセット
+
+**フロー（起動時復元）**:
+1. `useSiteboardDisplayEngine` の初回マウント時 effect が実行
+2. `get_existing_screenshot_paths(projectId, pageIds)` で既存ファイルパスを一括取得
+3. `convertFileSrc` でアセット URL に変換 → `screenshotReadyRef` と `screenshotUrls` を更新
+4. `computeDisplayModes()` を再実行（復元スクショを考慮した正しいモード判定）
+
+**削除**: ページ削除時に `cleanupPageArtifacts()` → `delete_screenshot(pageId, projectId)` でファイルも削除。
+
+**Tauri 設定**:
+- `tauri.conf.json`: `app.security.assetProtocol.enable = true`, scope `$APPDATA/screenshots/**`
+- `Cargo.toml`: `tauri` feature に `protocol-asset` を追加
+
 ## スクリーンショット撮影タイミング
 
 - pan/zoom 操作開始時

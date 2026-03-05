@@ -252,6 +252,46 @@ export const webviewApi = {
     }
   },
 
+  /**
+   * Webview のスクリーンショットを PNG ファイルに保存し、絶対パスを返す（macOS のみ）。
+   * 保存先: app_data_dir/screenshots/{projectId}/{pageId}.png（既存ファイルは上書き）
+   * 失敗時は null
+   */
+  async saveScreenshot(pageId: string, projectId: string): Promise<string | null> {
+    try {
+      return await invoke<string>('save_webview_screenshot', { pageId, projectId });
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 複数ページの既存スクリーンショットパスを一括取得する（起動時の復元用）。
+   * 存在するファイルのみ [pageId, absolutePath] のペアで返す。
+   */
+  async getExistingScreenshotPaths(
+    projectId: string,
+    pageIds: string[],
+  ): Promise<Array<[string, string]>> {
+    try {
+      return await invoke<Array<[string, string]>>('get_existing_screenshot_paths', {
+        projectId,
+        pageIds,
+      });
+    } catch {
+      return [];
+    }
+  },
+
+  /** ページのスクリーンショットファイルを削除する（ページ削除時のクリーンアップ用） */
+  async deleteScreenshot(pageId: string, projectId: string): Promise<void> {
+    try {
+      await invoke('delete_screenshot', { pageId, projectId });
+    } catch {
+      // no-op
+    }
+  },
+
   /** Rust → JS: ナビゲーション URL 変更イベントをリッスン */
   onPageNavigated: (pageId: string, callback: (payload: { url: string }) => void) =>
     listen<{ url: string }>(`page-navigated-${pageId}`, (event) => callback(event.payload)),

@@ -130,7 +130,9 @@ export const PageNode = memo(function PageNode({
         isCreatingRef.current = false;
         isFirstTitleRef.current = true;
 
-        // ネイティブ表示を Zustand 更新より先に試みる（初期化完了タイミングを最大化）
+        // bounds を事前に設定してから onWebviewCreated → computeDisplayModes の判定に委ねる。
+        // 起動直後に見切れているノードがサイドバーに重ならないよう、show() は
+        // computeDisplayModes の結果（displayMode effect）が確定してから呼ばれる。
         const currentRect = placeholder.getBoundingClientRect();
         void webviewApi.updateBounds(
           page.id,
@@ -140,8 +142,6 @@ export const PageNode = memo(function PageNode({
           currentRect.height,
           getZoom(),
         );
-        void webviewApi.show(label);
-        // Zustand 更新後にフォールバック effect が念押し表示
         onWebviewCreated(page.id, label);
         console.log(`[PageNode] Webview 作成完了: label=${label}`);
       })

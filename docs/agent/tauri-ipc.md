@@ -28,7 +28,10 @@
 - `go_back_page_webview(pageId)`
 - `go_forward_page_webview(pageId)`
 - `get_navigation_state_page_webview(pageId)`
-- `capture_webview_screenshot(pageId)`
+- `capture_webview_screenshot(pageId)` — base64 Data URL を返す（内部用途のみ）
+- `save_webview_screenshot(pageId, projectId)` — PNG ファイルを保存しファイルパスを返す（macOS のみ）
+- `get_existing_screenshot_paths(projectId, pageIds)` — 存在するスクリーンショットのパスを一括取得
+- `delete_screenshot(pageId, projectId)` — スクリーンショットファイルを削除
 
 ## Backend -> Renderer（イベント）
 
@@ -42,7 +45,7 @@
 - `create`, `updateBounds`, `updateAllBounds`, `updateAllPositions`
 - `show`, `hide`, `destroy`, `hideAll`, `showAllWithBounds`
 - `setOpacity`, `reload`, `goBack`, `goForward`, `getNavigationState`
-- `captureScreenshot`
+- `captureScreenshot`, `saveScreenshot`, `getExistingScreenshotPaths`, `deleteScreenshot`
 - `onPageNavigated`, `onPageTitleChanged`, `onPageScrollEnded`
 - `onEditCommand`（`EditCommand = 'undo' | 'redo' | 'delete'`）
 

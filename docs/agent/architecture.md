@@ -65,3 +65,14 @@ Tauri Plugin Store は `tauri.conf.json` ではなく `src-tauri/src/lib.rs` で
 |---|---|---|
 | `tauri-plugin-store` | プロジェクト状態の永続化 | |
 | `tauri-plugin-prevent-default` | メインウィンドウのデフォルトコンテキストメニュー無効化 | `Flags::CONTEXT_MENU` のみ指定。DevTools は維持。子 Webview（外部サイト）は対象外 |
+
+## アセットプロトコル
+
+スクリーンショット画像をフロントエンドから読み込むために Tauri のアセットプロトコルを使用する。
+
+- `Cargo.toml`: `tauri` の features に `"protocol-asset"` を追加（`unstable` と並記）
+- `tauri.conf.json`: `app.security.assetProtocol.enable = true` と `scope` を設定する
+
+`convertFileSrc` はアセットプロトコルが有効でないと動作しない。capabilities ではなくこの2箇所で設定する（`core:asset:default` は Tauri v2 の有効なパーミッションではない）。
+
+保存先とスコープは `siteboard-runtime.md` のスクリーンショット永続化セクションを参照。

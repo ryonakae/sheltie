@@ -1,5 +1,6 @@
 import { Toast } from '@heroui/react';
 
+import { UnsavedChangesDialog } from '@/components/Common/UnsavedChangesDialog';
 import { TabBar } from '@/components/TabBar/TabBar';
 import { HomeScreen } from '@/screens/Home';
 import { ProjectScreen } from '@/screens/Project';
@@ -18,6 +19,7 @@ export default function App() {
     <div className="flex h-full flex-col select-none">
       <TabBar />
       {isHome ? <HomeScreen /> : <ProjectScreen key={activeId} />}
+      <UnsavedChangesDialog />
       <Toast.Provider placement="bottom" />
     </div>
   );

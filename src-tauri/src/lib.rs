@@ -1,7 +1,10 @@
 mod commands;
 
 use commands::{
-    store::{close_ready, load_project_state, save_project_state},
+    store::{
+        close_ready, load_project_file, load_project_state, save_project_file,
+        save_project_state,
+    },
     theme::{get_platform_info, load_theme, set_theme},
     webview::{
         batch_update_page_webview_bounds, batch_update_webview_positions,
@@ -19,6 +22,10 @@ use tauri::{
 };
 
 const EVENT_EDIT_COMMAND: &str = "edit-command";
+const EVENT_FILE_COMMAND: &str = "file-command";
+const MENU_ID_FILE_OPEN: &str = "file.open";
+const MENU_ID_FILE_SAVE: &str = "file.save";
+const MENU_ID_FILE_SAVE_AS: &str = "file.save-as";
 const MENU_ID_EDIT_UNDO: &str = "edit.undo";
 const MENU_ID_EDIT_REDO: &str = "edit.redo";
 const MENU_ID_EDIT_DELETE: &str = "edit.delete";
@@ -27,6 +34,12 @@ const MENU_ID_OPEN_DEVTOOLS: &str = "develop.open-devtools";
 fn emit_edit_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
     if let Err(error) = app.emit_to("main", EVENT_EDIT_COMMAND, command) {
         log::warn!("edit-command の送信に失敗しました: command={command}, error={error}");
+    }
+}
+
+fn emit_file_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
+    if let Err(error) = app.emit_to("main", EVENT_FILE_COMMAND, command) {
+        log::warn!("file-command の送信に失敗しました: command={command}, error={error}");
     }
 }
 
@@ -119,6 +132,45 @@ fn remove_default_undo_redo<R: tauri::Runtime>(submenu: &Submenu<R>) -> tauri::R
     Ok(())
 }
 
+fn configure_file_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    menu: &Menu<R>,
+) -> tauri::Result<()> {
+    let file_submenu = if let Some(existing) = menu
+        .items()?
+        .into_iter()
+        .filter_map(|item| item.as_submenu().cloned())
+        .find(|submenu| normalize_menu_text(&submenu.text().unwrap_or_default()) == "file")
+    {
+        existing
+    } else {
+        log::warn!("既定の File メニューが見つからなかったため新規作成します");
+        let fallback = SubmenuBuilder::with_id(app, "file", "File").build()?;
+        menu.append(&fallback)?;
+        fallback
+    };
+
+    remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_OPEN)?;
+    remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_SAVE)?;
+    remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_SAVE_AS)?;
+
+    let open_item = MenuItemBuilder::with_id(MENU_ID_FILE_OPEN, "Open")
+        .accelerator("CmdOrCtrl+O")
+        .build(app)?;
+    let save_item = MenuItemBuilder::with_id(MENU_ID_FILE_SAVE, "Save")
+        .accelerator("CmdOrCtrl+S")
+        .build(app)?;
+    let save_as_item = MenuItemBuilder::with_id(MENU_ID_FILE_SAVE_AS, "Save As")
+        .accelerator("CmdOrCtrl+Shift+S")
+        .build(app)?;
+
+    file_submenu.insert(&open_item, 0)?;
+    file_submenu.insert(&save_item, 1)?;
+    file_submenu.insert(&save_as_item, 2)?;
+
+    Ok(())
+}
+
 fn configure_edit_menu<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     menu: &Menu<R>,
@@ -175,6 +227,7 @@ pub fn run() {
     use tauri_plugin_prevent_default::Flags;
 
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_prevent_default::Builder::new()
                 .with_flags(Flags::CONTEXT_MENU)
@@ -183,6 +236,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .menu(|app| {
             let menu = Menu::default(app)?;
+            configure_file_menu(app, &menu)?;
             configure_edit_menu(app, &menu)?;
 
             #[cfg(debug_assertions)]
@@ -209,6 +263,9 @@ pub fn run() {
             }
             app.on_menu_event(|app, event| {
                 match event.id().as_ref() {
+                    MENU_ID_FILE_OPEN => emit_file_command(app, "open"),
+                    MENU_ID_FILE_SAVE => emit_file_command(app, "save"),
+                    MENU_ID_FILE_SAVE_AS => emit_file_command(app, "save-as"),
                     MENU_ID_EDIT_UNDO => emit_edit_command(app, "undo"),
                     MENU_ID_EDIT_REDO => emit_edit_command(app, "redo"),
                     MENU_ID_EDIT_DELETE => emit_edit_command(app, "delete"),
@@ -229,6 +286,8 @@ pub fn run() {
             load_project_state,
             save_project_state,
             close_ready,
+            load_project_file,
+            save_project_file,
             load_theme,
             set_theme,
             get_platform_info,

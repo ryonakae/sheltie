@@ -6,23 +6,23 @@ import { NodeResizeHandle } from '@/components/Node/NodeResizeHandle';
 import { STICKY_NOTE_COLORS, STICKY_NOTE_MIN_HEIGHT } from '@/constants';
 import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import { zoomPx } from '@/lib/canvas-zoom';
-import { type Page } from '@/types';
+import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
 
 interface StickyNoteNodeProps {
-  page: Page;
+  node: StickyNoteNodeModel;
   isActive: boolean;
   hideColorCycleButton: boolean;
-  onActivate: (pageId: string) => void;
-  onContextMenu: (e: React.MouseEvent, pageId: string) => void;
-  onDragStart: (e: React.MouseEvent, pageId: string) => void;
-  onResizeStart: (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => void;
-  onContentChange: (pageId: string, content: string) => void;
-  onAutoHeightChange: (pageId: string, height: number) => void;
-  onColorCycle: (pageId: string) => void;
+  onActivate: (nodeId: string) => void;
+  onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
+  onDragStart: (e: React.MouseEvent, nodeId: string) => void;
+  onResizeStart: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
+  onContentChange: (nodeId: string, content: string) => void;
+  onAutoHeightChange: (nodeId: string, height: number) => void;
+  onColorCycle: (nodeId: string) => void;
 }
 
 export const StickyNoteNode = memo(function StickyNoteNode({
-  page,
+  node,
   isActive,
   hideColorCycleButton,
   onActivate,
@@ -39,12 +39,12 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentMeasureRef = useRef<HTMLDivElement>(null);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastCommittedContentRef = useRef(page.content ?? '');
+  const lastCommittedContentRef = useRef(node.content ?? '');
 
-  const colorIndex = page.colorIndex ?? 0;
+  const colorIndex = node.colorIndex ?? 0;
   const color = STICKY_NOTE_COLORS[colorIndex];
   const nextColor = STICKY_NOTE_COLORS[(colorIndex + 1) % STICKY_NOTE_COLORS.length];
-  const noteContent = isEditing ? editingContent : (page.content ?? '');
+  const noteContent = isEditing ? editingContent : (node.content ?? '');
 
   useEffect(() => {
     if (!isEditing) return;
@@ -52,23 +52,23 @@ export const StickyNoteNode = memo(function StickyNoteNode({
     if (!measureEl) return;
     const contentHeight = Math.ceil(measureEl.getBoundingClientRect().height);
     const nextHeight = Math.max(STICKY_NOTE_MIN_HEIGHT, contentHeight);
-    if (nextHeight <= page.height) return;
-    onAutoHeightChange(page.id, nextHeight);
-  }, [editingContent, isEditing, onAutoHeightChange, page.height, page.id, page.width]);
+    if (nextHeight <= node.height) return;
+    onAutoHeightChange(node.id, nextHeight);
+  }, [editingContent, isEditing, node.height, node.id, node.width, onAutoHeightChange]);
 
   useEffect(() => {
     if (!isEditing) {
-      lastCommittedContentRef.current = page.content ?? '';
+      lastCommittedContentRef.current = node.content ?? '';
     }
-  }, [isEditing, page.content]);
+  }, [isEditing, node.content]);
 
   const commitContent = useCallback(
     (content: string) => {
       if (lastCommittedContentRef.current === content) return;
       lastCommittedContentRef.current = content;
-      onContentChange(page.id, content);
+      onContentChange(node.id, content);
     },
-    [onContentChange, page.id],
+    [node.id, onContentChange],
   );
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   );
 
   const handleDoubleClick = useCallback(() => {
-    const nextContent = page.content ?? '';
+    const nextContent = node.content ?? '';
     // 編集開始時にストアの現在値で初期化
     setEditingContent(nextContent);
     lastCommittedContentRef.current = nextContent;
@@ -112,7 +112,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       textareaRef.current?.focus();
       textareaRef.current?.select();
     });
-  }, [page.content]);
+  }, [node.content]);
 
   const handleTextareaDoubleClick = useCallback(() => {
     textareaRef.current?.select();
@@ -128,14 +128,14 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   }, [commitContent, editingContent]);
 
   // page.id は UUID で不変のため、親の関数参照が安定していればこれらも安定する
-  const handleActivate = useCallback(() => onActivate(page.id), [onActivate, page.id]);
+  const handleActivate = useCallback(() => onActivate(node.id), [node.id, onActivate]);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent, direction: NodeResizeDirection) => {
       handleActivate();
-      onResizeStart(e, page.id, direction);
+      onResizeStart(e, node.id, direction);
     },
-    [handleActivate, onResizeStart, page.id],
+    [handleActivate, node.id, onResizeStart],
   );
 
   const noteClassName = twMerge(
@@ -157,21 +157,21 @@ export const StickyNoteNode = memo(function StickyNoteNode({
     nextColor.textClass,
     'hover:opacity-80',
   );
-  const noteBodyColorClassName = page.content ? 'text-[#333]' : 'text-[#aaa]';
+  const noteBodyColorClassName = node.content ? 'text-[#333]' : 'text-[#aaa]';
   return (
     <div
       className={noteClassName}
       style={{
-        left: page.x,
-        top: page.y,
-        width: page.width,
+        left: node.x,
+        top: node.y,
+        width: node.width,
         borderRadius: zoomPx(16),
         outline: isActive ? `${zoomPx(2)} solid var(--color-focus)` : 'none',
         borderWidth: zoomPx(1),
       }}
-      data-page-id={page.id}
+      data-node-id={node.id}
       onMouseDown={handleActivate}
-      onContextMenu={(e) => onContextMenu(e, page.id)}
+      onContextMenu={(e) => onContextMenu(e, node.id)}
     >
       {/* タイトルバー（ドラッグハンドル） */}
       <div
@@ -186,7 +186,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         }}
         onMouseDown={(e) => {
           // テキスト選択・ボタン操作以外でドラッグ開始
-          onDragStart(e, page.id);
+          onDragStart(e, node.id);
         }}
       >
         <span
@@ -209,7 +209,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
               minHeight: zoomPx(18),
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            onPress={() => onColorCycle(page.id)}
+            onPress={() => onColorCycle(node.id)}
             aria-label="色を切り替え"
           >
             <span />
@@ -222,8 +222,8 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         data-webview-placeholder
         className="relative box-border min-h-0 overflow-hidden"
         style={{
-          width: page.width,
-          height: page.height,
+          width: node.width,
+          height: node.height,
         }}
         onDoubleClick={handleDoubleClick}
       >
@@ -232,7 +232,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
           data-sticky-note-content-measure
           aria-hidden
           className="pointer-events-none absolute top-0 left-0 box-border p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap opacity-0"
-          style={{ width: page.width }}
+          style={{ width: node.width }}
         >
           {noteContent || ' '}
         </div>
@@ -254,7 +254,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
               noteBodyColorClassName,
             )}
           >
-            {page.content || 'ダブルクリックで編集'}
+            {node.content || 'ダブルクリックで編集'}
           </div>
         )}
       </div>

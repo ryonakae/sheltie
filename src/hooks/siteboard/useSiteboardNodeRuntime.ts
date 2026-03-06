@@ -4,51 +4,51 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import type { NavigationState } from '@/lib/tauri-bridge';
 import { webviewApi } from '@/lib/tauri-bridge';
-import type { Page } from '@/types';
+import type { BoardNode } from '@/types';
 
 interface UseSiteboardNodeRuntimeParams {
   activeId: string;
-  pages: Page[];
-  selectedPageId: string | null;
-  onSelectPage: (pageId: string) => void;
+  nodes: BoardNode[];
+  selectedNodeId: string | null;
+  onSelectNode: (nodeId: string) => void;
   onClearSelection: () => void;
-  startDrag: (e: React.MouseEvent, pageId: string) => void;
-  startResize: (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => void;
-  updatePageUrl: (projectId: string, pageId: string, url: string, title: string) => void;
-  updatePageTitle: (projectId: string, pageId: string, title: string) => void;
-  removePage: (projectId: string, pageId: string) => void;
-  setPageWebviewLabel: (projectId: string, pageId: string, label: string) => void;
-  setPageUrl: (projectId: string, pageId: string, url: string) => void;
-  pinPageUrl: (projectId: string, pageId: string) => void;
-  updatePageSize: (projectId: string, pageId: string, width: number, height: number) => void;
-  updatePageSizeWithoutHistory: (
+  startDrag: (e: React.MouseEvent, nodeId: string) => void;
+  startResize: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
+  updateWebNodeUrl: (projectId: string, nodeId: string, url: string, title: string) => void;
+  updateNodeTitle: (projectId: string, nodeId: string, title: string) => void;
+  removeNode: (projectId: string, nodeId: string) => void;
+  setWebNodeWebviewLabel: (projectId: string, nodeId: string, label: string) => void;
+  setWebNodeUrl: (projectId: string, nodeId: string, url: string) => void;
+  pinWebNodeUrl: (projectId: string, nodeId: string) => void;
+  updateNodeSize: (projectId: string, nodeId: string, width: number, height: number) => void;
+  updateNodeSizeWithoutHistory: (
     projectId: string,
-    pageId: string,
+    nodeId: string,
     width: number,
     height: number,
   ) => void;
-  updateStickyNoteContent: (projectId: string, pageId: string, content: string) => void;
-  cycleStickyNoteColor: (projectId: string, pageId: string) => void;
+  updateStickyNoteContent: (projectId: string, nodeId: string, content: string) => void;
+  cycleStickyNoteColor: (projectId: string, nodeId: string) => void;
   computeDisplayModes: () => void;
-  captureScreenshot: (pageId: string) => Promise<void>;
+  captureScreenshot: (nodeId: string) => Promise<void>;
 }
 
 export function useSiteboardNodeRuntime({
   activeId,
-  pages,
-  selectedPageId,
-  onSelectPage,
+  nodes,
+  selectedNodeId,
+  onSelectNode,
   onClearSelection,
   startDrag,
   startResize,
-  updatePageUrl,
-  updatePageTitle,
-  removePage,
-  setPageWebviewLabel,
-  setPageUrl,
-  pinPageUrl,
-  updatePageSize,
-  updatePageSizeWithoutHistory,
+  updateWebNodeUrl,
+  updateNodeTitle,
+  removeNode,
+  setWebNodeWebviewLabel,
+  setWebNodeUrl,
+  pinWebNodeUrl,
+  updateNodeSize,
+  updateNodeSizeWithoutHistory,
   updateStickyNoteContent,
   cycleStickyNoteColor,
   computeDisplayModes,
@@ -56,29 +56,25 @@ export function useSiteboardNodeRuntime({
 }: UseSiteboardNodeRuntimeParams) {
   const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
 
-  // goBack/goForward 操作中フラグ。操作中は handleNavigated の楽観的更新をスキップする
   const isGoingBackRef = useRef(false);
   const isGoingForwardRef = useRef(false);
-  // handleNavigated の呼び出し回数（pageId 別）。初回は初期 URL ロードのためスキップ
   const navigatedCountRef = useRef<Record<string, number>>({});
 
   const visibleNavStates = useMemo(() => {
-    const pageIds = new Set(pages.map((page) => page.id));
+    const nodeIds = new Set(nodes.map((node) => node.id));
     const next: Record<string, NavigationState> = {};
-    for (const [pageId, value] of Object.entries(navStates)) {
-      if (pageIds.has(pageId)) {
-        next[pageId] = value;
+    for (const [nodeId, value] of Object.entries(navStates)) {
+      if (nodeIds.has(nodeId)) {
+        next[nodeId] = value;
       }
     }
     return next;
-  }, [navStates, pages]);
+  }, [navStates, nodes]);
 
-  const refreshNavigationState = useCallback(async (pageId: string) => {
-    const state = await webviewApi.getNavigationState(pageId);
+  const refreshNavigationState = useCallback(async (nodeId: string) => {
+    const state = await webviewApi.getNavigationState(nodeId);
     setNavStates((prev) => {
-      const existing = prev[pageId];
-      // ネイティブ API が true を返した場合はそれを採用。
-      // false の場合は既存の楽観的更新値を維持（SPA では canGoBack/canGoForward が常に false のため）
+      const existing = prev[nodeId];
       const merged: NavigationState = {
         can_go_back: state.can_go_back || (existing?.can_go_back ?? false),
         can_go_forward: state.can_go_forward || (existing?.can_go_forward ?? false),
@@ -90,196 +86,192 @@ export function useSiteboardNodeRuntime({
       ) {
         return prev;
       }
-      return { ...prev, [pageId]: merged };
+      return { ...prev, [nodeId]: merged };
     });
   }, []);
 
-  const removeNavigationState = useCallback((pageId: string) => {
+  const removeNavigationState = useCallback((nodeId: string) => {
     setNavStates((prev) => {
-      if (!(pageId in prev)) {
+      if (!(nodeId in prev)) {
         return prev;
       }
       const next = { ...prev };
-      delete next[pageId];
+      delete next[nodeId];
       return next;
     });
   }, []);
 
   const handleGoBack = useCallback(
-    (pageId: string) => {
+    (nodeId: string) => {
       isGoingBackRef.current = true;
-      void webviewApi.goBack(pageId);
-      // 楽観的更新: 戻った後は少なくとも1つ進める
+      void webviewApi.goBack(nodeId);
       setNavStates((prev) => ({
         ...prev,
-        [pageId]: {
-          can_go_back: prev[pageId]?.can_go_back ?? false,
+        [nodeId]: {
+          can_go_back: prev[nodeId]?.can_go_back ?? false,
           can_go_forward: true,
         },
       }));
       setTimeout(() => {
         isGoingBackRef.current = false;
-        void refreshNavigationState(pageId);
+        void refreshNavigationState(nodeId);
       }, 300);
     },
     [refreshNavigationState],
   );
 
   const handleGoForward = useCallback(
-    (pageId: string) => {
+    (nodeId: string) => {
       isGoingForwardRef.current = true;
-      void webviewApi.goForward(pageId);
-      // 楽観的更新: 進んだ後は少なくとも1つ戻れる
+      void webviewApi.goForward(nodeId);
       setNavStates((prev) => ({
         ...prev,
-        [pageId]: {
+        [nodeId]: {
           can_go_back: true,
-          can_go_forward: prev[pageId]?.can_go_forward ?? false,
+          can_go_forward: prev[nodeId]?.can_go_forward ?? false,
         },
       }));
       setTimeout(() => {
         isGoingForwardRef.current = false;
-        void refreshNavigationState(pageId);
+        void refreshNavigationState(nodeId);
       }, 300);
     },
     [refreshNavigationState],
   );
 
   const handleNavigated = useCallback(
-    (pageId: string, url: string, title: string) => {
-      updatePageUrl(activeId, pageId, url, title);
-      setTimeout(() => void captureScreenshot(pageId), 1000);
+    (nodeId: string, url: string, title: string) => {
+      updateWebNodeUrl(activeId, nodeId, url, title);
+      setTimeout(() => void captureScreenshot(nodeId), 1000);
 
-      const count = (navigatedCountRef.current[pageId] ?? 0) + 1;
-      navigatedCountRef.current[pageId] = count;
+      const count = (navigatedCountRef.current[nodeId] ?? 0) + 1;
+      navigatedCountRef.current[nodeId] = count;
 
-      // 初回は初期 URL ロードなので楽観的更新をスキップ。
-      // goBack/goForward 操作中も各ハンドラー側で更新済みのためスキップ
       if (count >= 2 && !isGoingBackRef.current && !isGoingForwardRef.current) {
         setNavStates((prev) => ({
           ...prev,
-          [pageId]: { can_go_back: true, can_go_forward: false },
+          [nodeId]: { can_go_back: true, can_go_forward: false },
         }));
       }
 
-      void refreshNavigationState(pageId);
-      setTimeout(() => void refreshNavigationState(pageId), 300);
+      void refreshNavigationState(nodeId);
+      setTimeout(() => void refreshNavigationState(nodeId), 300);
     },
-    [activeId, captureScreenshot, refreshNavigationState, updatePageUrl],
+    [activeId, captureScreenshot, refreshNavigationState, updateWebNodeUrl],
   );
 
   const handleTitleUpdated = useCallback(
-    (pageId: string, title: string) => {
+    (nodeId: string, title: string) => {
       if (!title) return;
-      updatePageTitle(activeId, pageId, title);
-      void refreshNavigationState(pageId);
+      updateNodeTitle(activeId, nodeId, title);
+      void refreshNavigationState(nodeId);
     },
-    [activeId, refreshNavigationState, updatePageTitle],
+    [activeId, refreshNavigationState, updateNodeTitle],
   );
 
   const handleDragStart = useCallback(
-    (e: React.MouseEvent, pageId: string) => {
-      onSelectPage(pageId);
-      startDrag(e, pageId);
+    (e: React.MouseEvent, nodeId: string) => {
+      onSelectNode(nodeId);
+      startDrag(e, nodeId);
     },
-    [onSelectPage, startDrag],
+    [onSelectNode, startDrag],
   );
 
   const handleResizeStart = useCallback(
-    (e: React.MouseEvent, pageId: string, direction: NodeResizeDirection) => {
-      startResize(e, pageId, direction);
+    (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => {
+      startResize(e, nodeId, direction);
     },
     [startResize],
   );
 
   const handleWebviewCreated = useCallback(
-    (pageId: string, label: string) => {
-      setPageWebviewLabel(activeId, pageId, label);
+    (nodeId: string, label: string) => {
+      setWebNodeWebviewLabel(activeId, nodeId, label);
       requestAnimationFrame(() => computeDisplayModes());
-      void refreshNavigationState(pageId);
+      void refreshNavigationState(nodeId);
     },
-    [activeId, computeDisplayModes, refreshNavigationState, setPageWebviewLabel],
+    [activeId, computeDisplayModes, refreshNavigationState, setWebNodeWebviewLabel],
   );
 
   const handleWebviewLoaded = useCallback(
-    (pageId: string) => {
-      void captureScreenshot(pageId);
-      void refreshNavigationState(pageId);
+    (nodeId: string) => {
+      void captureScreenshot(nodeId);
+      void refreshNavigationState(nodeId);
     },
     [captureScreenshot, refreshNavigationState],
   );
 
   const handleScrollEnded = useCallback(
-    (pageId: string) => {
-      void captureScreenshot(pageId);
+    (nodeId: string) => {
+      void captureScreenshot(nodeId);
     },
     [captureScreenshot],
   );
 
-  const handleRemovePage = useCallback(
-    (pageId: string) => {
-      if (selectedPageId === pageId) {
+  const handleRemoveNode = useCallback(
+    (nodeId: string) => {
+      if (selectedNodeId === nodeId) {
         onClearSelection();
       }
-      removeNavigationState(pageId);
-      delete navigatedCountRef.current[pageId];
-      removePage(activeId, pageId);
+      removeNavigationState(nodeId);
+      delete navigatedCountRef.current[nodeId];
+      removeNode(activeId, nodeId);
     },
-    [activeId, onClearSelection, removeNavigationState, removePage, selectedPageId],
+    [activeId, onClearSelection, removeNavigationState, removeNode, selectedNodeId],
   );
 
-  const handleReloadPage = useCallback(
-    (pageId: string) => {
-      const page = pages.find((p) => p.id === pageId);
-      if (!page) return;
-      void webviewApi.reload(pageId, page.addedUrl ?? page.url);
+  const handleReloadWebNode = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((candidate) => candidate.id === nodeId);
+      if (!node) return;
+      void webviewApi.reload(nodeId, node.addedUrl ?? node.url);
     },
-    [pages],
+    [nodes],
   );
 
-  const handlePinPageUrl = useCallback(
-    (pageId: string) => {
-      pinPageUrl(activeId, pageId);
+  const handlePinWebNodeUrl = useCallback(
+    (nodeId: string) => {
+      pinWebNodeUrl(activeId, nodeId);
       toast.success('表示中のページで固定しました');
     },
-    [activeId, pinPageUrl],
+    [activeId, pinWebNodeUrl],
   );
 
   const handleUrlSubmit = useCallback(
-    (pageId: string, url: string) => {
-      setPageUrl(activeId, pageId, url);
+    (nodeId: string, url: string) => {
+      setWebNodeUrl(activeId, nodeId, url);
     },
-    [activeId, setPageUrl],
+    [activeId, setWebNodeUrl],
   );
 
   const handleResizePreset = useCallback(
-    (pageId: string, width: number, height: number) => {
-      updatePageSize(activeId, pageId, width, height);
+    (nodeId: string, width: number, height: number) => {
+      updateNodeSize(activeId, nodeId, width, height);
     },
-    [activeId, updatePageSize],
+    [activeId, updateNodeSize],
   );
 
   const handleStickyNoteContentChange = useCallback(
-    (pageId: string, content: string) => {
-      updateStickyNoteContent(activeId, pageId, content);
+    (nodeId: string, content: string) => {
+      updateStickyNoteContent(activeId, nodeId, content);
     },
     [activeId, updateStickyNoteContent],
   );
 
   const handleStickyNoteColorCycle = useCallback(
-    (pageId: string) => {
-      cycleStickyNoteColor(activeId, pageId);
+    (nodeId: string) => {
+      cycleStickyNoteColor(activeId, nodeId);
     },
     [activeId, cycleStickyNoteColor],
   );
 
   const handleStickyNoteAutoHeightChange = useCallback(
-    (pageId: string, height: number) => {
-      const page = pages.find((p) => p.id === pageId);
-      if (!page || page.height === height) return;
-      updatePageSizeWithoutHistory(activeId, pageId, page.width, height);
+    (nodeId: string, height: number) => {
+      const node = nodes.find((candidate) => candidate.id === nodeId);
+      if (!node || node.height === height) return;
+      updateNodeSizeWithoutHistory(activeId, nodeId, node.width, height);
     },
-    [activeId, pages, updatePageSizeWithoutHistory],
+    [activeId, nodes, updateNodeSizeWithoutHistory],
   );
 
   return {
@@ -287,17 +279,17 @@ export function useSiteboardNodeRuntime({
     handleGoBack,
     handleGoForward,
     handleNavigated,
-    handlePinPageUrl,
-    handleReloadPage,
-    handleRemovePage,
+    handlePinWebNodeUrl,
+    handleReloadWebNode,
+    handleRemoveNode,
     handleResizePreset,
     handleResizeStart,
+    handleScrollEnded,
     handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,
     handleStickyNoteContentChange,
     handleTitleUpdated,
     handleUrlSubmit,
-    handleScrollEnded,
     handleWebviewCreated,
     handleWebviewLoaded,
     navStates: visibleNavStates,

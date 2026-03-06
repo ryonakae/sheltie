@@ -1,4 +1,5 @@
 import { SAVE_DEBOUNCE_MS } from '@/constants';
+import { requestAppClose } from '@/lib/project-close';
 import { api } from '@/lib/tauri-bridge';
 import { useProjectStore } from '@/store/tab-store';
 
@@ -11,7 +12,7 @@ let initialized = false;
  *
  * - 起動時: Tauri Store から状態を読み込んで復元
  * - 変更時: 500ms デバウンスで Tauri Store に保存
- * - クローズ前: 最新状態を即時保存してウィンドウを破棄
+ * - クローズ前: 未保存変更を解決してから最終状態を保存し、ウィンドウを破棄
  */
 export function setupProjectPersistence(): void {
   if (initialized) return;
@@ -51,9 +52,8 @@ export function setupProjectPersistence(): void {
   });
 
   // 3. ウィンドウクローズ前の最終保存
-  api.onSaveBeforeClose(() => {
+  api.onSaveBeforeClose(async () => {
     if (saveTimer) clearTimeout(saveTimer);
-    const { projects, openIds, activeId } = useProjectStore.getState();
-    api.closeReady({ projects, openIds, activeId }).catch(() => {});
+    await requestAppClose();
   });
 }

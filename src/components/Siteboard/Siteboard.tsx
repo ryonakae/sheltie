@@ -2,8 +2,8 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { ContextMenu } from '@/components/Common/ContextMenu';
-import { PageNode } from '@/components/Node/PageNode';
 import { StickyNoteNode } from '@/components/Node/StickyNoteNode';
+import { WebPageNode } from '@/components/Node/WebPageNode';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
 import { InteractionOverlay } from '@/components/Siteboard/InteractionOverlay';
 import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
@@ -13,25 +13,25 @@ import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
 import { useSiteboardViewportEngine } from '@/hooks/siteboard/useSiteboardViewportEngine';
 import { selectActiveProject, useProjectStore } from '@/store/tab-store';
-import { isStickyNote } from '@/types';
+import { isStickyNoteNode, isWebPageNode } from '@/types';
 
 interface SiteboardProps {
-  selectedPageId: string | null;
-  onSelectPage: (pageId: string) => void;
+  selectedNodeId: string | null;
+  onSelectNode: (nodeId: string) => void;
   onClearSelection: () => void;
-  centeredPageId?: string | null;
-  onCenteredPageHandled?: () => void;
-  onAddPage: () => void;
+  centeredNodeId?: string | null;
+  onCenteredNodeHandled?: () => void;
+  onAddWebNode: () => void;
   onAddStickyNote: () => void;
 }
 
 export function Siteboard({
-  selectedPageId,
-  onSelectPage,
+  selectedNodeId,
+  onSelectNode,
   onClearSelection,
-  centeredPageId = null,
-  onCenteredPageHandled,
-  onAddPage,
+  centeredNodeId = null,
+  onCenteredNodeHandled,
+  onAddWebNode,
   onAddStickyNote,
 }: SiteboardProps) {
   const activeProject = useProjectStore(selectActiveProject);
@@ -41,37 +41,37 @@ export function Siteboard({
     undoActiveProject,
     redoActiveProject,
     updateViewport,
-    updatePagePosition,
-    updatePageSize,
-    updatePageSizeWithoutHistory,
-    updatePageUrl,
-    updatePageTitle,
-    removePage,
-    setPageWebviewLabel,
-    setPageUrl,
-    pinPageUrl,
+    updateNodePosition,
+    updateNodeSize,
+    updateNodeSizeWithoutHistory,
+    updateWebNodeUrl,
+    updateNodeTitle,
+    removeNode,
+    setWebNodeWebviewLabel,
+    setWebNodeUrl,
+    pinWebNodeUrl,
     updateStickyNoteContent,
     cycleStickyNoteColor,
   } = useProjectStore(
     useShallow((s) => ({
       cycleStickyNoteColor: s.cycleStickyNoteColor,
       redoActiveProject: s.redoActiveProject,
-      pinPageUrl: s.pinPageUrl,
-      removePage: s.removePage,
-      setPageUrl: s.setPageUrl,
-      setPageWebviewLabel: s.setPageWebviewLabel,
+      pinWebNodeUrl: s.pinWebNodeUrl,
+      removeNode: s.removeNode,
+      setWebNodeUrl: s.setWebNodeUrl,
+      setWebNodeWebviewLabel: s.setWebNodeWebviewLabel,
       undoActiveProject: s.undoActiveProject,
-      updatePagePosition: s.updatePagePosition,
-      updatePageSize: s.updatePageSize,
-      updatePageSizeWithoutHistory: s.updatePageSizeWithoutHistory,
-      updatePageTitle: s.updatePageTitle,
-      updatePageUrl: s.updatePageUrl,
+      updateNodePosition: s.updateNodePosition,
+      updateNodeSize: s.updateNodeSize,
+      updateNodeSizeWithoutHistory: s.updateNodeSizeWithoutHistory,
+      updateNodeTitle: s.updateNodeTitle,
       updateStickyNoteContent: s.updateStickyNoteContent,
       updateViewport: s.updateViewport,
+      updateWebNodeUrl: s.updateWebNodeUrl,
     })),
   );
 
-  const pages = useMemo(() => activeProject?.pages ?? [], [activeProject?.pages]);
+  const nodes = useMemo(() => activeProject?.nodes ?? [], [activeProject?.nodes]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -95,13 +95,13 @@ export function Siteboard({
     scheduleZoomRestoreAfterReflow,
     screenshotUrls,
   } = useSiteboardDisplayEngine({
-    pages,
+    nodes,
     projectId: activeId ?? '',
     containerRef,
     canvasRef,
     zoomRef,
-    centeredPageId,
-    onCenteredPageHandled,
+    centeredNodeId,
+    onCenteredNodeHandled,
   });
 
   const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
@@ -123,16 +123,16 @@ export function Siteboard({
     activeId,
     viewport: activeProject?.viewport,
     onInteractionChange: handleInteractionChange,
-    onPageResizeStart: handlePageResizeStart,
-    onPageResizeEnd: handlePageResizeEnd,
+    onNodeResizeStart: handlePageResizeStart,
+    onNodeResizeEnd: handlePageResizeEnd,
     scheduleInteractionUpdate,
     computeInteractionModes,
     computeDisplayModes,
     cancelZoomRestore,
     scheduleZoomRestoreAfterReflow,
     updateViewport,
-    updatePagePosition,
-    updatePageSize,
+    updateNodePosition,
+    updateNodeSize,
   });
   const hideCompactControls = Math.round(uiZoom * 100) <= Math.round(LOW_ZOOM_HIDE_THRESHOLD * 100);
 
@@ -141,9 +141,9 @@ export function Siteboard({
     handleGoBack,
     handleGoForward,
     handleNavigated,
-    handlePinPageUrl,
-    handleReloadPage,
-    handleRemovePage,
+    handlePinWebNodeUrl,
+    handleReloadWebNode,
+    handleRemoveNode,
     handleResizePreset,
     handleResizeStart,
     handleStickyNoteAutoHeightChange,
@@ -157,20 +157,20 @@ export function Siteboard({
     navStates,
   } = useSiteboardNodeRuntime({
     activeId,
-    pages,
-    selectedPageId,
-    onSelectPage,
+    nodes,
+    selectedNodeId,
+    onSelectNode,
     onClearSelection,
     startDrag,
     startResize,
-    updatePageUrl,
-    updatePageTitle,
-    removePage,
-    setPageWebviewLabel,
-    setPageUrl,
-    pinPageUrl,
-    updatePageSize,
-    updatePageSizeWithoutHistory,
+    updateWebNodeUrl,
+    updateNodeTitle,
+    removeNode,
+    setWebNodeWebviewLabel,
+    setWebNodeUrl,
+    pinWebNodeUrl,
+    updateNodeSize,
+    updateNodeSizeWithoutHistory,
     updateStickyNoteContent,
     cycleStickyNoteColor,
     computeDisplayModes,
@@ -178,36 +178,33 @@ export function Siteboard({
   });
 
   useSiteboardKeyboard({
-    selectedPageId,
-    onRemovePage: handleRemovePage,
+    selectedNodeId,
+    onRemoveNode: handleRemoveNode,
     onUndo: undoActiveProject,
     onRedo: redoActiveProject,
   });
 
-  const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(
+  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(
     null,
   );
 
   const handleNodeContextMenu = useCallback(
-    (e: React.MouseEvent, pageId: string) => {
+    (e: React.MouseEvent, nodeId: string) => {
       e.preventDefault();
-      onSelectPage(pageId);
+      onSelectNode(nodeId);
 
-      const page = pages.find((p) => p.id === pageId);
-      if (page && !isStickyNote(page)) {
-        // WebPage ノード: スクリーンショット撮影完了後にメニューを表示（未撮影時の白画面防止）
-        // rAF でスクリーンショット差し替えの React レンダー＋ブラウザ描画を確定させてからメニューを表示
-        void handleContextMenuOpen(pageId).then(() => {
+      const node = nodes.find((candidate) => candidate.id === nodeId);
+      if (node && !isStickyNoteNode(node)) {
+        void handleContextMenuOpen(nodeId).then(() => {
           requestAnimationFrame(() => {
-            setContextMenu({ pageId, x: e.clientX, y: e.clientY });
+            setContextMenu({ nodeId, x: e.clientX, y: e.clientY });
           });
         });
       } else {
-        // 付箋ノード: Webview なし、即時表示
-        setContextMenu({ pageId, x: e.clientX, y: e.clientY });
+        setContextMenu({ nodeId, x: e.clientX, y: e.clientY });
       }
     },
-    [handleContextMenuOpen, onSelectPage, pages],
+    [handleContextMenuOpen, onSelectNode, nodes],
   );
 
   const handleContextMenuClose = useCallback(() => {
@@ -219,17 +216,17 @@ export function Siteboard({
     (actionId: string) => {
       if (actionId === 'remove' && contextMenu) {
         handleContextMenuCloseDisplay();
-        handleRemovePage(contextMenu.pageId);
+        handleRemoveNode(contextMenu.nodeId);
       }
     },
-    [contextMenu, handleContextMenuCloseDisplay, handleRemovePage],
+    [contextMenu, handleContextMenuCloseDisplay, handleRemoveNode],
   );
 
   const handleSiteboardMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (e.button !== 0) return;
       if (isPanMode.current) return;
-      if ((e.target as HTMLElement).closest('[data-page-id]')) return;
+      if ((e.target as HTMLElement).closest('[data-node-id]')) return;
       setContextMenu(null);
       onClearSelection();
     },
@@ -246,41 +243,49 @@ export function Siteboard({
       {interactionCursor && <InteractionOverlay cursor={interactionCursor} />}
 
       <div ref={canvasRef} className="absolute inset-0 origin-top-left will-change-transform">
-        {pages.map((page) =>
-          isStickyNote(page) ? (
-            <StickyNoteNode
-              key={page.id}
-              page={page}
-              isActive={page.id === selectedPageId}
-              hideColorCycleButton={hideCompactControls}
-              onActivate={onSelectPage}
-              onContextMenu={handleNodeContextMenu}
-              onDragStart={handleDragStart}
-              onResizeStart={startStickyNoteResize}
-              onContentChange={handleStickyNoteContentChange}
-              onAutoHeightChange={handleStickyNoteAutoHeightChange}
-              onColorCycle={handleStickyNoteColorCycle}
-            />
-          ) : (
-            <PageNode
-              key={page.id}
-              page={page}
-              isActive={page.id === selectedPageId}
-              title={page.title}
-              displayWidth={resizingSize?.pageId === page.id ? resizingSize.width : page.width}
-              displayHeight={resizingSize?.pageId === page.id ? resizingSize.height : page.height}
-              displayMode={displayModes[page.id] ?? 'hidden'}
-              screenshotUrl={screenshotUrls[page.id] ?? null}
+        {nodes.map((node) => {
+          if (isStickyNoteNode(node)) {
+            return (
+              <StickyNoteNode
+                key={node.id}
+                node={node}
+                isActive={node.id === selectedNodeId}
+                hideColorCycleButton={hideCompactControls}
+                onActivate={onSelectNode}
+                onContextMenu={handleNodeContextMenu}
+                onDragStart={handleDragStart}
+                onResizeStart={startStickyNoteResize}
+                onContentChange={handleStickyNoteContentChange}
+                onAutoHeightChange={handleStickyNoteAutoHeightChange}
+                onColorCycle={handleStickyNoteColorCycle}
+              />
+            );
+          }
+
+          if (!isWebPageNode(node)) {
+            return null;
+          }
+
+          return (
+            <WebPageNode
+              key={node.id}
+              node={node}
+              isActive={node.id === selectedNodeId}
+              title={node.title}
+              displayWidth={resizingSize?.nodeId === node.id ? resizingSize.width : node.width}
+              displayHeight={resizingSize?.nodeId === node.id ? resizingSize.height : node.height}
+              displayMode={displayModes[node.id] ?? 'hidden'}
+              screenshotUrl={screenshotUrls[node.id] ?? null}
               hideTopNavControls={hideCompactControls}
               hideBottomPresetControls={hideCompactControls}
-              canGoBack={navStates[page.id]?.can_go_back ?? false}
-              canGoForward={navStates[page.id]?.can_go_forward ?? false}
+              canGoBack={navStates[node.id]?.can_go_back ?? false}
+              canGoForward={navStates[node.id]?.can_go_forward ?? false}
               getZoom={getZoom}
               onGoBack={handleGoBack}
               onGoForward={handleGoForward}
-              onActivate={onSelectPage}
-              onReload={handleReloadPage}
-              onPinUrl={handlePinPageUrl}
+              onActivate={onSelectNode}
+              onReload={handleReloadWebNode}
+              onPinUrl={handlePinWebNodeUrl}
               onContextMenu={handleNodeContextMenu}
               onDragStart={handleDragStart}
               onResizeStart={handleResizeStart}
@@ -292,17 +297,17 @@ export function Siteboard({
               onScrollEnded={handleScrollEnded}
               onUrlSubmit={handleUrlSubmit}
             />
-          ),
-        )}
+          );
+        })}
       </div>
 
-      {pages.length === 0 && (
+      {nodes.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <p className="text-sm text-muted">下部のボタンから Web ページや付箋を追加してください</p>
         </div>
       )}
 
-      <FloatingToolbar onAddPage={onAddPage} onAddStickyNote={onAddStickyNote} />
+      <FloatingToolbar onAddWebNode={onAddWebNode} onAddStickyNote={onAddStickyNote} />
 
       <ZoomIndicator zoom={uiZoom} onReset={handleResetZoom} />
 

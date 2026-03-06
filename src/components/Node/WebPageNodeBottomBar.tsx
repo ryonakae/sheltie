@@ -17,19 +17,19 @@ const PRESET_ICONS: Record<string, SvgComponent> = {
   PC: Display,
 };
 
-export interface PageNodeBottomBarProps {
+export interface WebPageNodeBottomBarProps {
   width: number;
   height: number;
   hidePresetControls: boolean;
   onResizePreset: (width: number, height: number) => void;
 }
 
-export function PageNodeBottomBar({
+export function WebPageNodeBottomBar({
   width,
   height,
   hidePresetControls,
   onResizePreset,
-}: PageNodeBottomBarProps) {
+}: WebPageNodeBottomBarProps) {
   const bottomBarStyle = {
     height: zoomPx(32),
     paddingInline: zoomPx(8),

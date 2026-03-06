@@ -5,11 +5,11 @@ import { Surface } from '@heroui/react';
 import { AppButton } from '@/components/Common/AppButton';
 
 interface FloatingToolbarProps {
-  onAddPage: () => void;
+  onAddWebNode: () => void;
   onAddStickyNote: () => void;
 }
 
-export function FloatingToolbar({ onAddPage, onAddStickyNote }: FloatingToolbarProps) {
+export function FloatingToolbar({ onAddWebNode, onAddStickyNote }: FloatingToolbarProps) {
   return (
     /* ツールバー全体の配置レイヤー: pointer-events-none で Siteboard の操作を妨げない */
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-40 flex justify-center">
@@ -21,7 +21,7 @@ export function FloatingToolbar({ onAddPage, onAddStickyNote }: FloatingToolbarP
           <AppButton
             size="lg"
             tooltipMessage="Webページを追加"
-            onPress={onAddPage}
+            onPress={onAddWebNode}
             aria-label="Webページを追加"
           >
             <Plus className="size-5" />

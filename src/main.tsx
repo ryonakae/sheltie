@@ -4,7 +4,8 @@ import { createRoot } from 'react-dom/client';
 
 import App from '@/App';
 import { runEditCommand } from '@/lib/edit-commands';
-import { onEditCommand } from '@/lib/tauri-bridge';
+import { runFileCommand } from '@/lib/file-commands';
+import { onEditCommand, onFileCommand } from '@/lib/tauri-bridge';
 import { setupProjectPersistence } from '@/store/tab-persistence';
 import { setupThemeListener, useThemeStore } from '@/store/theme-store';
 
@@ -12,6 +13,8 @@ import './index.css';
 
 let isEditCommandListenerInitialized = false;
 let editCommandUnlistenPromise: Promise<() => void> | null = null;
+let isFileCommandListenerInitialized = false;
+let fileCommandUnlistenPromise: Promise<() => void> | null = null;
 type HotModule = { dispose: (callback: () => void) => void };
 
 function setupEditCommandListener(): void {
@@ -34,10 +37,31 @@ function setupEditCommandListener(): void {
   }
 }
 
+function setupFileCommandListener(): void {
+  if (isFileCommandListenerInitialized) return;
+  isFileCommandListenerInitialized = true;
+
+  fileCommandUnlistenPromise = onFileCommand((command) => {
+    void runFileCommand(command);
+  });
+
+  const hot = (import.meta as ImportMeta & { hot?: HotModule }).hot;
+  if (hot) {
+    hot.dispose(() => {
+      if (fileCommandUnlistenPromise) {
+        void fileCommandUnlistenPromise.then((unlisten) => unlisten());
+      }
+      fileCommandUnlistenPromise = null;
+      isFileCommandListenerInitialized = false;
+    });
+  }
+}
+
 // React マウント前に永続化・テーマをセットアップ
 setupProjectPersistence();
 setupThemeListener();
 setupEditCommandListener();
+setupFileCommandListener();
 // 非同期で初期テーマを適用（React マウントをブロックしない）
 void useThemeStore.getState().initialize();
 

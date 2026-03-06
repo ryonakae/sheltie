@@ -6,6 +6,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { EditCommand } from '@/lib/edit-commands';
 import type { ProjectState, ThemeMode } from '@/types';
 
+export type FileCommand = 'open' | 'save' | 'save-as';
+
 // ── プロジェクト状態 ─────────────────────────────────────────────
 
 export const api = {
@@ -13,11 +15,16 @@ export const api = {
 
   saveProjectState: (state: ProjectState): Promise<void> => invoke('save_project_state', { state }),
 
-  onSaveBeforeClose: (callback: () => void): void => {
+  loadProjectFile: (path: string): Promise<string> => invoke('load_project_file', { path }),
+
+  saveProjectFile: (path: string, contents: string): Promise<string> =>
+    invoke('save_project_file', { path, contents }),
+
+  onSaveBeforeClose: (callback: () => void | Promise<void>): void => {
     // Tauri の CloseRequested イベントでクローズ前保存を処理
     void getCurrentWindow().onCloseRequested(async (event) => {
       event.preventDefault();
-      callback();
+      await callback();
     });
   },
 
@@ -314,6 +321,9 @@ export type NavigationState = {
 
 export const onEditCommand = (callback: (command: EditCommand) => void) =>
   listen<EditCommand>('edit-command', (event) => callback(event.payload));
+
+export const onFileCommand = (callback: (command: FileCommand) => void) =>
+  listen<FileCommand>('file-command', (event) => callback(event.payload));
 
 // ── プラットフォーム情報 ──────────────────────────────────────────
 

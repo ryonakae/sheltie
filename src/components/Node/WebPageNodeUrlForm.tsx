@@ -6,11 +6,11 @@ import { AppButton } from '@/components/Common/AppButton';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { normalizeUrl } from '@/lib/url-utils';
 
-interface PageNodeUrlFormProps {
+interface WebPageNodeUrlFormProps {
   onSubmit: (url: string) => void;
 }
 
-export function PageNodeUrlForm({ onSubmit }: PageNodeUrlFormProps) {
+export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
   const [value, setValue] = useState('');
   const normalizedUrl = useMemo(() => normalizeUrl(value), [value]);
   const isValid = normalizedUrl !== null;

@@ -7,7 +7,7 @@
 - `src/hooks/siteboard/useSiteboardDisplayEngine.ts`
 - `src/hooks/siteboard/useSiteboardViewportEngine.ts`
 - `src/hooks/siteboard/useSiteboardNodeRuntime.ts`
-- `src/components/Node/PageNode.tsx`
+- `src/components/Node/WebPageNode.tsx`
 
 ## 表示モード
 
@@ -49,22 +49,25 @@
 
 ネイティブ Webview は OS レベルで常に最前面に描画されるため、HTML の `createPortal` で body に fixed 配置したコンテキストメニューが Webview の下に隠れる。
 
-これを回避するため、右クリック時に対象ページを screenshot/hidden モードに切り替え、メニュー表示中はそれを維持する。
+これを回避するため、右クリック時に対象 webpage ノードを screenshot/hidden モードに切り替え、メニュー表示中はそれを維持する。
 
 **フロー**:
-1. `handleContextMenuOpen(pageId)` — async 関数。`contextMenuPageIdRef` にセット、`cancelNativeReveal` でタイマーキャンセル。スクリーンショット未準備時（`screenshotReadyRef.current[pageId] === false`）はWebview が visible なうちに `captureScreenshot({ forceDuringInteraction: true })` で撮影を完了させてから hide する。撮影成功 → `newMode = 'screenshot'`、失敗（または未撮影）→ `newMode = 'hidden'`。`captureInFlightRef` で二重撮影を防止。
-2. `Siteboard.tsx` の `handleNodeContextMenu` — WebPage ノードは `handleContextMenuOpen(pageId)` の Promise を `.then()` で待ち、さらに `requestAnimationFrame` を挟んでから `setContextMenu` を呼ぶ（白画面防止）。`requestAnimationFrame` を挟む理由: React 18 の自動バッチングにより `setDisplayModes`（スクリーンショット差し替え）と `setContextMenu`（メニュー表示）が同一レンダーサイクルに合流し、スクリーンショットのブラウザ描画完了前にメニューが表示される問題を防ぐため。付箋ノードは Webview なしのため即時表示。
+1. `handleContextMenuOpen(pageId)` — async 関数。`contextMenuPageIdRef` にセットし、`cancelNativeReveal` でタイマーをキャンセルする。スクリーンショット未準備時（`screenshotReadyRef.current[pageId] === false`）は Webview が visible なうちに `captureScreenshot({ forceDuringInteraction: true })` で撮影を完了させてから hide する。撮影成功 -> `newMode = 'screenshot'`、失敗（または未撮影）-> `newMode = 'hidden'`。`captureInFlightRef` で二重撮影を防止する。
+2. `Siteboard.tsx` の `handleNodeContextMenu` — webpage ノードは `handleContextMenuOpen(pageId)` の Promise を `.then()` で待ち、さらに `requestAnimationFrame` を挟んでから `setContextMenu` を呼ぶ（白画面防止）。`requestAnimationFrame` を挟む理由: React 18 の自動バッチングにより `setDisplayModes`（スクリーンショット差し替え）と `setContextMenu`（メニュー表示）が同一レンダーサイクルに合流し、スクリーンショットのブラウザ描画完了前にメニューが表示される問題を防ぐため。付箋ノードは Webview なしのため即時表示。
 3. `computeDisplayModes()` の override ロジック — `contextMenuPageIdRef` がセットされているページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え。
 4. `handleContextMenuClose()` — ref をクリアし `computeDisplayModes()` で表示を復帰。
 5. ページ削除ケース — `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
 
-付箋ノードは Webview を持たないため、コンテキストメニュー開時に `handleContextMenuOpen` は呼ばない（Siteboard.tsx の `isStickyNote(page)` チェックで分岐）。
+付箋ノードは Webview を持たないため、コンテキストメニュー表示時に `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` の node type 判定で分岐）。
 
 ## スクリーンショット永続化
 
 スクリーンショットは PNG ファイルとしてディスクに保存する（macOS のみ）。
 
 **保存先**: `~/Library/Application Support/com.siteboard.app/screenshots/{projectId}/{pageId}.png`
+
+- `projectId` は `.siteboard` に保存される値ではなく、ローカルワークスペース上の `Project.id` を使う
+- `pageId` は node id をそのまま使う。webpage 系 Webview IPC では歴史的理由で `pageId` 命名を維持している
 
 **フロー（撮影時）**:
 1. Rust `save_webview_screenshot(pageId, projectId)` → WKWebView スナップショット → PNG → ファイル保存 → ファイルパス返却
@@ -103,9 +106,12 @@
 
 ## Webview 生成・破棄の注意
 
-- React StrictMode 二重マウント対策として、`PageNode` で作成競合をガードする。
+- React StrictMode 二重マウント対策として、`WebPageNode` で作成競合をガードする。
 - Webview API は例外時 no-op を許容する前提。
 - 空フレーム（`url === ''`）は Webview を作成しない。
+- Webview の create/destroy は URL 同期から切り離し、`node.url` 更新では再生成しない。
+- `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、その更新で `reload` を再発火させない。
+- 既存 Webview への URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview` を呼ぶ。
 
 ## スクロール完了通知チャネル
 

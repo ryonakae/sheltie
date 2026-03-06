@@ -25,16 +25,16 @@ interface UseSiteboardViewportEngineParams {
   activeId: string;
   viewport?: Viewport;
   onInteractionChange: (active: boolean, cursor: string, type: InteractionType) => void;
-  onPageResizeStart?: (pageId: string) => void;
-  onPageResizeEnd?: (pageId: string) => void;
+  onNodeResizeStart?: (nodeId: string) => void;
+  onNodeResizeEnd?: (nodeId: string) => void;
   scheduleInteractionUpdate: () => void;
   computeInteractionModes: () => void;
   computeDisplayModes: () => void;
   cancelZoomRestore: () => void;
   scheduleZoomRestoreAfterReflow: () => void;
   updateViewport: (projectId: string, viewport: Partial<Viewport>) => void;
-  updatePagePosition: (projectId: string, pageId: string, x: number, y: number) => void;
-  updatePageSize: (projectId: string, pageId: string, width: number, height: number) => void;
+  updateNodePosition: (projectId: string, nodeId: string, x: number, y: number) => void;
+  updateNodeSize: (projectId: string, nodeId: string, width: number, height: number) => void;
 }
 
 export function useSiteboardViewportEngine({
@@ -46,22 +46,22 @@ export function useSiteboardViewportEngine({
   activeId,
   viewport,
   onInteractionChange,
-  onPageResizeStart,
-  onPageResizeEnd,
+  onNodeResizeStart,
+  onNodeResizeEnd,
   scheduleInteractionUpdate,
   computeInteractionModes,
   computeDisplayModes,
   cancelZoomRestore,
   scheduleZoomRestoreAfterReflow,
   updateViewport,
-  updatePagePosition,
-  updatePageSize,
+  updateNodePosition,
+  updateNodeSize,
 }: UseSiteboardViewportEngineParams) {
   const zoomResetAnimationRef = useRef<{ stop: () => void } | null>(null);
 
   const [uiZoom, setUiZoom] = useState(() => viewport?.zoom ?? 1);
   const [resizingSize, setResizingSize] = useState<{
-    pageId: string;
+    nodeId: string;
     width: number;
     height: number;
   } | null>(null);
@@ -204,10 +204,10 @@ export function useSiteboardViewportEngine({
   const { startDrag } = usePageDrag({
     zoom: zoomRef,
     onDragEnd: useCallback(
-      (pageId, x, y) => {
-        updatePagePosition(activeId, pageId, x, y);
+      (nodeId, x, y) => {
+        updateNodePosition(activeId, nodeId, x, y);
       },
-      [activeId, updatePagePosition],
+      [activeId, updateNodePosition],
     ),
     onInteractionChange: useCallback(
       (active) => onInteractionChange(active, 'grabbing', 'drag'),
@@ -218,21 +218,21 @@ export function useSiteboardViewportEngine({
   const { startResize } = usePageResize({
     zoom: zoomRef,
     onResizeStart: useCallback(
-      (pageId: string) => {
-        onPageResizeStart?.(pageId);
+      (nodeId: string) => {
+        onNodeResizeStart?.(nodeId);
       },
-      [onPageResizeStart],
+      [onNodeResizeStart],
     ),
-    onResizeMove: useCallback((pageId: string, width: number, height: number) => {
-      setResizingSize({ pageId, width, height });
+    onResizeMove: useCallback((nodeId: string, width: number, height: number) => {
+      setResizingSize({ nodeId, width, height });
     }, []),
     onResizeEnd: useCallback(
-      (pageId, width, height) => {
-        updatePageSize(activeId, pageId, width, height);
+      (nodeId, width, height) => {
+        updateNodeSize(activeId, nodeId, width, height);
         setResizingSize(null);
-        onPageResizeEnd?.(pageId);
+        onNodeResizeEnd?.(nodeId);
       },
-      [activeId, onPageResizeEnd, updatePageSize],
+      [activeId, onNodeResizeEnd, updateNodeSize],
     ),
     onInteractionChange: useCallback(
       (active: boolean, direction?: NodeResizeDirection) => {
@@ -263,17 +263,17 @@ export function useSiteboardViewportEngine({
   const { startResize: startStickyNoteResize } = usePageResize({
     zoom: zoomRef,
     onResizeStart: useCallback(
-      (pageId: string) => {
-        onPageResizeStart?.(pageId);
+      (nodeId: string) => {
+        onNodeResizeStart?.(nodeId);
       },
-      [onPageResizeStart],
+      [onNodeResizeStart],
     ),
     onResizeEnd: useCallback(
-      (pageId, width, height) => {
-        updatePageSize(activeId, pageId, width, height);
-        onPageResizeEnd?.(pageId);
+      (nodeId, width, height) => {
+        updateNodeSize(activeId, nodeId, width, height);
+        onNodeResizeEnd?.(nodeId);
       },
-      [activeId, onPageResizeEnd, updatePageSize],
+      [activeId, onNodeResizeEnd, updateNodeSize],
     ),
     onInteractionChange: useCallback(
       (active: boolean, direction?: NodeResizeDirection) => {

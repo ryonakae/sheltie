@@ -12,28 +12,21 @@ import { TabItem } from '@/components/TabBar/TabItem';
 import { ThemeToggle } from '@/components/TabBar/ThemeToggle';
 import { HOME_ID } from '@/constants';
 import { useWindowControlsInset } from '@/hooks/useWindowControlsInset';
+import { requestProjectTabClose } from '@/lib/project-close';
 import { useProjectStore } from '@/store/tab-store';
 
 export function TabBar() {
-  const {
-    projects,
-    openIds,
-    activeId,
-    setActive,
-    createProject,
-    closeProject,
-    reorderOpenProjects,
-  } = useProjectStore(
-    useShallow((s) => ({
-      projects: s.projects,
-      openIds: s.openIds,
-      activeId: s.activeId,
-      setActive: s.setActive,
-      createProject: s.createProject,
-      closeProject: s.closeProject,
-      reorderOpenProjects: s.reorderOpenProjects,
-    })),
-  );
+  const { projects, openIds, activeId, setActive, createProject, reorderOpenProjects } =
+    useProjectStore(
+      useShallow((s) => ({
+        projects: s.projects,
+        openIds: s.openIds,
+        activeId: s.activeId,
+        setActive: s.setActive,
+        createProject: s.createProject,
+        reorderOpenProjects: s.reorderOpenProjects,
+      })),
+    );
 
   // タブバーに表示するプロジェクトを openIds の順序で取得
   const openProjects = openIds
@@ -92,7 +85,9 @@ export function TabBar() {
               index={index}
               isActive={project.id === activeId}
               onActivate={() => setActive(project.id)}
-              onClose={() => closeProject(project.id)}
+              onClose={() => {
+                void requestProjectTabClose(project.id);
+              }}
             />
           ))}
           {/* タブ追加ボタン: 最後のタブのすぐ右に配置 */}

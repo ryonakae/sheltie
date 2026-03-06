@@ -47,7 +47,8 @@
 - Undo/Redo は `CmdOrCtrl+Z` / `CmdOrCtrl+Shift+Z` とメニューバー `Edit -> Undo / Redo` を同じ `edit-command` 経路で処理する。
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `components/Common/ContextMenu` を使い createPortal で body 直下に描画する。
-- `removePage` の呼び出しは `screens/Project.tsx` に集約し、`Sidebar` と `Siteboard` には `onRemovePage` prop として渡す。
+- node 削除の呼び出しは `screens/Project.tsx` に集約し、`Sidebar` と `Siteboard` には `onRemoveNode` prop として渡す。
+- File メニューの `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
 
 ## リサイズハンドルとカーソル制御
 

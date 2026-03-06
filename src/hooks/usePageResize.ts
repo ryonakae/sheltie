@@ -6,9 +6,9 @@ type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 interface UsePageResizeOptions {
   zoom: React.RefObject<number>;
-  onResizeStart?: (pageId: string) => void;
-  onResizeMove?: (pageId: string, width: number, height: number) => void;
-  onResizeEnd: (pageId: string, width: number, height: number) => void;
+  onResizeStart?: (nodeId: string) => void;
+  onResizeMove?: (nodeId: string, width: number, height: number) => void;
+  onResizeEnd: (nodeId: string, width: number, height: number) => void;
   onInteractionChange: (active: boolean, direction?: ResizeDirection) => void;
   /** リサイズ最小幅（デフォルト: PAGE_MIN_WIDTH = 320） */
   minWidth?: number;
@@ -16,7 +16,7 @@ interface UsePageResizeOptions {
   minHeight?: number;
   /** リサイズ中の幅・DOM 状態に応じた動的最小高さ */
   resolveMinHeight?: (context: {
-    pageId: string;
+    nodeId: string;
     frameEl: HTMLElement;
     webviewEl: HTMLElement | null;
     width: number;
@@ -25,7 +25,7 @@ interface UsePageResizeOptions {
 }
 
 interface ResizeState {
-  pageId: string;
+  nodeId: string;
   frameEl: HTMLElement;
   webviewEl: HTMLElement | null;
   direction: ResizeDirection;
@@ -61,9 +61,9 @@ export function usePageResize({
   });
 
   const startResize = useCallback(
-    (e: React.MouseEvent, pageId: string, direction: ResizeDirection) => {
+    (e: React.MouseEvent, nodeId: string, direction: ResizeDirection) => {
       if (e.button !== 0) return;
-      const frameEl = (e.currentTarget as HTMLElement).closest('[data-page-id]') as HTMLElement;
+      const frameEl = (e.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement;
       if (!frameEl) return;
 
       const webviewEl = frameEl.querySelector('[data-webview-placeholder]') as HTMLElement | null;
@@ -72,7 +72,7 @@ export function usePageResize({
 
       e.preventDefault();
       resizeState.current = {
-        pageId,
+        nodeId,
         frameEl,
         webviewEl,
         direction,
@@ -86,7 +86,7 @@ export function usePageResize({
         currentWidth: initialWidth,
         currentHeight: initialHeight,
       };
-      onResizeStart?.(pageId);
+      onResizeStart?.(nodeId);
       document.body.style.userSelect = 'none';
       onInteractionChange(true, direction);
     },
@@ -118,7 +118,7 @@ export function usePageResize({
       const dynamicMinHeight = Math.max(
         minHeight,
         resolveMinHeightRef.current?.({
-          pageId: state.pageId,
+          nodeId: state.nodeId,
           frameEl: state.frameEl,
           webviewEl: state.webviewEl,
           width: newW,
@@ -149,7 +149,7 @@ export function usePageResize({
       }
       state.currentWidth = newW;
       state.currentHeight = newH;
-      onResizeMoveRef.current?.(state.pageId, newW, newH);
+      onResizeMoveRef.current?.(state.nodeId, newW, newH);
     };
 
     const handleMouseUp = () => {
@@ -162,7 +162,7 @@ export function usePageResize({
       resizeState.current = null;
       document.body.style.userSelect = '';
       onInteractionChange(false);
-      onResizeEnd(state.pageId, width, height);
+      onResizeEnd(state.nodeId, width, height);
     };
 
     window.addEventListener('mousemove', handleMouseMove);

@@ -6,7 +6,7 @@ import Pin from '@gravity-ui/icons/Pin';
 import { AppButton } from '@/components/Common/AppButton';
 import { zoomPx } from '@/lib/canvas-zoom';
 
-export interface PageNodeTopBarProps {
+export interface WebPageNodeTopBarProps {
   title: string;
   url: string;
   isMoved: boolean;
@@ -27,7 +27,7 @@ function formatDisplayUrl(url: string) {
     .replace(/\/+$/g, '');
 }
 
-export function PageNodeTopBar({
+export function WebPageNodeTopBar({
   title,
   url,
   isMoved,
@@ -39,7 +39,7 @@ export function PageNodeTopBar({
   onPinUrl,
   hideNavigationControls,
   onMouseDown,
-}: PageNodeTopBarProps) {
+}: WebPageNodeTopBarProps) {
   const topBarStyle = {
     height: zoomPx(32),
     paddingInline: zoomPx(8),

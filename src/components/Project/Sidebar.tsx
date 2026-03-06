@@ -8,18 +8,18 @@ import { twMerge } from 'tailwind-merge';
 import { ContextMenu } from '@/components/Common/ContextMenu';
 import { PAGE_CHROME_HEIGHT, STICKY_NOTE_COLORS } from '@/constants';
 import { selectActiveProject, useProjectStore } from '@/store/tab-store';
-import { type Page, isPageEmpty, isPageMoved, isStickyNote } from '@/types';
+import { type BoardNode, isNodeEmpty, isNodeMoved, isStickyNoteNode } from '@/types';
 
 interface SidebarProps {
   initialWidth: number;
-  selectedPageId: string | null;
-  onSelectPage: (pageId: string) => void;
-  onRemovePage: (pageId: string) => void;
+  selectedNodeId: string | null;
+  onSelectNode: (nodeId: string) => void;
+  onRemoveNode: (nodeId: string) => void;
   /** サイドバー選択時にセンタリング完了したら呼ぶ */
-  onCentered?: (pageId: string) => void;
+  onCentered?: (nodeId: string) => void;
 }
 
-type CenterTarget = Pick<Page, 'id' | 'x' | 'y' | 'width' | 'height'>;
+type CenterTarget = Pick<BoardNode, 'id' | 'x' | 'y' | 'width' | 'height'>;
 
 type FrameRect = {
   left: number;
@@ -30,10 +30,10 @@ type FrameRect = {
   height: number;
 };
 
-/** ページ本体（タイトルバー含む）を基準にセンタリングするため、必要に応じて実 DOM 幾何を取得する */
-function getPageFrameRect(siteboard: HTMLElement, pageId: string | undefined): FrameRect | null {
-  if (!pageId) return null;
-  const frame = siteboard.querySelector<HTMLElement>(`[data-page-id="${pageId}"]`);
+/** ノード本体（タイトルバー含む）を基準にセンタリングするため、必要に応じて実 DOM 幾何を取得する */
+function getNodeFrameRect(siteboard: HTMLElement, nodeId: string | undefined): FrameRect | null {
+  if (!nodeId) return null;
+  const frame = siteboard.querySelector<HTMLElement>(`[data-node-id="${nodeId}"]`);
   if (!frame) return null;
 
   const rect = frame.getBoundingClientRect();
@@ -48,7 +48,7 @@ function getPageFrameRect(siteboard: HTMLElement, pageId: string | undefined): F
 }
 
 export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
-  { initialWidth, selectedPageId, onSelectPage, onRemovePage, onCentered },
+  { initialWidth, selectedNodeId, onSelectNode, onRemoveNode, onCentered },
   ref,
 ) {
   const activeProject = useProjectStore(selectActiveProject);
@@ -68,14 +68,14 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
     centeringAnimationRef.current = [];
   }, []);
 
-  const [contextMenu, setContextMenu] = useState<{ pageId: string; x: number; y: number } | null>(
+  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(
     null,
   );
 
-  const handleItemContextMenu = useCallback((e: React.MouseEvent, pageId: string) => {
+  const handleItemContextMenu = useCallback((e: React.MouseEvent, nodeId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ pageId, x: e.clientX, y: e.clientY });
+    setContextMenu({ nodeId, x: e.clientX, y: e.clientY });
   }, []);
 
   const handleContextMenuClose = useCallback(() => {
@@ -85,10 +85,10 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
   const handleContextMenuAction = useCallback(
     (actionId: string) => {
       if (actionId === 'remove' && contextMenu) {
-        onRemovePage(contextMenu.pageId);
+        onRemoveNode(contextMenu.nodeId);
       }
     },
-    [contextMenu, onRemovePage],
+    [contextMenu, onRemoveNode],
   );
 
   const ensureFrameVisible = useCallback(
@@ -100,7 +100,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
 
       const nextPanX = viewport.panX;
       const nextPanY = viewport.panY;
-      const frameRect = getPageFrameRect(siteboard, target.id);
+      const frameRect = getNodeFrameRect(siteboard, target.id);
 
       const left = frameRect ? frameRect.left - rect.left : target.x * viewport.zoom + nextPanX;
       const top = frameRect ? frameRect.top - rect.top : target.y * viewport.zoom + nextPanY;
@@ -180,7 +180,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
 
   useEffect(() => cancelCentering, [cancelCentering]);
 
-  const pages = activeProject?.pages ?? [];
+  const nodes = activeProject?.nodes ?? [];
 
   return (
     <aside
@@ -188,56 +188,55 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
       className="flex shrink-0 flex-col gap-3 overflow-y-auto bg-default p-3"
       style={{ width: initialWidth }}
     >
-      {/* ページ一覧 */}
-      {pages.length > 0 && (
+      {nodes.length > 0 && (
         <ul className="flex flex-col gap-1">
-          {pages.map((page) => {
-            const isSelected = selectedPageId === page.id;
-            const sticky = isStickyNote(page);
+          {nodes.map((node) => {
+            const isSelected = selectedNodeId === node.id;
+            const sticky = isStickyNoteNode(node);
 
             return (
               <motion.li
-                key={page.id}
+                key={node.id}
                 className={twMerge(
                   'flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-default-hover',
                   isSelected ? 'bg-default-hover/80' : '',
                 )}
                 onClick={() => {
-                  onSelectPage(page.id);
-                  ensureFrameVisible(page, () => onCentered?.(page.id));
+                  onSelectNode(node.id);
+                  ensureFrameVisible(node, () => onCentered?.(node.id));
                 }}
-                onContextMenu={(e) => handleItemContextMenu(e, page.id)}
+                onContextMenu={(e) => handleItemContextMenu(e, node.id)}
                 aria-current={isSelected ? 'true' : undefined}
               >
                 {sticky ? (
                   <Sticker
                     className={twMerge(
                       'mt-0.5 size-4 shrink-0',
-                      STICKY_NOTE_COLORS[page.colorIndex ?? 0].textClass,
+                      STICKY_NOTE_COLORS[node.colorIndex ?? 0].textClass,
                     )}
                   />
-                ) : isPageEmpty(page) ? (
+                ) : isNodeEmpty(node) ? (
                   <SquareDashed className="mt-0.5 size-4 shrink-0 text-muted/60" />
                 ) : (
                   <Globe className="mt-0.5 size-4 shrink-0 text-muted" />
                 )}
                 {sticky ? (
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-foreground">{page.title}</p>
+                    <p className="truncate text-foreground">{node.title}</p>
                     <p className="truncate text-xs text-muted">
-                      {page.content ? page.content.slice(0, 40) : 'テキストなし'}
+                      {node.content ? node.content.slice(0, 40) : 'テキストなし'}
                     </p>
                   </div>
                 ) : (
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-foreground" title={page.title || page.url}>
-                      {page.title || '新規ページ'}
-                      {isPageMoved(page) && <span className="ml-1 text-muted">(Moved)</span>}
+                    <p className="truncate text-foreground" title={node.title || node.url}>
+                      {node.title || '新規ページ'}
+                      {isNodeMoved(node) && <span className="ml-1 text-muted">(Moved)</span>}
                     </p>
-                    <p className="truncate text-xs text-muted" title={page.addedUrl ?? page.url}>
-                      {isPageEmpty(page)
+                    <p className="truncate text-xs text-muted" title={node.addedUrl ?? node.url}>
+                      {isNodeEmpty(node)
                         ? 'URL 未設定'
-                        : (page.addedUrl ?? page.url)
+                        : (node.addedUrl ?? node.url)
                             .replace(/^https?:\/\//, '')
                             .replace(/\/$/, '')}
                     </p>

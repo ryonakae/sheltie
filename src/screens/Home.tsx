@@ -13,12 +13,15 @@ export function HomeScreen() {
       openProject: s.openProject,
     })),
   );
+  const sortedProjects = [...projects]
+    .filter((project) => Boolean(project.filePath))
+    .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <h2 className="mb-4 text-lg font-semibold text-foreground">プロジェクト</h2>
+      <h2 className="mb-4 text-lg font-semibold text-foreground">最近開いたプロジェクト</h2>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {projects.map((project) => (
+        {sortedProjects.map((project) => (
           <ProjectCard key={project.id} project={project} onOpen={() => openProject(project.id)} />
         ))}
 
@@ -35,9 +38,9 @@ export function HomeScreen() {
         </motion.button>
       </div>
 
-      {projects.length === 0 && (
+      {sortedProjects.length === 0 && (
         <p className="mt-8 text-center text-sm text-muted">
-          「+」ボタンをクリックして最初のプロジェクトを作成してください
+          保存済みのプロジェクトはまだありません
         </p>
       )}
     </div>

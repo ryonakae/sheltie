@@ -3,8 +3,8 @@ import { useEffect } from 'react';
 import { registerEditCommandHandlers, runEditCommand } from '@/lib/edit-commands';
 
 interface UseSiteboardKeyboardParams {
-  selectedPageId: string | null;
-  onRemovePage: (pageId: string) => void;
+  selectedNodeId: string | null;
+  onRemoveNode: (nodeId: string) => void;
   onUndo: () => void;
   onRedo: () => void;
 }
@@ -16,16 +16,16 @@ interface UseSiteboardKeyboardParams {
  * - Cmd/Ctrl + Shift + Z: Redo
  */
 export function useSiteboardKeyboard({
-  selectedPageId,
-  onRemovePage,
+  selectedNodeId,
+  onRemoveNode,
   onUndo,
   onRedo,
 }: UseSiteboardKeyboardParams) {
   useEffect(() => {
     return registerEditCommandHandlers({
       delete: () => {
-        if (!selectedPageId) return false;
-        onRemovePage(selectedPageId);
+        if (!selectedNodeId) return false;
+        onRemoveNode(selectedNodeId);
         return true;
       },
       redo: () => {
@@ -37,7 +37,7 @@ export function useSiteboardKeyboard({
         return true;
       },
     });
-  }, [onRedo, onRemovePage, onUndo, selectedPageId]);
+  }, [onRedo, onRemoveNode, onUndo, selectedNodeId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

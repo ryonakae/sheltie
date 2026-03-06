@@ -20,7 +20,7 @@ import {
   SIDEBAR_MIN_WIDTH,
 } from '@/constants';
 import { selectActiveProject, useProjectStore } from '@/store/tab-store';
-import { type Page } from '@/types';
+import { type BoardNode } from '@/types';
 
 /** 現在のビューポート中央のワールド座標を起点とした、指定サイズの要素の配置位置を算出する */
 function getViewportCenterPos(
@@ -49,13 +49,13 @@ export function ProjectScreen() {
   const activeProject = useProjectStore(selectActiveProject);
   const activeId = useProjectStore((s) => s.activeId);
   const updateSidebarWidth = useProjectStore((s) => s.updateSidebarWidth);
-  const addPage = useProjectStore((s) => s.addPage);
-  const addStickyNote = useProjectStore((s) => s.addStickyNote);
-  const removePage = useProjectStore((s) => s.removePage);
+  const addWebNode = useProjectStore((s) => s.addWebNode);
+  const addStickyNoteNode = useProjectStore((s) => s.addStickyNoteNode);
+  const removeNode = useProjectStore((s) => s.removeNode);
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = activeProject?.viewport;
-  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
-  const [centeredPageId, setCenteredPageId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [centeredNodeId, setCenteredNodeId] = useState<string | null>(null);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   const sidebarRef = useRef<HTMLElement>(null);
@@ -88,27 +88,27 @@ export function ProjectScreen() {
     updateSidebarWidth(activeId, SIDEBAR_DEFAULT_WIDTH);
   }, [updateSidebarWidth, activeId]);
 
-  const handleSelectPage = useCallback((pageId: string) => {
-    setSelectedPageId(pageId);
+  const handleSelectNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
   }, []);
 
   const handleClearSelection = useCallback(() => {
-    setSelectedPageId(null);
+    setSelectedNodeId(null);
   }, []);
 
-  const handleRemovePage = useCallback(
-    (pageId: string) => {
-      removePage(activeId, pageId);
+  const handleRemoveNode = useCallback(
+    (nodeId: string) => {
+      removeNode(activeId, nodeId);
     },
-    [removePage, activeId],
+    [removeNode, activeId],
   );
 
-  const handleCenteredPage = useCallback((pageId: string) => {
-    setCenteredPageId(pageId);
+  const handleCenteredNode = useCallback((nodeId: string) => {
+    setCenteredNodeId(nodeId);
   }, []);
 
-  const handleCenteredPageHandled = useCallback(() => {
-    setCenteredPageId(null);
+  const handleCenteredNodeHandled = useCallback(() => {
+    setCenteredNodeId(null);
   }, []);
 
   const cancelCentering = useCallback(() => {
@@ -126,23 +126,23 @@ export function ProjectScreen() {
    * ページ追加後にビューポートをアニメーションしてページを中央・フィット表示する。
    * ズームとパンを同時にアニメーションし、常にアニメーションが発火する（isFullyVisible チェックなし）。
    */
-  const centerOnNewPage = useCallback(
-    (page: Pick<Page, 'id' | 'x' | 'y' | 'width' | 'height'>, onComplete?: () => void) => {
+  const centerOnNewNode = useCallback(
+    (node: Pick<BoardNode, 'id' | 'x' | 'y' | 'width' | 'height'>, onComplete?: () => void) => {
       const siteboard = document.querySelector<HTMLElement>('[data-siteboard-container]');
       if (!siteboard || !viewport) return;
       const rect = siteboard.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
-      const pageHeightWithChrome = page.height + PAGE_CHROME_HEIGHT;
-      // ページ全体がビューポートに 80% フィットするズームを計算（最大 1 倍）
+      const nodeHeightWithChrome = node.height + PAGE_CHROME_HEIGHT;
+      // ノード全体がビューポートに 80% フィットするズームを計算（最大 1 倍）
       const targetZoom = Math.min(
-        (rect.width * 0.8) / page.width,
-        (rect.height * 0.8) / pageHeightWithChrome,
+        (rect.width * 0.8) / node.width,
+        (rect.height * 0.8) / nodeHeightWithChrome,
         1,
       );
-      // ページ中心がビューポート中心に来るパンを計算
-      const targetPanX = rect.width / 2 - (page.x + page.width / 2) * targetZoom;
-      const targetPanY = rect.height / 2 - (page.y + pageHeightWithChrome / 2) * targetZoom;
+      // ノード中心がビューポート中心に来るパンを計算
+      const targetPanX = rect.width / 2 - (node.x + node.width / 2) * targetZoom;
+      const targetPanY = rect.height / 2 - (node.y + nodeHeightWithChrome / 2) * targetZoom;
 
       cancelCentering();
       const currentId = activeIdRef.current ?? activeId;
@@ -207,7 +207,7 @@ export function ProjectScreen() {
   );
 
   /** FloatingToolbar の＋ボタンから呼ばれる: 空フレームをキャンバス中央に追加してセンタリング */
-  const handleAddEmptyPage = useCallback(() => {
+  const handleAddWebNode = useCallback(() => {
     const centerPos = getViewportCenterPos(
       viewport?.zoom ?? 1,
       viewport?.panX ?? 0,
@@ -215,7 +215,7 @@ export function ProjectScreen() {
       DEFAULT_PAGE_WIDTH,
       DEFAULT_PAGE_HEIGHT,
     );
-    const created = addPage(
+    const created = addWebNode(
       activeId,
       undefined,
       centerPos
@@ -223,10 +223,10 @@ export function ProjectScreen() {
         : undefined,
     );
     if (created) {
-      handleSelectPage(created.id);
-      centerOnNewPage(created, () => handleCenteredPage(created.id));
+      handleSelectNode(created.id);
+      centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [addPage, activeId, viewport, centerOnNewPage, handleSelectPage, handleCenteredPage]);
+  }, [addWebNode, activeId, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
 
   /** FloatingToolbar の付箋ボタンから呼ばれる: 付箋をキャンバス中央に追加してセンタリング */
   const handleAddStickyNote = useCallback(() => {
@@ -237,7 +237,7 @@ export function ProjectScreen() {
       DEFAULT_STICKY_NOTE_WIDTH,
       DEFAULT_STICKY_NOTE_HEIGHT,
     );
-    const created = addStickyNote(
+    const created = addStickyNoteNode(
       activeId,
       centerPos
         ? {
@@ -249,19 +249,26 @@ export function ProjectScreen() {
         : undefined,
     );
     if (created) {
-      handleSelectPage(created.id);
-      centerOnNewPage(created, () => handleCenteredPage(created.id));
+      handleSelectNode(created.id);
+      centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [addStickyNote, activeId, viewport, centerOnNewPage, handleSelectPage, handleCenteredPage]);
+  }, [
+    addStickyNoteNode,
+    activeId,
+    viewport,
+    centerOnNewNode,
+    handleSelectNode,
+    handleCenteredNode,
+  ]);
 
   useEffect(() => {
-    if (!selectedPageId) return;
-    const exists = activeProject?.pages.some((page) => page.id === selectedPageId) ?? false;
+    if (!selectedNodeId) return;
+    const exists = activeProject?.nodes.some((node) => node.id === selectedNodeId) ?? false;
     if (!exists) {
       // effect 内での直接 setState を避けるため非同期で実行
-      queueMicrotask(() => setSelectedPageId(null));
+      queueMicrotask(() => setSelectedNodeId(null));
     }
-  }, [selectedPageId, activeProject?.pages]);
+  }, [selectedNodeId, activeProject?.nodes]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -298,10 +305,10 @@ export function ProjectScreen() {
       <Sidebar
         ref={sidebarRef}
         initialWidth={isSidebarVisible ? sidebarWidth : 0}
-        selectedPageId={selectedPageId}
-        onSelectPage={handleSelectPage}
-        onRemovePage={handleRemovePage}
-        onCentered={handleCenteredPage}
+        selectedNodeId={selectedNodeId}
+        onSelectNode={handleSelectNode}
+        onRemoveNode={handleRemoveNode}
+        onCentered={handleCenteredNode}
       />
       {isSidebarVisible && (
         <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
@@ -317,12 +324,12 @@ export function ProjectScreen() {
         </AppButton>
       </div>
       <Siteboard
-        selectedPageId={selectedPageId}
-        onSelectPage={handleSelectPage}
+        selectedNodeId={selectedNodeId}
+        onSelectNode={handleSelectNode}
         onClearSelection={handleClearSelection}
-        centeredPageId={centeredPageId}
-        onCenteredPageHandled={handleCenteredPageHandled}
-        onAddPage={handleAddEmptyPage}
+        centeredNodeId={centeredNodeId}
+        onCenteredNodeHandled={handleCenteredNodeHandled}
+        onAddWebNode={handleAddWebNode}
         onAddStickyNote={handleAddStickyNote}
       />
     </div>

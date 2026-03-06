@@ -3,15 +3,15 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 /** ネイティブ Webview の表示モード */
 export type DisplayMode = 'native' | 'screenshot' | 'hidden';
 
-/** ページの種類 */
-export type PageType = 'webpage' | 'stickynote';
+/** ボード上のノード種別 */
+export type BoardNodeType = 'webpage' | 'stickynote';
 
-export interface Page {
+export interface BoardNode {
   id: string;
-  url: string;
   title: string;
-  /** ページ種別（undefined は 'webpage' として扱う・後方互換） */
-  type?: PageType;
+  url: string;
+  /** ノード種別（undefined は 'webpage' として扱う・後方互換） */
+  type?: BoardNodeType;
   /** 追加時点のURLを保持し、リダイレクト後でも一覧で参照可能にする */
   addedUrl?: string;
   /** 付箋のテキスト内容 */
@@ -22,10 +22,50 @@ export interface Page {
   y: number;
   width: number;
   height: number;
-  createdAt: number;
   /** Tauri Webview のラベル（ランタイムのみ・永続化不要） */
   webviewLabel?: string;
 }
+
+export interface WebPageNode extends BoardNode {
+  /** undefined は 'webpage' として扱う・後方互換 */
+  type?: 'webpage';
+}
+
+export interface StickyNoteNode extends BoardNode {
+  type: 'stickynote';
+  content?: string;
+  colorIndex?: number;
+}
+
+export interface SiteboardDocumentV1 {
+  schemaVersion: 1;
+  title: string;
+  nodes: SiteboardDocumentNode[];
+}
+
+export type SiteboardDocumentNode =
+  | {
+      id: string;
+      type: 'webpage';
+      title: string;
+      url: string;
+      addedUrl?: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }
+  | {
+      id: string;
+      type: 'stickynote';
+      title: string;
+      content: string;
+      colorIndex: number;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
 
 export interface Viewport {
   zoom: number;
@@ -42,37 +82,39 @@ export interface SizePreset {
 export interface Project {
   id: string;
   title: string;
+  filePath?: string;
   sidebarWidth: number;
-  createdAt: number;
-  pages: Page[];
+  lastOpenedAt: number;
+  nodes: BoardNode[];
   viewport: Viewport;
+  lastSavedDocument: SiteboardDocumentV1;
 }
 
 /** URL 未設定の空フレームかどうか */
-export function isPageEmpty(page: Page): boolean {
-  return page.url === '';
+export function isNodeEmpty(node: BoardNode): boolean {
+  return node.url === '';
 }
 
-/** 付箋ページかどうか */
-export function isStickyNote(page: Page): boolean {
-  return page.type === 'stickynote';
+/** 付箋ノードかどうか */
+export function isStickyNoteNode(node: BoardNode): node is StickyNoteNode {
+  return node.type === 'stickynote';
 }
 
-/** Webページかどうか（type が undefined の場合も 'webpage' 扱い = 後方互換） */
-export function isWebPage(page: Page): boolean {
-  return !isStickyNote(page);
+/** Webページノードかどうか（type が undefined の場合も 'webpage' 扱い = 後方互換） */
+export function isWebPageNode(node: BoardNode): node is WebPageNode {
+  return !isStickyNoteNode(node);
 }
 
 /**
- * ページが追加時の URL から別ページに遷移したかどうかを判定する。
+ * ノードが追加時の URL から別ページに遷移したかどうかを判定する。
  * URL の正規化（末尾スラッシュ等）を考慮して比較する。
  */
-export function isPageMoved(page: Page): boolean {
-  if (!page.addedUrl) return false;
+export function isNodeMoved(node: BoardNode): boolean {
+  if (!node.addedUrl) return false;
   try {
-    return new URL(page.addedUrl).href !== new URL(page.url).href;
+    return new URL(node.addedUrl).href !== new URL(node.url).href;
   } catch {
-    return page.addedUrl !== page.url;
+    return node.addedUrl !== node.url;
   }
 }
 

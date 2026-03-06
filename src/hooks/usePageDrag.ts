@@ -4,12 +4,12 @@ import { DRAG_THRESHOLD } from '@/constants';
 
 interface UsePageDragOptions {
   zoom: React.RefObject<number>;
-  onDragEnd: (pageId: string, x: number, y: number) => void;
+  onDragEnd: (nodeId: string, x: number, y: number) => void;
   onInteractionChange: (active: boolean) => void;
 }
 
 interface DragState {
-  pageId: string;
+  nodeId: string;
   frameEl: HTMLElement;
   startMouse: { x: number; y: number };
   startPos: { x: number; y: number };
@@ -27,14 +27,14 @@ interface DragState {
 export function usePageDrag({ zoom, onDragEnd, onInteractionChange }: UsePageDragOptions) {
   const dragState = useRef<DragState | null>(null);
 
-  const startDrag = useCallback((e: React.MouseEvent, pageId: string) => {
+  const startDrag = useCallback((e: React.MouseEvent, nodeId: string) => {
     if (e.button !== 0) return;
-    const frameEl = (e.currentTarget as HTMLElement).closest('[data-page-id]') as HTMLElement;
+    const frameEl = (e.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement;
     if (!frameEl) return;
 
     e.preventDefault();
     dragState.current = {
-      pageId,
+      nodeId,
       frameEl,
       startMouse: { x: e.clientX, y: e.clientY },
       startPos: {
@@ -82,7 +82,7 @@ export function usePageDrag({ zoom, onDragEnd, onInteractionChange }: UsePageDra
         const x = parseInt(state.frameEl.style.left || '0', 10);
         const y = parseInt(state.frameEl.style.top || '0', 10);
         onInteractionChange(false);
-        onDragEnd(state.pageId, x, y);
+        onDragEnd(state.nodeId, x, y);
       }
     };
 

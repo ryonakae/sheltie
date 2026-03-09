@@ -27,7 +27,7 @@ export function HomeScreen() {
 
         {/* 新規プロジェクト追加カード */}
         <motion.button
-          className="flex min-h-[120px] cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-border-secondary text-muted hover:border-border-tertiary hover:text-foreground"
+          className="flex min-h-30 cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-border-secondary text-muted hover:border-border-tertiary hover:text-foreground"
           onClick={() => createProject()}
           aria-label="新規プロジェクトを追加"
           whileHover={{ scale: 1.02 }}
@@ -37,12 +37,6 @@ export function HomeScreen() {
           <Plus className="size-6" />
         </motion.button>
       </div>
-
-      {sortedProjects.length === 0 && (
-        <p className="mt-8 text-center text-sm text-muted">
-          保存済みのプロジェクトはまだありません
-        </p>
-      )}
     </div>
   );
 }

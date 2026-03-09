@@ -12,6 +12,7 @@ import { type BoardNode, isNodeEmpty, isNodeMoved, isStickyNoteNode } from '@/ty
 
 interface SidebarProps {
   initialWidth: number;
+  isVisible: boolean;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   onRemoveNode: (nodeId: string) => void;
@@ -48,7 +49,7 @@ function getNodeFrameRect(siteboard: HTMLElement, nodeId: string | undefined): F
 }
 
 export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
-  { initialWidth, selectedNodeId, onSelectNode, onRemoveNode, onCentered },
+  { initialWidth, isVisible, selectedNodeId, onSelectNode, onRemoveNode, onCentered },
   ref,
 ) {
   const activeProject = useProjectStore(selectActiveProject);
@@ -185,8 +186,12 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
   return (
     <aside
       ref={ref}
-      className="flex shrink-0 flex-col gap-3 overflow-y-auto bg-default p-3"
+      className={twMerge(
+        'flex shrink-0 flex-col',
+        isVisible ? 'gap-3 overflow-y-auto bg-default p-3' : 'gap-0 overflow-hidden p-0',
+      )}
       style={{ width: initialWidth }}
+      aria-hidden={!isVisible}
     >
       {nodes.length > 0 && (
         <ul className="flex flex-col gap-1">

@@ -301,12 +301,6 @@ export function Siteboard({
         })}
       </div>
 
-      {nodes.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <p className="text-sm text-muted">下部のボタンから Web ページや付箋を追加してください</p>
-        </div>
-      )}
-
       <FloatingToolbar onAddWebNode={onAddWebNode} onAddStickyNote={onAddStickyNote} />
 
       <ZoomIndicator zoom={uiZoom} onReset={handleResetZoom} />

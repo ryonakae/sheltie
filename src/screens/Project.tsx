@@ -305,6 +305,7 @@ export function ProjectScreen() {
       <Sidebar
         ref={sidebarRef}
         initialWidth={isSidebarVisible ? sidebarWidth : 0}
+        isVisible={isSidebarVisible}
         selectedNodeId={selectedNodeId}
         onSelectNode={handleSelectNode}
         onRemoveNode={handleRemoveNode}
@@ -316,9 +317,11 @@ export function ProjectScreen() {
       <div className="absolute bottom-4 left-4 z-30">
         <AppButton
           size="sm"
+          variant="ghost"
           tooltipMessage={isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}
           onPress={toggleSidebar}
           aria-label={isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}
+          className={isSidebarVisible ? undefined : 'border border-border shadow-md'}
         >
           {isSidebarVisible ? <ChevronsCollapseHorizontal /> : <ChevronsExpandHorizontal />}
         </AppButton>

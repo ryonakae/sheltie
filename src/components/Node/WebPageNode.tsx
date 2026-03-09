@@ -10,6 +10,23 @@ import { webviewApi } from '@/lib/tauri-bridge';
 import { isNodeEmpty, isNodeMoved } from '@/types';
 import type { DisplayMode, WebPageNode as WebPageNodeModel } from '@/types';
 
+const webviewOwnerTokens = new Map<string, symbol>();
+const pendingWebviewDestroyPromises = new Map<string, Promise<void>>();
+
+function isCurrentWebviewOwner(nodeId: string, token: symbol): boolean {
+  return webviewOwnerTokens.get(nodeId) === token;
+}
+
+function scheduleWebviewDestroy(nodeId: string, label: string): Promise<void> {
+  const destroyPromise = webviewApi.destroy(label).finally(() => {
+    if (pendingWebviewDestroyPromises.get(nodeId) === destroyPromise) {
+      pendingWebviewDestroyPromises.delete(nodeId);
+    }
+  });
+  pendingWebviewDestroyPromises.set(nodeId, destroyPromise);
+  return destroyPromise;
+}
+
 interface WebPageNodeProps {
   node: WebPageNodeModel;
   isActive: boolean;
@@ -35,7 +52,9 @@ interface WebPageNodeProps {
   onNavigated: (nodeId: string, url: string, title: string) => void;
   onTitleUpdated: (nodeId: string, title: string) => void;
   onWebviewCreated: (nodeId: string, label: string) => void;
+  onWebviewDestroyed: (nodeId: string) => void;
   onWebviewLoaded: (nodeId: string) => void;
+  onScreenshotPresented: (nodeId: string, url: string) => void;
   onScrollEnded: (nodeId: string) => void;
   onUrlSubmit: (nodeId: string, url: string) => void;
 }
@@ -65,17 +84,21 @@ export const WebPageNode = memo(function WebPageNode({
   onNavigated,
   onTitleUpdated,
   onWebviewCreated,
+  onWebviewDestroyed,
   onWebviewLoaded,
+  onScreenshotPresented,
   onScrollEnded,
   onUrlSubmit,
 }: WebPageNodeProps) {
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const screenshotImgRef = useRef<HTMLImageElement>(null);
   const webviewLabelRef = useRef<string | null>(null);
   const isCreatingRef = useRef(false);
   const hasUrl = node.url !== '';
   const requestedUrlRef = useRef(node.url);
   const runtimeUrlRef = useRef('');
   const isFirstTitleRef = useRef(true);
+  const ownerTokenRef = useRef<symbol | null>(null);
 
   useEffect(() => {
     requestedUrlRef.current = node.url;
@@ -89,15 +112,40 @@ export const WebPageNode = memo(function WebPageNode({
 
     isCreatingRef.current = true;
     let cancelled = false;
+    const ownerToken = Symbol(node.id);
+    ownerTokenRef.current = ownerToken;
+    webviewOwnerTokens.set(node.id, ownerToken);
 
-    const rect = placeholder.getBoundingClientRect();
-    console.log(`[WebPageNode] Webview 作成開始: node.id=${node.id}`);
-    webviewApi
-      .create(node.id, initialUrl, rect.left, rect.top, rect.width, rect.height, getZoom())
-      .then((label) => {
-        if (cancelled) {
-          console.log(`[WebPageNode] cancelled=true -> destroy(${label})`);
-          void webviewApi.destroy(label);
+    void (async () => {
+      try {
+        const pendingDestroy = pendingWebviewDestroyPromises.get(node.id);
+        if (pendingDestroy) {
+          await pendingDestroy;
+        }
+
+        if (cancelled || !isCurrentWebviewOwner(node.id, ownerToken)) {
+          isCreatingRef.current = false;
+          return;
+        }
+
+        const rect = placeholder.getBoundingClientRect();
+        console.log(`[WebPageNode] Webview 作成開始: node.id=${node.id}`);
+        const label = await webviewApi.create(
+          node.id,
+          initialUrl,
+          rect.left,
+          rect.top,
+          rect.width,
+          rect.height,
+          getZoom(),
+        );
+
+        const currentOwner = webviewOwnerTokens.get(node.id);
+        if (cancelled || currentOwner !== ownerToken) {
+          if (!currentOwner) {
+            console.log(`[WebPageNode] orphaned create -> destroy(${label})`);
+            void scheduleWebviewDestroy(node.id, label);
+          }
           isCreatingRef.current = false;
           return;
         }
@@ -118,11 +166,11 @@ export const WebPageNode = memo(function WebPageNode({
         );
         onWebviewCreated(node.id, label);
         console.log(`[WebPageNode] Webview 作成完了: label=${label}`);
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         console.error('[WebPageNode] Webview 作成に失敗:', err);
         isCreatingRef.current = false;
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -131,16 +179,23 @@ export const WebPageNode = memo(function WebPageNode({
 
   useEffect(() => {
     return () => {
+      onWebviewDestroyed(node.id);
+      const ownerToken = ownerTokenRef.current;
+      if (ownerToken && isCurrentWebviewOwner(node.id, ownerToken)) {
+        webviewOwnerTokens.delete(node.id);
+      }
+
       const label = webviewLabelRef.current;
       if (label) {
         console.log(`[WebPageNode] アンマウント -> destroy(${label})`);
-        void webviewApi.destroy(label);
+        void scheduleWebviewDestroy(node.id, label);
       }
       webviewLabelRef.current = null;
       runtimeUrlRef.current = '';
       isCreatingRef.current = false;
+      ownerTokenRef.current = null;
     };
-  }, [node.id]);
+  }, [node.id, onWebviewDestroyed]);
 
   useEffect(() => {
     const unlistenNav = webviewApi.onPageNavigated(node.id, ({ url }) => {
@@ -174,25 +229,36 @@ export const WebPageNode = memo(function WebPageNode({
   }, [node.id, node.url]);
 
   useEffect(() => {
-    const label = webviewLabelRef.current;
-    if (!label || !placeholderRef.current) return;
+    if (!screenshotUrl) return;
 
-    if (displayMode === 'native') {
-      const rect = placeholderRef.current.getBoundingClientRect();
-      void webviewApi.updateBounds(
-        node.id,
-        rect.left,
-        rect.top,
-        rect.width,
-        rect.height,
-        getZoom(),
-      );
-      void webviewApi.show(label);
-      return;
+    const img = screenshotImgRef.current;
+    if (!img) return;
+
+    let cancelled = false;
+
+    const notifyPresented = () => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        onScreenshotPresented(node.id, screenshotUrl);
+      });
+    };
+
+    const handleLoad = () => {
+      if (img.getAttribute('src') !== screenshotUrl) return;
+      notifyPresented();
+    };
+
+    if (img.complete && img.naturalWidth > 0 && img.getAttribute('src') === screenshotUrl) {
+      notifyPresented();
+    } else {
+      img.addEventListener('load', handleLoad);
     }
 
-    void webviewApi.hide(label);
-  }, [displayMode, getZoom, node.height, node.id, node.width, node.webviewLabel, node.x, node.y]);
+    return () => {
+      cancelled = true;
+      img.removeEventListener('load', handleLoad);
+    };
+  }, [node.id, onScreenshotPresented, screenshotUrl]);
 
   const handleActivate = useCallback(() => onActivate(node.id), [node.id, onActivate]);
   const handleGoBackBound = useCallback(() => onGoBack(node.id), [node.id, onGoBack]);
@@ -234,6 +300,7 @@ export const WebPageNode = memo(function WebPageNode({
           : `${zoomPx(1)} solid var(--color-border)`,
       }}
       data-node-id={node.id}
+      data-display-mode={displayMode}
       onMouseDown={handleActivate}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
@@ -265,9 +332,10 @@ export const WebPageNode = memo(function WebPageNode({
         ) : (
           screenshotUrl && (
             <img
+              ref={screenshotImgRef}
               src={screenshotUrl}
               alt=""
-              className="pointer-events-none absolute inset-0 hidden size-full object-cover object-top-left"
+              className="pointer-events-none absolute inset-0 size-full object-cover object-top-left"
               data-screenshot-img
               draggable={false}
             />

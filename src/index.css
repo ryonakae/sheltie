@@ -23,7 +23,7 @@
   }
 }
 
-/* スクリーンショット画像: displayMode=screenshot の時のみ表示 */
-[data-display-mode='screenshot'] [data-screenshot-img] {
-  display: block;
+/* スクリーンショット画像は常時背面に置き、hidden の時だけ隠す */
+[data-display-mode='hidden'] [data-screenshot-img] {
+  display: none;
 }

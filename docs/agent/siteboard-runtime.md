@@ -14,13 +14,23 @@
 `DisplayMode` は 3 種類。
 
 - `native`: ネイティブ Webview を表示
-- `screenshot`: スクリーンショット画像を表示
+- `screenshot`: Webview を隠し、背面に常駐したスクリーンショット画像を表示
 - `hidden`: 両方非表示
+
+## 背面スクショ方式
+
+- HTML のスクリーンショット画像を Webview の**上**に重ねることはできない。ネイティブ Webview は OS レベルで最前面に描画されるため、スクショは常に Webview の**背面**に置く。
+- `WebPageNode` は `screenshotUrl` がある限り `<img data-screenshot-img>` を常時マウントする。`display:none` を `screenshot` 時だけ切り替えるのではなく、`hidden` の時だけ隠す。
+- `native -> screenshot` は「スクショ準備完了を確認してから Webview を hide」する。`screenshot -> native` は「Webview を先に show してから screenshot を消す」順序を守る。
+- `handleScreenshotPresented(nodeId, url)` が「その URL のスクショが DOM に反映され、描画機会を得た」合図になる。`ensureScreenshotReady()` はこの通知まで待ってから resolve する。
 
 ## しきい値・定数
 
-- `NATIVE_SAFE_MARGIN_PX = 50`
+- `NATIVE_SAFE_MARGIN_PX = 25`
+- `NATIVE_SAFE_MARGIN_BOTTOM_PX = 75`
+- `PRE_DISPLAY_MARGIN_PX = 50`
 - `HYSTERESIS_PX = 4`
+- `WEBVIEW_REVEAL_DELAY_MS = 100`
 - `SCREENSHOT_CLIPPING_ENABLED`（`useSiteboardDisplayEngine.ts` 内）
 
 近接判定ではヒステリシスを使い、境界振動を防ぐ。
@@ -29,8 +39,8 @@
 
 `InteractionType = 'pan' | 'zoom' | 'drag' | 'resize'`
 
-- `drag/resize`: 開始時に Webview を非表示化し、終了時に表示判定を再計算。
-- `pan/zoom`: rAF 単位で `computeInteractionModes` を実行し、必要に応じて `native/screenshot/hidden` を切り替える。
+- `drag/resize`: 保存済みスクショがあれば `screenshot` に落とし、未準備なら `native` を維持する。終了時に表示判定を再計算する。
+- `pan/zoom`: 開始時に保存済みスクショがあるページを即 `screenshot` に切り替え、未準備ページは `native` のまま capture を開始する。rAF 単位では `computeInteractionModes` が `native/screenshot/hidden` を再判定する。
 
 ## pan 専用最適化
 
@@ -52,11 +62,12 @@
 これを回避するため、右クリック時に対象 webpage ノードを screenshot/hidden モードに切り替え、メニュー表示中はそれを維持する。
 
 **フロー**:
-1. `handleContextMenuOpen(pageId)` — async 関数。`contextMenuPageIdRef` にセットし、`cancelNativeReveal` でタイマーをキャンセルする。スクリーンショット未準備時（`screenshotReadyRef.current[pageId] === false`）は Webview が visible なうちに `captureScreenshot({ forceDuringInteraction: true })` で撮影を完了させてから hide する。撮影成功 -> `newMode = 'screenshot'`、失敗（または未撮影）-> `newMode = 'hidden'`。`captureInFlightRef` で二重撮影を防止する。
-2. `Siteboard.tsx` の `handleNodeContextMenu` — webpage ノードは `handleContextMenuOpen(pageId)` の Promise を `.then()` で待ち、さらに `requestAnimationFrame` を挟んでから `setContextMenu` を呼ぶ（白画面防止）。`requestAnimationFrame` を挟む理由: React 18 の自動バッチングにより `setDisplayModes`（スクリーンショット差し替え）と `setContextMenu`（メニュー表示）が同一レンダーサイクルに合流し、スクリーンショットのブラウザ描画完了前にメニューが表示される問題を防ぐため。付箋ノードは Webview なしのため即時表示。
-3. `computeDisplayModes()` の override ロジック — `contextMenuPageIdRef` がセットされているページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え。
-4. `handleContextMenuClose()` — ref をクリアし `computeDisplayModes()` で表示を復帰。
-5. ページ削除ケース — `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
+1. `handleContextMenuOpen(pageId)` — async 関数。まず `cancelNativeReveal` で復帰タイマーを止める。スクリーンショット未準備時は `ensureScreenshotReady({ forceDuringInteraction: true })` で「PNG 保存 + React 反映 + DOM 描画完了」まで待つ。
+2. 準備完了後に `contextMenuPageIdRef` をセットし、`newMode = 'screenshot'`（失敗時のみ `hidden`）へ更新してから Webview を hide する。
+3. `Siteboard.tsx` の `handleNodeContextMenu` — webpage ノードは `handleContextMenuOpen(pageId)` の Promise を `.then()` で待ち、さらに `requestAnimationFrame` を挟んでから `setContextMenu` を呼ぶ。これでメニューが「スクショ背面化」より先に表示されない。
+4. `computeDisplayModes()` の override ロジック — `contextMenuPageIdRef` がセットされているページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え。
+5. `handleContextMenuClose()` — ref をクリアし `computeDisplayModes()` で表示を復帰。
+6. ページ削除ケース — `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
 
 付箋ノードは Webview を持たないため、コンテキストメニュー表示時に `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` の node type 判定で分岐）。
 
@@ -72,7 +83,9 @@
 **フロー（撮影時）**:
 1. Rust `save_webview_screenshot(pageId, projectId)` → WKWebView スナップショット → PNG → ファイル保存 → ファイルパス返却
 2. JS: `convertFileSrc(filePath) + '?t=Date.now()'` でアセット URL 生成 → `<img src>` に設定
-3. `screenshotReadyRef.current[pageId] = true` をセット
+3. `Image.decode()` でデコード完了を待つ
+4. `WebPageNode` の `onScreenshotPresented(pageId, url)` が呼ばれたら、その URL を表示可能なスクショとして扱う
+5. `screenshotReadyRef.current[pageId] = true` をセット
 
 **フロー（起動時復元）**:
 1. `useSiteboardDisplayEngine` の初回マウント時 effect が実行
@@ -99,17 +112,26 @@
 `screenshot -> native` への復帰時は以下を守る。
 
 1. 先に `webviewApi.show()` を呼ぶ。
-2. `requestAnimationFrame` で 1 フレーム待つ。
-3. `data-display-mode='native'` と state 更新を行う。
+2. macOS では必要に応じて `setOpacity(pageId, 0)` から始める。
+3. `requestAnimationFrame` で 1 フレーム待つ。
+4. `data-display-mode='native'` と state 更新を行う。
 
 即時に mode を戻すと OS 側描画が追いつかず、ちらつきが出る。
+
+`native -> screenshot` 側は逆に「Webview を先に hide しない」ことが重要。
+
+1. スクショ未準備なら `ensureScreenshotReady()` を待つ。
+2. `data-display-mode='screenshot'` を反映する。
+3. 最後に Webview を hide する。
 
 ## Webview 生成・破棄の注意
 
 - React StrictMode 二重マウント対策として、`WebPageNode` で作成競合をガードする。
+- タブ切替で `ProjectScreen` が再マウントされるため、同じ `pageId` の Webview は create/destroy が短時間で連続しうる。`WebPageNode` は owner token と pending destroy Promise で直列化し、旧 cleanup が新 Webview を閉じないようにする。
 - Webview API は例外時 no-op を許容する前提。
 - 空フレーム（`url === ''`）は Webview を作成しない。
 - Webview の create/destroy は URL 同期から切り離し、`node.url` 更新では再生成しない。
+- `webviewLabel` は「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。`webviewLabel` が無いページは `native` に戻さず `screenshot` または `hidden` を使う。
 - `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、その更新で `reload` を再発火させない。
 - 既存 Webview への URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview` を呼ぶ。
 
@@ -184,6 +206,8 @@ canGoBack / canGoForward の管理は楽観的更新とネイティブ API の O
 ## 変更時チェックリスト
 
 - 表示モード変更時: `computeDisplayModes` と `computeInteractionModes` の両方を確認。
+- スクショ切替を変更した時: `ensureScreenshotReady` と `handleScreenshotPresented` の待機条件が崩れていないことを確認。
+- `webviewLabel` の扱いを変えた時: 再マウント直後に `native` が選ばれず、保存済みスクリーンショットなら `screenshot`、未保存なら `hidden` へ落ちることを確認。
 - しきい値変更時: pan/zoom 中と終了時で振動・ちらつきがないか確認。
 - イベント変更時: Rust emit と JS listener の名前一致を確認。
 - viewport insets を変更する場合: zoom 変化後の svh/lvh/vh/dvh の各単位が論理サイズと一致することを確認。

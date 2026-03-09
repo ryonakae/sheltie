@@ -32,6 +32,7 @@
 - `ProjectStore`（`tab-store.ts` 内部）
   - `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `nodeHistories`
+  - runtime action: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`
 - `ProjectNodeHistory`（`tab-store.ts` 内部）
   - `past`: 直前までの `BoardNode[]` スナップショット配列
   - `future`: Redo 用の `BoardNode[]` スナップショット配列
@@ -87,6 +88,7 @@
 ## 不変条件
 
 - `webviewLabel` はランタイム専用で永続化しない
+- `webviewLabel` は「現在接続済みのネイティブ Webview がある」間だけ設定する。再マウント開始時に `clearWebNodeWebviewLabel` で外し、再生成完了後に `setWebNodeWebviewLabel` で付け直す。
 - 付箋ノードは `type: 'stickynote'` と `content` / `colorIndex` を利用する
 - 空フレーム（`url === ''`）は Webview 未作成状態を許容する
 - `nodeHistories` はランタイム専用で永続化しない（`_restoreState` で必ず初期化）

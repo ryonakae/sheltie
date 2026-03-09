@@ -48,6 +48,7 @@ export function Siteboard({
     updateNodeTitle,
     removeNode,
     setWebNodeWebviewLabel,
+    clearWebNodeWebviewLabel,
     setWebNodeUrl,
     pinWebNodeUrl,
     updateStickyNoteContent,
@@ -55,6 +56,7 @@ export function Siteboard({
   } = useProjectStore(
     useShallow((s) => ({
       cycleStickyNoteColor: s.cycleStickyNoteColor,
+      clearWebNodeWebviewLabel: s.clearWebNodeWebviewLabel,
       redoActiveProject: s.redoActiveProject,
       pinWebNodeUrl: s.pinWebNodeUrl,
       removeNode: s.removeNode,
@@ -90,6 +92,7 @@ export function Siteboard({
     handleInteractionChange,
     handlePageResizeEnd,
     handlePageResizeStart,
+    handleScreenshotPresented,
     interactionCursor,
     scheduleInteractionUpdate,
     scheduleZoomRestoreAfterReflow,
@@ -153,6 +156,7 @@ export function Siteboard({
     handleUrlSubmit,
     handleScrollEnded,
     handleWebviewCreated,
+    handleWebviewDestroyed,
     handleWebviewLoaded,
     navStates,
   } = useSiteboardNodeRuntime({
@@ -167,6 +171,7 @@ export function Siteboard({
     updateNodeTitle,
     removeNode,
     setWebNodeWebviewLabel,
+    clearWebNodeWebviewLabel,
     setWebNodeUrl,
     pinWebNodeUrl,
     updateNodeSize,
@@ -293,7 +298,9 @@ export function Siteboard({
               onNavigated={handleNavigated}
               onTitleUpdated={handleTitleUpdated}
               onWebviewCreated={handleWebviewCreated}
+              onWebviewDestroyed={handleWebviewDestroyed}
               onWebviewLoaded={handleWebviewLoaded}
+              onScreenshotPresented={handleScreenshotPresented}
               onScrollEnded={handleScrollEnded}
               onUrlSubmit={handleUrlSubmit}
             />

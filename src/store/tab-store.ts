@@ -266,6 +266,7 @@ interface ProjectActions {
   cycleStickyNoteColor: (projectId: string, nodeId: string) => void;
   pinWebNodeUrl: (projectId: string, nodeId: string) => void;
   setWebNodeWebviewLabel: (projectId: string, nodeId: string, label: string) => void;
+  clearWebNodeWebviewLabel: (projectId: string, nodeId: string) => void;
   undoActiveProject: () => void;
   redoActiveProject: () => void;
   _restoreState: (state: ProjectState) => void;
@@ -701,6 +702,21 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           nodes: project.nodes.map((node) => {
             if (node.id !== nodeId || node.webviewLabel === label) return node;
             return { ...node, webviewLabel: label };
+          }),
+        };
+      }),
+    })),
+
+  clearWebNodeWebviewLabel: (projectId, nodeId) =>
+    set((state) => ({
+      projects: state.projects.map((project) => {
+        if (project.id !== projectId) return project;
+        return {
+          ...project,
+          nodes: project.nodes.map((node) => {
+            if (node.id !== nodeId || node.webviewLabel === undefined) return node;
+            const { webviewLabel: _removed, ...rest } = node;
+            return rest;
           }),
         };
       }),

@@ -18,6 +18,7 @@ interface UseSiteboardNodeRuntimeParams {
   updateNodeTitle: (projectId: string, nodeId: string, title: string) => void;
   removeNode: (projectId: string, nodeId: string) => void;
   setWebNodeWebviewLabel: (projectId: string, nodeId: string, label: string) => void;
+  clearWebNodeWebviewLabel: (projectId: string, nodeId: string) => void;
   setWebNodeUrl: (projectId: string, nodeId: string, url: string) => void;
   pinWebNodeUrl: (projectId: string, nodeId: string) => void;
   updateNodeSize: (projectId: string, nodeId: string, width: number, height: number) => void;
@@ -30,7 +31,7 @@ interface UseSiteboardNodeRuntimeParams {
   updateStickyNoteContent: (projectId: string, nodeId: string, content: string) => void;
   cycleStickyNoteColor: (projectId: string, nodeId: string) => void;
   computeDisplayModes: () => void;
-  captureScreenshot: (nodeId: string) => Promise<void>;
+  captureScreenshot: (nodeId: string) => Promise<boolean>;
 }
 
 export function useSiteboardNodeRuntime({
@@ -45,6 +46,7 @@ export function useSiteboardNodeRuntime({
   updateNodeTitle,
   removeNode,
   setWebNodeWebviewLabel,
+  clearWebNodeWebviewLabel,
   setWebNodeUrl,
   pinWebNodeUrl,
   updateNodeSize,
@@ -193,6 +195,13 @@ export function useSiteboardNodeRuntime({
     [activeId, computeDisplayModes, refreshNavigationState, setWebNodeWebviewLabel],
   );
 
+  const handleWebviewDestroyed = useCallback(
+    (nodeId: string) => {
+      clearWebNodeWebviewLabel(activeId, nodeId);
+    },
+    [activeId, clearWebNodeWebviewLabel],
+  );
+
   const handleWebviewLoaded = useCallback(
     (nodeId: string) => {
       void captureScreenshot(nodeId);
@@ -291,6 +300,7 @@ export function useSiteboardNodeRuntime({
     handleTitleUpdated,
     handleUrlSubmit,
     handleWebviewCreated,
+    handleWebviewDestroyed,
     handleWebviewLoaded,
     navStates: visibleNavStates,
   };

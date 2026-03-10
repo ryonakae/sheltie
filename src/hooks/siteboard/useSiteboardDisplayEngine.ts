@@ -66,6 +66,7 @@ export function useSiteboardDisplayEngine({
   const nativeRevealTokenRef = useRef<Record<string, number>>({});
   const resizingNodeIdRef = useRef<string | null>(null);
   const contextMenuNodeIdRef = useRef<string | null>(null);
+  const settlingNodeIdsRef = useRef<Set<string>>(new Set());
   const forceHiddenInteractionNodeIdsRef = useRef<Set<string>>(new Set());
 
   const screenshotUrlsRef = useRef<Record<string, string>>({});
@@ -337,6 +338,9 @@ export function useSiteboardDisplayEngine({
 
       // コンテキストメニュー表示中のページは native に復帰させない
       if (contextMenuNodeIdRef.current === page.id && nextMode === 'native') {
+        nextMode = hasDisplayableScreenshot(page.id) ? 'screenshot' : 'hidden';
+      }
+      if (settlingNodeIdsRef.current.has(page.id) && nextMode === 'native') {
         nextMode = hasDisplayableScreenshot(page.id) ? 'screenshot' : 'hidden';
       }
       if (!label && nextMode === 'native') {
@@ -929,6 +933,24 @@ export function useSiteboardDisplayEngine({
     computeDisplayModes();
   }, [computeDisplayModes]);
 
+  const holdNodeDuringPositionSettle = useCallback(
+    (nodeId: string) => {
+      settlingNodeIdsRef.current.add(nodeId);
+      cancelNativeReveal(nodeId);
+    },
+    [cancelNativeReveal],
+  );
+
+  const releaseNodeAfterPositionSettle = useCallback(
+    (nodeId: string) => {
+      if (!settlingNodeIdsRef.current.delete(nodeId)) return;
+      if (activeInteractionsRef.current.size === 0) {
+        computeDisplayModes();
+      }
+    },
+    [computeDisplayModes],
+  );
+
   const cleanupPageArtifacts = useCallback(
     (nodeId: string) => {
       cancelNativeReveal(nodeId);
@@ -950,6 +972,7 @@ export function useSiteboardDisplayEngine({
       delete presentedScreenshotUrlRef.current[nodeId];
       delete screenshotPresentationWaitersRef.current[nodeId];
       forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
+      settlingNodeIdsRef.current.delete(nodeId);
       if (resizingNodeIdRef.current === nodeId) {
         resizingNodeIdRef.current = null;
       }
@@ -1047,6 +1070,7 @@ export function useSiteboardDisplayEngine({
       cancelZoomRestore();
       cancelAllNativeReveals();
       forceHiddenInteractionNodeIdsRef.current.clear();
+      settlingNodeIdsRef.current.clear();
       resizingNodeIdRef.current = null;
       setInteractionCursor(null);
       computeDisplayModes();
@@ -1074,8 +1098,10 @@ export function useSiteboardDisplayEngine({
   }, [centeredNodeId, computeDisplayModes, onCenteredNodeHandled, webPageNodes]);
 
   useEffect(() => {
+    const settlingNodeIds = settlingNodeIdsRef.current;
     return () => {
       cancelAllNativeReveals();
+      settlingNodeIds.clear();
       resizingNodeIdRef.current = null;
     };
   }, [cancelAllNativeReveals]);
@@ -1095,7 +1121,9 @@ export function useSiteboardDisplayEngine({
     handlePageResizeStart,
     prepareInteractionStart,
     handleScreenshotPresented,
+    holdNodeDuringPositionSettle,
     interactionCursor,
+    releaseNodeAfterPositionSettle,
     scheduleInteractionUpdate,
     scheduleZoomRestoreAfterReflow,
     screenshotUrls,

@@ -79,7 +79,8 @@
 `src/constants/siteboard.ts`
 
 - ズーム: `MIN_ZOOM = 0.2`, `MAX_ZOOM = 1.5`
-- しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 50`
+- しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 25`
+- ドラッグ補正: `DRAG_REPOSITION_GAP = 20`
 
 `src/hooks/siteboard/types.ts`
 
@@ -100,6 +101,7 @@
 - ローカル project state は現行 `ProjectState` のみ復元対象とし、旧 shape は migration しない
 - Undo/Redo は `activeId` のプロジェクトにのみ適用し、`HOME_ID` では no-op
 - node 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
+- ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
 - 同一 `filePath` の `.siteboard` を複数のローカル project に関連付けない
 - `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `1` のみ受け入れる
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない

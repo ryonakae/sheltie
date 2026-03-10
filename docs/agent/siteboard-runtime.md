@@ -44,6 +44,16 @@
 - 保存済みスクショがないページは、操作開始前に capture を待つ。capture 不能な場合のみ `hidden` を最後の退避先として使う。
 - `pan/zoom` 中は rAF 単位で `computeInteractionModes` が `screenshot/hidden` を再判定する。操作中に `native` へ戻さない。
 
+## drag 終了後の重なり補正
+
+- ドラッグ中の DOM 直接移動は従来どおり維持し、`mouseup` 後にだけ store 座標を確定する
+- ドロップ位置が禁止された重なりを作る場合は、`x` または `y` の単軸だけを動かして再配置する
+- 補正は最短移動を優先し、補正後の余白は `DRAG_REPOSITION_GAP = 20`
+- webpage は他の全ノードとの重なりを禁止し、stickynote は webpage に対してのみ同じ制約を適用する
+- webpage の補正が発生した時は `settling` 扱いにし、`computeDisplayModes()` が `native` 復帰を抑制する
+- `WebPageNode` は drop 座標から補正後座標までを明示的な translate アニメーションで戻し、完了後に settling を解除して `native` 復帰を再判定する
+- Reduced Motion ではアニメーション待ちをせず、次フレームで settling を解除する
+
 ## pan 専用最適化
 
 - pan 中で zoom が変わらない場合は `updateAllPositions` を使う。

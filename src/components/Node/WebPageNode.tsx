@@ -1,4 +1,5 @@
-import { memo, useCallback, useRef } from 'react';
+import { useReducedMotion } from 'motion/react';
+import { memo, useCallback, useLayoutEffect, useRef } from 'react';
 
 import { NodeResizeHandle } from '@/components/Node/NodeResizeHandle';
 import { WebPageNodeBottomBar } from '@/components/Node/WebPageNodeBottomBar';
@@ -40,6 +41,12 @@ interface WebPageNodeProps {
   onScreenshotPresented: (nodeId: string, url: string) => void;
   onScrollEnded: (nodeId: string) => void;
   onUrlSubmit: (nodeId: string, url: string) => void;
+  positionCorrectionAnimationToken: number | null;
+  positionCorrectionFromX: number | null;
+  positionCorrectionFromY: number | null;
+  positionCorrectionToX: number | null;
+  positionCorrectionToY: number | null;
+  onPositionCorrectionAnimationComplete: (nodeId: string, token: number) => void;
 }
 
 export const WebPageNode = memo(function WebPageNode({
@@ -72,9 +79,18 @@ export const WebPageNode = memo(function WebPageNode({
   onScreenshotPresented,
   onScrollEnded,
   onUrlSubmit,
+  positionCorrectionAnimationToken,
+  positionCorrectionFromX,
+  positionCorrectionFromY,
+  positionCorrectionToX,
+  positionCorrectionToY,
+  onPositionCorrectionAnimationComplete,
 }: WebPageNodeProps) {
+  const prefersReducedMotion = useReducedMotion();
+  const frameRef = useRef<HTMLDivElement>(null);
   const placeholderRef = useRef<HTMLDivElement>(null);
   const screenshotImgRef = useRef<HTMLImageElement>(null);
+  const positionCorrectionAnimationRef = useRef<Animation | null>(null);
 
   useWebPageWebviewLifecycle({
     nodeId: node.id,
@@ -119,8 +135,88 @@ export const WebPageNode = memo(function WebPageNode({
     [handleActivate, node.id, onResizeStart],
   );
 
+  useLayoutEffect(() => {
+    const frameEl = frameRef.current;
+    if (!frameEl) return;
+
+    positionCorrectionAnimationRef.current?.cancel();
+    positionCorrectionAnimationRef.current = null;
+    frameEl.style.transform = 'none';
+
+    if (positionCorrectionAnimationToken === null) return;
+    if (
+      positionCorrectionFromX === null ||
+      positionCorrectionFromY === null ||
+      positionCorrectionToX === null ||
+      positionCorrectionToY === null
+    ) {
+      return;
+    }
+
+    frameEl.style.left = `${positionCorrectionToX}px`;
+    frameEl.style.top = `${positionCorrectionToY}px`;
+
+    const offsetX = positionCorrectionFromX - positionCorrectionToX;
+    const offsetY = positionCorrectionFromY - positionCorrectionToY;
+    let frameId: number | null = null;
+
+    if (prefersReducedMotion) {
+      frameId = window.requestAnimationFrame(() => {
+        frameEl.style.transform = 'none';
+        onPositionCorrectionAnimationComplete(node.id, positionCorrectionAnimationToken);
+      });
+      return () => {
+        if (frameId !== null) {
+          window.cancelAnimationFrame(frameId);
+        }
+        frameEl.style.transform = 'none';
+      };
+    }
+
+    frameEl.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+    const animation = frameEl.animate(
+      [
+        { transform: `translate(${offsetX}px, ${offsetY}px)` },
+        { transform: 'translate(0px, 0px)' },
+      ],
+      {
+        duration: 180,
+        easing: 'cubic-bezier(0.215, 0.61, 0.355, 1)',
+        fill: 'forwards',
+      },
+    );
+    positionCorrectionAnimationRef.current = animation;
+
+    animation.onfinish = () => {
+      if (positionCorrectionAnimationRef.current !== animation) return;
+      positionCorrectionAnimationRef.current = null;
+      frameEl.style.transform = 'none';
+      onPositionCorrectionAnimationComplete(node.id, positionCorrectionAnimationToken);
+    };
+    animation.oncancel = () => {
+      if (positionCorrectionAnimationRef.current !== animation) return;
+      positionCorrectionAnimationRef.current = null;
+      frameEl.style.transform = 'none';
+    };
+
+    return () => {
+      animation.cancel();
+      frameEl.style.transform = 'none';
+    };
+  }, [
+    node.id,
+    onPositionCorrectionAnimationComplete,
+    positionCorrectionAnimationToken,
+    positionCorrectionFromX,
+    positionCorrectionFromY,
+    positionCorrectionToX,
+    positionCorrectionToY,
+    prefersReducedMotion,
+  ]);
+
   return (
     <div
+      ref={frameRef}
       className="absolute flex flex-col shadow-lg outline-offset-0"
       style={{
         left: node.x,

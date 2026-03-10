@@ -117,8 +117,8 @@ export function usePageDrag({
       if (state.isDragging) {
         const x = parseInt(state.frameEl.style.left || '0', 10);
         const y = parseInt(state.frameEl.style.top || '0', 10);
-        onInteractionChange(false);
         onDragEnd(state.nodeId, x, y);
+        onInteractionChange(false);
       }
     };
 

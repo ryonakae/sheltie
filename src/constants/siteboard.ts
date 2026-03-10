@@ -4,6 +4,7 @@ export const PAGE_MIN_HEIGHT = 200;
 export const STICKY_NOTE_MIN_WIDTH = 150;
 export const STICKY_NOTE_MIN_HEIGHT = 150;
 export const DRAG_THRESHOLD = 3;
+export const DRAG_REPOSITION_GAP = 20;
 
 // ズーム制御の境界とアニメーション
 export const MIN_ZOOM = 0.2;

@@ -1,3 +1,4 @@
+import { motion } from 'motion/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
@@ -159,7 +160,8 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   );
   const noteBodyColorClassName = node.content ? 'text-[#333]' : 'text-[#aaa]';
   return (
-    <div
+    <motion.div
+      layout="position"
       className={noteClassName}
       style={{
         left: node.x,
@@ -263,6 +265,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as NodeResizeDirection[]).map((dir) => (
         <NodeResizeHandle key={dir} direction={dir} onMouseDown={handleResizeStart} />
       ))}
-    </div>
+    </motion.div>
   );
 });

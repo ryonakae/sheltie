@@ -34,7 +34,7 @@ interface UseSiteboardViewportEngineParams {
   cancelZoomRestore: () => void;
   scheduleZoomRestoreAfterReflow: () => void;
   updateViewport: (projectId: string, viewport: Partial<Viewport>) => void;
-  updateNodePosition: (projectId: string, nodeId: string, x: number, y: number) => void;
+  onNodeDragEnd: (nodeId: string, x: number, y: number) => void;
   updateNodeSize: (projectId: string, nodeId: string, width: number, height: number) => void;
 }
 
@@ -56,7 +56,7 @@ export function useSiteboardViewportEngine({
   cancelZoomRestore,
   scheduleZoomRestoreAfterReflow,
   updateViewport,
-  updateNodePosition,
+  onNodeDragEnd,
   updateNodeSize,
 }: UseSiteboardViewportEngineParams) {
   const zoomResetAnimationRef = useRef<{ stop: () => void } | null>(null);
@@ -210,12 +210,7 @@ export function useSiteboardViewportEngine({
 
   const { startDrag } = usePageDrag({
     zoom: zoomRef,
-    onDragEnd: useCallback(
-      (nodeId, x, y) => {
-        updateNodePosition(activeId, nodeId, x, y);
-      },
-      [activeId, updateNodePosition],
-    ),
+    onDragEnd: onNodeDragEnd,
     onInteractionChange: useCallback(
       (active) => onInteractionChange(active, 'grabbing', 'drag'),
       [onInteractionChange],

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { ContextMenu } from '@/components/Common/ContextMenu';
@@ -7,11 +7,12 @@ import { WebPageNode } from '@/components/Node/WebPageNode';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
 import { InteractionOverlay } from '@/components/Siteboard/InteractionOverlay';
 import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
-import { LOW_ZOOM_HIDE_THRESHOLD } from '@/constants';
+import { DRAG_REPOSITION_GAP, LOW_ZOOM_HIDE_THRESHOLD } from '@/constants';
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
 import { useSiteboardViewportEngine } from '@/hooks/siteboard/useSiteboardViewportEngine';
+import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
 import {
   selectActiveProject,
   selectActiveProjectWebviewRuntime,
@@ -27,6 +28,14 @@ interface SiteboardProps {
   onCenteredNodeHandled?: () => void;
   onAddWebNode: () => void;
   onAddStickyNote: () => void;
+}
+
+interface PositionCorrectionAnimation {
+  token: number;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
 }
 
 export function Siteboard({
@@ -101,8 +110,10 @@ export function Siteboard({
     prepareInteractionStart,
     handleScreenshotPresented,
     interactionCursor,
+    holdNodeDuringPositionSettle,
     scheduleInteractionUpdate,
     scheduleZoomRestoreAfterReflow,
+    releaseNodeAfterPositionSettle,
     screenshotUrls,
   } = useSiteboardDisplayEngine({
     webPageNodes,
@@ -116,6 +127,11 @@ export function Siteboard({
   });
 
   const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
+  const [positionCorrectionAnimations, setPositionCorrectionAnimations] = useState<
+    Record<string, PositionCorrectionAnimation>
+  >({});
+  const positionCorrectionAnimationsRef = useRef<Record<string, PositionCorrectionAnimation>>({});
+  const positionCorrectionSequenceRef = useRef(0);
 
   const {
     handleResetZoom,
@@ -143,7 +159,43 @@ export function Siteboard({
     cancelZoomRestore,
     scheduleZoomRestoreAfterReflow,
     updateViewport,
-    updateNodePosition,
+    onNodeDragEnd: useCallback(
+      (nodeId: string, x: number, y: number) => {
+        const movingNode = nodes.find((candidate) => candidate.id === nodeId);
+        if (!movingNode) return;
+
+        const resolvedPosition = resolveDraggedNodePosition({
+          nodes,
+          movingNode,
+          proposedX: x,
+          proposedY: y,
+          gap: DRAG_REPOSITION_GAP,
+        });
+        if (resolvedPosition.corrected && isWebPageNode(movingNode)) {
+          positionCorrectionSequenceRef.current += 1;
+          const nextAnimation = {
+            token: positionCorrectionSequenceRef.current,
+            fromX: x,
+            fromY: y,
+            toX: resolvedPosition.x,
+            toY: resolvedPosition.y,
+          };
+          positionCorrectionAnimationsRef.current = {
+            ...positionCorrectionAnimationsRef.current,
+            [nodeId]: nextAnimation,
+          };
+          setPositionCorrectionAnimations((prev) => ({ ...prev, [nodeId]: nextAnimation }));
+          holdNodeDuringPositionSettle(nodeId);
+          if (movingNode.x !== resolvedPosition.x || movingNode.y !== resolvedPosition.y) {
+            updateNodePosition(activeId, nodeId, resolvedPosition.x, resolvedPosition.y);
+          }
+          return;
+        }
+
+        updateNodePosition(activeId, nodeId, resolvedPosition.x, resolvedPosition.y);
+      },
+      [activeId, holdNodeDuringPositionSettle, nodes, updateNodePosition],
+    ),
     updateNodeSize,
   });
   const hideCompactControls = Math.round(uiZoom * 100) <= Math.round(LOW_ZOOM_HIDE_THRESHOLD * 100);
@@ -191,9 +243,76 @@ export function Siteboard({
     captureScreenshot,
   });
 
+  const clearPositionCorrectionAnimation = useCallback(
+    (nodeId: string) => {
+      if (!(nodeId in positionCorrectionAnimationsRef.current)) return;
+      const { [nodeId]: _removedAnimation, ...rest } = positionCorrectionAnimationsRef.current;
+      positionCorrectionAnimationsRef.current = rest;
+      setPositionCorrectionAnimations((prev) => {
+        if (!(nodeId in prev)) return prev;
+        const next = { ...prev };
+        delete next[nodeId];
+        return next;
+      });
+      releaseNodeAfterPositionSettle(nodeId);
+    },
+    [releaseNodeAfterPositionSettle],
+  );
+
+  const handlePositionCorrectionAnimationComplete = useCallback(
+    (nodeId: string, token: number) => {
+      if (positionCorrectionAnimationsRef.current[nodeId]?.token !== token) return;
+      clearPositionCorrectionAnimation(nodeId);
+    },
+    [clearPositionCorrectionAnimation],
+  );
+
+  const handleDragStartWithSettleReset = useCallback(
+    (e: React.MouseEvent, nodeId: string) => {
+      clearPositionCorrectionAnimation(nodeId);
+      handleDragStart(e, nodeId);
+    },
+    [clearPositionCorrectionAnimation, handleDragStart],
+  );
+
+  const handleRemoveNodeWithSettleReset = useCallback(
+    (nodeId: string) => {
+      clearPositionCorrectionAnimation(nodeId);
+      handleRemoveNode(nodeId);
+    },
+    [clearPositionCorrectionAnimation, handleRemoveNode],
+  );
+
+  useEffect(() => {
+    const liveNodeIds = new Set(webPageNodes.map((node) => node.id));
+    const staleAnimationNodeIds = Object.keys(positionCorrectionAnimationsRef.current).filter(
+      (nodeId) => !liveNodeIds.has(nodeId),
+    );
+    if (staleAnimationNodeIds.length === 0) return;
+
+    let nextAnimations = positionCorrectionAnimationsRef.current;
+    for (const nodeId of staleAnimationNodeIds) {
+      const { [nodeId]: _removedAnimation, ...rest } = nextAnimations;
+      nextAnimations = rest;
+      releaseNodeAfterPositionSettle(nodeId);
+    }
+
+    positionCorrectionAnimationsRef.current = nextAnimations;
+    setPositionCorrectionAnimations((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const nodeId of staleAnimationNodeIds) {
+        if (!(nodeId in next)) continue;
+        delete next[nodeId];
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [releaseNodeAfterPositionSettle, webPageNodes]);
+
   useSiteboardKeyboard({
     selectedNodeId,
-    onRemoveNode: handleRemoveNode,
+    onRemoveNode: handleRemoveNodeWithSettleReset,
     onUndo: undoActiveProject,
     onRedo: redoActiveProject,
   });
@@ -230,10 +349,10 @@ export function Siteboard({
     (actionId: string) => {
       if (actionId === 'remove' && contextMenu) {
         handleContextMenuCloseDisplay();
-        handleRemoveNode(contextMenu.nodeId);
+        handleRemoveNodeWithSettleReset(contextMenu.nodeId);
       }
     },
-    [contextMenu, handleContextMenuCloseDisplay, handleRemoveNode],
+    [contextMenu, handleContextMenuCloseDisplay, handleRemoveNodeWithSettleReset],
   );
 
   const handleSiteboardMouseDown = useCallback(
@@ -267,7 +386,7 @@ export function Siteboard({
                 hideColorCycleButton={hideCompactControls}
                 onActivate={onSelectNode}
                 onContextMenu={handleNodeContextMenu}
-                onDragStart={handleDragStart}
+                onDragStart={handleDragStartWithSettleReset}
                 onResizeStart={startStickyNoteResize}
                 onContentChange={handleStickyNoteContentChange}
                 onAutoHeightChange={handleStickyNoteAutoHeightChange}
@@ -301,7 +420,7 @@ export function Siteboard({
               onReload={handleReloadWebNode}
               onPinUrl={handlePinWebNodeUrl}
               onContextMenu={handleNodeContextMenu}
-              onDragStart={handleDragStart}
+              onDragStart={handleDragStartWithSettleReset}
               onResizeStart={handleResizeStart}
               onResizePreset={handleResizePreset}
               onNavigated={handleNavigated}
@@ -312,6 +431,14 @@ export function Siteboard({
               onScreenshotPresented={handleScreenshotPresented}
               onScrollEnded={handleScrollEnded}
               onUrlSubmit={handleUrlSubmit}
+              positionCorrectionAnimationToken={
+                positionCorrectionAnimations[node.id]?.token ?? null
+              }
+              positionCorrectionFromX={positionCorrectionAnimations[node.id]?.fromX ?? null}
+              positionCorrectionFromY={positionCorrectionAnimations[node.id]?.fromY ?? null}
+              positionCorrectionToX={positionCorrectionAnimations[node.id]?.toX ?? null}
+              positionCorrectionToY={positionCorrectionAnimations[node.id]?.toY ?? null}
+              onPositionCorrectionAnimationComplete={handlePositionCorrectionAnimationComplete}
             />
           );
         })}

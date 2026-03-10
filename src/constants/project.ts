@@ -16,8 +16,10 @@ export const MAX_VERTICAL_SEARCH_STEPS = 60;
 // 永続化時の保存デバウンス
 export const SAVE_DEBOUNCE_MS = 500;
 
-// ページ表示関連のヘッダー高さ
-export const PAGE_CHROME_HEIGHT = 48;
+// ノード外枠の chrome 高さ
+export const WEB_PAGE_TOP_BAR_HEIGHT = 32;
+export const WEB_PAGE_BOTTOM_BAR_HEIGHT = 32;
+export const STICKY_NOTE_HEADER_HEIGHT = 32;
 
 // 空フレーム追加時のセンタリングアニメーション
 export const CANVAS_CENTER_ANIMATION_DURATION_SEC = 0.4;

@@ -4,7 +4,7 @@ import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/components/Common/AppButton';
 import { NodeResizeHandle } from '@/components/Node/NodeResizeHandle';
-import { STICKY_NOTE_COLORS, STICKY_NOTE_MIN_HEIGHT } from '@/constants';
+import { STICKY_NOTE_COLORS, STICKY_NOTE_HEADER_HEIGHT, STICKY_NOTE_MIN_HEIGHT } from '@/constants';
 import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
@@ -179,7 +179,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       <div
         className={noteHeaderClassName}
         style={{
-          height: zoomPx(32),
+          height: zoomPx(STICKY_NOTE_HEADER_HEIGHT),
           paddingInlineStart: zoomPx(8),
           paddingInlineEnd: zoomPx(4),
           borderBottomWidth: zoomPx(1),

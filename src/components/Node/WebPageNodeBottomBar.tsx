@@ -4,7 +4,7 @@ import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/components/Common/AppButton';
 import { NodeTabletIcon } from '@/components/Node/NodeTabletIcon';
-import { SIZE_PRESETS } from '@/constants';
+import { SIZE_PRESETS, WEB_PAGE_BOTTOM_BAR_HEIGHT } from '@/constants';
 import { zoomPx } from '@/lib/canvas-zoom';
 
 import type { ComponentType, SVGProps } from 'react';
@@ -31,7 +31,7 @@ export function WebPageNodeBottomBar({
   onResizePreset,
 }: WebPageNodeBottomBarProps) {
   const bottomBarStyle = {
-    height: zoomPx(32),
+    height: zoomPx(WEB_PAGE_BOTTOM_BAR_HEIGHT),
     paddingInline: zoomPx(8),
     fontSize: zoomPx(11),
     lineHeight: zoomPx(15),

@@ -50,9 +50,17 @@
 - ドロップ位置が禁止された重なりを作る場合は、`x` または `y` の単軸だけを動かして再配置する
 - 補正は最短移動を優先し、補正後の余白は `DRAG_REPOSITION_GAP = 20`
 - webpage は他の全ノードとの重なりを禁止し、stickynote は webpage に対してのみ同じ制約を適用する
+- 重なり判定は placeholder / content ではなくノード外枠全体を基準にする。webpage は `top bar + content + bottom bar`、stickynote は `header + content` を 1 つの矩形として扱う
+- top bar / bottom bar / sticky header は `zoomPx` により画面上では固定 px のため、world 座標での外枠高さは current zoom に応じて `screenPx / zoom` で計算する
 - webpage の補正が発生した時は `settling` 扱いにし、`computeDisplayModes()` が `native` 復帰を抑制する
 - `WebPageNode` は drop 座標から補正後座標までを明示的な translate アニメーションで戻し、完了後に settling を解除して `native` 復帰を再判定する
 - Reduced Motion ではアニメーション待ちをせず、次フレームで settling を解除する
+
+## ノード外枠基準の配置計算
+
+- 新規ノード追加時の自動配置も drag 補正と同じ zoom-aware な外枠矩形を使う
+- センタリングや可視判定の fallback 計算も同じ外枠矩形を使い、DOM 実測がない場合でも content だけで過小評価しない
+- 一方でネイティブ Webview の bounds 更新や safe area 判定は従来どおり placeholder 矩形を使う。外枠判定と Webview 実表示判定は責務を分ける
 
 ## pan 専用最適化
 

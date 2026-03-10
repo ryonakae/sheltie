@@ -4,6 +4,7 @@ import ChevronRight from '@gravity-ui/icons/ChevronRight';
 import Pin from '@gravity-ui/icons/Pin';
 
 import { AppButton } from '@/components/Common/AppButton';
+import { WEB_PAGE_TOP_BAR_HEIGHT } from '@/constants';
 import { zoomPx } from '@/lib/canvas-zoom';
 
 export interface WebPageNodeTopBarProps {
@@ -41,7 +42,7 @@ export function WebPageNodeTopBar({
   onMouseDown,
 }: WebPageNodeTopBarProps) {
   const topBarStyle = {
-    height: zoomPx(32),
+    height: zoomPx(WEB_PAGE_TOP_BAR_HEIGHT),
     paddingInline: zoomPx(8),
     fontSize: zoomPx(12),
     lineHeight: zoomPx(16),

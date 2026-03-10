@@ -6,7 +6,8 @@ import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 import { ContextMenu } from '@/components/Common/ContextMenu';
-import { PAGE_CHROME_HEIGHT, STICKY_NOTE_COLORS } from '@/constants';
+import { STICKY_NOTE_COLORS } from '@/constants';
+import { getNodeFrameRect as getNodeWorldFrameRect } from '@/lib/siteboard-node-frame';
 import { selectActiveProject, useProjectStore } from '@/store/tab-store';
 import { type BoardNode, isNodeEmpty, isNodeMoved, isStickyNoteNode } from '@/types';
 
@@ -20,7 +21,7 @@ interface SidebarProps {
   onCentered?: (nodeId: string) => void;
 }
 
-type CenterTarget = Pick<BoardNode, 'id' | 'x' | 'y' | 'width' | 'height'>;
+type CenterTarget = Pick<BoardNode, 'id' | 'type' | 'x' | 'y' | 'width' | 'height'>;
 
 type FrameRect = {
   left: number;
@@ -31,7 +32,7 @@ type FrameRect = {
   height: number;
 };
 
-/** ノード本体（タイトルバー含む）を基準にセンタリングするため、必要に応じて実 DOM 幾何を取得する */
+/** ノード外枠全体を基準にセンタリングするため、必要に応じて実 DOM 幾何を取得する */
 function getNodeFrameRect(siteboard: HTMLElement, nodeId: string | undefined): FrameRect | null {
   if (!nodeId) return null;
   const frame = siteboard.querySelector<HTMLElement>(`[data-node-id="${nodeId}"]`);
@@ -102,17 +103,16 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
       const nextPanX = viewport.panX;
       const nextPanY = viewport.panY;
       const frameRect = getNodeFrameRect(siteboard, target.id);
+      const fallbackFrameRect = getNodeWorldFrameRect(target, viewport.zoom);
 
       const left = frameRect ? frameRect.left - rect.left : target.x * viewport.zoom + nextPanX;
       const top = frameRect ? frameRect.top - rect.top : target.y * viewport.zoom + nextPanY;
       const right = frameRect ? left + frameRect.width : left + target.width * viewport.zoom;
       const bottom = frameRect
         ? top + frameRect.height
-        : top + (target.height + PAGE_CHROME_HEIGHT) * viewport.zoom;
+        : top + fallbackFrameRect.height * viewport.zoom;
       const frameWidth = frameRect ? frameRect.width : target.width * viewport.zoom;
-      const frameHeight = frameRect
-        ? frameRect.height
-        : (target.height + PAGE_CHROME_HEIGHT) * viewport.zoom;
+      const frameHeight = frameRect ? frameRect.height : fallbackFrameRect.height * viewport.zoom;
 
       let panX = nextPanX;
       let panY = nextPanY;

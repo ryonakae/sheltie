@@ -18,6 +18,7 @@ import {
   documentNodeToBoardNode,
   sanitizeProjectDocument,
 } from '@/lib/project-document';
+import { getNodeFrameHeight, getNodeFrameRect } from '@/lib/siteboard-node-frame';
 import {
   type BoardNode,
   type Project,
@@ -89,11 +90,16 @@ function isHorizontalOverlapping(
 
 function findNonOverlappingPosition(
   nodes: BoardNode[],
+  type: BoardNode['type'],
   x: number,
   y: number,
   width: number,
   height: number,
+  zoom: number,
 ) {
+  const existingRects = nodes.map((node) => getNodeFrameRect(node, zoom));
+  const candidateFrameHeight = getNodeFrameHeight({ type, height }, zoom);
+
   if (nodes.length === 0) {
     return { x, y };
   }
@@ -102,7 +108,9 @@ function findNonOverlappingPosition(
     const yCandidates = step === 0 ? [0] : [step * PAGE_GAP, -step * PAGE_GAP];
     for (const yOffset of yCandidates) {
       const candidateY = y + yOffset;
-      const sameRowNodes = nodes.filter((node) => isVerticalOverlapping(candidateY, height, node));
+      const sameRowNodes = existingRects.filter((node) =>
+        isVerticalOverlapping(candidateY, candidateFrameHeight, node),
+      );
 
       if (sameRowNodes.length === 0) {
         return { x, y: candidateY };
@@ -123,7 +131,7 @@ function findNonOverlappingPosition(
     }
   }
 
-  const fallbackY = Math.max(...nodes.map((node) => node.y + node.height)) + PAGE_GAP;
+  const fallbackY = Math.max(...existingRects.map((node) => node.bottom)) + PAGE_GAP;
   return { x, y: fallbackY };
 }
 
@@ -264,6 +272,7 @@ interface ProjectActions {
     projectId: string,
     url?: string,
     options?: { x: number; y: number; width: number; height: number },
+    zoom?: number,
   ) => BoardNode | null;
   setWebNodeUrl: (projectId: string, nodeId: string, url: string) => void;
   removeNode: (projectId: string, nodeId: string) => void;
@@ -282,6 +291,7 @@ interface ProjectActions {
   addStickyNoteNode: (
     projectId: string,
     options?: { x: number; y: number; width: number; height: number },
+    zoom?: number,
   ) => BoardNode | null;
   updateStickyNoteContent: (projectId: string, nodeId: string, content: string) => void;
   cycleStickyNoteColor: (projectId: string, nodeId: string) => void;
@@ -472,7 +482,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       projects: touchProjects(state.projects, projectId),
     })),
 
-  addWebNode: (projectId, url = '', options) => {
+  addWebNode: (projectId, url = '', options, zoom = 1) => {
     let createdNode: BoardNode | null = null;
 
     set((state) =>
@@ -498,10 +508,12 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         };
         const positioned = findNonOverlappingPosition(
           nodes,
+          newNodeBase.type,
           options?.x ?? 0,
           options?.y ?? 0,
           newNodeBase.width,
           newNodeBase.height,
+          zoom,
         );
         const newNode = {
           ...newNodeBase,
@@ -654,7 +666,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     })),
 
-  addStickyNoteNode: (projectId, options) => {
+  addStickyNoteNode: (projectId, options, zoom = 1) => {
     let createdNode: BoardNode | null = null;
 
     set((state) =>
@@ -673,10 +685,12 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         };
         const positioned = findNonOverlappingPosition(
           nodes,
+          nextNode.type,
           options?.x ?? 0,
           options?.y ?? 0,
           nextNode.width,
           nextNode.height,
+          zoom,
         );
         const newNode = { ...nextNode, x: positioned.x, y: positioned.y };
         createdNode = newNode;

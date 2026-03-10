@@ -8,6 +8,7 @@
 - `BoardNodeType = 'webpage' | 'stickynote'`
 - `BoardNode`
   - 基本: `id`, `title`, `url`, `x`, `y`, `width`, `height`
+  - `height` は content / Webview 本体の高さ。ノード外枠全体の高さではない
   - 任意: `type`, `addedUrl`, `content`, `colorIndex`
 - `WebPageNode`
   - `BoardNode` を拡張した webpage 専用補助型
@@ -74,6 +75,10 @@
 - `DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 }`
 - `DEFAULT_PAGE_WIDTH = 375`
 - `DEFAULT_PAGE_HEIGHT = 812`
+- `WEB_PAGE_TOP_BAR_HEIGHT = 32`
+- `WEB_PAGE_BOTTOM_BAR_HEIGHT = 32`
+- `DEFAULT_STICKY_NOTE_HEIGHT = 200`
+- `STICKY_NOTE_HEADER_HEIGHT = 32`
 - `SIZE_PRESETS = [モバイル, タブレット, PC]`
 
 `src/constants/siteboard.ts`
@@ -102,6 +107,7 @@
 - Undo/Redo は `activeId` のプロジェクトにのみ適用し、`HOME_ID` では no-op
 - node 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
 - ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
+- 重なり補正・新規ノード自動配置・センタリング fallback は、content 高ではなくノード外枠を基準にする。chrome は `zoomPx` で画面 px が固定されるため、world 座標での外枠高さは current zoom に依存する
 - 同一 `filePath` の `.siteboard` を複数のローカル project に関連付けない
 - `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `1` のみ受け入れる
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない

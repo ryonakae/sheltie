@@ -170,6 +170,7 @@ export function Siteboard({
           proposedX: x,
           proposedY: y,
           gap: DRAG_REPOSITION_GAP,
+          zoom: zoomRef.current,
         });
         if (resolvedPosition.corrected && isWebPageNode(movingNode)) {
           positionCorrectionSequenceRef.current += 1;

@@ -8,13 +8,16 @@
 - `BoardNodeType = 'webpage' | 'stickynote'`
 - `BoardNode`
   - 基本: `id`, `title`, `url`, `x`, `y`, `width`, `height`
-  - 任意: `type`, `addedUrl`, `content`, `colorIndex`, `webviewLabel`
+  - 任意: `type`, `addedUrl`, `content`, `colorIndex`
 - `WebPageNode`
   - `BoardNode` を拡張した webpage 専用補助型
   - `type` は `'webpage' | undefined`
 - `StickyNoteNode`
   - `BoardNode` を拡張した付箋専用補助型
   - `type` は `'stickynote'`
+- `ProjectWebviewRuntime`
+  - project ごとの runtime-only state
+  - `labelsByNodeId: Record<string, string>`
 - `Viewport`: `zoom`, `panX`, `panY`
 - `SiteboardDocumentNode`
   - `.siteboard` に保存される node の union 型
@@ -31,7 +34,7 @@
   - `projects`, `openIds`, `activeId`
 - `ProjectStore`（`tab-store.ts` 内部）
   - `ProjectState` + actions + ランタイム状態
-  - ランタイム状態: `isLoaded`, `nodeHistories`
+  - ランタイム状態: `isLoaded`, `nodeHistories`, `webviewRuntime`
   - runtime action: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`
 - `ProjectNodeHistory`（`tab-store.ts` 内部）
   - `past`: 直前までの `BoardNode[]` スナップショット配列
@@ -41,11 +44,12 @@
 
 - `.siteboard` は共有用ドキュメント形式
   - 保存する: `schemaVersion`, `title`, `nodes`
-  - 保存しない: ローカル project id, `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `webviewLabel`
+  - 保存しない: ローカル project id, `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, Webview runtime label
 - ローカル状態は再起動復元用
   - `nodes` に加えて `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保持する
   - 未保存編集もローカルから復元する
   - Tauri Store の project state key は `projectStateV2` を使用する。旧 key は migration せず読み捨てる
+  - `webviewRuntime` と `nodeHistories` は runtime-only のため復元しない
 
 ## 未保存変更の判定
 
@@ -87,11 +91,12 @@
 
 ## 不変条件
 
-- `webviewLabel` はランタイム専用で永続化しない
-- `webviewLabel` は「現在接続済みのネイティブ Webview がある」間だけ設定する。再マウント開始時に `clearWebNodeWebviewLabel` で外し、再生成完了後に `setWebNodeWebviewLabel` で付け直す。
+- `BoardNode` は永続化対象だけを持ち、Webview 接続状態は含めない
+- `webviewRuntime.labelsByNodeId[nodeId]` は「現在接続済みのネイティブ Webview がある」間だけ設定する。再マウント開始時に `clearWebNodeWebviewLabel` で外し、再生成完了後に `setWebNodeWebviewLabel` で付け直す。
 - 付箋ノードは `type: 'stickynote'` と `content` / `colorIndex` を利用する
 - 空フレーム（`url === ''`）は Webview 未作成状態を許容する
 - `nodeHistories` はランタイム専用で永続化しない（`_restoreState` で必ず初期化）
+- `webviewRuntime` はランタイム専用で永続化しない（`_restoreState` と project 削除時に必ず破棄）
 - ローカル project state は現行 `ProjectState` のみ復元対象とし、旧 shape は migration しない
 - Undo/Redo は `activeId` のプロジェクトにのみ適用し、`HOME_ID` では no-op
 - node 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない

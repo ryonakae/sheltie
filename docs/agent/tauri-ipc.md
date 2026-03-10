@@ -45,6 +45,8 @@
 
 ## JS ブリッジ API
 
+`src/lib/tauri-bridge.ts` は公開 facade で、内部実装は `src/lib/tauri-bridge/{project,theme,events,webview}.ts` に分割している。
+
 ### `api`
 
 - `loadProjectState`, `saveProjectState`, `closeReady`

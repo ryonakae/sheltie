@@ -22,8 +22,6 @@ export interface BoardNode {
   y: number;
   width: number;
   height: number;
-  /** Tauri Webview のラベル（ランタイムのみ・永続化不要） */
-  webviewLabel?: string;
 }
 
 export interface WebPageNode extends BoardNode {
@@ -125,4 +123,8 @@ export interface ProjectState {
   openIds: string[];
   /** 現在アクティブなプロジェクト ID（HOME_ID の場合はホーム画面） */
   activeId: string;
+}
+
+export interface ProjectWebviewRuntime {
+  labelsByNodeId: Record<string, string>;
 }

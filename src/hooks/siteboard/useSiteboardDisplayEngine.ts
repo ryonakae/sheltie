@@ -1,16 +1,16 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-  HYSTERESIS_PX,
-  NATIVE_SAFE_MARGIN_BOTTOM_PX,
-  NATIVE_SAFE_MARGIN_PX,
-  PRE_DISPLAY_MARGIN_PX,
-  WEBVIEW_REVEAL_DELAY_MS,
-} from '@/constants';
+import { WEBVIEW_REVEAL_DELAY_MS } from '@/constants';
 import { getPlatformInfo, webviewApi } from '@/lib/tauri-bridge';
-import type { DisplayMode, BoardNode } from '@/types';
-import { isWebPageNode } from '@/types';
+import type { DisplayMode, WebPageNode } from '@/types';
+
+import { getWebPageElements, setDisplayModeAttribute } from './display-engine/dom';
+import {
+  isFullyInsideNativeSafeArea,
+  isOutsideExpandedViewport,
+  resolveViewportDisplayMode,
+} from './display-engine/mode';
 
 import type { InteractionType } from './types';
 
@@ -18,7 +18,8 @@ import type { InteractionType } from './types';
 const SCREENSHOT_CLIPPING_ENABLED = true;
 
 interface UseSiteboardDisplayEngineParams {
-  nodes: BoardNode[];
+  webPageNodes: WebPageNode[];
+  webviewLabelsByNodeId: Record<string, string>;
   projectId: string;
   containerRef: React.RefObject<HTMLDivElement | null>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
@@ -34,7 +35,8 @@ interface CaptureScreenshotOptions {
 }
 
 export function useSiteboardDisplayEngine({
-  nodes,
+  webPageNodes,
+  webviewLabelsByNodeId,
   projectId,
   containerRef,
   canvasRef,
@@ -67,6 +69,13 @@ export function useSiteboardDisplayEngine({
     Record<string, { url: string; resolvers: Array<() => void> }>
   >({});
   const knownNodeIdsRef = useRef<Set<string>>(new Set());
+  const webPageIds = useMemo(() => webPageNodes.map((page) => page.id), [webPageNodes]);
+  const webPageIdsKey = useMemo(() => webPageIds.join('|'), [webPageIds]);
+
+  const getWebviewLabel = useCallback(
+    (nodeId: string) => webviewLabelsByNodeId[nodeId],
+    [webviewLabelsByNodeId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -136,14 +145,8 @@ export function useSiteboardDisplayEngine({
 
   const setNodeDisplayMode = useCallback(
     (nodeId: string, mode: DisplayMode, wrapper?: HTMLElement | null) => {
-      const targetWrapper =
-        wrapper ??
-        (canvasRef.current?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null) ??
-        null;
-
-      if (targetWrapper?.getAttribute('data-display-mode') !== mode) {
-        targetWrapper?.setAttribute('data-display-mode', mode);
-      }
+      const targetWrapper = wrapper ?? getWebPageElements(canvasRef.current, nodeId).wrapper;
+      setDisplayModeAttribute(targetWrapper, mode);
 
       setDisplayModes((prev) => {
         if (prev[nodeId] === mode) return prev;
@@ -225,48 +228,32 @@ export function useSiteboardDisplayEngine({
   const computeDisplayModes = useCallback(() => {
     if (!containerRef.current || !canvasRef.current) return;
 
-    const cr = containerRef.current.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
     const modes: Record<string, DisplayMode> = {};
     // 非 macOS: screenshot→native 遷移ページは show 後 1 フレーム待ってスクショを消す
     const deferredNativeSwaps: HTMLElement[] = [];
 
-    for (const page of nodes) {
-      const wrapper = canvasRef.current.querySelector(
-        `[data-node-id="${page.id}"]`,
-      ) as HTMLElement | null;
-      const el = wrapper?.querySelector('[data-webview-placeholder]') as HTMLElement | null;
-      if (!el || !wrapper) {
+    for (const page of webPageNodes) {
+      const label = getWebviewLabel(page.id);
+      const { wrapper, placeholder } = getWebPageElements(canvasRef.current, page.id);
+      if (!placeholder || !wrapper) {
         modes[page.id] = 'hidden';
         cancelNativeReveal(page.id);
         continue;
       }
 
-      const pr = el.getBoundingClientRect();
-
-      let nextMode: DisplayMode;
-      if (
-        pr.right <= cr.left ||
-        pr.left >= cr.right ||
-        pr.bottom <= cr.top ||
-        pr.top >= cr.bottom
-      ) {
-        nextMode = 'hidden';
-      } else if (
-        pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
-        pr.right <= cr.right - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX &&
-        pr.top >= cr.top + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
-        pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_BOTTOM_PX + HYSTERESIS_PX
-      ) {
-        nextMode = 'native';
-      } else {
-        nextMode = hasStoredScreenshot(page.id) ? 'screenshot' : 'native';
-      }
+      const placeholderRect = placeholder.getBoundingClientRect();
+      let nextMode = resolveViewportDisplayMode(
+        placeholderRect,
+        containerRect,
+        hasStoredScreenshot(page.id),
+      );
 
       // コンテキストメニュー表示中のページは native に復帰させない
       if (contextMenuNodeIdRef.current === page.id && nextMode === 'native') {
         nextMode = hasStoredScreenshot(page.id) ? 'screenshot' : 'hidden';
       }
-      if (!page.webviewLabel && nextMode === 'native') {
+      if (!label && nextMode === 'native') {
         nextMode = getFallbackDisplayMode(page.id);
       }
 
@@ -277,14 +264,14 @@ export function useSiteboardDisplayEngine({
 
       modes[page.id] = nextMode;
 
-      if (page.webviewLabel) {
+      if (label) {
         if (nextMode === 'native') {
           void webviewApi.updateBounds(
             page.id,
-            pr.left,
-            pr.top,
-            pr.width,
-            pr.height,
+            placeholderRect.left,
+            placeholderRect.top,
+            placeholderRect.width,
+            placeholderRect.height,
             zoomRef.current,
           );
 
@@ -301,7 +288,7 @@ export function useSiteboardDisplayEngine({
               nativeRevealTokenRef.current[page.id] = token;
 
               void webviewApi.setOpacity(page.id, 0);
-              void webviewApi.show(page.webviewLabel);
+              void webviewApi.show(label);
 
               nativeRevealTimersRef.current[page.id] = window.setTimeout(() => {
                 if (nativeRevealTokenRef.current[page.id] !== token) return;
@@ -314,12 +301,10 @@ export function useSiteboardDisplayEngine({
                   pendingNativeRevealRef.current.delete(page.id);
                   delete nativeRevealTokenRef.current[page.id];
 
-                  const latestWrapper = canvasRef.current?.querySelector(
-                    `[data-node-id="${page.id}"]`,
-                  ) as HTMLElement | null;
+                  const latestWrapper = getWebPageElements(canvasRef.current, page.id).wrapper;
                   if (!latestWrapper) return;
 
-                  latestWrapper.setAttribute('data-display-mode', 'native');
+                  setDisplayModeAttribute(latestWrapper, 'native');
                   setDisplayModes((prev) => {
                     if (prev[page.id] === 'native') return prev;
                     return { ...prev, [page.id]: 'native' };
@@ -327,28 +312,28 @@ export function useSiteboardDisplayEngine({
                 });
               }, WEBVIEW_REVEAL_DELAY_MS);
             } else {
-              void webviewApi.show(page.webviewLabel);
+              void webviewApi.show(label);
             }
           } else {
             if (isMacOsRef.current) {
               void webviewApi.setOpacity(page.id, 1);
             }
-            void webviewApi.show(page.webviewLabel);
+            void webviewApi.show(label);
             if (isScreenshotToNative) {
               deferredNativeSwaps.push(wrapper);
             } else {
-              wrapper.setAttribute('data-display-mode', 'native');
+              setDisplayModeAttribute(wrapper, 'native');
             }
           }
         } else {
           if (isMacOsRef.current) {
             void webviewApi.setOpacity(page.id, 1);
           }
-          wrapper.setAttribute('data-display-mode', nextMode);
-          void webviewApi.hide(page.webviewLabel);
+          setDisplayModeAttribute(wrapper, nextMode);
+          void webviewApi.hide(label);
         }
       } else {
-        wrapper.setAttribute('data-display-mode', nextMode);
+        setDisplayModeAttribute(wrapper, nextMode);
       }
     }
 
@@ -356,7 +341,7 @@ export function useSiteboardDisplayEngine({
       // WebView が OS レベルで描画されるのを 1 フレーム待ってからスクリーンショットを非表示にする
       requestAnimationFrame(() => {
         for (const wrapper of deferredNativeSwaps) {
-          wrapper.setAttribute('data-display-mode', 'native');
+          setDisplayModeAttribute(wrapper, 'native');
         }
         setDisplayModes(modes);
       });
@@ -368,8 +353,9 @@ export function useSiteboardDisplayEngine({
     cancelNativeReveal,
     containerRef,
     getFallbackDisplayMode,
+    getWebviewLabel,
     hasStoredScreenshot,
-    nodes,
+    webPageNodes,
     zoomRef,
   ]);
 
@@ -388,8 +374,8 @@ export function useSiteboardDisplayEngine({
   }, [computeDisplayModes]);
 
   const computeInteractionModes = useCallback(() => {
-    const cr = containerRectRef.current;
-    if (!cr || !canvasRef.current) return;
+    const containerRect = containerRectRef.current;
+    if (!containerRect || !canvasRef.current) return;
 
     const boundsEntries: {
       pageId: string;
@@ -405,33 +391,18 @@ export function useSiteboardDisplayEngine({
     const isPanOnly =
       activeInteractionsRef.current.has('pan') && !activeInteractionsRef.current.has('zoom');
 
-    for (const page of nodes) {
-      const wrapper = canvasRef.current.querySelector(
-        `[data-node-id="${page.id}"]`,
-      ) as HTMLElement | null;
-      const el = wrapper?.querySelector('[data-webview-placeholder]') as HTMLElement | null;
-      if (!el || !wrapper) continue;
+    for (const page of webPageNodes) {
+      const label = getWebviewLabel(page.id);
+      const { wrapper, placeholder } = getWebPageElements(canvasRef.current, page.id);
+      if (!placeholder || !wrapper) continue;
 
-      const pr = el.getBoundingClientRect();
+      const placeholderRect = placeholder.getBoundingClientRect();
       const currentMode = (wrapper.getAttribute('data-display-mode') ?? 'native') as DisplayMode;
 
-      const isOutsideExpanded =
-        pr.right <= cr.left - PRE_DISPLAY_MARGIN_PX ||
-        pr.left >= cr.right + PRE_DISPLAY_MARGIN_PX ||
-        pr.bottom <= cr.top - PRE_DISPLAY_MARGIN_PX ||
-        pr.top >= cr.bottom + PRE_DISPLAY_MARGIN_PX;
+      const isOutsideExpanded = isOutsideExpandedViewport(placeholderRect, containerRect);
+      const isFullyInside = isFullyInsideNativeSafeArea(placeholderRect, containerRect);
 
-      const isOutsideCanvas =
-        pr.right <= cr.left || pr.left >= cr.right || pr.bottom <= cr.top || pr.top >= cr.bottom;
-
-      const isFullyInside =
-        !isOutsideCanvas &&
-        pr.left >= cr.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
-        pr.right <= cr.right - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX &&
-        pr.top >= cr.top + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&
-        pr.bottom <= cr.bottom - NATIVE_SAFE_MARGIN_BOTTOM_PX + HYSTERESIS_PX;
-
-      if (!page.webviewLabel) {
+      if (!label) {
         setNodeDisplayMode(page.id, getFallbackDisplayMode(page.id, isOutsideExpanded), wrapper);
         continue;
       }
@@ -439,35 +410,43 @@ export function useSiteboardDisplayEngine({
       if (currentMode === 'native') {
         if (isOutsideExpanded) {
           setNodeDisplayMode(page.id, 'hidden', wrapper);
-          hideNodeWebview(page.id, page.webviewLabel);
+          hideNodeWebview(page.id, label);
         } else if (!isFullyInside) {
           if (hasStoredScreenshot(page.id)) {
             setNodeDisplayMode(page.id, 'screenshot', wrapper);
-            hideNodeWebview(page.id, page.webviewLabel);
+            hideNodeWebview(page.id, label);
           } else {
             if (isPanOnly) {
-              positionEntries.push({ pageId: page.id, x: pr.left, y: pr.top });
+              positionEntries.push({
+                pageId: page.id,
+                x: placeholderRect.left,
+                y: placeholderRect.top,
+              });
             } else {
               boundsEntries.push({
                 pageId: page.id,
-                x: pr.left,
-                y: pr.top,
-                w: pr.width,
-                h: pr.height,
+                x: placeholderRect.left,
+                y: placeholderRect.top,
+                w: placeholderRect.width,
+                h: placeholderRect.height,
                 zoom: zoomRef.current,
               });
             }
           }
         } else {
           if (isPanOnly) {
-            positionEntries.push({ pageId: page.id, x: pr.left, y: pr.top });
+            positionEntries.push({
+              pageId: page.id,
+              x: placeholderRect.left,
+              y: placeholderRect.top,
+            });
           } else {
             boundsEntries.push({
               pageId: page.id,
-              x: pr.left,
-              y: pr.top,
-              w: pr.width,
-              h: pr.height,
+              x: placeholderRect.left,
+              y: placeholderRect.top,
+              w: placeholderRect.width,
+              h: placeholderRect.height,
               zoom: zoomRef.current,
             });
           }
@@ -491,9 +470,10 @@ export function useSiteboardDisplayEngine({
   }, [
     canvasRef,
     getFallbackDisplayMode,
+    getWebviewLabel,
     hasStoredScreenshot,
     hideNodeWebview,
-    nodes,
+    webPageNodes,
     setNodeDisplayMode,
     zoomRef,
   ]);
@@ -557,8 +537,8 @@ export function useSiteboardDisplayEngine({
           await waitForScreenshotPresentation(nodeId, assetUrl);
         }
 
-        const page = nodes.find((candidate) => candidate.id === nodeId);
-        if (page?.webviewLabel) {
+        const label = getWebviewLabel(nodeId);
+        if (label) {
           const shouldUseScreenshotNow =
             contextMenuNodeIdRef.current === nodeId ||
             activeInteractionsRef.current.has('pan') ||
@@ -566,7 +546,7 @@ export function useSiteboardDisplayEngine({
 
           if (shouldUseScreenshotNow) {
             setNodeDisplayMode(nodeId, 'screenshot');
-            hideNodeWebview(nodeId, page.webviewLabel);
+            hideNodeWebview(nodeId, label);
             return true;
           }
         }
@@ -584,8 +564,8 @@ export function useSiteboardDisplayEngine({
     },
     [
       computeDisplayModes,
+      getWebviewLabel,
       hideNodeWebview,
-      nodes,
       projectId,
       setNodeDisplayMode,
       waitForScreenshotPresentation,
@@ -609,17 +589,15 @@ export function useSiteboardDisplayEngine({
   const handlePageResizeStart = useCallback(
     (nodeId: string) => {
       resizingNodeIdRef.current = nodeId;
-      const page = nodes.find((p) => p.id === nodeId);
-      if (!page?.webviewLabel) return;
+      const label = getWebviewLabel(nodeId);
+      if (!label) return;
 
       cancelNativeReveal(nodeId);
 
-      const wrapper = canvasRef.current?.querySelector(
-        `[data-node-id="${nodeId}"]`,
-      ) as HTMLElement | null;
+      const { wrapper } = getWebPageElements(canvasRef.current, nodeId);
       if (hasStoredScreenshot(nodeId)) {
         setNodeDisplayMode(nodeId, 'screenshot', wrapper);
-        hideNodeWebview(nodeId, page.webviewLabel);
+        hideNodeWebview(nodeId, label);
       } else {
         setNodeDisplayMode(nodeId, 'native', wrapper);
       }
@@ -627,9 +605,9 @@ export function useSiteboardDisplayEngine({
     [
       canvasRef,
       cancelNativeReveal,
+      getWebviewLabel,
       hasStoredScreenshot,
       hideNodeWebview,
-      nodes,
       setNodeDisplayMode,
     ],
   );
@@ -640,41 +618,37 @@ export function useSiteboardDisplayEngine({
         resizingNodeIdRef.current = null;
       }
 
-      const page = nodes.find((p) => p.id === nodeId);
-      if (!page?.webviewLabel) {
+      const label = getWebviewLabel(nodeId);
+      if (!label) {
         if (activeInteractionsRef.current.size === 0) {
           computeDisplayModes();
         }
         return;
       }
-      const webviewLabel = page.webviewLabel;
 
       requestAnimationFrame(() => {
         if (activeInteractionsRef.current.has('resize')) return;
 
-        const wrapper = canvasRef.current?.querySelector(
-          `[data-node-id="${nodeId}"]`,
-        ) as HTMLElement | null;
-        const el = wrapper?.querySelector('[data-webview-placeholder]') as HTMLElement | null;
-        if (!wrapper || !el) {
+        const { wrapper, placeholder } = getWebPageElements(canvasRef.current, nodeId);
+        if (!wrapper || !placeholder) {
           if (activeInteractionsRef.current.size === 0) {
             computeDisplayModes();
           }
           return;
         }
 
-        const pr = el.getBoundingClientRect();
+        const placeholderRect = placeholder.getBoundingClientRect();
         setNodeDisplayMode(nodeId, 'native', wrapper);
 
         void webviewApi.updateBounds(
-          page.id,
-          pr.left,
-          pr.top,
-          pr.width,
-          pr.height,
+          nodeId,
+          placeholderRect.left,
+          placeholderRect.top,
+          placeholderRect.width,
+          placeholderRect.height,
           zoomRef.current,
         );
-        void webviewApi.show(webviewLabel);
+        void webviewApi.show(label);
         if (isMacOsRef.current) {
           void webviewApi.setOpacity(nodeId, 0);
         }
@@ -700,7 +674,7 @@ export function useSiteboardDisplayEngine({
     [
       canvasRef,
       computeDisplayModes,
-      nodes,
+      getWebviewLabel,
       setNodeDisplayMode,
       waitForWebviewResizeRelayout,
       zoomRef,
@@ -717,20 +691,19 @@ export function useSiteboardDisplayEngine({
 
         if (type === 'drag') {
           if (canvasRef.current) {
-            for (const page of nodes) {
-              const wrapper = canvasRef.current.querySelector(
-                `[data-node-id="${page.id}"]`,
-              ) as HTMLElement | null;
+            for (const page of webPageNodes) {
+              const label = getWebviewLabel(page.id);
+              const { wrapper } = getWebPageElements(canvasRef.current, page.id);
               if (!wrapper) continue;
 
-              if (!page.webviewLabel) {
+              if (!label) {
                 setNodeDisplayMode(page.id, getFallbackDisplayMode(page.id), wrapper);
                 continue;
               }
 
               if (hasStoredScreenshot(page.id)) {
                 setNodeDisplayMode(page.id, 'screenshot', wrapper);
-                hideNodeWebview(page.id, page.webviewLabel);
+                hideNodeWebview(page.id, label);
               } else {
                 setNodeDisplayMode(page.id, 'native', wrapper);
               }
@@ -740,20 +713,19 @@ export function useSiteboardDisplayEngine({
           // resize 開始時の表示制御は handlePageResizeStart 側で行う
         } else {
           if (SCREENSHOT_CLIPPING_ENABLED && canvasRef.current) {
-            for (const page of nodes) {
-              const wrapper = canvasRef.current.querySelector(
-                `[data-node-id="${page.id}"]`,
-              ) as HTMLElement | null;
+            for (const page of webPageNodes) {
+              const label = getWebviewLabel(page.id);
+              const { wrapper } = getWebPageElements(canvasRef.current, page.id);
               if (!wrapper) continue;
 
-              if (!page.webviewLabel) {
+              if (!label) {
                 setNodeDisplayMode(page.id, getFallbackDisplayMode(page.id), wrapper);
                 continue;
               }
 
               if (hasStoredScreenshot(page.id)) {
                 setNodeDisplayMode(page.id, 'screenshot', wrapper);
-                hideNodeWebview(page.id, page.webviewLabel);
+                hideNodeWebview(page.id, label);
                 continue;
               }
 
@@ -796,21 +768,21 @@ export function useSiteboardDisplayEngine({
       computeInteractionModes,
       containerRef,
       getFallbackDisplayMode,
+      getWebviewLabel,
       hasStoredScreenshot,
       hideNodeWebview,
-      nodes,
       scheduleZoomRestoreAfterReflow,
       setNodeDisplayMode,
+      webPageNodes,
     ],
   );
 
   const handleContextMenuOpen = useCallback(
     async (nodeId: string) => {
       cancelNativeReveal(nodeId);
+      const label = getWebviewLabel(nodeId);
 
-      const page = nodes.find((p) => p.id === nodeId);
-
-      if (!hasStoredScreenshot(nodeId) && page?.webviewLabel) {
+      if (!hasStoredScreenshot(nodeId) && label) {
         await ensureScreenshotReady(nodeId, {
           forceDuringInteraction: true,
         });
@@ -818,24 +790,22 @@ export function useSiteboardDisplayEngine({
 
       contextMenuNodeIdRef.current = nodeId;
 
-      const wrapper = canvasRef.current?.querySelector(
-        `[data-node-id="${nodeId}"]`,
-      ) as HTMLElement | null;
+      const { wrapper } = getWebPageElements(canvasRef.current, nodeId);
 
       const newMode: DisplayMode = hasStoredScreenshot(nodeId) ? 'screenshot' : 'hidden';
       setNodeDisplayMode(nodeId, newMode, wrapper);
 
-      if (page?.webviewLabel) {
-        hideNodeWebview(nodeId, page.webviewLabel);
+      if (label) {
+        hideNodeWebview(nodeId, label);
       }
     },
     [
       canvasRef,
       cancelNativeReveal,
       ensureScreenshotReady,
+      getWebviewLabel,
       hasStoredScreenshot,
       hideNodeWebview,
-      nodes,
       setNodeDisplayMode,
     ],
   );
@@ -873,14 +843,14 @@ export function useSiteboardDisplayEngine({
   );
 
   useEffect(() => {
-    const nextIds = new Set(nodes.map((page) => page.id));
+    const nextIds = new Set(webPageIds);
     for (const nodeId of knownNodeIdsRef.current) {
       if (!nextIds.has(nodeId)) {
         cleanupPageArtifacts(nodeId);
       }
     }
     knownNodeIdsRef.current = nextIds;
-  }, [cleanupPageArtifacts, nodes]);
+  }, [cleanupPageArtifacts, webPageIds, webPageIdsKey]);
 
   useEffect(() => {
     captureScreenshotRef.current = captureScreenshot;
@@ -912,11 +882,11 @@ export function useSiteboardDisplayEngine({
   // screenshotReadyRef を true に設定することで、右クリック時の白画面や
   // 起動直後の Webview がサイドバーに重なる問題を防ぐ。
   useEffect(() => {
-    const webPageIds = nodes.filter((p) => isWebPageNode(p) && p.url).map((p) => p.id);
-    if (webPageIds.length === 0) return;
+    const restorablePageIds = webPageNodes.filter((page) => page.url).map((page) => page.id);
+    if (restorablePageIds.length === 0) return;
 
     let cancelled = false;
-    void webviewApi.getExistingScreenshotPaths(projectId, webPageIds).then((entries) => {
+    void webviewApi.getExistingScreenshotPaths(projectId, restorablePageIds).then((entries) => {
       if (cancelled || entries.length === 0) return;
 
       const restoredUrls: Record<string, string> = {};
@@ -932,9 +902,7 @@ export function useSiteboardDisplayEngine({
     return () => {
       cancelled = true;
     };
-    // 初回マウント時のみ実行（projectId は起動後に変化しない）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [computeDisplayModes, projectId, webPageIdsKey, webPageNodes]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -973,7 +941,7 @@ export function useSiteboardDisplayEngine({
   useEffect(() => {
     if (!centeredNodeId) return;
 
-    const targetPage = nodes.find((p) => p.id === centeredNodeId);
+    const targetPage = webPageNodes.find((page) => page.id === centeredNodeId);
     if (!targetPage) {
       onCenteredNodeHandled?.();
       return;
@@ -985,7 +953,7 @@ export function useSiteboardDisplayEngine({
     });
 
     return () => cancelAnimationFrame(frameId);
-  }, [centeredNodeId, computeDisplayModes, onCenteredNodeHandled, nodes]);
+  }, [centeredNodeId, computeDisplayModes, onCenteredNodeHandled, webPageNodes]);
 
   useEffect(() => {
     return () => {

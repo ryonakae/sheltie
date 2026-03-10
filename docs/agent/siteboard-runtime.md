@@ -88,7 +88,7 @@
 5. `screenshotReadyRef.current[pageId] = true` をセット
 
 **フロー（起動時復元）**:
-1. `useSiteboardDisplayEngine` の初回マウント時 effect が実行
+1. `useSiteboardDisplayEngine` の `projectId + webpage node ids` 依存 effect が実行
 2. `get_existing_screenshot_paths(projectId, pageIds)` で既存ファイルパスを一括取得
 3. `convertFileSrc` でアセット URL に変換 → `screenshotReadyRef` と `screenshotUrls` を更新
 4. `computeDisplayModes()` を再実行（復元スクショを考慮した正しいモード判定）
@@ -126,12 +126,12 @@
 
 ## Webview 生成・破棄の注意
 
-- React StrictMode 二重マウント対策として、`WebPageNode` で作成競合をガードする。
-- タブ切替で `ProjectScreen` が再マウントされるため、同じ `pageId` の Webview は create/destroy が短時間で連続しうる。`WebPageNode` は owner token と pending destroy Promise で直列化し、旧 cleanup が新 Webview を閉じないようにする。
+- React StrictMode 二重マウント対策として、`WebPageNode` では `useWebPageWebviewLifecycle` が作成競合をガードする。
+- タブ切替で `ProjectScreen` が再マウントされるため、同じ `pageId` の Webview は create/destroy が短時間で連続しうる。`useWebPageWebviewLifecycle` は owner token と pending destroy Promise で直列化し、旧 cleanup が新 Webview を閉じないようにする。
 - Webview API は例外時 no-op を許容する前提。
 - 空フレーム（`url === ''`）は Webview を作成しない。
 - Webview の create/destroy は URL 同期から切り離し、`node.url` 更新では再生成しない。
-- `webviewLabel` は「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。`webviewLabel` が無いページは `native` に戻さず `screenshot` または `hidden` を使う。
+- `webviewLabel` は `BoardNode` に持たず、`tab-store` の `webviewRuntime.labelsByNodeId` に保持する。「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。label が無いページは `native` に戻さず `screenshot` または `hidden` を使う。
 - `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、その更新で `reload` を再発火させない。
 - 既存 Webview への URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview` を呼ぶ。
 
@@ -188,7 +188,7 @@ unobscuredSize = physical - (physical - logical) = logical  ✓
 
 ## ナビゲーション状態管理（`useSiteboardNodeRuntime`）
 
-canGoBack / canGoForward の管理は楽観的更新とネイティブ API の OR マージを組み合わせる。
+canGoBack / canGoForward は `nodeId` 単位の runtime model で管理する。
 
 ### 背景
 
@@ -197,11 +197,11 @@ canGoBack / canGoForward の管理は楽観的更新とネイティブ API の O
 
 ### 実装方針
 
-- `refreshNavigationState`: ネイティブ API が `true` を返した値は採用し、`false` の場合は既存の楽観的更新値を維持（OR マージ）
-- `handleGoBack`: 実行後に `can_go_forward=true` を即座に楽観的更新 → 300ms 後にネイティブ API で再問い合わせ
-- `handleGoForward`: 実行後に `can_go_back=true` を即座に楽観的更新 → 300ms 後にネイティブ API で再問い合わせ
-- `handleNavigated`: `navigatedCountRef` で呼び出し回数を管理し、初回（初期ロード）はスキップ。2 回目以降かつ goBack/goForward 操作中でなければ `can_go_back=true, can_go_forward=false` を即座に設定 → 300ms 後にリトライ
-- ページ削除時は `navigatedCountRef` のエントリーも合わせてクリア
+- `refreshNavigationState`: ネイティブ API の結果はそのまま `nativeState` に保存し、表示用 state は `nativeState || history depth` で再計算する
+- `handleGoBack`: `pendingAction[nodeId]='back'` を立て、`forwardDepth` を楽観的に +1 してから実行。300ms 後に action をクリアして再問い合わせする
+- `handleGoForward`: `pendingAction[nodeId]='forward'` を立て、`backDepth` を楽観的に +1 してから実行。300ms 後に action をクリアして再問い合わせする
+- `handleNavigated`: `currentUrl` と `pendingAction[nodeId]` を見て `backDepth / forwardDepth` を調整する。通常遷移は `backDepth + 1, forwardDepth = 0`、戻る/進むはそれぞれ深度を増減させる
+- スクリーンショット撮影待ち (`1000ms`) と nav 再問い合わせ待ち (`300ms`) はどちらも `nodeId` 単位で timer を管理し、削除・unmount 時に必ず clear する
 
 ## 変更時チェックリスト
 

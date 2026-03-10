@@ -1,5 +1,5 @@
 import { toast } from '@heroui/react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import type { NavigationState } from '@/lib/tauri-bridge';
@@ -34,6 +34,14 @@ interface UseSiteboardNodeRuntimeParams {
   captureScreenshot: (nodeId: string) => Promise<boolean>;
 }
 
+interface NavigationRuntimeEntry {
+  currentUrl: string | null;
+  hasCommittedNavigation: boolean;
+  nativeState: NavigationState;
+  backDepth: number;
+  forwardDepth: number;
+}
+
 export function useSiteboardNodeRuntime({
   activeId,
   nodes,
@@ -58,10 +66,12 @@ export function useSiteboardNodeRuntime({
 }: UseSiteboardNodeRuntimeParams) {
   const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
 
-  const isGoingBackRef = useRef(false);
-  const isGoingForwardRef = useRef(false);
-  const navigatedCountRef = useRef<Record<string, number>>({});
+  const navigationRuntimeRef = useRef<Record<string, NavigationRuntimeEntry>>({});
+  const pendingActionRef = useRef<Record<string, 'back' | 'forward' | undefined>>({});
+  const captureTimerRef = useRef<Record<string, number>>({});
+  const refreshTimerRef = useRef<Record<string, number>>({});
 
+  const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const visibleNavStates = useMemo(() => {
     const nodeIds = new Set(nodes.map((node) => node.id));
     const next: Record<string, NavigationState> = {};
@@ -73,24 +83,104 @@ export function useSiteboardNodeRuntime({
     return next;
   }, [navStates, nodes]);
 
-  const refreshNavigationState = useCallback(async (nodeId: string) => {
-    const state = await webviewApi.getNavigationState(nodeId);
-    setNavStates((prev) => {
-      const existing = prev[nodeId];
-      const merged: NavigationState = {
-        can_go_back: state.can_go_back || (existing?.can_go_back ?? false),
-        can_go_forward: state.can_go_forward || (existing?.can_go_forward ?? false),
-      };
-      if (
-        existing &&
-        existing.can_go_back === merged.can_go_back &&
-        existing.can_go_forward === merged.can_go_forward
-      ) {
-        return prev;
+  const ensureNavigationRuntime = useCallback(
+    (nodeId: string): NavigationRuntimeEntry => {
+      const existing = navigationRuntimeRef.current[nodeId];
+      if (existing) {
+        return existing;
       }
-      return { ...prev, [nodeId]: merged };
-    });
+
+      const node = nodesById.get(nodeId);
+      const created: NavigationRuntimeEntry = {
+        currentUrl: node?.url || null,
+        hasCommittedNavigation: Boolean(node?.url),
+        nativeState: { can_go_back: false, can_go_forward: false },
+        backDepth: 0,
+        forwardDepth: 0,
+      };
+      navigationRuntimeRef.current[nodeId] = created;
+      return created;
+    },
+    [nodesById],
+  );
+
+  const clearCaptureTimer = useCallback((nodeId: string) => {
+    const timerId = captureTimerRef.current[nodeId];
+    if (timerId === undefined) return;
+    window.clearTimeout(timerId);
+    delete captureTimerRef.current[nodeId];
   }, []);
+
+  const clearRefreshTimer = useCallback((nodeId: string) => {
+    const timerId = refreshTimerRef.current[nodeId];
+    if (timerId === undefined) return;
+    window.clearTimeout(timerId);
+    delete refreshTimerRef.current[nodeId];
+  }, []);
+
+  const clearNodeRuntime = useCallback(
+    (nodeId: string) => {
+      clearCaptureTimer(nodeId);
+      clearRefreshTimer(nodeId);
+      delete navigationRuntimeRef.current[nodeId];
+      delete pendingActionRef.current[nodeId];
+    },
+    [clearCaptureTimer, clearRefreshTimer],
+  );
+
+  const clearAllRuntimeTimers = useCallback(() => {
+    for (const nodeId of Object.keys(captureTimerRef.current)) {
+      clearCaptureTimer(nodeId);
+    }
+    for (const nodeId of Object.keys(refreshTimerRef.current)) {
+      clearRefreshTimer(nodeId);
+    }
+  }, [clearCaptureTimer, clearRefreshTimer]);
+
+  const updateResolvedNavigationState = useCallback(
+    (nodeId: string) => {
+      const runtime = ensureNavigationRuntime(nodeId);
+      const nextState: NavigationState = {
+        can_go_back: runtime.nativeState.can_go_back || runtime.backDepth > 0,
+        can_go_forward: runtime.nativeState.can_go_forward || runtime.forwardDepth > 0,
+      };
+
+      setNavStates((prev) => {
+        const existing = prev[nodeId];
+        if (
+          existing &&
+          existing.can_go_back === nextState.can_go_back &&
+          existing.can_go_forward === nextState.can_go_forward
+        ) {
+          return prev;
+        }
+        return { ...prev, [nodeId]: nextState };
+      });
+    },
+    [ensureNavigationRuntime],
+  );
+
+  const refreshNavigationState = useCallback(
+    async (nodeId: string) => {
+      const state = await webviewApi.getNavigationState(nodeId);
+      const runtime = ensureNavigationRuntime(nodeId);
+      runtime.nativeState = state;
+      updateResolvedNavigationState(nodeId);
+    },
+    [ensureNavigationRuntime, updateResolvedNavigationState],
+  );
+
+  const scheduleRefreshNavigationState = useCallback(
+    (nodeId: string, delayMs = 300) => {
+      clearRefreshTimer(nodeId);
+      refreshTimerRef.current[nodeId] = window.setTimeout(() => {
+        delete refreshTimerRef.current[nodeId];
+        pendingActionRef.current[nodeId] = undefined;
+        void refreshNavigationState(nodeId);
+      }, delayMs);
+    },
+    [clearRefreshTimer, refreshNavigationState],
+  );
 
   const removeNavigationState = useCallback((nodeId: string) => {
     setNavStates((prev) => {
@@ -105,61 +195,74 @@ export function useSiteboardNodeRuntime({
 
   const handleGoBack = useCallback(
     (nodeId: string) => {
-      isGoingBackRef.current = true;
+      const runtime = ensureNavigationRuntime(nodeId);
+      pendingActionRef.current[nodeId] = 'back';
+      runtime.forwardDepth = Math.max(runtime.forwardDepth, 1);
+      updateResolvedNavigationState(nodeId);
       void webviewApi.goBack(nodeId);
-      setNavStates((prev) => ({
-        ...prev,
-        [nodeId]: {
-          can_go_back: prev[nodeId]?.can_go_back ?? false,
-          can_go_forward: true,
-        },
-      }));
-      setTimeout(() => {
-        isGoingBackRef.current = false;
-        void refreshNavigationState(nodeId);
-      }, 300);
+      scheduleRefreshNavigationState(nodeId);
     },
-    [refreshNavigationState],
+    [ensureNavigationRuntime, scheduleRefreshNavigationState, updateResolvedNavigationState],
   );
 
   const handleGoForward = useCallback(
     (nodeId: string) => {
-      isGoingForwardRef.current = true;
+      const runtime = ensureNavigationRuntime(nodeId);
+      pendingActionRef.current[nodeId] = 'forward';
+      runtime.backDepth = Math.max(runtime.backDepth, 1);
+      updateResolvedNavigationState(nodeId);
       void webviewApi.goForward(nodeId);
-      setNavStates((prev) => ({
-        ...prev,
-        [nodeId]: {
-          can_go_back: true,
-          can_go_forward: prev[nodeId]?.can_go_forward ?? false,
-        },
-      }));
-      setTimeout(() => {
-        isGoingForwardRef.current = false;
-        void refreshNavigationState(nodeId);
-      }, 300);
+      scheduleRefreshNavigationState(nodeId);
     },
-    [refreshNavigationState],
+    [ensureNavigationRuntime, scheduleRefreshNavigationState, updateResolvedNavigationState],
   );
 
   const handleNavigated = useCallback(
     (nodeId: string, url: string, title: string) => {
       updateWebNodeUrl(activeId, nodeId, url, title);
-      setTimeout(() => void captureScreenshot(nodeId), 1000);
 
-      const count = (navigatedCountRef.current[nodeId] ?? 0) + 1;
-      navigatedCountRef.current[nodeId] = count;
+      clearCaptureTimer(nodeId);
+      captureTimerRef.current[nodeId] = window.setTimeout(() => {
+        delete captureTimerRef.current[nodeId];
+        void captureScreenshot(nodeId);
+      }, 1000);
 
-      if (count >= 2 && !isGoingBackRef.current && !isGoingForwardRef.current) {
-        setNavStates((prev) => ({
-          ...prev,
-          [nodeId]: { can_go_back: true, can_go_forward: false },
-        }));
+      const runtime = ensureNavigationRuntime(nodeId);
+      const pendingAction = pendingActionRef.current[nodeId];
+      const previousUrl = runtime.currentUrl;
+
+      if (!runtime.hasCommittedNavigation) {
+        runtime.currentUrl = url;
+        runtime.hasCommittedNavigation = true;
+      } else if (pendingAction === 'back') {
+        runtime.backDepth = Math.max(0, runtime.backDepth - 1);
+        runtime.forwardDepth += 1;
+        runtime.currentUrl = url;
+      } else if (pendingAction === 'forward') {
+        runtime.backDepth += 1;
+        runtime.forwardDepth = Math.max(0, runtime.forwardDepth - 1);
+        runtime.currentUrl = url;
+      } else if (previousUrl !== url) {
+        runtime.backDepth += 1;
+        runtime.forwardDepth = 0;
+        runtime.currentUrl = url;
       }
 
+      pendingActionRef.current[nodeId] = undefined;
+      updateResolvedNavigationState(nodeId);
       void refreshNavigationState(nodeId);
-      setTimeout(() => void refreshNavigationState(nodeId), 300);
+      scheduleRefreshNavigationState(nodeId);
     },
-    [activeId, captureScreenshot, refreshNavigationState, updateWebNodeUrl],
+    [
+      activeId,
+      captureScreenshot,
+      clearCaptureTimer,
+      ensureNavigationRuntime,
+      refreshNavigationState,
+      scheduleRefreshNavigationState,
+      updateResolvedNavigationState,
+      updateWebNodeUrl,
+    ],
   );
 
   const handleTitleUpdated = useCallback(
@@ -189,17 +292,26 @@ export function useSiteboardNodeRuntime({
   const handleWebviewCreated = useCallback(
     (nodeId: string, label: string) => {
       setWebNodeWebviewLabel(activeId, nodeId, label);
+      ensureNavigationRuntime(nodeId);
       requestAnimationFrame(() => computeDisplayModes());
       void refreshNavigationState(nodeId);
     },
-    [activeId, computeDisplayModes, refreshNavigationState, setWebNodeWebviewLabel],
+    [
+      activeId,
+      computeDisplayModes,
+      ensureNavigationRuntime,
+      refreshNavigationState,
+      setWebNodeWebviewLabel,
+    ],
   );
 
   const handleWebviewDestroyed = useCallback(
     (nodeId: string) => {
       clearWebNodeWebviewLabel(activeId, nodeId);
+      clearRefreshTimer(nodeId);
+      pendingActionRef.current[nodeId] = undefined;
     },
-    [activeId, clearWebNodeWebviewLabel],
+    [activeId, clearRefreshTimer, clearWebNodeWebviewLabel],
   );
 
   const handleWebviewLoaded = useCallback(
@@ -223,10 +335,17 @@ export function useSiteboardNodeRuntime({
         onClearSelection();
       }
       removeNavigationState(nodeId);
-      delete navigatedCountRef.current[nodeId];
+      clearNodeRuntime(nodeId);
       removeNode(activeId, nodeId);
     },
-    [activeId, onClearSelection, removeNavigationState, removeNode, selectedNodeId],
+    [
+      activeId,
+      clearNodeRuntime,
+      onClearSelection,
+      removeNavigationState,
+      removeNode,
+      selectedNodeId,
+    ],
   );
 
   const handleReloadWebNode = useCallback(
@@ -282,6 +401,22 @@ export function useSiteboardNodeRuntime({
     },
     [activeId, nodes, updateNodeSizeWithoutHistory],
   );
+
+  useEffect(() => {
+    const nodeIds = new Set(nodes.map((node) => node.id));
+
+    for (const nodeId of Object.keys(navigationRuntimeRef.current)) {
+      if (!nodeIds.has(nodeId)) {
+        clearNodeRuntime(nodeId);
+      }
+    }
+  }, [clearNodeRuntime, nodes]);
+
+  useEffect(() => {
+    return () => {
+      clearAllRuntimeTimers();
+    };
+  }, [clearAllRuntimeTimers]);
 
   return {
     handleDragStart,

@@ -12,7 +12,11 @@ import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplay
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
 import { useSiteboardViewportEngine } from '@/hooks/siteboard/useSiteboardViewportEngine';
-import { selectActiveProject, useProjectStore } from '@/store/tab-store';
+import {
+  selectActiveProject,
+  selectActiveProjectWebviewRuntime,
+  useProjectStore,
+} from '@/store/tab-store';
 import { isStickyNoteNode, isWebPageNode } from '@/types';
 
 interface SiteboardProps {
@@ -35,6 +39,7 @@ export function Siteboard({
   onAddStickyNote,
 }: SiteboardProps) {
   const activeProject = useProjectStore(selectActiveProject);
+  const activeProjectWebviewRuntime = useProjectStore(selectActiveProjectWebviewRuntime);
   const activeId = useProjectStore((s) => s.activeId);
 
   const {
@@ -74,6 +79,7 @@ export function Siteboard({
   );
 
   const nodes = useMemo(() => activeProject?.nodes ?? [], [activeProject?.nodes]);
+  const webPageNodes = useMemo(() => nodes.filter(isWebPageNode), [nodes]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -98,7 +104,8 @@ export function Siteboard({
     scheduleZoomRestoreAfterReflow,
     screenshotUrls,
   } = useSiteboardDisplayEngine({
-    nodes,
+    webPageNodes,
+    webviewLabelsByNodeId: activeProjectWebviewRuntime.labelsByNodeId,
     projectId: activeId ?? '',
     containerRef,
     canvasRef,

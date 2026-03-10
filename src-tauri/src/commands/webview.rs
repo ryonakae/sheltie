@@ -1,147 +1,15 @@
+mod macos_viewport;
+mod scripts;
+mod snapshot;
+
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 
-#[cfg(target_os = "macos")]
-fn sanitize_zoom(zoom: f64) -> f64 {
-    if zoom.is_finite() && zoom > 0.0 {
-        zoom
-    } else {
-        1.0
-    }
-}
+use self::scripts::{SCROLL_DETECTION_SCRIPT, SPA_URL_DETECTION_SCRIPT};
 
 #[cfg(target_os = "macos")]
-fn run_objc_void_guarded<F>(context: &str, f: F)
-where
-    F: FnOnce(),
-{
-    // macOS の private selector は OS バージョン差分で ObjC 例外を投げる場合があるため、
-    // 起動直後クラッシュを防ぐために補正処理をスキップして継続する。
-    if let Err(exception) = objc2::exception::catch(std::panic::AssertUnwindSafe(f)) {
-        let detail = exception
-            .as_ref()
-            .map(|e| format!("{e:?}"))
-            .unwrap_or_else(|| "nil exception".to_string());
-        log::warn!(
-            "Objective-C 呼び出し `{context}` で例外が発生したため補正をスキップしました: {detail}"
-        );
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn run_objc_bool_guarded<F>(context: &str, f: F) -> bool
-where
-    F: FnOnce() -> bool,
-{
-    match objc2::exception::catch(std::panic::AssertUnwindSafe(f)) {
-        Ok(value) => value,
-        Err(exception) => {
-            let detail = exception
-                .as_ref()
-                .map(|e| format!("{e:?}"))
-                .unwrap_or_else(|| "nil exception".to_string());
-            log::warn!(
-                "Objective-C 呼び出し `{context}` で例外が発生したため `false` を返します: {detail}"
-            );
-            false
-        }
-    }
-}
-
-/// frame/zoom から CSS viewport の論理サイズを計算する。
-///
-/// 無効な zoom 値で NaN/Inf になるのを防ぐ。
-#[cfg(target_os = "macos")]
-fn compute_css_viewport_size_for_units(width: f64, height: f64, zoom: f64) -> (f64, f64) {
-    let safe_zoom = sanitize_zoom(zoom);
-    (width / safe_zoom, height / safe_zoom)
-}
-
-/// CSS Viewport Units（svh/lvh）の基準サイズを CSS viewport（論理サイズ）に合わせる。
-///
-/// `_setLayoutMode: 2` + `_setViewScale` は vh/dvh のみに効き、svh/lvh は
-/// "unobscured size" を参照するため、viewport insets を使って補正する。
-///
-/// WebKit 内部の計算:
-///   `minimumUnobscuredSize = frame - maximumViewportInset` → svh
-///   `maximumUnobscuredSize = frame - minimumViewportInset` → lvh
-///
-/// `inset = physical - logical`（zoom < 1 で負値）を渡すと:
-///   `unobscuredSize = physical - (physical - logical) = logical` ✓
-///
-/// 優先度 1: `_recalculateViewportSizesWithMinimumViewportInset:maximumViewportInset:throwOnInvalidInput:`
-///   WebKit 内部で `setFrameSize:` から `throwOnInvalidInput: NO` で呼ばれるメソッドを直接呼ぶことで、
-///   公開 API の負値バリデーション（macOS 26.2 で強化）をスキップして負 inset を設定できる。
-///
-/// 優先度 2: `setMinimumViewportInset:maximumViewportInset:` (macOS 13.0+)
-///   公開 API。inset が非負（zoom >= 1）の場合のみ有効。
-#[cfg(target_os = "macos")]
-unsafe fn set_css_viewport_unit_sizes(
-    raw: *mut objc2::runtime::AnyObject,
-    physical_width: f64,
-    physical_height: f64,
-    logical_width: f64,
-    logical_height: f64,
-) {
-    use objc2_foundation::NSEdgeInsets;
-
-    // zoom < 1 のとき inset は負値（logical > physical）になる
-    let inset_right = physical_width - logical_width;
-    let inset_bottom = physical_height - logical_height;
-    let inset = NSEdgeInsets {
-        top: 0.0,
-        left: 0.0,
-        bottom: inset_bottom,
-        right: inset_right,
-    };
-
-    // 優先度 1: 内部メソッドを throwOnInvalidInput: NO で呼び、負 inset バリデーションをスキップ
-    let recalc_sel = objc2::sel!(
-        _recalculateViewportSizesWithMinimumViewportInset:maximumViewportInset:throwOnInvalidInput:
-    );
-    let supports_recalc = run_objc_bool_guarded(
-        "respondsToSelector(_recalculateViewportSizes...)",
-        || unsafe { objc2::msg_send![raw, respondsToSelector: recalc_sel] },
-    );
-    if supports_recalc {
-        run_objc_void_guarded(
-            "_recalculateViewportSizesWithMinimumViewportInset:maximumViewportInset:throwOnInvalidInput:",
-            || unsafe {
-                let _: () = objc2::msg_send![
-                    raw,
-                    _recalculateViewportSizesWithMinimumViewportInset: inset,
-                    maximumViewportInset: inset,
-                    throwOnInvalidInput: false
-                ];
-            },
-        );
-        return;
-    }
-
-    // 優先度 2: 公開 API（inset が非負の場合のみ呼ぶ。負値は NSInvalidArgumentException）
-    if inset_right >= 0.0 && inset_bottom >= 0.0 {
-        let supports_inset = run_objc_bool_guarded(
-            "respondsToSelector(setMinimumViewportInset:maximumViewportInset:)",
-            || unsafe {
-                objc2::msg_send![
-                    raw,
-                    respondsToSelector: objc2::sel!(setMinimumViewportInset:maximumViewportInset:)
-                ]
-            },
-        );
-        if supports_inset {
-            run_objc_void_guarded(
-                "setMinimumViewportInset:maximumViewportInset:",
-                || unsafe {
-                    let _: () = objc2::msg_send![
-                        raw,
-                        setMinimumViewportInset: inset,
-                        maximumViewportInset: inset
-                    ];
-                },
-            );
-        }
-    }
-}
+use self::macos_viewport::{
+    configure_new_webview_viewport, set_webview_alpha, update_existing_webview_viewport,
+};
 
 /// WKWebView のスクリーンショットをキャプチャし、base64 PNG Data URL として返す。
 ///
@@ -152,119 +20,7 @@ pub async fn capture_webview_screenshot(
     app: AppHandle,
     page_id: String,
 ) -> Result<String, String> {
-    capture_impl(app, page_id).await
-}
-
-#[cfg(target_os = "macos")]
-async fn capture_impl(app: AppHandle, page_id: String) -> Result<String, String> {
-    use std::sync::{Arc, Mutex};
-    use tokio::sync::oneshot;
-
-    let label = format!("page-{}", page_id);
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
-
-    let (tx, rx) = oneshot::channel::<Result<String, String>>();
-    let tx = Arc::new(Mutex::new(Some(tx)));
-
-    webview
-        .with_webview(move |platform_wv| {
-            // inner() は *mut c_void を返すため AnyObject にキャスト
-            let raw_ptr = platform_wv.inner() as *mut objc2::runtime::AnyObject;
-            take_wkwebview_snapshot(raw_ptr, tx);
-        })
-        .map_err(|e| format!("with_webview エラー: {e}"))?;
-
-    rx.await
-        .map_err(|_| "スクリーンショットチャネルが閉じられました".to_string())?
-}
-
-#[cfg(not(target_os = "macos"))]
-async fn capture_impl(_app: AppHandle, _page_id: String) -> Result<String, String> {
-    Err("この OS ではサポートされていません".to_string())
-}
-
-/// WKWebView のネイティブポインタに対して takeSnapshotWithConfiguration:completionHandler: を呼び出す。
-/// with_webview クロージャ内（メインスレッド）から呼ぶこと。
-#[cfg(target_os = "macos")]
-fn take_wkwebview_snapshot(
-    raw_ptr: *mut objc2::runtime::AnyObject,
-    tx: std::sync::Arc<
-        std::sync::Mutex<
-            Option<tokio::sync::oneshot::Sender<Result<String, String>>>,
-        >,
-    >,
-) {
-    use block2::RcBlock;
-    use objc2::runtime::AnyObject;
-
-    let block = RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
-        let result = if image.is_null() {
-            Err("NSImage が null です（Webview が非表示の可能性があります）".to_string())
-        } else {
-            encode_nsimage_to_base64(image)
-        };
-        if let Ok(mut guard) = tx.lock() {
-            if let Some(sender) = guard.take() {
-                let _ = sender.send(result);
-            }
-        }
-    });
-
-    unsafe {
-        let nil: *mut AnyObject = std::ptr::null_mut();
-        // takeSnapshotWithConfiguration:nil は全画面のスナップショットをデフォルト設定で取得
-        let _: () = objc2::msg_send![raw_ptr, takeSnapshotWithConfiguration: nil, completionHandler: &*block];
-    }
-}
-
-/// NSImage ポインタを PNG バイト列に変換する。
-#[cfg(target_os = "macos")]
-fn nsimage_to_png_bytes(image: *mut objc2::runtime::AnyObject) -> Result<Vec<u8>, String> {
-    use objc2::runtime::{AnyClass, AnyObject};
-
-    unsafe {
-        // NSImage → TIFF 中間表現
-        let tiff: *mut AnyObject = objc2::msg_send![image, TIFFRepresentation];
-        if tiff.is_null() {
-            return Err("TIFFRepresentation が null です".to_string());
-        }
-
-        // NSBitmapImageRep に変換
-        let cls = AnyClass::get(c"NSBitmapImageRep")
-            .ok_or("NSBitmapImageRep クラスが見つかりません")?;
-        let bitmap: *mut AnyObject = objc2::msg_send![cls, imageRepWithData: tiff];
-        if bitmap.is_null() {
-            return Err("NSBitmapImageRep の生成に失敗しました".to_string());
-        }
-
-        // PNG 形式でエクスポート（NSBitmapImageFileTypePNG = 4）
-        let nil_dict: *mut AnyObject = std::ptr::null_mut();
-        let png_data: *mut AnyObject = objc2::msg_send![
-            bitmap,
-            representationUsingType: 4usize,
-            properties: nil_dict
-        ];
-        if png_data.is_null() {
-            return Err("PNG データの生成に失敗しました".to_string());
-        }
-
-        let bytes: *const u8 = objc2::msg_send![png_data, bytes];
-        let length: usize = objc2::msg_send![png_data, length];
-
-        let slice = std::slice::from_raw_parts(bytes, length);
-        Ok(slice.to_vec())
-    }
-}
-
-/// NSImage ポインタを PNG base64 Data URL に変換する。
-#[cfg(target_os = "macos")]
-fn encode_nsimage_to_base64(image: *mut objc2::runtime::AnyObject) -> Result<String, String> {
-    use base64::Engine as _;
-    let bytes = nsimage_to_png_bytes(image)?;
-    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Ok(format!("data:image/png;base64,{encoded}"))
+    snapshot::capture_webview_base64(&app, &page_id).await
 }
 
 /// ページ Webview のブラウザ履歴を1つ戻る。
@@ -413,59 +169,11 @@ pub async fn create_page_webview(
         .parse::<tauri::Url>()
         .map_err(|e| format!("URL のパースに失敗しました: {e}"))?;
 
-    // SPA のクライアントサイドルーティング（history.pushState/replaceState）を検出するため、
-    // initialization_script を注入して URL 変更を on_document_title_changed 経由で通知する。
-    // on_navigation は WKWebView の decidePolicyForNavigationAction にマッピングされており、
-    // pushState/replaceState では発火しないため、この代替手段が必要。
-    let spa_url_detection_script = r#"(function() {
-  var lastUrl = location.href;
-  function onUrlChange() {
-    var newUrl = location.href;
-    if (newUrl === lastUrl) return;
-    lastUrl = newUrl;
-    var orig = document.title;
-    document.title = '\x01' + newUrl;
-    requestAnimationFrame(function() { document.title = orig; });
-  }
-  var origPush = history.pushState;
-  history.pushState = function() {
-    var r = origPush.apply(this, arguments);
-    onUrlChange();
-    return r;
-  };
-  var origReplace = history.replaceState;
-  history.replaceState = function() {
-    var r = origReplace.apply(this, arguments);
-    onUrlChange();
-    return r;
-  };
-  window.addEventListener('popstate', onUrlChange);
-})();"#;
-
-    // scrollend（Safari 26.2+）+ debounced scroll のハイブリッドでスクロール完了を検知し、
-    // \x02 プレフィックスで on_document_title_changed 経由で通知する
-    let scroll_detection_script = r#"(function() {
-  var t = null, orig = '', DELAY = 150;
-  function notify() {
-    orig = document.title;
-    document.title = '\x02scroll-end';
-    requestAnimationFrame(function() { document.title = orig; });
-  }
-  if ('onscrollend' in window) {
-    window.addEventListener('scrollend', notify, { passive: true });
-  } else {
-    window.addEventListener('scroll', function() {
-      if (t) clearTimeout(t);
-      t = setTimeout(notify, DELAY);
-    }, { passive: true, capture: true });
-  }
-})();"#;
-
     window
         .add_child(
             tauri::webview::WebviewBuilder::new(&label_clone, WebviewUrl::External(parsed_url))
-                .initialization_script(spa_url_detection_script)
-                .initialization_script(scroll_detection_script)
+                .initialization_script(SPA_URL_DETECTION_SCRIPT)
+                .initialization_script(SCROLL_DETECTION_SCRIPT)
                 .on_navigation({
                     let ah = app_handle.clone();
                     let pid = pid.clone();
@@ -520,25 +228,10 @@ pub async fn create_page_webview(
     // layoutMode は作成時のみ設定し、update 時は viewScale + viewport insets を更新する。
     #[cfg(target_os = "macos")]
     {
-        let safe_zoom = sanitize_zoom(zoom);
-        let (css_viewport_width, css_viewport_height) =
-            compute_css_viewport_size_for_units(width, height, safe_zoom);
-
         if let Some(wv) = app.get_webview(&label) {
             wv.with_webview(move |platform_wv| {
                 let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
-                run_objc_void_guarded("_setLayoutMode + _setViewScale + viewport insets", || unsafe {
-                    // _WKLayoutModeDynamicSizeComputedFromViewScale = 2
-                    let _: () = objc2::msg_send![raw, _setLayoutMode: 2i64];
-                    let _: () = objc2::msg_send![raw, _setViewScale: safe_zoom];
-                    set_css_viewport_unit_sizes(
-                        raw,
-                        width,
-                        height,
-                        css_viewport_width,
-                        css_viewport_height,
-                    );
-                });
+                configure_new_webview_viewport(raw, width, height, zoom);
             })
             .ok();
         }
@@ -593,9 +286,7 @@ async fn set_opacity_impl(
 
     wv.with_webview(move |platform_wv| {
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
-        run_objc_void_guarded("setAlphaValue:", || unsafe {
-            let _: () = objc2::msg_send![raw, setAlphaValue: opacity];
-        });
+        set_webview_alpha(raw, opacity);
     })
     .map_err(|e| format!("with_webview エラー: {e}"))?;
 
@@ -633,15 +324,9 @@ async fn update_bounds_impl(
     wv.set_size(LogicalSize::new(width, height))
         .map_err(|e| format!("setSize エラー: {e}"))?;
 
-    let safe_zoom = sanitize_zoom(zoom);
-    let (css_viewport_width, css_viewport_height) =
-        compute_css_viewport_size_for_units(width, height, safe_zoom);
     wv.with_webview(move |platform_wv| {
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
-        run_objc_void_guarded("_setViewScale + viewport insets", || unsafe {
-            let _: () = objc2::msg_send![raw, _setViewScale: safe_zoom];
-            set_css_viewport_unit_sizes(raw, width, height, css_viewport_width, css_viewport_height);
-        });
+        update_existing_webview_viewport(raw, width, height, zoom);
     })
     .map_err(|e| format!("with_webview エラー: {e}"))?;
 
@@ -745,46 +430,7 @@ async fn save_screenshot_impl(
     page_id: String,
     project_id: String,
 ) -> Result<String, String> {
-    use std::sync::{Arc, Mutex};
-    use tokio::sync::oneshot;
-    use block2::RcBlock;
-    use objc2::runtime::AnyObject;
-
-    let label = format!("page-{}", page_id);
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
-
-    let (tx, rx) = oneshot::channel::<Result<Vec<u8>, String>>();
-    let tx = Arc::new(Mutex::new(Some(tx)));
-
-    webview
-        .with_webview(move |platform_wv| {
-            let raw_ptr = platform_wv.inner() as *mut AnyObject;
-
-            let block = RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
-                let result = if image.is_null() {
-                    Err("NSImage が null です（Webview が非表示の可能性があります）".to_string())
-                } else {
-                    nsimage_to_png_bytes(image)
-                };
-                if let Ok(mut guard) = tx.lock() {
-                    if let Some(sender) = guard.take() {
-                        let _ = sender.send(result);
-                    }
-                }
-            });
-
-            unsafe {
-                let nil: *mut AnyObject = std::ptr::null_mut();
-                let _: () = objc2::msg_send![raw_ptr, takeSnapshotWithConfiguration: nil, completionHandler: &*block];
-            }
-        })
-        .map_err(|e| format!("with_webview エラー: {e}"))?;
-
-    let png_bytes = rx
-        .await
-        .map_err(|_| "スクリーンショットチャネルが閉じられました".to_string())??;
+    let png_bytes = snapshot::capture_webview_png_bytes(&app, &page_id).await?;
 
     let data_dir = app
         .path()

@@ -22,6 +22,7 @@ import {
   type BoardNode,
   type Project,
   type ProjectState,
+  type ProjectWebviewRuntime,
   type SiteboardDocumentV1,
   type Viewport,
 } from '@/types';
@@ -34,6 +35,7 @@ interface ProjectNodeHistory {
 }
 
 type ProjectNodeHistories = Record<string, ProjectNodeHistory>;
+type ProjectWebviewRuntimes = Record<string, ProjectWebviewRuntime>;
 
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
@@ -164,6 +166,29 @@ function touchProjects(projects: Project[], id: string, timestamp = Date.now()):
   );
 }
 
+function getProjectWebviewRuntime(
+  runtimes: ProjectWebviewRuntimes,
+  projectId: string,
+): ProjectWebviewRuntime {
+  return runtimes[projectId] ?? { labelsByNodeId: {} };
+}
+
+function updateProjectWebviewRuntime(
+  runtimes: ProjectWebviewRuntimes,
+  projectId: string,
+  updater: (runtime: ProjectWebviewRuntime) => ProjectWebviewRuntime | null,
+): ProjectWebviewRuntimes {
+  const current = getProjectWebviewRuntime(runtimes, projectId);
+  const next = updater(current);
+  if (!next) {
+    if (!(projectId in runtimes)) return runtimes;
+    const { [projectId]: _removed, ...rest } = runtimes;
+    return rest;
+  }
+  if (next === current) return runtimes;
+  return { ...runtimes, [projectId]: next };
+}
+
 function sanitizeNode(rawNode: Partial<BoardNode>): BoardNode {
   const type =
     rawNode.type === 'stickynote'
@@ -199,11 +224,7 @@ function sanitizeProject(rawProject: Partial<Project>, fallbackOrder: number): P
     typeof rawProject?.title === 'string' && rawProject.title
       ? rawProject.title
       : `プロジェクト ${fallbackOrder + 1}`;
-  const nodes = rawNodes.map((node) => {
-    const sanitized = sanitizeNode(node);
-    const { webviewLabel: _unusedWebviewLabel, ...rest } = sanitized;
-    return rest;
-  });
+  const nodes = rawNodes.map((node) => sanitizeNode(node));
 
   return {
     id: typeof rawProject?.id === 'string' && rawProject.id ? rawProject.id : crypto.randomUUID(),
@@ -276,6 +297,7 @@ interface ProjectActions {
 interface ProjectStore extends ProjectState, ProjectActions {
   isLoaded: boolean;
   nodeHistories: ProjectNodeHistories;
+  webviewRuntime: ProjectWebviewRuntimes;
 }
 
 function replaceProjectNodes(
@@ -310,6 +332,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   activeId: HOME_ID,
   isLoaded: false,
   nodeHistories: {},
+  webviewRuntime: {},
 
   createProject: () =>
     set((state) => {
@@ -351,11 +374,13 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         newActiveId = resolveNextActiveId(openIdx, remainingOpenIds);
       }
       const { [id]: _removedHistory, ...remainingHistories } = state.nodeHistories;
+      const { [id]: _removedRuntime, ...remainingRuntime } = state.webviewRuntime;
       return {
         projects: state.projects.filter((project) => project.id !== id),
         openIds: remainingOpenIds,
         activeId: newActiveId,
         nodeHistories: remainingHistories,
+        webviewRuntime: remainingRuntime,
       };
     }),
 
@@ -433,10 +458,12 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         nodes: restoredNodes,
       };
       const { [projectId]: _removedHistory, ...remainingHistories } = state.nodeHistories;
+      const { [projectId]: _removedRuntime, ...remainingRuntime } = state.webviewRuntime;
 
       return {
         projects: nextProjects,
         nodeHistories: remainingHistories,
+        webviewRuntime: remainingRuntime,
       };
     }),
 
@@ -510,12 +537,20 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     })),
 
   removeNode: (projectId, nodeId) =>
-    set((state) =>
-      replaceProjectNodes(state, projectId, (nodes) => {
+    set((state) => ({
+      ...replaceProjectNodes(state, projectId, (nodes) => {
         if (!nodes.some((node) => node.id === nodeId)) return null;
         return nodes.filter((node) => node.id !== nodeId);
       }),
-    ),
+      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
+        if (!(nodeId in runtime.labelsByNodeId)) return runtime;
+        const { [nodeId]: _removedLabel, ...rest } = runtime.labelsByNodeId;
+        if (Object.keys(rest).length === 0) {
+          return null;
+        }
+        return { labelsByNodeId: rest };
+      }),
+    })),
 
   updateNodePosition: (projectId, nodeId, x, y) =>
     set((state) =>
@@ -695,30 +730,26 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   setWebNodeWebviewLabel: (projectId, nodeId, label) =>
     set((state) => ({
-      projects: state.projects.map((project) => {
-        if (project.id !== projectId) return project;
+      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
+        if (runtime.labelsByNodeId[nodeId] === label) return runtime;
         return {
-          ...project,
-          nodes: project.nodes.map((node) => {
-            if (node.id !== nodeId || node.webviewLabel === label) return node;
-            return { ...node, webviewLabel: label };
-          }),
+          labelsByNodeId: {
+            ...runtime.labelsByNodeId,
+            [nodeId]: label,
+          },
         };
       }),
     })),
 
   clearWebNodeWebviewLabel: (projectId, nodeId) =>
     set((state) => ({
-      projects: state.projects.map((project) => {
-        if (project.id !== projectId) return project;
-        return {
-          ...project,
-          nodes: project.nodes.map((node) => {
-            if (node.id !== nodeId || node.webviewLabel === undefined) return node;
-            const { webviewLabel: _removed, ...rest } = node;
-            return rest;
-          }),
-        };
+      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
+        if (!(nodeId in runtime.labelsByNodeId)) return runtime;
+        const { [nodeId]: _removedLabel, ...rest } = runtime.labelsByNodeId;
+        if (Object.keys(rest).length === 0) {
+          return null;
+        }
+        return { labelsByNodeId: rest };
       }),
     })),
 
@@ -804,6 +835,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         openIds: nextOpenIds,
         activeId: nextActiveId,
         nodeHistories: {},
+        webviewRuntime: {},
       };
     }),
 
@@ -814,3 +846,12 @@ export const selectActiveProject = (state: ProjectStore): Project | undefined =>
   state.projects.find((project) => project.id === state.activeId);
 
 export const selectIsHome = (state: ProjectStore): boolean => state.activeId === HOME_ID;
+
+const EMPTY_WEBVIEW_RUNTIME: ProjectWebviewRuntime = { labelsByNodeId: {} };
+
+export const selectActiveProjectWebviewRuntime = (state: ProjectStore): ProjectWebviewRuntime => {
+  if (state.activeId === HOME_ID) {
+    return EMPTY_WEBVIEW_RUNTIME;
+  }
+  return state.webviewRuntime[state.activeId] ?? EMPTY_WEBVIEW_RUNTIME;
+};

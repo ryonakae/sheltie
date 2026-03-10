@@ -39,8 +39,10 @@
 
 `InteractionType = 'pan' | 'zoom' | 'drag' | 'resize'`
 
-- `drag/resize`: 保存済みスクショがあれば `screenshot` に落とし、未準備なら `native` を維持する。終了時に表示判定を再計算する。
-- `pan/zoom`: 開始時に保存済みスクショがあるページを即 `screenshot` に切り替え、未準備ページは `native` のまま capture を開始する。rAF 単位では `computeInteractionModes` が `native/screenshot/hidden` を再判定する。
+- すべての操作開始前に、対象ページの **fresh capture を毎回要求** する。
+- 保存済みスクショがあるページは、それを即 `screenshot` として見せたまま fresh capture をバックグラウンドで取り直し、準備完了後に stale → fresh へ差し替える。
+- 保存済みスクショがないページは、操作開始前に capture を待つ。capture 不能な場合のみ `hidden` を最後の退避先として使う。
+- `pan/zoom` 中は rAF 単位で `computeInteractionModes` が `screenshot/hidden` を再判定する。操作中に `native` へ戻さない。
 
 ## pan 専用最適化
 
@@ -62,12 +64,14 @@
 これを回避するため、右クリック時に対象 webpage ノードを screenshot/hidden モードに切り替え、メニュー表示中はそれを維持する。
 
 **フロー**:
-1. `handleContextMenuOpen(pageId)` — async 関数。まず `cancelNativeReveal` で復帰タイマーを止める。スクリーンショット未準備時は `ensureScreenshotReady({ forceDuringInteraction: true })` で「PNG 保存 + React 反映 + DOM 描画完了」まで待つ。
-2. 準備完了後に `contextMenuPageIdRef` をセットし、`newMode = 'screenshot'`（失敗時のみ `hidden`）へ更新してから Webview を hide する。
-3. `Siteboard.tsx` の `handleNodeContextMenu` — webpage ノードは `handleContextMenuOpen(pageId)` の Promise を `.then()` で待ち、さらに `requestAnimationFrame` を挟んでから `setContextMenu` を呼ぶ。これでメニューが「スクショ背面化」より先に表示されない。
-4. `computeDisplayModes()` の override ロジック — `contextMenuPageIdRef` がセットされているページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え。
-5. `handleContextMenuClose()` — ref をクリアし `computeDisplayModes()` で表示を復帰。
-6. ページ削除ケース — `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
+1. `handleContextMenuOpen(pageId)` — async 関数。まず `cancelNativeReveal` で復帰タイマーを止める。
+2. 保存済みスクショがある場合は、その stale screenshot を即利用しつつ fresh capture をバックグラウンドで要求する。
+3. 保存済みスクショがない場合だけ `ensureScreenshotReady()` で「PNG 保存 + React 反映 + DOM 描画完了」まで待つ。
+4. 準備完了後に `contextMenuPageIdRef` をセットし、`newMode = 'screenshot'`（capture 不能時のみ `hidden`）へ更新してから Webview を hide する。
+5. `Siteboard.tsx` の `handleNodeContextMenu` — webpage ノードは `handleContextMenuOpen(pageId)` の Promise を `.then()` で待ち、さらに `requestAnimationFrame` を挟んでから `setContextMenu` を呼ぶ。これでメニューが「スクショ背面化」より先に表示されない。
+6. `computeDisplayModes()` の override ロジック — `contextMenuPageIdRef` がセットされているページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え。
+7. `handleContextMenuClose()` — ref をクリアし `computeDisplayModes()` で表示を復帰。
+8. ページ削除ケース — `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
 
 付箋ノードは Webview を持たないため、コンテキストメニュー表示時に `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` の node type 判定で分岐）。
 
@@ -84,8 +88,9 @@
 1. Rust `save_webview_screenshot(pageId, projectId)` → WKWebView スナップショット → PNG → ファイル保存 → ファイルパス返却
 2. JS: `convertFileSrc(filePath) + '?t=Date.now()'` でアセット URL 生成 → `<img src>` に設定
 3. `Image.decode()` でデコード完了を待つ
-4. `WebPageNode` の `onScreenshotPresented(pageId, url)` が呼ばれたら、その URL を表示可能なスクショとして扱う
-5. `screenshotReadyRef.current[pageId] = true` をセット
+4. 既存 screenshot が表示中でも新 URL が準備できるまで差し替えない
+5. `WebPageNode` の `onScreenshotPresented(pageId, url)` が呼ばれたら、その URL を表示可能なスクショとして扱う
+6. `screenshotReadyRef.current[pageId] = true` をセット
 
 **フロー（起動時復元）**:
 1. `useSiteboardDisplayEngine` の `projectId + webpage node ids` 依存 effect が実行
@@ -101,11 +106,20 @@
 
 ## スクリーンショット撮影タイミング
 
-- pan/zoom 操作開始時
+- pan/zoom 操作開始時（毎回 fresh capture）
+- drag 操作開始時（毎回 fresh capture）
 - ナビゲーション後（遅延あり）
 - 初回ロード完了時
-- リサイズ終了時
+- リサイズ開始時（毎回 fresh capture）
+- リサイズ終了時（最終サイズの再撮影）
+- 右クリックメニュー表示前（保存済みがなければ待機、あれば stale を表示しつつ fresh capture）
 - Webview 内スクロール完了時（`page-scroll-ended-{pageId}`）
+
+## hidden モードの役割
+
+- `hidden` は常用モードではなく、`native` も `screenshot` も安全に使えない瞬間の退避先
+- 主な用途は offscreen ノード、live Webview 未接続かつ screenshot 未準備、capture 失敗時
+- interaction 中は `hidden` を増やさず、可能な限り stale/fresh screenshot を優先する
 
 ## ちらつき回避（重要）
 

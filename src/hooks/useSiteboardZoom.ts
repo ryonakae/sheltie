@@ -20,6 +20,7 @@ interface UseSiteboardZoomOptions {
   onInteractionChange?: (active: boolean) => void;
   /** ホイール操作中に毎フレーム呼ばれる（Webview 座標リアルタイム同期用） */
   onBoundsUpdate?: () => void;
+  beforeInteractionStart?: () => Promise<boolean>;
 }
 
 /**
@@ -38,6 +39,7 @@ export function useSiteboardZoom({
   onZoomEnd,
   onInteractionChange,
   onBoundsUpdate,
+  beforeInteractionStart,
 }: UseSiteboardZoomOptions) {
   const applyTransform = useCallback(() => {
     if (!canvasRef.current) return;
@@ -55,27 +57,41 @@ export function useSiteboardZoom({
 
     let commitTimer: ReturnType<typeof setTimeout> | null = null;
     let isInteracting = false;
+    let isPreparing = false;
+    let prepareToken = 0;
+    let bufferedEvents: Array<{
+      clientX: number;
+      clientY: number;
+      ctrlKey: boolean;
+      metaKey: boolean;
+      deltaX: number;
+      deltaY: number;
+    }> = [];
 
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-
-      // 最初のホイールイベントで操作開始を通知（Webview を hide）
+    const applyWheelDelta = (event: {
+      clientX: number;
+      clientY: number;
+      ctrlKey: boolean;
+      metaKey: boolean;
+      deltaX: number;
+      deltaY: number;
+    }) => {
       if (!isInteracting) {
         isInteracting = true;
         onInteractionChange?.(true);
       }
 
-      const isZoomGesture = e.ctrlKey || e.metaKey;
+      const isZoomGesture = event.ctrlKey || event.metaKey;
       if (isZoomGesture) {
         const rect = container.getBoundingClientRect();
         // コンテナ左上を基準としたマウス座標
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
+        const mx = event.clientX - rect.left;
+        const my = event.clientY - rect.top;
 
         const prevZoom = zoom.current;
         const nextZoom = Math.min(
           MAX_ZOOM,
-          Math.max(MIN_ZOOM, prevZoom * (1 - e.deltaY * ZOOM_SENSITIVITY)),
+          Math.max(MIN_ZOOM, prevZoom * (1 - event.deltaY * ZOOM_SENSITIVITY)),
         );
         const scaleRatio = nextZoom / prevZoom;
 
@@ -85,8 +101,8 @@ export function useSiteboardZoom({
         zoom.current = nextZoom;
       } else {
         // 修飾キーなし: スクロール量をそのままパンに反映
-        panX.current -= e.deltaX;
-        panY.current -= e.deltaY;
+        panX.current -= event.deltaX;
+        panY.current -= event.deltaY;
       }
 
       applyTransform();
@@ -106,15 +122,62 @@ export function useSiteboardZoom({
       }, interactionEndDebounceMs);
     };
 
+    const flushBufferedEvents = () => {
+      const pendingEvents = bufferedEvents;
+      bufferedEvents = [];
+      for (const event of pendingEvents) {
+        applyWheelDelta(event);
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      const bufferedEvent = {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+      };
+
+      if (isInteracting) {
+        applyWheelDelta(bufferedEvent);
+        return;
+      }
+
+      bufferedEvents.push(bufferedEvent);
+      if (isPreparing) return;
+
+      isPreparing = true;
+      const token = ++prepareToken;
+
+      void (async () => {
+        const canStart = (await beforeInteractionStart?.()) ?? true;
+        if (prepareToken !== token) return;
+
+        isPreparing = false;
+        if (!canStart) {
+          bufferedEvents = [];
+          return;
+        }
+
+        flushBufferedEvents();
+      })();
+    };
+
     // { passive: false } で preventDefault が効くようにする
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       container.removeEventListener('wheel', handleWheel);
       if (commitTimer) clearTimeout(commitTimer);
+      bufferedEvents = [];
     };
   }, [
     containerRef,
     applyTransform,
+    beforeInteractionStart,
     zoom,
     panX,
     panY,

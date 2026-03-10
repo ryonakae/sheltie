@@ -6,6 +6,7 @@ type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 interface UsePageResizeOptions {
   zoom: React.RefObject<number>;
+  beforeResizeStart?: (nodeId: string) => Promise<boolean>;
   onResizeStart?: (nodeId: string) => void;
   onResizeMove?: (nodeId: string, width: number, height: number) => void;
   onResizeEnd: (nodeId: string, width: number, height: number) => void;
@@ -35,12 +36,24 @@ interface ResizeState {
   currentHeight: number;
 }
 
+interface PendingResizeState {
+  nodeId: string;
+  frameEl: HTMLElement;
+  webviewEl: HTMLElement | null;
+  direction: ResizeDirection;
+  startMouse: { x: number; y: number };
+  startRect: { x: number; y: number; width: number; height: number };
+  currentWidth: number;
+  currentHeight: number;
+}
+
 /**
  * アートボード内のページをリサイズする Hook。
  * 8 方向リサイズハンドルの mousedown → mousemove（DOM 直接操作）→ mouseup（ストア同期）。
  */
 export function usePageResize({
   zoom,
+  beforeResizeStart,
   onResizeStart,
   onResizeMove,
   onResizeEnd,
@@ -50,6 +63,7 @@ export function usePageResize({
   resolveMinHeight,
 }: UsePageResizeOptions) {
   const resizeState = useRef<ResizeState | null>(null);
+  const pendingResizeState = useRef<PendingResizeState | null>(null);
   const onResizeMoveRef = useRef(onResizeMove);
   const resolveMinHeightRef = useRef(resolveMinHeight);
   // レンダリング外で ref を更新（latest ref パターン: stale closure を回避）
@@ -71,7 +85,7 @@ export function usePageResize({
       const initialHeight = webviewEl ? webviewEl.offsetHeight : frameEl.offsetHeight;
 
       e.preventDefault();
-      resizeState.current = {
+      const pendingState: PendingResizeState = {
         nodeId,
         frameEl,
         webviewEl,
@@ -86,11 +100,25 @@ export function usePageResize({
         currentWidth: initialWidth,
         currentHeight: initialHeight,
       };
-      onResizeStart?.(nodeId);
       document.body.style.userSelect = 'none';
-      onInteractionChange(true, direction);
+      pendingResizeState.current = pendingState;
+
+      void (async () => {
+        const canStart = (await beforeResizeStart?.(nodeId)) ?? true;
+        if (pendingResizeState.current !== pendingState) return;
+
+        pendingResizeState.current = null;
+        if (!canStart) {
+          document.body.style.userSelect = '';
+          return;
+        }
+
+        resizeState.current = pendingState;
+        onResizeStart?.(nodeId);
+        onInteractionChange(true, direction);
+      })();
     },
-    [onInteractionChange, onResizeStart],
+    [beforeResizeStart, onInteractionChange, onResizeStart],
   );
 
   useEffect(() => {
@@ -153,6 +181,12 @@ export function usePageResize({
     };
 
     const handleMouseUp = () => {
+      if (pendingResizeState.current) {
+        pendingResizeState.current = null;
+        document.body.style.userSelect = '';
+        return;
+      }
+
       const state = resizeState.current;
       if (!state) return;
 
@@ -170,6 +204,7 @@ export function usePageResize({
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      pendingResizeState.current = null;
       resizeState.current = null;
       document.body.style.userSelect = '';
     };

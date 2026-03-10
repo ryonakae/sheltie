@@ -25,6 +25,7 @@ interface UseSiteboardViewportEngineParams {
   activeId: string;
   viewport?: Viewport;
   onInteractionChange: (active: boolean, cursor: string, type: InteractionType) => void;
+  prepareInteractionStart: (type: InteractionType, nodeId?: string) => Promise<boolean>;
   onNodeResizeStart?: (nodeId: string) => void;
   onNodeResizeEnd?: (nodeId: string) => void;
   scheduleInteractionUpdate: () => void;
@@ -46,6 +47,7 @@ export function useSiteboardViewportEngine({
   activeId,
   viewport,
   onInteractionChange,
+  prepareInteractionStart,
   onNodeResizeStart,
   onNodeResizeEnd,
   scheduleInteractionUpdate,
@@ -181,6 +183,7 @@ export function useSiteboardViewportEngine({
       [onInteractionChange],
     ),
     onPanMove: scheduleInteractionUpdate,
+    beforePanStart: useCallback(() => prepareInteractionStart('pan'), [prepareInteractionStart]),
   });
 
   useSiteboardZoom({
@@ -199,6 +202,10 @@ export function useSiteboardViewportEngine({
       [onInteractionChange],
     ),
     onBoundsUpdate: handleZoomMove,
+    beforeInteractionStart: useCallback(
+      () => prepareInteractionStart('zoom'),
+      [prepareInteractionStart],
+    ),
   });
 
   const { startDrag } = usePageDrag({
@@ -213,10 +220,18 @@ export function useSiteboardViewportEngine({
       (active) => onInteractionChange(active, 'grabbing', 'drag'),
       [onInteractionChange],
     ),
+    beforeDragStart: useCallback(
+      (nodeId: string) => prepareInteractionStart('drag', nodeId),
+      [prepareInteractionStart],
+    ),
   });
 
   const { startResize } = usePageResize({
     zoom: zoomRef,
+    beforeResizeStart: useCallback(
+      (nodeId: string) => prepareInteractionStart('resize', nodeId),
+      [prepareInteractionStart],
+    ),
     onResizeStart: useCallback(
       (nodeId: string) => {
         onNodeResizeStart?.(nodeId);

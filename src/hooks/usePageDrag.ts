@@ -6,6 +6,7 @@ interface UsePageDragOptions {
   zoom: React.RefObject<number>;
   onDragEnd: (nodeId: string, x: number, y: number) => void;
   onInteractionChange: (active: boolean) => void;
+  beforeDragStart?: (nodeId: string) => Promise<boolean>;
 }
 
 interface DragState {
@@ -15,6 +16,8 @@ interface DragState {
   startPos: { x: number; y: number };
   /** mousedown 時は false。閾値を超えた mousemove で true になる */
   isDragging: boolean;
+  isPreparing: boolean;
+  lastMouse: { x: number; y: number };
 }
 
 /** mousedown から実際の移動とみなす最小距離（px） */
@@ -24,7 +27,12 @@ interface DragState {
  * ズーム倍率で delta を補正してキャンバス座標を維持する。
  * 閾値未満の移動（単なるクリック）では Webview の hide/show を発生させない。
  */
-export function usePageDrag({ zoom, onDragEnd, onInteractionChange }: UsePageDragOptions) {
+export function usePageDrag({
+  zoom,
+  onDragEnd,
+  onInteractionChange,
+  beforeDragStart,
+}: UsePageDragOptions) {
   const dragState = useRef<DragState | null>(null);
 
   const startDrag = useCallback((e: React.MouseEvent, nodeId: string) => {
@@ -42,6 +50,8 @@ export function usePageDrag({ zoom, onDragEnd, onInteractionChange }: UsePageDra
         y: parseInt(frameEl.style.top || '0', 10),
       },
       isDragging: false,
+      isPreparing: false,
+      lastMouse: { x: e.clientX, y: e.clientY },
     };
     document.body.style.userSelect = 'none';
     // onInteractionChange(true) はドラッグ閾値を超えてから呼ぶ（単なるクリックで Webview を hide しない）
@@ -51,14 +61,40 @@ export function usePageDrag({ zoom, onDragEnd, onInteractionChange }: UsePageDra
     const handleMouseMove = (e: MouseEvent) => {
       const state = dragState.current;
       if (!state) return;
+      state.lastMouse = { x: e.clientX, y: e.clientY };
 
       // 閾値を超えた時点で初めてドラッグ開始とみなし Webview を隠す
-      if (!state.isDragging) {
+      if (!state.isDragging && !state.isPreparing) {
         const rawDx = e.clientX - state.startMouse.x;
         const rawDy = e.clientY - state.startMouse.y;
         if (Math.sqrt(rawDx * rawDx + rawDy * rawDy) < DRAG_THRESHOLD) return;
-        state.isDragging = true;
-        onInteractionChange(true);
+        state.isPreparing = true;
+        const pendingState = state;
+
+        void (async () => {
+          const canStart = (await beforeDragStart?.(pendingState.nodeId)) ?? true;
+          if (dragState.current !== pendingState) return;
+
+          pendingState.isPreparing = false;
+          if (!canStart) {
+            dragState.current = null;
+            document.body.style.userSelect = '';
+            return;
+          }
+
+          pendingState.isDragging = true;
+          pendingState.startMouse = { ...pendingState.lastMouse };
+          pendingState.startPos = {
+            x: parseInt(pendingState.frameEl.style.left || '0', 10),
+            y: parseInt(pendingState.frameEl.style.top || '0', 10),
+          };
+          onInteractionChange(true);
+        })();
+        return;
+      }
+
+      if (!state.isDragging) {
+        return;
       }
 
       // ズームを考慮してキャンバス座標系に変換
@@ -94,7 +130,7 @@ export function usePageDrag({ zoom, onDragEnd, onInteractionChange }: UsePageDra
       dragState.current = null;
       document.body.style.userSelect = '';
     };
-  }, [zoom, onDragEnd, onInteractionChange]);
+  }, [beforeDragStart, zoom, onDragEnd, onInteractionChange]);
 
   return { startDrag };
 }

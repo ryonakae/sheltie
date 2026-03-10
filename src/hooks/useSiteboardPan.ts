@@ -10,6 +10,7 @@ interface UseSiteboardPanOptions {
   onInteractionChange: (active: boolean) => void;
   /** パン移動中に毎フレーム呼ばれる（Webview 座標リアルタイム同期用） */
   onPanMove?: () => void;
+  beforePanStart?: () => Promise<boolean>;
 }
 
 /**
@@ -25,9 +26,15 @@ export function useSiteboardPan({
   onPanEnd,
   onInteractionChange,
   onPanMove,
+  beforePanStart,
 }: UseSiteboardPanOptions) {
   const isPanMode = useRef(false);
   const isDragging = useRef(false);
+  const isPreparing = useRef(false);
+  const pendingPanStart = useRef<{
+    startMouse: { x: number; y: number };
+    startPan: { x: number; y: number };
+  } | null>(null);
   const startMouse = useRef({ x: 0, y: 0 });
   const startPan = useRef({ x: 0, y: 0 });
   const currentCursor = useRef('default');
@@ -74,11 +81,32 @@ export function useSiteboardPan({
       if (!isSpacePan && !isMiddleClick) return;
 
       e.preventDefault();
-      isDragging.current = true;
-      startMouse.current = { x: e.clientX, y: e.clientY };
-      startPan.current = { x: panX.current, y: panY.current };
-      setCursor('grabbing');
-      onInteractionChange(true);
+      if (isPreparing.current || isDragging.current) return;
+
+      pendingPanStart.current = {
+        startMouse: { x: e.clientX, y: e.clientY },
+        startPan: { x: panX.current, y: panY.current },
+      };
+      isPreparing.current = true;
+
+      void (async () => {
+        const canStart = (await beforePanStart?.()) ?? true;
+        const pending = pendingPanStart.current;
+        isPreparing.current = false;
+        if (!pending) return;
+
+        pendingPanStart.current = null;
+        if (!canStart) {
+          setCursor(isPanMode.current ? 'grab' : 'default');
+          return;
+        }
+
+        isDragging.current = true;
+        startMouse.current = pending.startMouse;
+        startPan.current = pending.startPan;
+        setCursor('grabbing');
+        onInteractionChange(true);
+      })();
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -92,6 +120,9 @@ export function useSiteboardPan({
     };
 
     const handleMouseUp = () => {
+      if (pendingPanStart.current) {
+        pendingPanStart.current = null;
+      }
       if (!isDragging.current) return;
       isDragging.current = false;
       onInteractionChange(false);
@@ -112,10 +143,22 @@ export function useSiteboardPan({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       isDragging.current = false;
+      isPreparing.current = false;
+      pendingPanStart.current = null;
       isPanMode.current = false;
       document.body.style.cursor = '';
     };
-  }, [applyTransform, setCursor, zoom, panX, panY, onPanEnd, onInteractionChange, onPanMove]);
+  }, [
+    applyTransform,
+    beforePanStart,
+    setCursor,
+    zoom,
+    panX,
+    panY,
+    onPanEnd,
+    onInteractionChange,
+    onPanMove,
+  ]);
 
   return { isPanMode, isDragging };
 }

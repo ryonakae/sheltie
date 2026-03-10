@@ -38,6 +38,13 @@ interface ProjectNodeHistory {
 type ProjectNodeHistories = Record<string, ProjectNodeHistory>;
 type ProjectWebviewRuntimes = Record<string, ProjectWebviewRuntime>;
 
+function createEmptyProjectWebviewRuntime(): ProjectWebviewRuntime {
+  return {
+    labelsByNodeId: {},
+    screenshotUrlsByNodeId: {},
+  };
+}
+
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
@@ -178,7 +185,14 @@ function getProjectWebviewRuntime(
   runtimes: ProjectWebviewRuntimes,
   projectId: string,
 ): ProjectWebviewRuntime {
-  return runtimes[projectId] ?? { labelsByNodeId: {} };
+  return runtimes[projectId] ?? createEmptyProjectWebviewRuntime();
+}
+
+function isProjectWebviewRuntimeEmpty(runtime: ProjectWebviewRuntime): boolean {
+  return (
+    Object.keys(runtime.labelsByNodeId).length === 0 &&
+    Object.keys(runtime.screenshotUrlsByNodeId).length === 0
+  );
 }
 
 function updateProjectWebviewRuntime(
@@ -298,6 +312,12 @@ interface ProjectActions {
   pinWebNodeUrl: (projectId: string, nodeId: string) => void;
   setWebNodeWebviewLabel: (projectId: string, nodeId: string, label: string) => void;
   clearWebNodeWebviewLabel: (projectId: string, nodeId: string) => void;
+  hydrateProjectScreenshotUrls: (
+    projectId: string,
+    screenshotUrlsByNodeId: Record<string, string>,
+  ) => void;
+  setProjectScreenshotUrl: (projectId: string, nodeId: string, url: string) => void;
+  clearProjectScreenshotUrl: (projectId: string, nodeId: string) => void;
   undoActiveProject: () => void;
   redoActiveProject: () => void;
   _restoreState: (state: ProjectState) => void;
@@ -555,12 +575,20 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         return nodes.filter((node) => node.id !== nodeId);
       }),
       webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
-        if (!(nodeId in runtime.labelsByNodeId)) return runtime;
-        const { [nodeId]: _removedLabel, ...rest } = runtime.labelsByNodeId;
-        if (Object.keys(rest).length === 0) {
+        if (!(nodeId in runtime.labelsByNodeId) && !(nodeId in runtime.screenshotUrlsByNodeId)) {
+          return runtime;
+        }
+        const { [nodeId]: _removedLabel, ...remainingLabels } = runtime.labelsByNodeId;
+        const { [nodeId]: _removedScreenshot, ...remainingScreenshotUrls } =
+          runtime.screenshotUrlsByNodeId;
+        const nextRuntime = {
+          labelsByNodeId: remainingLabels,
+          screenshotUrlsByNodeId: remainingScreenshotUrls,
+        };
+        if (isProjectWebviewRuntimeEmpty(nextRuntime)) {
           return null;
         }
-        return { labelsByNodeId: rest };
+        return nextRuntime;
       }),
     })),
 
@@ -751,6 +779,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
             ...runtime.labelsByNodeId,
             [nodeId]: label,
           },
+          screenshotUrlsByNodeId: runtime.screenshotUrlsByNodeId,
         };
       }),
     })),
@@ -760,10 +789,64 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
         if (!(nodeId in runtime.labelsByNodeId)) return runtime;
         const { [nodeId]: _removedLabel, ...rest } = runtime.labelsByNodeId;
-        if (Object.keys(rest).length === 0) {
+        const nextRuntime = {
+          labelsByNodeId: rest,
+          screenshotUrlsByNodeId: runtime.screenshotUrlsByNodeId,
+        };
+        if (isProjectWebviewRuntimeEmpty(nextRuntime)) {
           return null;
         }
-        return { labelsByNodeId: rest };
+        return nextRuntime;
+      }),
+    })),
+
+  hydrateProjectScreenshotUrls: (projectId, screenshotUrlsByNodeId) =>
+    set((state) => ({
+      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
+        let changed = false;
+        const nextScreenshotUrls = { ...runtime.screenshotUrlsByNodeId };
+
+        for (const [nodeId, url] of Object.entries(screenshotUrlsByNodeId)) {
+          if (!url || nextScreenshotUrls[nodeId] === url) continue;
+          nextScreenshotUrls[nodeId] = url;
+          changed = true;
+        }
+
+        if (!changed) return runtime;
+        return {
+          labelsByNodeId: runtime.labelsByNodeId,
+          screenshotUrlsByNodeId: nextScreenshotUrls,
+        };
+      }),
+    })),
+
+  setProjectScreenshotUrl: (projectId, nodeId, url) =>
+    set((state) => ({
+      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
+        if (runtime.screenshotUrlsByNodeId[nodeId] === url) return runtime;
+        return {
+          labelsByNodeId: runtime.labelsByNodeId,
+          screenshotUrlsByNodeId: {
+            ...runtime.screenshotUrlsByNodeId,
+            [nodeId]: url,
+          },
+        };
+      }),
+    })),
+
+  clearProjectScreenshotUrl: (projectId, nodeId) =>
+    set((state) => ({
+      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
+        if (!(nodeId in runtime.screenshotUrlsByNodeId)) return runtime;
+        const { [nodeId]: _removedScreenshot, ...rest } = runtime.screenshotUrlsByNodeId;
+        const nextRuntime = {
+          labelsByNodeId: runtime.labelsByNodeId,
+          screenshotUrlsByNodeId: rest,
+        };
+        if (isProjectWebviewRuntimeEmpty(nextRuntime)) {
+          return null;
+        }
+        return nextRuntime;
       }),
     })),
 
@@ -861,7 +944,7 @@ export const selectActiveProject = (state: ProjectStore): Project | undefined =>
 
 export const selectIsHome = (state: ProjectStore): boolean => state.activeId === HOME_ID;
 
-const EMPTY_WEBVIEW_RUNTIME: ProjectWebviewRuntime = { labelsByNodeId: {} };
+const EMPTY_WEBVIEW_RUNTIME: ProjectWebviewRuntime = createEmptyProjectWebviewRuntime();
 
 export const selectActiveProjectWebviewRuntime = (state: ProjectStore): ProjectWebviewRuntime => {
   if (state.activeId === HOME_ID) {

@@ -19,6 +19,7 @@
 - `ProjectWebviewRuntime`
   - project ごとの runtime-only state
   - `labelsByNodeId: Record<string, string>`
+  - `screenshotUrlsByNodeId: Record<string, string>`
 - `Viewport`: `zoom`, `panX`, `panY`
 - `SiteboardDocumentNode`
   - `.siteboard` に保存される node の union 型
@@ -36,7 +37,7 @@
 - `ProjectStore`（`tab-store.ts` 内部）
   - `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `nodeHistories`, `webviewRuntime`
-  - runtime action: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`
+  - runtime action: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
 - `ProjectNodeHistory`（`tab-store.ts` 内部）
   - `past`: 直前までの `BoardNode[]` スナップショット配列
   - `future`: Redo 用の `BoardNode[]` スナップショット配列
@@ -99,6 +100,7 @@
 
 - `BoardNode` は永続化対象だけを持ち、Webview 接続状態は含めない
 - `webviewRuntime.labelsByNodeId[nodeId]` は「現在接続済みのネイティブ Webview がある」間だけ設定する。再マウント開始時に `clearWebNodeWebviewLabel` で外し、再生成完了後に `setWebNodeWebviewLabel` で付け直す。
+- `webviewRuntime.screenshotUrlsByNodeId[nodeId]` は最後に表示可能だった screenshot の asset URL を保持し、同一セッション内の再マウントと起動直後の open tab preload で使い回す。node 削除時にだけ破棄する。
 - 付箋ノードは `type: 'stickynote'` と `content` / `colorIndex` を利用する
 - 空フレーム（`url === ''`）は Webview 未作成状態を許容する
 - `nodeHistories` はランタイム専用で永続化しない（`_restoreState` で必ず初期化）

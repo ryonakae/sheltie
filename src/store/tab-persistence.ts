@@ -1,7 +1,37 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
+
 import { SAVE_DEBOUNCE_MS } from '@/constants';
 import { requestAppClose } from '@/lib/project-close';
-import { api } from '@/lib/tauri-bridge';
+import { api, webviewApi } from '@/lib/tauri-bridge';
 import { useProjectStore } from '@/store/tab-store';
+import { isWebPageNode } from '@/types';
+
+async function preloadOpenProjectScreenshots(): Promise<void> {
+  const { projects, openIds, hydrateProjectScreenshotUrls } = useProjectStore.getState();
+  const openProjectIds = new Set(openIds);
+
+  await Promise.all(
+    projects
+      .filter((project) => openProjectIds.has(project.id))
+      .map(async (project) => {
+        const pageIds = project.nodes
+          .filter((node) => isWebPageNode(node) && Boolean(node.url))
+          .map((node) => node.id);
+        if (pageIds.length === 0) return;
+
+        const entries = await webviewApi.getExistingScreenshotPaths(project.id, pageIds);
+        if (entries.length === 0) return;
+
+        const screenshotUrlsByNodeId: Record<string, string> = {};
+        for (const [nodeId, filePath] of entries) {
+          screenshotUrlsByNodeId[nodeId] = `${convertFileSrc(filePath)}?t=restored`;
+        }
+
+        if (Object.keys(screenshotUrlsByNodeId).length === 0) return;
+        hydrateProjectScreenshotUrls(project.id, screenshotUrlsByNodeId);
+      }),
+  );
+}
 
 // HMR で setupProjectPersistence() が再実行されても多重登録を防ぐためのガード
 let initialized = false;
@@ -21,8 +51,9 @@ export function setupProjectPersistence(): void {
   // 1. 起動時: 保存済み状態を読み込んで復元
   api
     .loadProjectState()
-    .then((saved) => {
+    .then(async (saved) => {
       useProjectStore.getState()._restoreState(saved);
+      await preloadOpenProjectScreenshots();
       useProjectStore.getState()._setLoaded();
     })
     .catch(() => {

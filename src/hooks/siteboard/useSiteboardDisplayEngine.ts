@@ -20,12 +20,19 @@ const SCREENSHOT_CLIPPING_ENABLED = true;
 interface UseSiteboardDisplayEngineParams {
   webPageNodes: WebPageNode[];
   webviewLabelsByNodeId: Record<string, string>;
+  cachedScreenshotUrlsByNodeId: Record<string, string>;
   projectId: string;
   containerRef: React.RefObject<HTMLDivElement | null>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   zoomRef: React.RefObject<number>;
   centeredNodeId?: string | null;
   onCenteredNodeHandled?: () => void;
+  hydrateCachedScreenshotUrls: (
+    projectId: string,
+    screenshotUrlsByNodeId: Record<string, string>,
+  ) => void;
+  setCachedScreenshotUrl: (projectId: string, nodeId: string, url: string) => void;
+  clearCachedScreenshotUrl: (projectId: string, nodeId: string) => void;
 }
 
 interface CaptureScreenshotOptions {
@@ -36,21 +43,69 @@ interface CaptureScreenshotOptions {
 
 type InteractionPreparationType = InteractionType | 'context-menu';
 
+function buildSeededScreenshotUrls(
+  webPageNodes: WebPageNode[],
+  cachedScreenshotUrlsByNodeId: Record<string, string>,
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const page of webPageNodes) {
+    if (!page.url) continue;
+    const cachedUrl = cachedScreenshotUrlsByNodeId[page.id];
+    if (!cachedUrl) continue;
+    next[page.id] = cachedUrl;
+  }
+  return next;
+}
+
+function buildInitialDisplayModes(
+  webPageNodes: WebPageNode[],
+  seededScreenshotUrls: Record<string, string>,
+): Record<string, DisplayMode> {
+  const next: Record<string, DisplayMode> = {};
+  for (const page of webPageNodes) {
+    next[page.id] = seededScreenshotUrls[page.id] ? 'screenshot' : 'hidden';
+  }
+  return next;
+}
+
+function buildScreenshotReadyState(
+  seededScreenshotUrls: Record<string, string>,
+): Record<string, boolean> {
+  const next: Record<string, boolean> = {};
+  for (const nodeId of Object.keys(seededScreenshotUrls)) {
+    next[nodeId] = true;
+  }
+  return next;
+}
+
 export function useSiteboardDisplayEngine({
   webPageNodes,
   webviewLabelsByNodeId,
+  cachedScreenshotUrlsByNodeId,
   projectId,
   containerRef,
   canvasRef,
   zoomRef,
   centeredNodeId = null,
   onCenteredNodeHandled,
+  hydrateCachedScreenshotUrls,
+  setCachedScreenshotUrl,
+  clearCachedScreenshotUrl,
 }: UseSiteboardDisplayEngineParams) {
-  const [displayModes, setDisplayModes] = useState<Record<string, DisplayMode>>({});
-  const [screenshotUrls, setScreenshotUrls] = useState<Record<string, string>>({});
+  const seededScreenshotUrls = useMemo(
+    () => buildSeededScreenshotUrls(webPageNodes, cachedScreenshotUrlsByNodeId),
+    [cachedScreenshotUrlsByNodeId, webPageNodes],
+  );
+  const [displayModes, setDisplayModes] = useState<Record<string, DisplayMode>>(() =>
+    buildInitialDisplayModes(webPageNodes, seededScreenshotUrls),
+  );
+  const [screenshotUrls, setScreenshotUrls] =
+    useState<Record<string, string>>(seededScreenshotUrls);
   const [interactionCursor, setInteractionCursor] = useState<string | null>(null);
 
-  const screenshotReadyRef = useRef<Record<string, boolean>>({});
+  const screenshotReadyRef = useRef<Record<string, boolean>>(
+    buildScreenshotReadyState(seededScreenshotUrls),
+  );
   const capturePromiseRef = useRef<Record<string, Promise<boolean> | undefined>>({});
   const pendingCaptureOptionsRef = useRef<Record<string, CaptureScreenshotOptions | undefined>>({});
   const queuedFreshCaptureRef = useRef<Record<string, boolean>>({});
@@ -69,7 +124,7 @@ export function useSiteboardDisplayEngine({
   const settlingNodeIdsRef = useRef<Set<string>>(new Set());
   const forceHiddenInteractionNodeIdsRef = useRef<Set<string>>(new Set());
 
-  const screenshotUrlsRef = useRef<Record<string, string>>({});
+  const screenshotUrlsRef = useRef<Record<string, string>>(seededScreenshotUrls);
   const presentedScreenshotUrlRef = useRef<Record<string, string>>({});
   const screenshotPresentationWaitersRef = useRef<
     Record<string, { url: string; resolvers: Array<() => void> }>
@@ -681,6 +736,7 @@ export function useSiteboardDisplayEngine({
               screenshotReadyRef.current[nodeId] = true;
               delete presentedScreenshotUrlRef.current[nodeId];
               forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
+              setCachedScreenshotUrl(projectId, nodeId, assetUrl);
 
               setScreenshotUrls((prev) => {
                 const next = { ...prev, [nodeId]: assetUrl };
@@ -730,6 +786,7 @@ export function useSiteboardDisplayEngine({
       hideNodeWebview,
       mergeCaptureOptions,
       projectId,
+      setCachedScreenshotUrl,
       setNodeDisplayMode,
       waitForScreenshotPresentation,
     ],
@@ -973,13 +1030,14 @@ export function useSiteboardDisplayEngine({
       delete screenshotPresentationWaitersRef.current[nodeId];
       forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
       settlingNodeIdsRef.current.delete(nodeId);
+      clearCachedScreenshotUrl(projectId, nodeId);
       if (resizingNodeIdRef.current === nodeId) {
         resizingNodeIdRef.current = null;
       }
       // スクリーンショットファイルをクリーンアップ
       void webviewApi.deleteScreenshot(nodeId, projectId);
     },
-    [cancelNativeReveal, projectId],
+    [cancelNativeReveal, clearCachedScreenshotUrl, projectId],
   );
 
   useEffect(() => {
@@ -1023,18 +1081,34 @@ export function useSiteboardDisplayEngine({
   // 起動直後の Webview がサイドバーに重なる問題を防ぐ。
   useEffect(() => {
     const restorablePageIds = webPageNodes.filter((page) => page.url).map((page) => page.id);
-    if (restorablePageIds.length === 0) return;
+    const missingPageIds = restorablePageIds.filter((nodeId) => !screenshotUrlsRef.current[nodeId]);
+    if (missingPageIds.length === 0) return;
 
     let cancelled = false;
-    void webviewApi.getExistingScreenshotPaths(projectId, restorablePageIds).then((entries) => {
+    void webviewApi.getExistingScreenshotPaths(projectId, missingPageIds).then((entries) => {
       if (cancelled || entries.length === 0) return;
 
       const restoredUrls: Record<string, string> = {};
       for (const [nodeId, filePath] of entries) {
+        if (screenshotUrlsRef.current[nodeId]) continue;
         screenshotReadyRef.current[nodeId] = true;
         restoredUrls[nodeId] = `${convertFileSrc(filePath)}?t=restored`;
       }
-      setScreenshotUrls((prev) => ({ ...prev, ...restoredUrls }));
+      if (Object.keys(restoredUrls).length === 0) return;
+
+      hydrateCachedScreenshotUrls(projectId, restoredUrls);
+      setScreenshotUrls((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [nodeId, url] of Object.entries(restoredUrls)) {
+          if (next[nodeId]) continue;
+          next[nodeId] = url;
+          changed = true;
+        }
+        if (!changed) return prev;
+        screenshotUrlsRef.current = next;
+        return next;
+      });
       // 復元後にモード判定を再実行し、端のページが screenshot モードで表示されるようにする
       requestAnimationFrame(() => computeDisplayModes());
     });
@@ -1042,7 +1116,7 @@ export function useSiteboardDisplayEngine({
     return () => {
       cancelled = true;
     };
-  }, [computeDisplayModes, projectId, webPageIdsKey, webPageNodes]);
+  }, [computeDisplayModes, hydrateCachedScreenshotUrls, projectId, webPageIdsKey, webPageNodes]);
 
   useEffect(() => {
     const el = containerRef.current;

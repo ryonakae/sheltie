@@ -111,10 +111,16 @@
 6. `screenshotReadyRef.current[pageId] = true` をセット
 
 **フロー（起動時復元）**:
-1. `useSiteboardDisplayEngine` の `projectId + webpage node ids` 依存 effect が実行
-2. `get_existing_screenshot_paths(projectId, pageIds)` で既存ファイルパスを一括取得
-3. `convertFileSrc` でアセット URL に変換 → `screenshotReadyRef` と `screenshotUrls` を更新
-4. `computeDisplayModes()` を再実行（復元スクショを考慮した正しいモード判定）
+1. `setupProjectPersistence()` が `_restoreState()` の直後、`_setLoaded()` の前に「保存状態で open だった tab」だけ `get_existing_screenshot_paths(projectId, pageIds)` を実行する
+2. 戻り値を `convertFileSrc(filePath) + '?t=restored'` に変換し、`tab-store.webviewRuntime.screenshotUrlsByNodeId` へ preload する
+3. `useSiteboardDisplayEngine` は初回 render の `screenshotUrls` / `screenshotReadyRef` / 仮 `displayModes` をこの runtime cache で seed し、stale screenshot を即表示する
+4. Webview 作成後の `computeDisplayModes()` が既存ルールどおり `screenshot -> native` を最終決定する
+
+**フロー（lazy restore）**:
+1. `useSiteboardDisplayEngine` の `projectId + webpage node ids` 依存 effect は、runtime cache にまだ無い page だけを対象に `get_existing_screenshot_paths(projectId, pageIds)` を実行する
+2. `convertFileSrc(filePath) + '?t=restored'` を local state と `tab-store.webviewRuntime.screenshotUrlsByNodeId` の両方へ反映する
+3. 既に fresh capture などで in-memory URL がある page は上書きしない
+4. `computeDisplayModes()` を再実行し、復元スクショを考慮した正しいモード判定に収束させる
 
 **削除**: ページ削除時に `cleanupPageArtifacts()` → `delete_screenshot(pageId, projectId)` でファイルも削除。
 
@@ -164,6 +170,7 @@
 - 空フレーム（`url === ''`）は Webview を作成しない。
 - Webview の create/destroy は URL 同期から切り離し、`node.url` 更新では再生成しない。
 - `webviewLabel` は `BoardNode` に持たず、`tab-store` の `webviewRuntime.labelsByNodeId` に保持する。「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。label が無いページは `native` に戻さず `screenshot` または `hidden` を使う。
+- `screenshotUrl` も `BoardNode` には持たず、`tab-store` の `webviewRuntime.screenshotUrlsByNodeId` に runtime cache として保持する。タブ再マウントや起動直後の open tab 復元では、この cache を `useSiteboardDisplayEngine` の初期 state seed に使う。
 - `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、その更新で `reload` を再発火させない。
 - 既存 Webview への URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview` を呼ぶ。
 

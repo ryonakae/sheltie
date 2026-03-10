@@ -67,13 +67,19 @@ export function Siteboard({
     pinWebNodeUrl,
     updateStickyNoteContent,
     cycleStickyNoteColor,
+    hydrateProjectScreenshotUrls,
+    setProjectScreenshotUrl,
+    clearProjectScreenshotUrl,
   } = useProjectStore(
     useShallow((s) => ({
+      clearProjectScreenshotUrl: s.clearProjectScreenshotUrl,
       cycleStickyNoteColor: s.cycleStickyNoteColor,
       clearWebNodeWebviewLabel: s.clearWebNodeWebviewLabel,
+      hydrateProjectScreenshotUrls: s.hydrateProjectScreenshotUrls,
       redoActiveProject: s.redoActiveProject,
       pinWebNodeUrl: s.pinWebNodeUrl,
       removeNode: s.removeNode,
+      setProjectScreenshotUrl: s.setProjectScreenshotUrl,
       setWebNodeUrl: s.setWebNodeUrl,
       setWebNodeWebviewLabel: s.setWebNodeWebviewLabel,
       undoActiveProject: s.undoActiveProject,
@@ -118,12 +124,16 @@ export function Siteboard({
   } = useSiteboardDisplayEngine({
     webPageNodes,
     webviewLabelsByNodeId: activeProjectWebviewRuntime.labelsByNodeId,
+    cachedScreenshotUrlsByNodeId: activeProjectWebviewRuntime.screenshotUrlsByNodeId,
     projectId: activeId ?? '',
     containerRef,
     canvasRef,
     zoomRef,
     centeredNodeId,
     onCenteredNodeHandled,
+    hydrateCachedScreenshotUrls: hydrateProjectScreenshotUrls,
+    setCachedScreenshotUrl: setProjectScreenshotUrl,
+    clearCachedScreenshotUrl: clearProjectScreenshotUrl,
   });
 
   const getZoom = useCallback(() => zoomRef.current, [zoomRef]);

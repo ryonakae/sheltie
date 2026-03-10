@@ -127,4 +127,5 @@ export interface ProjectState {
 
 export interface ProjectWebviewRuntime {
   labelsByNodeId: Record<string, string>;
+  screenshotUrlsByNodeId: Record<string, string>;
 }

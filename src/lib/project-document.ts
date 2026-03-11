@@ -1,9 +1,12 @@
 import {
   isStickyNoteNode,
+  type BoardEdge,
   type BoardNode,
   type Project,
+  type SiteboardDocument,
+  type SiteboardDocumentEdge,
   type SiteboardDocumentNode,
-  type SiteboardDocumentV1,
+  type SiteboardDocumentV2,
 } from '@/types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,13 +80,33 @@ function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
   throw new Error(`nodes[${index}].type が未対応です: ${type}`);
 }
 
-function parseProjectDocumentValue(value: unknown): SiteboardDocumentV1 {
-  if (!isRecord(value)) {
-    throw new Error('ルートはオブジェクトである必要があります');
+function parseEdge(rawEdge: unknown, index: number): SiteboardDocumentEdge {
+  if (!isRecord(rawEdge)) {
+    throw new Error(`edges[${index}] はオブジェクトである必要があります`);
   }
 
-  if (value.schemaVersion !== 1) {
-    throw new Error('schemaVersion は 1 のみ対応しています');
+  return {
+    id: parseString(rawEdge.id, `edges[${index}].id`),
+    source: parseString(rawEdge.source, `edges[${index}].source`),
+    target: parseString(rawEdge.target, `edges[${index}].target`),
+    sourceHandle:
+      rawEdge.sourceHandle === undefined
+        ? undefined
+        : parseString(rawEdge.sourceHandle, `edges[${index}].sourceHandle`),
+    targetHandle:
+      rawEdge.targetHandle === undefined
+        ? undefined
+        : parseString(rawEdge.targetHandle, `edges[${index}].targetHandle`),
+    type:
+      rawEdge.type === undefined ? undefined : parseString(rawEdge.type, `edges[${index}].type`),
+    label:
+      rawEdge.label === undefined ? undefined : parseString(rawEdge.label, `edges[${index}].label`),
+  };
+}
+
+function parseProjectDocumentValue(value: unknown): SiteboardDocument {
+  if (!isRecord(value)) {
+    throw new Error('ルートはオブジェクトである必要があります');
   }
 
   const title = parseString(value.title, 'title').trim() || 'Untitled';
@@ -92,11 +115,29 @@ function parseProjectDocumentValue(value: unknown): SiteboardDocumentV1 {
     throw new Error('nodes は配列である必要があります');
   }
 
-  return {
-    schemaVersion: 1,
-    title,
-    nodes: rawNodes.map((node, index) => parseNode(node, index)),
-  };
+  if (value.schemaVersion === 1) {
+    return {
+      schemaVersion: 1,
+      title,
+      nodes: rawNodes.map((node, index) => parseNode(node, index)),
+    };
+  }
+
+  if (value.schemaVersion === 2) {
+    const rawEdges = value.edges;
+    if (!Array.isArray(rawEdges)) {
+      throw new Error('edges は配列である必要があります');
+    }
+
+    return {
+      schemaVersion: 2,
+      title,
+      nodes: rawNodes.map((node, index) => parseNode(node, index)),
+      edges: rawEdges.map((edge, index) => parseEdge(edge, index)),
+    };
+  }
+
+  throw new Error('schemaVersion は 1 または 2 のみ対応しています');
 }
 
 export function boardNodeToDocumentNode(node: BoardNode): SiteboardDocumentNode {
@@ -124,6 +165,18 @@ export function boardNodeToDocumentNode(node: BoardNode): SiteboardDocumentNode 
     y: node.y,
     width: node.width,
     height: node.height,
+  };
+}
+
+export function boardEdgeToDocumentEdge(edge: BoardEdge): SiteboardDocumentEdge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceHandle: edge.sourceHandle,
+    targetHandle: edge.targetHandle,
+    type: edge.type,
+    label: edge.label,
   };
 }
 
@@ -156,21 +209,34 @@ export function documentNodeToBoardNode(node: SiteboardDocumentNode): BoardNode 
   };
 }
 
-export function createProjectDocument(
-  project: Pick<Project, 'title' | 'nodes'>,
-): SiteboardDocumentV1 {
+export function documentEdgeToBoardEdge(edge: SiteboardDocumentEdge): BoardEdge {
   return {
-    schemaVersion: 1,
-    title: project.title,
-    nodes: project.nodes.map(boardNodeToDocumentNode),
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceHandle: edge.sourceHandle,
+    targetHandle: edge.targetHandle,
+    type: edge.type,
+    label: edge.label,
   };
 }
 
-export function serializeProjectDocument(document: SiteboardDocumentV1): string {
+export function createProjectDocument(
+  project: Pick<Project, 'title' | 'nodes' | 'edges'>,
+): SiteboardDocumentV2 {
+  return {
+    schemaVersion: 2,
+    title: project.title,
+    nodes: project.nodes.map(boardNodeToDocumentNode),
+    edges: project.edges.map(boardEdgeToDocumentEdge),
+  };
+}
+
+export function serializeProjectDocument(document: SiteboardDocument): string {
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 
-export function parseProjectDocument(contents: string): SiteboardDocumentV1 {
+export function parseProjectDocument(contents: string): SiteboardDocument {
   let parsed: unknown;
 
   try {
@@ -184,24 +250,42 @@ export function parseProjectDocument(contents: string): SiteboardDocumentV1 {
 
 export function sanitizeProjectDocument(
   rawDocument: unknown,
-  fallbackProject: Pick<Project, 'title' | 'nodes'>,
-): SiteboardDocumentV1 {
+  fallbackProject: Pick<Project, 'title' | 'nodes' | 'edges'>,
+): SiteboardDocumentV2 {
   if (rawDocument === undefined) {
     return createProjectDocument(fallbackProject);
   }
 
   try {
-    return parseProjectDocumentValue(rawDocument);
+    const parsed = parseProjectDocumentValue(rawDocument);
+    if (parsed.schemaVersion === 2) {
+      return parsed;
+    }
+    return {
+      schemaVersion: 2,
+      title: parsed.title,
+      nodes: parsed.nodes,
+      edges: [],
+    };
   } catch {
     return createProjectDocument(fallbackProject);
   }
 }
 
 export function isProjectDirty(
-  project: Pick<Project, 'title' | 'nodes' | 'lastSavedDocument'>,
+  project: Pick<Project, 'title' | 'nodes' | 'edges' | 'lastSavedDocument'>,
 ): boolean {
   return (
     serializeProjectDocument(createProjectDocument(project)) !==
-    serializeProjectDocument(project.lastSavedDocument)
+    serializeProjectDocument(
+      project.lastSavedDocument.schemaVersion === 2
+        ? project.lastSavedDocument
+        : {
+            schemaVersion: 2,
+            title: project.lastSavedDocument.title,
+            nodes: project.lastSavedDocument.nodes,
+            edges: [],
+          },
+    )
   );
 }

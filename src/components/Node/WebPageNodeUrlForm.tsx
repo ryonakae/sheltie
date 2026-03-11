@@ -6,6 +6,8 @@ import { AppButton } from '@/components/Common/AppButton';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { normalizeUrl } from '@/lib/url-utils';
 
+const INTERACTION_BLOCKER_CLASS = 'nodrag nopan';
+
 interface WebPageNodeUrlFormProps {
   onSubmit: (url: string) => void;
 }
@@ -26,7 +28,7 @@ export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
     <div className="flex size-full items-center justify-center">
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col items-center"
+        className={`${INTERACTION_BLOCKER_CLASS} flex flex-col items-center`}
         style={{
           gap: zoomPx(12),
           width: zoomPx(280),
@@ -48,6 +50,7 @@ export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
           <Input
             autoFocus
             placeholder="https://example.com"
+            className={INTERACTION_BLOCKER_CLASS}
             style={{ fontSize: zoomPx(14) }}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
@@ -64,6 +67,7 @@ export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
           type="submit"
           variant="primary"
           isDisabled={!isValid}
+          className={INTERACTION_BLOCKER_CLASS}
           style={{ fontSize: zoomPx(14) }}
         >
           開く

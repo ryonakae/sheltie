@@ -1,12 +1,12 @@
 import { motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 
 interface ZoomIndicatorProps {
   zoom: number;
   onReset: () => void;
 }
 
-export function ZoomIndicator({ zoom, onReset }: ZoomIndicatorProps) {
+export const ZoomIndicator = memo(function ZoomIndicator({ zoom, onReset }: ZoomIndicatorProps) {
   const zoomPercent = Math.round(zoom * 100);
   // ズーム操作が止まった時だけ pop アニメーションを再生するためのフラグ
   const [settled, setSettled] = useState(false);
@@ -36,4 +36,4 @@ export function ZoomIndicator({ zoom, onReset }: ZoomIndicatorProps) {
       </motion.span>
     </motion.button>
   );
-}
+});

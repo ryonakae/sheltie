@@ -58,7 +58,6 @@ export function ProjectScreen() {
   const addStickyNoteNode = useProjectStore((s) => s.addStickyNoteNode);
   const removeNode = useProjectStore((s) => s.removeNode);
   const updateViewport = useProjectStore((s) => s.updateViewport);
-  const viewport = activeProject?.viewport;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [centeredNodeId, setCenteredNodeId] = useState<string | null>(null);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
@@ -71,6 +70,9 @@ export function ProjectScreen() {
   const prefersReducedMotion = useReducedMotion();
 
   const sidebarWidth = activeProject?.sidebarWidth ?? SIDEBAR_DEFAULT_WIDTH;
+  // viewport は不変値として保持せず、関数内で getState() から都度取得する。
+  // updateViewport を毎フレーム呼ぶ centerOnNewNode アニメーション中に ProjectScreen が
+  // 再レンダリングされるのを防ぐ。
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -137,9 +139,17 @@ export function ProjectScreen() {
       onComplete?: () => void,
     ) => {
       const siteboard = document.querySelector<HTMLElement>('[data-siteboard-container]');
-      if (!siteboard || !viewport) return;
+      if (!siteboard) return;
       const rect = siteboard.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
+
+      // アニメーション開始時点の viewport を getState() で取得し、
+      // React state 購読を通じた毎フレーム再レンダリングを回避する
+      const currentId = activeIdRef.current ?? activeId;
+      const currentViewport = useProjectStore
+        .getState()
+        .projects.find((p) => p.id === currentId)?.viewport;
+      if (!currentViewport) return;
 
       const chromeScreenHeight = getNodeChromeScreenHeight(node);
       const heightBudget = Math.max(1, rect.height * 0.8 - chromeScreenHeight);
@@ -154,7 +164,6 @@ export function ProjectScreen() {
       const targetPanY = rect.height / 2 - (node.y + frameRect.height / 2) * targetZoom;
 
       cancelCentering();
-      const currentId = activeIdRef.current ?? activeId;
 
       if (prefersReducedMotion) {
         if (currentId)
@@ -164,7 +173,11 @@ export function ProjectScreen() {
       }
 
       let completed = false;
-      const latestState = { x: viewport.panX, y: viewport.panY, zoom: viewport.zoom };
+      const latestState = {
+        x: currentViewport.panX,
+        y: currentViewport.panY,
+        zoom: currentViewport.zoom,
+      };
       const updateAll = () => {
         if (!currentId) return;
         updateViewport(currentId, {
@@ -182,7 +195,7 @@ export function ProjectScreen() {
         onComplete?.();
       };
 
-      const xControls = animate(viewport.panX, targetPanX, {
+      const xControls = animate(currentViewport.panX, targetPanX, {
         duration: CANVAS_CENTER_ANIMATION_DURATION_SEC,
         ease: CANVAS_CENTER_ANIMATION_EASE,
         onUpdate: (v: number) => {
@@ -191,7 +204,7 @@ export function ProjectScreen() {
         },
         onComplete: handleComplete,
       });
-      const yControls = animate(viewport.panY, targetPanY, {
+      const yControls = animate(currentViewport.panY, targetPanY, {
         duration: CANVAS_CENTER_ANIMATION_DURATION_SEC,
         ease: CANVAS_CENTER_ANIMATION_EASE,
         onUpdate: (v: number) => {
@@ -200,7 +213,7 @@ export function ProjectScreen() {
         },
         onComplete: handleComplete,
       });
-      const zoomControls = animate(viewport.zoom, targetZoom, {
+      const zoomControls = animate(currentViewport.zoom, targetZoom, {
         duration: CANVAS_CENTER_ANIMATION_DURATION_SEC,
         ease: CANVAS_CENTER_ANIMATION_EASE,
         onUpdate: (v: number) => {
@@ -212,11 +225,12 @@ export function ProjectScreen() {
 
       centeringAnimationRef.current = [xControls, yControls, zoomControls];
     },
-    [activeId, updateViewport, viewport, cancelCentering, prefersReducedMotion],
+    [activeId, updateViewport, cancelCentering, prefersReducedMotion],
   );
 
   /** FloatingToolbar の＋ボタンから呼ばれる: 空フレームをキャンバス中央に追加してセンタリング */
   const handleAddWebNode = useCallback(() => {
+    const viewport = useProjectStore.getState().projects.find((p) => p.id === activeId)?.viewport;
     const centerPos = getViewportCenterPos(
       viewport?.zoom ?? 1,
       viewport?.panX ?? 0,
@@ -236,10 +250,11 @@ export function ProjectScreen() {
       handleSelectNode(created.id);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [addWebNode, activeId, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
+  }, [addWebNode, activeId, centerOnNewNode, handleSelectNode, handleCenteredNode]);
 
   /** FloatingToolbar の付箋ボタンから呼ばれる: 付箋をキャンバス中央に追加してセンタリング */
   const handleAddStickyNote = useCallback(() => {
+    const viewport = useProjectStore.getState().projects.find((p) => p.id === activeId)?.viewport;
     const centerPos = getViewportCenterPos(
       viewport?.zoom ?? 1,
       viewport?.panX ?? 0,
@@ -266,14 +281,7 @@ export function ProjectScreen() {
       handleSelectNode(created.id);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [
-    addStickyNoteNode,
-    activeId,
-    viewport,
-    centerOnNewNode,
-    handleSelectNode,
-    handleCenteredNode,
-  ]);
+  }, [addStickyNoteNode, activeId, centerOnNewNode, handleSelectNode, handleCenteredNode]);
 
   useEffect(() => {
     if (!selectedNodeId) return;

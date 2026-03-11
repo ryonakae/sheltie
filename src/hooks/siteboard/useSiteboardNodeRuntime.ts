@@ -1,19 +1,19 @@
 import { toast } from '@heroui/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
-import type { NodeResizeDirection } from '@/hooks/siteboard/types';
+import type { SiteboardRuntimeStore } from '@/components/Siteboard/siteboard-runtime-store';
 import type { NavigationState } from '@/lib/tauri-bridge';
 import { webviewApi } from '@/lib/tauri-bridge';
 import type { BoardNode } from '@/types';
+
+import type { StoreApi } from 'zustand/vanilla';
 
 interface UseSiteboardNodeRuntimeParams {
   activeId: string;
   nodes: BoardNode[];
   selectedNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
   onClearSelection: () => void;
-  startDrag: (e: React.MouseEvent, nodeId: string) => void;
-  startResize: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
+  runtimeStore: StoreApi<SiteboardRuntimeStore>;
   updateWebNodeUrl: (projectId: string, nodeId: string, url: string, title: string) => void;
   updateNodeTitle: (projectId: string, nodeId: string, title: string) => void;
   removeNode: (projectId: string, nodeId: string) => void;
@@ -46,10 +46,8 @@ export function useSiteboardNodeRuntime({
   activeId,
   nodes,
   selectedNodeId,
-  onSelectNode,
   onClearSelection,
-  startDrag,
-  startResize,
+  runtimeStore,
   updateWebNodeUrl,
   updateNodeTitle,
   removeNode,
@@ -64,24 +62,12 @@ export function useSiteboardNodeRuntime({
   computeDisplayModes,
   captureScreenshot,
 }: UseSiteboardNodeRuntimeParams) {
-  const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
-
   const navigationRuntimeRef = useRef<Record<string, NavigationRuntimeEntry>>({});
   const pendingActionRef = useRef<Record<string, 'back' | 'forward' | undefined>>({});
   const captureTimerRef = useRef<Record<string, number>>({});
   const refreshTimerRef = useRef<Record<string, number>>({});
 
   const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const visibleNavStates = useMemo(() => {
-    const nodeIds = new Set(nodes.map((node) => node.id));
-    const next: Record<string, NavigationState> = {};
-    for (const [nodeId, value] of Object.entries(navStates)) {
-      if (nodeIds.has(nodeId)) {
-        next[nodeId] = value;
-      }
-    }
-    return next;
-  }, [navStates, nodes]);
 
   const ensureNavigationRuntime = useCallback(
     (nodeId: string): NavigationRuntimeEntry => {
@@ -145,19 +131,9 @@ export function useSiteboardNodeRuntime({
         can_go_forward: runtime.nativeState.can_go_forward || runtime.forwardDepth > 0,
       };
 
-      setNavStates((prev) => {
-        const existing = prev[nodeId];
-        if (
-          existing &&
-          existing.can_go_back === nextState.can_go_back &&
-          existing.can_go_forward === nextState.can_go_forward
-        ) {
-          return prev;
-        }
-        return { ...prev, [nodeId]: nextState };
-      });
+      runtimeStore.getState().setNodeNavState(nodeId, nextState);
     },
-    [ensureNavigationRuntime],
+    [ensureNavigationRuntime, runtimeStore],
   );
 
   const refreshNavigationState = useCallback(
@@ -182,16 +158,12 @@ export function useSiteboardNodeRuntime({
     [clearRefreshTimer, refreshNavigationState],
   );
 
-  const removeNavigationState = useCallback((nodeId: string) => {
-    setNavStates((prev) => {
-      if (!(nodeId in prev)) {
-        return prev;
-      }
-      const next = { ...prev };
-      delete next[nodeId];
-      return next;
-    });
-  }, []);
+  const removeNavigationState = useCallback(
+    (nodeId: string) => {
+      runtimeStore.getState().clearNodeNavState(nodeId);
+    },
+    [runtimeStore],
+  );
 
   const handleGoBack = useCallback(
     (nodeId: string) => {
@@ -274,21 +246,6 @@ export function useSiteboardNodeRuntime({
     [activeId, refreshNavigationState, updateNodeTitle],
   );
 
-  const handleDragStart = useCallback(
-    (e: React.MouseEvent, nodeId: string) => {
-      onSelectNode(nodeId);
-      startDrag(e, nodeId);
-    },
-    [onSelectNode, startDrag],
-  );
-
-  const handleResizeStart = useCallback(
-    (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => {
-      startResize(e, nodeId, direction);
-    },
-    [startResize],
-  );
-
   const handleWebviewCreated = useCallback(
     (nodeId: string, label: string) => {
       setWebNodeWebviewLabel(activeId, nodeId, label);
@@ -320,13 +277,6 @@ export function useSiteboardNodeRuntime({
       void refreshNavigationState(nodeId);
     },
     [captureScreenshot, refreshNavigationState],
-  );
-
-  const handleScrollEnded = useCallback(
-    (nodeId: string) => {
-      void captureScreenshot(nodeId);
-    },
-    [captureScreenshot],
   );
 
   const handleRemoveNode = useCallback(
@@ -419,7 +369,6 @@ export function useSiteboardNodeRuntime({
   }, [clearAllRuntimeTimers]);
 
   return {
-    handleDragStart,
     handleGoBack,
     handleGoForward,
     handleNavigated,
@@ -427,8 +376,6 @@ export function useSiteboardNodeRuntime({
     handleReloadWebNode,
     handleRemoveNode,
     handleResizePreset,
-    handleResizeStart,
-    handleScrollEnded,
     handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,
     handleStickyNoteContentChange,
@@ -437,6 +384,5 @@ export function useSiteboardNodeRuntime({
     handleWebviewCreated,
     handleWebviewDestroyed,
     handleWebviewLoaded,
-    navStates: visibleNavStates,
   };
 }

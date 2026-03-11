@@ -194,6 +194,9 @@ export const webviewApi = {
   onPageTitleChanged: (pageId: string, callback: (payload: { title: string }) => void) =>
     listen<{ title: string }>(`page-title-changed-${pageId}`, (event) => callback(event.payload)),
 
+  onPageScrollStarted: (pageId: string, callback: () => void) =>
+    listen(`page-scroll-started-${pageId}`, () => callback()),
+
   onPageScrollEnded: (pageId: string, callback: () => void) =>
     listen(`page-scroll-ended-${pageId}`, () => callback()),
 };

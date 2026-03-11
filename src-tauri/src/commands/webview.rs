@@ -192,19 +192,27 @@ pub async fn create_page_webview(
                     let pid = pid.clone();
                     move |_webview, title| {
                         // \x01: initialization_script からの SPA URL 変更通知
-                        // \x02: initialization_script からのスクロール完了通知
+                        // \x02: initialization_script からのスクロール開始/完了通知
                         if let Some(url) = title.strip_prefix('\u{0001}') {
                             ah.emit(
                                 &format!("page-navigated-{pid}"),
                                 serde_json::json!({ "url": url }),
                             )
                             .ok();
-                        } else if title.starts_with('\u{0002}') {
-                            ah.emit(
-                                &format!("page-scroll-ended-{pid}"),
-                                serde_json::json!({}),
-                            )
-                            .ok();
+                        } else if let Some(scroll_state) = title.strip_prefix('\u{0002}') {
+                            if scroll_state == "scroll-start" {
+                                ah.emit(
+                                    &format!("page-scroll-started-{pid}"),
+                                    serde_json::json!({}),
+                                )
+                                .ok();
+                            } else if scroll_state == "scroll-end" {
+                                ah.emit(
+                                    &format!("page-scroll-ended-{pid}"),
+                                    serde_json::json!({}),
+                                )
+                                .ok();
+                            }
                         } else {
                             ah.emit(
                                 &format!("page-title-changed-{pid}"),

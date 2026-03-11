@@ -6,6 +6,9 @@
 
 - `DisplayMode = 'native' | 'screenshot' | 'hidden'`
 - `BoardNodeType = 'webpage' | 'stickynote'`
+- `BoardEdge`
+  - 基本: `id`, `source`, `target`
+  - 任意: `sourceHandle`, `targetHandle`, `type`, `label`
 - `BoardNode`
   - 基本: `id`, `title`, `url`, `x`, `y`, `width`, `height`
   - `height` は content / Webview 本体の高さ。ノード外枠全体の高さではない
@@ -25,13 +28,21 @@
   - `.siteboard` に保存される node の union 型
   - `webpage` は `id`, `type`, `title`, `url`, `addedUrl?`, `x`, `y`, `width`, `height`
   - `stickynote` は `id`, `type`, `title`, `content`, `colorIndex`, `x`, `y`, `width`, `height`
+- `SiteboardDocumentEdge`
+  - `.siteboard` に保存される edge 型
+  - `id`, `source`, `target`, `sourceHandle?`, `targetHandle?`, `type?`, `label?`
 - `SiteboardDocumentV1`
   - `schemaVersion: 1`
   - `title`
   - `nodes`
+- `SiteboardDocumentV2`
+  - `schemaVersion: 2`
+  - `title`
+  - `nodes`
+  - `edges`
 - `Project`
   - ローカルワークスペース用
-  - `id`, `title`, `nodes`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `filePath?`, `lastSavedDocument`
+  - `id`, `title`, `nodes`, `edges`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `filePath?`, `lastSavedDocument`
 - `ProjectState`
   - `projects`, `openIds`, `activeId`
 - `ProjectStore`（`tab-store.ts` 内部）
@@ -39,26 +50,27 @@
   - ランタイム状態: `isLoaded`, `nodeHistories`, `webviewRuntime`
   - runtime action: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
 - `ProjectNodeHistory`（`tab-store.ts` 内部）
-  - `past`: 直前までの `BoardNode[]` スナップショット配列
-  - `future`: Redo 用の `BoardNode[]` スナップショット配列
+  - `past`: 直前までの `{ nodes, edges }` スナップショット配列
+  - `future`: Redo 用の `{ nodes, edges }` スナップショット配列
 
 ## `.siteboard` とローカル状態の境界
 
 - `.siteboard` は共有用ドキュメント形式
-  - 保存する: `schemaVersion`, `title`, `nodes`
+  - 保存する: `schemaVersion`, `title`, `nodes`, `edges`
   - 保存しない: ローカル project id, `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, Webview runtime label
 - ローカル状態は再起動復元用
-  - `nodes` に加えて `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保持する
+  - `nodes`, `edges` に加えて `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保持する
+  - `viewport` は live な pan/zoom の正本ではなく、復元・永続化・外部 UI からのセンタリングに使う snapshot
   - 未保存編集もローカルから復元する
   - Tauri Store の project state key は `projectStateV2` を使用する。旧 key は migration せず読み捨てる
   - `webviewRuntime` と `nodeHistories` は runtime-only のため復元しない
 
 ## 未保存変更の判定
 
-- 未保存判定は current project の `.siteboard` 相当内容（`title`, `nodes`）と `lastSavedDocument` の差分で行う
+- 未保存判定は current project の `.siteboard` 相当内容（`title`, `nodes`, `edges`）と `lastSavedDocument` の差分で行う
 - `viewport`, `sidebarWidth`, `lastOpenedAt`, `filePath` の差分は未保存確認の対象に含めない
 - 新規未保存プロジェクトは作成時点の空 document を `lastSavedDocument` として持つ
-- `restoreProjectFromLastSaved` は `title` と `nodes` を `lastSavedDocument` に戻し、対応する `nodeHistories` も破棄する
+- `restoreProjectFromLastSaved` は `title`, `nodes`, `edges` を `lastSavedDocument` に戻し、対応する `nodeHistories` も破棄する
 - `.siteboard` 未保存かつ clean なプロジェクトは、タブクローズまたはアプリ終了時にローカル state から削除する
 
 ## ヘルパー
@@ -101,15 +113,16 @@
 - `BoardNode` は永続化対象だけを持ち、Webview 接続状態は含めない
 - `webviewRuntime.labelsByNodeId[nodeId]` は「現在接続済みのネイティブ Webview がある」間だけ設定する。再マウント開始時に `clearWebNodeWebviewLabel` で外し、再生成完了後に `setWebNodeWebviewLabel` で付け直す。
 - `webviewRuntime.screenshotUrlsByNodeId[nodeId]` は最後に表示可能だった screenshot の asset URL を保持し、同一セッション内の再マウントと起動直後の open tab preload で使い回す。node 削除時にだけ破棄する。
+- node 削除時は、その node を source / target に持つ `edges` も同時に削除する。
 - 付箋ノードは `type: 'stickynote'` と `content` / `colorIndex` を利用する
 - 空フレーム（`url === ''`）は Webview 未作成状態を許容する
 - `nodeHistories` はランタイム専用で永続化しない（`_restoreState` で必ず初期化）
 - `webviewRuntime` はランタイム専用で永続化しない（`_restoreState` と project 削除時に必ず破棄）
 - ローカル project state は現行 `ProjectState` のみ復元対象とし、旧 shape は migration しない
 - Undo/Redo は `activeId` のプロジェクトにのみ適用し、`HOME_ID` では no-op
-- node 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
+- node / edge 配列を更新する操作は基本的に履歴へ記録するが、React Flow の drag / resize 中の中間 state と付箋の自動高さ調整は `setProjectNodesWithoutHistory` / `updateNodeSizeWithoutHistory` を使って履歴を積まない
 - ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
 - 重なり補正・新規ノード自動配置・センタリング fallback は、content 高ではなくノード外枠を基準にする。chrome は `zoomPx` で画面 px が固定されるため、world 座標での外枠高さは current zoom に依存する
 - 同一 `filePath` の `.siteboard` を複数のローカル project に関連付けない
-- `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `1` のみ受け入れる
+- `.siteboard` の `schemaVersion` は整数で管理し、保存時は `2` を出力する。読込時は `1` と `2` の両方を受け入れ、`1` は `edges = []` として扱う
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない

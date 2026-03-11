@@ -9,9 +9,9 @@ import betterTailwindcss from 'eslint-plugin-better-tailwindcss';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  // ビルド成果物・エージェントスクリプト・Rust ビルド成果物を除外
+  // ビルド成果物・エージェントスクリプト・Rust ビルド成果物・perf-test サブプロジェクトを除外
   {
-    ignores: ['.vite/', 'out/', 'dist/', '.agents/', 'src-tauri/'],
+    ignores: ['.vite/', 'out/', 'dist/', '.agents/', 'src-tauri/', 'perf-test/'],
   },
 
   eslint.configs.recommended,

@@ -25,14 +25,15 @@ src/
 - `components/Project/Sidebar.tsx`: node 一覧（種別アイコン + タイトル/説明）
 - `components/Common/ContextMenu.tsx`: createPortal で body 直下に fixed 配置するコンテキストメニュー
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
-- `components/Siteboard/Siteboard.tsx`: 描画と hook 結線
+- `components/Siteboard/Siteboard.tsx`: React Flow キャンバス・ノード統合・interaction history 管理
+- `components/Siteboard/flow-types.ts`: React Flow custom node / edge data 型
+- `components/Siteboard/siteboard-runtime-store.tsx`: displayMode / screenshotUrl / navigation state 等の ローカルランタイムストア
 - `components/Siteboard/FloatingToolbar.tsx`: Web ページ/付箋追加ボタン群
 - `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン
-- `components/Siteboard/InteractionOverlay.tsx`: 操作中カーソル上書き用オーバーレイ
 - `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI
-- `hooks/siteboard/*`: 表示制御・ビューポート・ノードランタイム・キーボード操作を分担
-- `store/tab-store.ts`: プロジェクト・node・ビューポート状態と、プロジェクト単位 node 履歴（Undo/Redo）を管理
+- `hooks/siteboard/*`: 表示制御・Webview ランタイム・キーボード操作を分担
+- `store/tab-store.ts`: プロジェクト・node・edge・ビューポート状態と、プロジェクト単位 history（Undo/Redo）を管理
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
 - `lib/file-commands.ts`: File メニューの `open` / `save` / `save-as` を処理し、`.siteboard` の入出力とローカル store 連携を担当する
@@ -42,17 +43,17 @@ src/
 ## `.siteboard` とローカル状態
 
 - `.siteboard` は共有用ドキュメント
-  - `schemaVersion`, `title`, `nodes` のみ保存する
+  - `schemaVersion`, `title`, `nodes`, `edges` を保存する
 - Zustand + Tauri Store はローカルワークスペースの復元用
-  - `nodes` に加えて `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保存する
+  - `nodes`, `edges` に加えて `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保存する
   - project state は Tauri Store の `projectStateV2` key に保存し、旧 key は参照しない
 - 起動時はローカル状態を復元し、`.siteboard` の自動再読込はしない
 - タブクローズ時とアプリ終了時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的なウィンドウ破棄だけ `close_ready` を使う
 
 ## Siteboard の責務分離
 
+- `components/Siteboard/Siteboard.tsx`: `@xyflow/react` の canvas と local selection / interaction history snapshot を管理。live viewport は React Flow、復元用 snapshot は Zustand を使い分ける
 - `useSiteboardDisplayEngine`: `DisplayMode` 判定、Webview 表示/非表示、スクリーンショット管理
-- `useSiteboardViewportEngine`: ズーム・パン・ドラッグ・リサイズの入力処理
 - `useSiteboardNodeRuntime`: webpage ノード単位のナビゲーション状態・タイトル同期・スクリーンショット契機を管理
 - `useSiteboardKeyboard`: Delete/Backspace・Undo/Redo のショートカットを処理し、共通編集コマンドへ委譲
 

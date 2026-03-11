@@ -10,7 +10,6 @@ export const DRAG_REPOSITION_GAP = 20;
 export const MIN_ZOOM = 0.2;
 export const MAX_ZOOM = 1.5;
 export const LOW_ZOOM_HIDE_THRESHOLD = 0.3;
-export const ZOOM_SENSITIVITY = 0.001;
 export const ZOOM_RESET_TARGET = 1;
 export const ZOOM_RESET_DURATION_SEC = 0.24;
 export const ZOOM_ANIMATION_EASE = [0.215, 0.61, 0.355, 1] as const;

@@ -32,6 +32,7 @@ interface UseWebPageWebviewLifecycleParams {
   onWebviewDestroyed: (nodeId: string) => void;
   onWebviewLoaded: (nodeId: string) => void;
   onScreenshotPresented: (nodeId: string, url: string) => void;
+  onScrollStarted: (nodeId: string) => void;
   onScrollEnded: (nodeId: string) => void;
 }
 
@@ -48,6 +49,7 @@ export function useWebPageWebviewLifecycle({
   onWebviewDestroyed,
   onWebviewLoaded,
   onScreenshotPresented,
+  onScrollStarted,
   onScrollEnded,
 }: UseWebPageWebviewLifecycleParams): void {
   const webviewLabelRef = useRef<string | null>(null);
@@ -162,6 +164,9 @@ export function useWebPageWebviewLifecycle({
         onWebviewLoaded(nodeId);
       }
     });
+    const unlistenScrollStarted = webviewApi.onPageScrollStarted(nodeId, () => {
+      onScrollStarted(nodeId);
+    });
     const unlistenScroll = webviewApi.onPageScrollEnded(nodeId, () => {
       onScrollEnded(nodeId);
     });
@@ -169,9 +174,10 @@ export function useWebPageWebviewLifecycle({
     return () => {
       void unlistenNav.then((cleanup) => cleanup());
       void unlistenTitle.then((cleanup) => cleanup());
+      void unlistenScrollStarted.then((cleanup) => cleanup());
       void unlistenScroll.then((cleanup) => cleanup());
     };
-  }, [nodeId, onNavigated, onScrollEnded, onTitleUpdated, onWebviewLoaded]);
+  }, [nodeId, onNavigated, onScrollEnded, onScrollStarted, onTitleUpdated, onWebviewLoaded]);
 
   useEffect(() => {
     if (!url || !webviewLabelRef.current) return;

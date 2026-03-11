@@ -3,8 +3,10 @@ import { useEffect } from 'react';
 import { registerEditCommandHandlers, runEditCommand } from '@/lib/edit-commands';
 
 interface UseSiteboardKeyboardParams {
-  selectedNodeId: string | null;
-  onRemoveNode: (nodeId: string) => void;
+  selectedNodeIds: string[];
+  selectedEdgeIds: string[];
+  onRemoveNodes: (nodeIds: string[]) => void;
+  onRemoveEdges: (edgeIds: string[]) => void;
   onUndo: () => void;
   onRedo: () => void;
 }
@@ -16,17 +18,25 @@ interface UseSiteboardKeyboardParams {
  * - Cmd/Ctrl + Shift + Z: Redo
  */
 export function useSiteboardKeyboard({
-  selectedNodeId,
-  onRemoveNode,
+  selectedNodeIds,
+  selectedEdgeIds,
+  onRemoveNodes,
+  onRemoveEdges,
   onUndo,
   onRedo,
 }: UseSiteboardKeyboardParams) {
   useEffect(() => {
     return registerEditCommandHandlers({
       delete: () => {
-        if (!selectedNodeId) return false;
-        onRemoveNode(selectedNodeId);
-        return true;
+        if (selectedNodeIds.length > 0) {
+          onRemoveNodes(selectedNodeIds);
+          return true;
+        }
+        if (selectedEdgeIds.length > 0) {
+          onRemoveEdges(selectedEdgeIds);
+          return true;
+        }
+        return false;
       },
       redo: () => {
         onRedo();
@@ -37,7 +47,7 @@ export function useSiteboardKeyboard({
         return true;
       },
     });
-  }, [onRedo, onRemoveNode, onUndo, selectedNodeId]);
+  }, [onRedo, onRemoveEdges, onRemoveNodes, onUndo, selectedEdgeIds, selectedNodeIds]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

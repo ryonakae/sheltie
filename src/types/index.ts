@@ -6,6 +6,17 @@ export type DisplayMode = 'native' | 'screenshot' | 'hidden';
 /** ボード上のノード種別 */
 export type BoardNodeType = 'webpage' | 'stickynote';
 
+/** ボード上のエッジ */
+export interface BoardEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  type?: string;
+  label?: string;
+}
+
 export interface BoardNode {
   id: string;
   title: string;
@@ -41,6 +52,15 @@ export interface SiteboardDocumentV1 {
   nodes: SiteboardDocumentNode[];
 }
 
+export interface SiteboardDocumentV2 {
+  schemaVersion: 2;
+  title: string;
+  nodes: SiteboardDocumentNode[];
+  edges: SiteboardDocumentEdge[];
+}
+
+export type SiteboardDocument = SiteboardDocumentV1 | SiteboardDocumentV2;
+
 export type SiteboardDocumentNode =
   | {
       id: string;
@@ -65,6 +85,16 @@ export type SiteboardDocumentNode =
       height: number;
     };
 
+export interface SiteboardDocumentEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  type?: string;
+  label?: string;
+}
+
 export interface Viewport {
   zoom: number;
   panX: number;
@@ -84,8 +114,9 @@ export interface Project {
   sidebarWidth: number;
   lastOpenedAt: number;
   nodes: BoardNode[];
+  edges: BoardEdge[];
   viewport: Viewport;
-  lastSavedDocument: SiteboardDocumentV1;
+  lastSavedDocument: SiteboardDocument;
 }
 
 /** URL 未設定の空フレームかどうか */

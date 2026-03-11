@@ -1,6 +1,7 @@
 import Plus from '@gravity-ui/icons/Plus';
 import Sticker from '@gravity-ui/icons/Sticker';
 import { Surface } from '@heroui/react';
+import { memo } from 'react';
 
 import { AppButton } from '@/components/Common/AppButton';
 
@@ -9,7 +10,10 @@ interface FloatingToolbarProps {
   onAddStickyNote: () => void;
 }
 
-export function FloatingToolbar({ onAddWebNode, onAddStickyNote }: FloatingToolbarProps) {
+export const FloatingToolbar = memo(function FloatingToolbar({
+  onAddWebNode,
+  onAddStickyNote,
+}: FloatingToolbarProps) {
   return (
     /* ツールバー全体の配置レイヤー: pointer-events-none で Siteboard の操作を妨げない */
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-40 flex justify-center">
@@ -38,4 +42,4 @@ export function FloatingToolbar({ onAddWebNode, onAddStickyNote }: FloatingToolb
       </div>
     </div>
   );
-}
+});

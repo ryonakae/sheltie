@@ -39,8 +39,10 @@
 
 - `page-navigated-{pageId}`: URL 変更通知
 - `page-title-changed-{pageId}`: タイトル変更通知
+- `page-scroll-started-{pageId}`: Webview 内スクロール開始通知
 - `page-scroll-ended-{pageId}`: Webview 内スクロール完了通知
 - `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
+  - Siteboard では `delete` を「選択中の node 群、無ければ選択中の edge 群を削除」として扱う
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `open` / `save` / `save-as`）
 
 ## JS ブリッジ API
@@ -61,7 +63,7 @@
 - `show`, `hide`, `destroy`, `hideAll`, `showAllWithBounds`
 - `setOpacity`, `reload`, `goBack`, `goForward`, `getNavigationState`
 - `captureScreenshot`, `saveScreenshot`, `getExistingScreenshotPaths`, `deleteScreenshot`
-- `onPageNavigated`, `onPageTitleChanged`, `onPageScrollEnded`
+- `onPageNavigated`, `onPageTitleChanged`, `onPageScrollStarted`, `onPageScrollEnded`
 
 ## メニュー連携
 

@@ -24,18 +24,40 @@ pub const SPA_URL_DETECTION_SCRIPT: &str = r#"(function() {
 })();"#;
 
 pub const SCROLL_DETECTION_SCRIPT: &str = r#"(function() {
-  var t = null, orig = '', DELAY = 150;
-  function notify() {
+  var t = null, orig = '', DELAY = 150, isScrolling = false;
+  function emit(kind) {
     orig = document.title;
-    document.title = '\x02scroll-end';
+    document.title = '\x02' + kind;
     requestAnimationFrame(function() { document.title = orig; });
   }
+  function clearTimer() {
+    if (!t) return;
+    clearTimeout(t);
+    t = null;
+  }
+  function notifyStart() {
+    if (isScrolling) return;
+    isScrolling = true;
+    emit('scroll-start');
+  }
+  function notifyEnd() {
+    if (!isScrolling) return;
+    isScrolling = false;
+    clearTimer();
+    emit('scroll-end');
+  }
+  function scheduleEnd() {
+    clearTimer();
+    t = setTimeout(notifyEnd, DELAY);
+  }
+  function handleScroll() {
+    notifyStart();
+    scheduleEnd();
+  }
   if ('onscrollend' in window) {
-    window.addEventListener('scrollend', notify, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    window.addEventListener('scrollend', notifyEnd, { passive: true });
   } else {
-    window.addEventListener('scroll', function() {
-      if (t) clearTimeout(t);
-      t = setTimeout(notify, DELAY);
-    }, { passive: true, capture: true });
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
   }
 })();"#;

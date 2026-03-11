@@ -31,12 +31,14 @@ src/
 - `components/Siteboard/InteractionOverlay.tsx`: 操作中カーソル上書き用オーバーレイ
 - `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI
+- `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`, `nodeTypes` 定数）
 - `hooks/siteboard/*`: 表示制御・ビューポート・ノードランタイム・キーボード操作を分担
 - `store/tab-store.ts`: プロジェクト・node・ビューポート状態と、プロジェクト単位 node 履歴（Undo/Redo）を管理
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
 - `lib/file-commands.ts`: File メニューの `open` / `save` / `save-as` を処理し、`.siteboard` の入出力とローカル store 連携を担当する
 - `lib/project-close.ts`: dirty 判定・保存/破棄確認・タブクローズ・アプリ終了時の close orchestration を担当する
+- `lib/reactflow-adapter.ts`: `BoardNode[]` を React Flow `Node[]` に変換し、React Flow の変更を Zustand に適用するアダプター
 - `main.tsx`: `edit-command` と `file-command` の listener を起動時に 1 回だけ登録する
 
 ## `.siteboard` とローカル状態
@@ -73,6 +75,19 @@ IPC 契約は `tauri-ipc.md` を参照。
 - ビルド: `npm run build`
 
 Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/lib.rs` で登録する。
+
+## テックスタック（フロントエンド依存関係）
+
+| ライブラリ | 用途 |
+|---|---|
+| React 19 | UI フレームワーク |
+| TypeScript | 型安全性 |
+| Tailwind CSS v4 | スタイリング |
+| HeroUI v3 | UI コンポーネントライブラリ |
+| Zustand | 状態管理（プロジェクト・ノード・テーマ） |
+| @xyflow/react v12 | React Flow（フェーズ 0 以降で段階的採用） |
+| Framer Motion | アニメーション |
+| Tauri v2 JS API | ネイティブ統合（IPC・Webview 管理） |
 
 ## 登録済み Tauri プラグイン
 

@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import '@heroui/styles';
+/* React Flow のベーススタイル。Tailwind v4 の後に配置して競合を防ぐ */
+@import '@xyflow/react/dist/style.css';
 
 /* アートボードのドットパターン背景。ダークモードは CSS 変数でテーマを切り替える */
 @utility siteboard-bg {

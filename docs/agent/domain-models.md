@@ -68,6 +68,30 @@
 - `isWebPageNode(node)`: webpage 判定の型ガード（`type` 未定義も webpage 扱い）
 - `isNodeMoved(node)`: `addedUrl` と現在 `url` の差分判定
 
+## React Flow アダプター（`src/lib/reactflow-adapter.ts`）
+
+### `boardNodesToFlowNodes(nodes: BoardNode[], zoom: number): Node[]`
+
+`BoardNode[]` を React Flow の `Node[]` に変換する。
+
+- `BoardNode.x/y` → `Node.position.{x, y}`
+- `BoardNode.width/height` → `Node.style.{width/zoom, height/zoom}`（ズーム値で逆スケーリング）
+- `BoardNode.type === 'stickynote'` → `Node.type = 'stickyNoteFlowNode'`（そうでなければ `'webPageFlowNode'`）
+- `Node.data` に元の `BoardNode` 全体を格納（React Flow の型制約のため `as unknown as Record<string, unknown>` でキャスト）
+
+### `applyFlowChangesToStore(changes, projectId, store, callbacks): void`
+
+React Flow の `NodeChange[]` を Zustand アクションに変換して適用する。
+
+**変更タイプと処理**:
+
+- `position` change（`dragging=false`）→ `updateNodePosition(projectId, nodeId, x, y)`（ドラッグ完了時のみ履歴付き）
+- `dimensions` change → `resizing=true` なら `updateNodeSizeWithoutHistory()`、`false` なら `updateNodeSize()`（完了時に履歴付き確定）
+- `select` change → `callbacks.onSelectNode(nodeId)` / `callbacks.onClearSelection()`
+- `remove` change → `removeNode(projectId, nodeId)`
+
+**注意点**: ドラッグ・リサイズ中（`dragging=true` / `resizing=true`）は履歴を積まず、完了時のみ確定更新する
+
 ## 主要定数
 
 `src/constants/project.ts`

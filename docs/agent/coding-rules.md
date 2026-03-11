@@ -16,6 +16,11 @@
 - Siteboard 内 UI のスケーリングは `--canvas-zoom` を使った CSS 計算で対応し、不要な再レンダーを避ける。
 - コメントは「なぜ必要か」がコードだけで伝わらない箇所に限定する。
 
+## React Flow
+
+- `nodeTypes` 定数は**必ずモジュールスコープで定義**すること。コンポーネント内で定義すると毎レンダーで全ノードが再マウント（unmount → mount）されるため。
+- `nodeTypes` の定義は `src/components/ReactFlowNodes/types.ts` に一元化する。
+
 ## Siteboard/Webview 変更時の必読
 
 - 表示モード遷移・スクリーンショット切替・操作中の制約は `siteboard-runtime.md` を正本とする。

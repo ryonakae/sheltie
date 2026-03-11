@@ -119,6 +119,12 @@ export default tseslint.config(
     rules: {
       // Prettier のフォーマットと競合するため無効化
       'better-tailwindcss/enforce-consistent-line-wrapping': 'off',
+      // React Flow 固有クラス（nodrag: ドラッグ抑制, nopan: パン抑制）と
+      // カスタムドラッグハンドルクラス（node-drag-handle: dragHandle セレクター用）を許可
+      'better-tailwindcss/no-unknown-classes': [
+        'error',
+        { ignore: ['nodrag', 'nopan', 'node-drag-handle'] },
+      ],
       // _ プレフィックス変数は意図的な未使用として許可
       '@typescript-eslint/no-unused-vars': [
         'error',

@@ -1,13 +1,32 @@
+import { Background, BackgroundVariant, ReactFlow, ReactFlowProvider } from '@xyflow/react';
+import {
+  type Node,
+  type NodeChange,
+  type NodePositionChange,
+  type ReactFlowInstance,
+  type Viewport as FlowViewport,
+} from '@xyflow/react';
+import { useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { ContextMenu } from '@/components/Common/ContextMenu';
-import { StickyNoteNode } from '@/components/Node/StickyNoteNode';
-import { WebPageNode } from '@/components/Node/WebPageNode';
+import { nodeTypes } from '@/components/ReactFlowNodes/nodeTypes';
+import type {
+  StickyNoteFlowNodeData,
+  WebPageFlowNodeData,
+} from '@/components/ReactFlowNodes/types';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
 import { InteractionOverlay } from '@/components/Siteboard/InteractionOverlay';
 import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
-import { DRAG_REPOSITION_GAP, LOW_ZOOM_HIDE_THRESHOLD } from '@/constants';
+import {
+  DRAG_REPOSITION_GAP,
+  LOW_ZOOM_HIDE_THRESHOLD,
+  MIN_ZOOM,
+  MAX_ZOOM,
+  ZOOM_END_DEBOUNCE_MS,
+  ZOOM_RESET_TARGET,
+} from '@/constants';
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
@@ -18,7 +37,9 @@ import {
   selectActiveProjectWebviewRuntime,
   useProjectStore,
 } from '@/store/tab-store';
+import { useThemeStore } from '@/store/theme-store';
 import { isStickyNoteNode, isWebPageNode } from '@/types';
+import type { WebPageNode } from '@/types';
 
 interface SiteboardProps {
   selectedNodeId: string | null;
@@ -50,6 +71,7 @@ export function Siteboard({
   const activeProject = useProjectStore(selectActiveProject);
   const activeProjectWebviewRuntime = useProjectStore(selectActiveProjectWebviewRuntime);
   const activeId = useProjectStore((s) => s.activeId);
+  const isDark = useThemeStore((s) => s.isDark);
 
   const {
     undoActiveProject,
@@ -97,16 +119,27 @@ export function Siteboard({
   const webPageNodes = useMemo(() => nodes.filter(isWebPageNode), [nodes]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  // React Flow 移行後: canvasRef は containerRef と同じ DOM ツリーを指すスコープとして使う
+  // (useSiteboardDisplayEngine の querySelector スコープとして機能)
+  const canvasRef = containerRef;
   const zoomRef = useRef(activeProject?.viewport.zoom ?? 1);
   const panXRef = useRef(activeProject?.viewport.panX ?? 0);
   const panYRef = useRef(activeProject?.viewport.panY ?? 0);
+
+  const [uiZoom, setUiZoom] = useState(() => activeProject?.viewport.zoom ?? 1);
+  // React Flow ネイティブドラッグ中のノード位置（ストアへの反映は dragStop 時のみ）
+  const [draggingNodePositions, setDraggingNodePositions] = useState<
+    Record<string, { x: number; y: number }>
+  >({});
+  const viewportUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // setViewport のみ使用するため広い型で保持
+  const reactFlowInstanceRef = useRef<Pick<ReactFlowInstance, 'setViewport'> | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const {
     captureScreenshot,
     cancelZoomRestore,
     computeDisplayModes,
-    computeInteractionModes,
     displayModes,
     handleContextMenuClose: handleContextMenuCloseDisplay,
     handleContextMenuOpen,
@@ -143,76 +176,19 @@ export function Siteboard({
   const positionCorrectionAnimationsRef = useRef<Record<string, PositionCorrectionAnimation>>({});
   const positionCorrectionSequenceRef = useRef(0);
 
-  const {
-    handleResetZoom,
-    isPanMode,
-    resizingSize,
-    startDrag,
-    startResize,
-    startStickyNoteResize,
-    uiZoom,
-  } = useSiteboardViewportEngine({
-    containerRef,
-    canvasRef,
+  const { resizingSize, startResize, startStickyNoteResize } = useSiteboardViewportEngine({
     zoomRef,
-    panXRef,
-    panYRef,
     activeId,
-    viewport: activeProject?.viewport,
     onInteractionChange: handleInteractionChange,
     prepareInteractionStart,
     onNodeResizeStart: handlePageResizeStart,
     onNodeResizeEnd: handlePageResizeEnd,
-    scheduleInteractionUpdate,
-    computeInteractionModes,
-    computeDisplayModes,
-    cancelZoomRestore,
-    scheduleZoomRestoreAfterReflow,
-    updateViewport,
-    onNodeDragEnd: useCallback(
-      (nodeId: string, x: number, y: number) => {
-        const movingNode = nodes.find((candidate) => candidate.id === nodeId);
-        if (!movingNode) return;
-
-        const resolvedPosition = resolveDraggedNodePosition({
-          nodes,
-          movingNode,
-          proposedX: x,
-          proposedY: y,
-          gap: DRAG_REPOSITION_GAP,
-          zoom: zoomRef.current,
-        });
-        if (resolvedPosition.corrected && isWebPageNode(movingNode)) {
-          positionCorrectionSequenceRef.current += 1;
-          const nextAnimation = {
-            token: positionCorrectionSequenceRef.current,
-            fromX: x,
-            fromY: y,
-            toX: resolvedPosition.x,
-            toY: resolvedPosition.y,
-          };
-          positionCorrectionAnimationsRef.current = {
-            ...positionCorrectionAnimationsRef.current,
-            [nodeId]: nextAnimation,
-          };
-          setPositionCorrectionAnimations((prev) => ({ ...prev, [nodeId]: nextAnimation }));
-          holdNodeDuringPositionSettle(nodeId);
-          if (movingNode.x !== resolvedPosition.x || movingNode.y !== resolvedPosition.y) {
-            updateNodePosition(activeId, nodeId, resolvedPosition.x, resolvedPosition.y);
-          }
-          return;
-        }
-
-        updateNodePosition(activeId, nodeId, resolvedPosition.x, resolvedPosition.y);
-      },
-      [activeId, holdNodeDuringPositionSettle, nodes, updateNodePosition],
-    ),
     updateNodeSize,
   });
+
   const hideCompactControls = Math.round(uiZoom * 100) <= Math.round(LOW_ZOOM_HIDE_THRESHOLD * 100);
 
   const {
-    handleDragStart,
     handleGoBack,
     handleGoForward,
     handleNavigated,
@@ -235,9 +211,7 @@ export function Siteboard({
     activeId,
     nodes,
     selectedNodeId,
-    onSelectNode,
     onClearSelection,
-    startDrag,
     startResize,
     updateWebNodeUrl,
     updateNodeTitle,
@@ -278,13 +252,86 @@ export function Siteboard({
     [clearPositionCorrectionAnimation],
   );
 
-  const handleDragStartWithSettleReset = useCallback(
-    (e: React.MouseEvent, nodeId: string) => {
-      clearPositionCorrectionAnimation(nodeId);
-      handleDragStart(e, nodeId);
+  // React Flow ネイティブドラッグ開始: スクリーンショット準備 + インタラクション開始
+  const handleNodeDragStart = useCallback(
+    async (_event: React.MouseEvent, node: Node) => {
+      clearPositionCorrectionAnimation(node.id);
+      await prepareInteractionStart('drag', node.id);
+      handleInteractionChange(true, 'grabbing', 'drag');
     },
-    [clearPositionCorrectionAnimation, handleDragStart],
+    [clearPositionCorrectionAnimation, prepareInteractionStart, handleInteractionChange],
   );
+
+  // React Flow ネイティブドラッグ終了: 位置補正後にストアへ反映
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      handleInteractionChange(false, 'grabbing', 'drag');
+
+      // ドラッグ中の一時位置をクリア
+      setDraggingNodePositions((prev) => {
+        if (!(node.id in prev)) return prev;
+        const { [node.id]: _, ...rest } = prev;
+        return rest;
+      });
+
+      const movingNode = nodes.find((candidate) => candidate.id === node.id);
+      if (!movingNode) return;
+
+      const resolvedPosition = resolveDraggedNodePosition({
+        nodes,
+        movingNode,
+        proposedX: node.position.x,
+        proposedY: node.position.y,
+        gap: DRAG_REPOSITION_GAP,
+        zoom: zoomRef.current,
+      });
+      if (resolvedPosition.corrected && isWebPageNode(movingNode)) {
+        positionCorrectionSequenceRef.current += 1;
+        const nextAnimation = {
+          token: positionCorrectionSequenceRef.current,
+          fromX: node.position.x,
+          fromY: node.position.y,
+          toX: resolvedPosition.x,
+          toY: resolvedPosition.y,
+        };
+        positionCorrectionAnimationsRef.current = {
+          ...positionCorrectionAnimationsRef.current,
+          [node.id]: nextAnimation,
+        };
+        setPositionCorrectionAnimations((prev) => ({ ...prev, [node.id]: nextAnimation }));
+        holdNodeDuringPositionSettle(node.id);
+        if (movingNode.x !== resolvedPosition.x || movingNode.y !== resolvedPosition.y) {
+          updateNodePosition(activeId, node.id, resolvedPosition.x, resolvedPosition.y);
+        }
+        return;
+      }
+
+      updateNodePosition(activeId, node.id, resolvedPosition.x, resolvedPosition.y);
+    },
+    [
+      activeId,
+      handleInteractionChange,
+      holdNodeDuringPositionSettle,
+      nodes,
+      updateNodePosition,
+      zoomRef,
+    ],
+  );
+
+  // ドラッグ中の position 変更を一時ステートに反映（ストアは dragStop 時のみ更新）
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    const positionChanges = changes.filter(
+      (c): c is NodePositionChange => c.type === 'position' && c.dragging === true,
+    );
+    if (positionChanges.length === 0) return;
+    setDraggingNodePositions((prev) => {
+      const next = { ...prev };
+      for (const change of positionChanges) {
+        if (change.position) next[change.id] = change.position;
+      }
+      return next;
+    });
+  }, []);
 
   const handleRemoveNodeWithSettleReset = useCallback(
     (nodeId: string) => {
@@ -366,108 +413,252 @@ export function Siteboard({
     [contextMenu, handleContextMenuCloseDisplay, handleRemoveNodeWithSettleReset],
   );
 
-  const handleSiteboardMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.button !== 0) return;
-      if (isPanMode.current) return;
-      if ((e.target as HTMLElement).closest('[data-node-id]')) return;
-      setContextMenu(null);
-      onClearSelection();
+  // ペイン（空白エリア）クリックで選択解除
+  const handlePaneClick = useCallback(() => {
+    setContextMenu(null);
+    onClearSelection();
+  }, [onClearSelection]);
+
+  // React Flow のビューポート変更ハンドラー
+  const handleViewportChange = useCallback(
+    (viewport: FlowViewport) => {
+      zoomRef.current = viewport.zoom;
+      panXRef.current = viewport.x;
+      panYRef.current = viewport.y;
+
+      // --canvas-zoom CSS 変数を同期（zoomPx() が引き続き動作するために必要）
+      if (containerRef.current) {
+        containerRef.current.style.setProperty('--canvas-zoom', String(viewport.zoom));
+      }
+
+      setUiZoom(viewport.zoom);
+
+      // debounce でストアへ永続化
+      if (viewportUpdateTimerRef.current) clearTimeout(viewportUpdateTimerRef.current);
+      viewportUpdateTimerRef.current = setTimeout(() => {
+        viewportUpdateTimerRef.current = null;
+        updateViewport(activeId, { zoom: viewport.zoom, panX: viewport.x, panY: viewport.y });
+      }, ZOOM_END_DEBOUNCE_MS);
     },
-    [isPanMode, onClearSelection],
+    [activeId, containerRef, panXRef, updateViewport, zoomRef],
   );
 
+  const handleMoveStart = useCallback(() => {
+    scheduleInteractionUpdate();
+  }, [scheduleInteractionUpdate]);
+
+  const handleMove = useCallback(() => {
+    scheduleInteractionUpdate();
+  }, [scheduleInteractionUpdate]);
+
+  const handleMoveEnd = useCallback(() => {
+    computeDisplayModes();
+  }, [computeDisplayModes]);
+
+  const handleResetZoom = useCallback(() => {
+    const instance = reactFlowInstanceRef.current;
+    if (!instance) return;
+    cancelZoomRestore();
+    instance.setViewport(
+      { x: 0, y: 0, zoom: ZOOM_RESET_TARGET },
+      { duration: prefersReducedMotion ? 0 : 240 },
+    );
+    // ズームリセット完了後に Webview 座標を再計算
+    setTimeout(() => scheduleZoomRestoreAfterReflow(), prefersReducedMotion ? 0 : 260);
+  }, [cancelZoomRestore, prefersReducedMotion, scheduleZoomRestoreAfterReflow]);
+
+  // ビューポートの debounce タイマーのクリーンアップ
+  useEffect(() => {
+    return () => {
+      if (viewportUpdateTimerRef.current) {
+        clearTimeout(viewportUpdateTimerRef.current);
+      }
+    };
+  }, []);
+
+  // React Flow の flowNodes 配列を構築する
+  // displayModes/screenshotUrls/navStates/resizingSize の変化に追従するため useMemo 依存に含める
+  const flowNodes = useMemo((): Node[] => {
+    return nodes.map((node): Node => {
+      // ドラッグ中は一時位置を使用。dragStop 時にストアへ反映する
+      const position = draggingNodePositions[node.id] ?? { x: node.x, y: node.y };
+      // React Flow の viewport が scale(zoom) を管理するため論理サイズをそのまま渡す
+      const style = { width: node.width };
+
+      if (isStickyNoteNode(node)) {
+        const nodeData: StickyNoteFlowNodeData = {
+          nodeProps: {
+            node: { ...node, x: 0, y: 0 },
+            isActive: node.id === selectedNodeId,
+            hideColorCycleButton: hideCompactControls,
+            onActivate: onSelectNode,
+            onContextMenu: handleNodeContextMenu,
+            onResizeStart: startStickyNoteResize,
+            onContentChange: handleStickyNoteContentChange,
+            onAutoHeightChange: handleStickyNoteAutoHeightChange,
+            onColorCycle: handleStickyNoteColorCycle,
+          },
+        };
+        return {
+          id: node.id,
+          type: 'stickyNoteFlowNode',
+          position,
+          style,
+          dragHandle: '.node-drag-handle',
+          data: nodeData as unknown as Record<string, unknown>,
+        };
+      }
+
+      const nodeData: WebPageFlowNodeData = {
+        nodeProps: {
+          // isStickyNoteNode の早期 return 後に WebPageNode と確定しているが spread で型が広がるため cast
+          node: { ...node, x: 0, y: 0 } as WebPageNode,
+          isActive: node.id === selectedNodeId,
+          title: node.title,
+          displayWidth: resizingSize?.nodeId === node.id ? resizingSize.width : node.width,
+          displayHeight: resizingSize?.nodeId === node.id ? resizingSize.height : node.height,
+          displayMode: displayModes[node.id] ?? 'hidden',
+          screenshotUrl: screenshotUrls[node.id] ?? null,
+          hideTopNavControls: hideCompactControls,
+          hideBottomPresetControls: hideCompactControls,
+          canGoBack: navStates[node.id]?.can_go_back ?? false,
+          canGoForward: navStates[node.id]?.can_go_forward ?? false,
+          getZoom,
+          onGoBack: handleGoBack,
+          onGoForward: handleGoForward,
+          onActivate: onSelectNode,
+          onReload: handleReloadWebNode,
+          onPinUrl: handlePinWebNodeUrl,
+          onContextMenu: handleNodeContextMenu,
+          onResizeStart: handleResizeStart,
+          onResizePreset: handleResizePreset,
+          onNavigated: handleNavigated,
+          onTitleUpdated: handleTitleUpdated,
+          onWebviewCreated: handleWebviewCreated,
+          onWebviewDestroyed: handleWebviewDestroyed,
+          onWebviewLoaded: handleWebviewLoaded,
+          onScreenshotPresented: handleScreenshotPresented,
+          onScrollEnded: handleScrollEnded,
+          onUrlSubmit: handleUrlSubmit,
+          positionCorrectionAnimationToken: positionCorrectionAnimations[node.id]?.token ?? null,
+          positionCorrectionFromX: positionCorrectionAnimations[node.id]?.fromX ?? null,
+          positionCorrectionFromY: positionCorrectionAnimations[node.id]?.fromY ?? null,
+          positionCorrectionToX: positionCorrectionAnimations[node.id]?.toX ?? null,
+          positionCorrectionToY: positionCorrectionAnimations[node.id]?.toY ?? null,
+          onPositionCorrectionAnimationComplete: handlePositionCorrectionAnimationComplete,
+        },
+      };
+      return {
+        id: node.id,
+        type: 'webPageFlowNode',
+        position,
+        style,
+        dragHandle: '.node-drag-handle',
+        data: nodeData as unknown as Record<string, unknown>,
+      };
+    });
+  }, [
+    nodes,
+    draggingNodePositions,
+    selectedNodeId,
+    hideCompactControls,
+    resizingSize,
+    displayModes,
+    screenshotUrls,
+    navStates,
+    positionCorrectionAnimations,
+    onSelectNode,
+    handleNodeContextMenu,
+    startStickyNoteResize,
+    handleStickyNoteContentChange,
+    handleStickyNoteAutoHeightChange,
+    handleStickyNoteColorCycle,
+    getZoom,
+    handleGoBack,
+    handleGoForward,
+    handleReloadWebNode,
+    handlePinWebNodeUrl,
+    handleResizeStart,
+    handleResizePreset,
+    handleNavigated,
+    handleTitleUpdated,
+    handleWebviewCreated,
+    handleWebviewDestroyed,
+    handleWebviewLoaded,
+    handleScreenshotPresented,
+    handleScrollEnded,
+    handleUrlSubmit,
+    handlePositionCorrectionAnimationComplete,
+  ]);
+
+  // React Flow はノードの変更（NodeChange）を onNodesChange で通知するが、
+  const defaultViewport = useMemo(
+    () => ({
+      x: activeProject?.viewport.panX ?? 0,
+      y: activeProject?.viewport.panY ?? 0,
+      zoom: activeProject?.viewport.zoom ?? 1,
+    }),
+    [],
+  );
+  // 初期値のみ使用するため deps は空でよい（プロジェクト切り替えは別途対応）
+
   return (
-    <div
-      ref={containerRef}
-      data-siteboard-container
-      className="relative flex-1 overflow-hidden siteboard-bg"
-      onMouseDown={handleSiteboardMouseDown}
-    >
-      {interactionCursor && <InteractionOverlay cursor={interactionCursor} />}
+    <ReactFlowProvider>
+      <div ref={containerRef} data-siteboard-container className="relative flex-1 overflow-hidden">
+        {interactionCursor && <InteractionOverlay cursor={interactionCursor} />}
 
-      <div ref={canvasRef} className="absolute inset-0 origin-top-left will-change-transform">
-        {nodes.map((node) => {
-          if (isStickyNoteNode(node)) {
-            return (
-              <StickyNoteNode
-                key={node.id}
-                node={node}
-                isActive={node.id === selectedNodeId}
-                hideColorCycleButton={hideCompactControls}
-                onActivate={onSelectNode}
-                onContextMenu={handleNodeContextMenu}
-                onDragStart={handleDragStartWithSettleReset}
-                onResizeStart={startStickyNoteResize}
-                onContentChange={handleStickyNoteContentChange}
-                onAutoHeightChange={handleStickyNoteAutoHeightChange}
-                onColorCycle={handleStickyNoteColorCycle}
-              />
-            );
-          }
+        <ReactFlow
+          nodes={flowNodes}
+          edges={[]}
+          nodeTypes={nodeTypes}
+          onNodesChange={handleNodesChange}
+          onViewportChange={handleViewportChange}
+          onMoveStart={handleMoveStart}
+          onMove={handleMove}
+          onMoveEnd={handleMoveEnd}
+          onNodeDragStart={handleNodeDragStart}
+          onNodeDragStop={handleNodeDragStop}
+          onPaneClick={handlePaneClick}
+          onInit={(instance) => {
+            reactFlowInstanceRef.current = instance;
+          }}
+          defaultViewport={defaultViewport}
+          panActivationKeyCode="Space"
+          panOnDrag={[0, 1]}
+          panOnScroll={false}
+          zoomOnScroll={true}
+          zoomOnPinch={true}
+          zoomOnDoubleClick={false}
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
+          // Webview 対策: 仮想化を無効化してすべてのノードをレンダリングする
+          onlyRenderVisibleElements={false}
+          nodesConnectable={false}
+          edgesFocusable={false}
+          proOptions={{ hideAttribution: true }}
+          className="size-full"
+        >
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={24}
+            size={2}
+            color={isDark ? '#27272a' : '#d1d5db'}
+            bgColor={isDark ? '#18181b' : '#f9fafb'}
+          />
+          <FloatingToolbar onAddWebNode={onAddWebNode} onAddStickyNote={onAddStickyNote} />
+          <ZoomIndicator zoom={uiZoom} onReset={handleResetZoom} />
+        </ReactFlow>
 
-          if (!isWebPageNode(node)) {
-            return null;
-          }
-
-          return (
-            <WebPageNode
-              key={node.id}
-              node={node}
-              isActive={node.id === selectedNodeId}
-              title={node.title}
-              displayWidth={resizingSize?.nodeId === node.id ? resizingSize.width : node.width}
-              displayHeight={resizingSize?.nodeId === node.id ? resizingSize.height : node.height}
-              displayMode={displayModes[node.id] ?? 'hidden'}
-              screenshotUrl={screenshotUrls[node.id] ?? null}
-              hideTopNavControls={hideCompactControls}
-              hideBottomPresetControls={hideCompactControls}
-              canGoBack={navStates[node.id]?.can_go_back ?? false}
-              canGoForward={navStates[node.id]?.can_go_forward ?? false}
-              getZoom={getZoom}
-              onGoBack={handleGoBack}
-              onGoForward={handleGoForward}
-              onActivate={onSelectNode}
-              onReload={handleReloadWebNode}
-              onPinUrl={handlePinWebNodeUrl}
-              onContextMenu={handleNodeContextMenu}
-              onDragStart={handleDragStartWithSettleReset}
-              onResizeStart={handleResizeStart}
-              onResizePreset={handleResizePreset}
-              onNavigated={handleNavigated}
-              onTitleUpdated={handleTitleUpdated}
-              onWebviewCreated={handleWebviewCreated}
-              onWebviewDestroyed={handleWebviewDestroyed}
-              onWebviewLoaded={handleWebviewLoaded}
-              onScreenshotPresented={handleScreenshotPresented}
-              onScrollEnded={handleScrollEnded}
-              onUrlSubmit={handleUrlSubmit}
-              positionCorrectionAnimationToken={
-                positionCorrectionAnimations[node.id]?.token ?? null
-              }
-              positionCorrectionFromX={positionCorrectionAnimations[node.id]?.fromX ?? null}
-              positionCorrectionFromY={positionCorrectionAnimations[node.id]?.fromY ?? null}
-              positionCorrectionToX={positionCorrectionAnimations[node.id]?.toX ?? null}
-              positionCorrectionToY={positionCorrectionAnimations[node.id]?.toY ?? null}
-              onPositionCorrectionAnimationComplete={handlePositionCorrectionAnimationComplete}
-            />
-          );
-        })}
+        {contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={[{ id: 'remove', label: 'ノードを削除', variant: 'danger' }]}
+            onAction={handleContextMenuAction}
+            onClose={handleContextMenuClose}
+          />
+        )}
       </div>
-
-      <FloatingToolbar onAddWebNode={onAddWebNode} onAddStickyNote={onAddStickyNote} />
-
-      <ZoomIndicator zoom={uiZoom} onReset={handleResetZoom} />
-
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          items={[{ id: 'remove', label: 'ノードを削除', variant: 'danger' }]}
-          onAction={handleContextMenuAction}
-          onClose={handleContextMenuClose}
-        />
-      )}
-    </div>
+    </ReactFlowProvider>
   );
 }

@@ -46,7 +46,7 @@
 
 ## drag 終了後の重なり補正
 
-- ドラッグ中の DOM 直接移動は従来どおり維持し、`mouseup` 後にだけ store 座標を確定する
+- React Flow ネイティブドラッグで `Siteboard.tsx` の `draggingNodePositions` state に一時位置を管理し、`onNodeDragStop` 後にのみ store 座標を確定する
 - ドロップ位置が禁止された重なりを作る場合は、`x` または `y` の単軸だけを動かして再配置する
 - 補正は最短移動を優先し、補正後の余白は `DRAG_REPOSITION_GAP = 20`
 - webpage は他の全ノードとの重なりを禁止し、stickynote は webpage に対してのみ同じ制約を適用する

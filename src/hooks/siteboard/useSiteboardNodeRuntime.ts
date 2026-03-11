@@ -10,9 +10,7 @@ interface UseSiteboardNodeRuntimeParams {
   activeId: string;
   nodes: BoardNode[];
   selectedNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
   onClearSelection: () => void;
-  startDrag: (e: React.MouseEvent, nodeId: string) => void;
   startResize: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
   updateWebNodeUrl: (projectId: string, nodeId: string, url: string, title: string) => void;
   updateNodeTitle: (projectId: string, nodeId: string, title: string) => void;
@@ -46,9 +44,7 @@ export function useSiteboardNodeRuntime({
   activeId,
   nodes,
   selectedNodeId,
-  onSelectNode,
   onClearSelection,
-  startDrag,
   startResize,
   updateWebNodeUrl,
   updateNodeTitle,
@@ -274,14 +270,6 @@ export function useSiteboardNodeRuntime({
     [activeId, refreshNavigationState, updateNodeTitle],
   );
 
-  const handleDragStart = useCallback(
-    (e: React.MouseEvent, nodeId: string) => {
-      onSelectNode(nodeId);
-      startDrag(e, nodeId);
-    },
-    [onSelectNode, startDrag],
-  );
-
   const handleResizeStart = useCallback(
     (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => {
       startResize(e, nodeId, direction);
@@ -419,7 +407,6 @@ export function useSiteboardNodeRuntime({
   }, [clearAllRuntimeTimers]);
 
   return {
-    handleDragStart,
     handleGoBack,
     handleGoForward,
     handleNavigated,

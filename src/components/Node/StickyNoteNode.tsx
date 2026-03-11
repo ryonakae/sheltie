@@ -9,13 +9,12 @@ import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
 
-interface StickyNoteNodeProps {
+export interface StickyNoteNodeProps {
   node: StickyNoteNodeModel;
   isActive: boolean;
   hideColorCycleButton: boolean;
   onActivate: (nodeId: string) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
-  onDragStart: (e: React.MouseEvent, nodeId: string) => void;
   onResizeStart: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
   onContentChange: (nodeId: string, content: string) => void;
   onAutoHeightChange: (nodeId: string, height: number) => void;
@@ -28,7 +27,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   hideColorCycleButton,
   onActivate,
   onContextMenu,
-  onDragStart,
   onResizeStart,
   onContentChange,
   onAutoHeightChange,
@@ -140,14 +138,14 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   );
 
   const noteClassName = twMerge(
-    'absolute flex flex-col shadow-lg',
+    'flex flex-col shadow-lg',
     'border-solid outline-offset-0',
     color.bgClass,
     isActive ? '' : 'border',
     color.borderClass,
   );
   const noteHeaderClassName = twMerge(
-    'flex shrink-0 cursor-grab items-center active:cursor-grabbing',
+    'node-drag-handle flex shrink-0 cursor-grab items-center active:cursor-grabbing',
     color.borderClass,
   );
   const noteColorButtonClassName = twMerge(
@@ -164,8 +162,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       layout="position"
       className={noteClassName}
       style={{
-        left: node.x,
-        top: node.y,
         width: node.width,
         borderRadius: zoomPx(16),
         outline: isActive ? `${zoomPx(2)} solid var(--color-focus)` : 'none',
@@ -185,10 +181,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
           borderBottomWidth: zoomPx(1),
           borderBottomStyle: 'solid',
           gap: zoomPx(2),
-        }}
-        onMouseDown={(e) => {
-          // テキスト選択・ボタン操作以外でドラッグ開始
-          onDragStart(e, node.id);
         }}
       >
         <span

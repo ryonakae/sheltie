@@ -18,7 +18,7 @@ export interface WebPageNodeTopBarProps {
   onReload?: () => void;
   onPinUrl?: () => void;
   hideNavigationControls: boolean;
-  onMouseDown: (e: React.MouseEvent) => void;
+  onMouseDown?: (e: React.MouseEvent) => void;
 }
 
 function formatDisplayUrl(url: string) {
@@ -55,7 +55,7 @@ export function WebPageNodeTopBar({
 
   return (
     <div
-      className="flex shrink-0 cursor-grab items-center overflow-hidden bg-default active:cursor-grabbing"
+      className="node-drag-handle flex shrink-0 cursor-grab items-center overflow-hidden bg-default active:cursor-grabbing"
       style={topBarStyle}
       onMouseDown={onMouseDown}
     >

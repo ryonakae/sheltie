@@ -70,27 +70,34 @@
 
 ## React Flow アダプター（`src/lib/reactflow-adapter.ts`）
 
+### Node 型と Flow ノード
+
+- `WebPageFlowNodeData = { nodeProps: WebPageNodeProps }`
+- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps }`
+- Flow ノードの `x`, `y` は常に 0 に設定（実位置は親 `.react-flow__node` の transform で管理）
+- Flow ノードの `style` には `width/zoom`, `height/zoom` でズーム補正を適用
+
 ### `boardNodesToFlowNodes(nodes: BoardNode[], zoom: number): Node[]`
 
-`BoardNode[]` を React Flow の `Node[]` に変換する。
+`BoardNode[]` を React Flow の `Node[]` に変換する。`Siteboard.tsx` の `useMemo` で直接構築（別関数にはしない。理由：ノード型定義の循環依存を避けるため）。
 
-- `BoardNode.x/y` → `Node.position.{x, y}`
-- `BoardNode.width/height` → `Node.style.{width/zoom, height/zoom}`（ズーム値で逆スケーリング）
+- `BoardNode.x/y` → `Node.position.{x: 0, y: 0}`（位置は親 `.react-flow__node` の transform で管理）
+- `BoardNode.width/height` → `Node.style.{width: ... / zoom, height: ... / zoom}`（ズーム値で逆スケーリングし、CSS calc で寸法を正規化）
 - `BoardNode.type === 'stickynote'` → `Node.type = 'stickyNoteFlowNode'`（そうでなければ `'webPageFlowNode'`）
-- `Node.data` に元の `BoardNode` 全体を格納（React Flow の型制約のため `as unknown as Record<string, unknown>` でキャスト）
+- `Node.data` に `{ nodeProps: ... }` を格納（WebPageFlowNode / StickyNoteFlowNode が `node.data.nodeProps` で受け取る）
+- `Node` に `draggable={false}` / `selectable={false}` を設定し、React Flow ネイティブ操作を無効化
 
-### `applyFlowChangesToStore(changes, projectId, store, callbacks): void`
+### React Flow インタラクション制御
 
-React Flow の `NodeChange[]` を Zustand アクションに変換して適用する。
+フェーズ 1：
+- pan/zoom は React Flow ネイティブ（`panActivationKeyCode="Space"` + `panOnDrag={[0, 1]}`）
+- ホイール = React Flow ズーム（`zoomOnScroll={true}`）
+- `onViewportChange` で `--canvas-zoom` CSS 変数を更新し、UI スケーリングと `zoomPx()` を同期
+- ドラッグ・リサイズはカスタムハンドラー（`useSiteboardViewportEngine` + component level イベント）で処理
 
-**変更タイプと処理**:
-
-- `position` change（`dragging=false`）→ `updateNodePosition(projectId, nodeId, x, y)`（ドラッグ完了時のみ履歴付き）
-- `dimensions` change → `resizing=true` なら `updateNodeSizeWithoutHistory()`、`false` なら `updateNodeSize()`（完了時に履歴付き確定）
-- `select` change → `callbacks.onSelectNode(nodeId)` / `callbacks.onClearSelection()`
-- `remove` change → `removeNode(projectId, nodeId)`
-
-**注意点**: ドラッグ・リサイズ中（`dragging=true` / `resizing=true`）は履歴を積まず、完了時のみ確定更新する
+**フェーズ 2 以降の計画**:
+- `onMove` / `onMoveEnd` コールバックで React Flow ドラッグを Zustand に適用予定
+- `onNodeDragStart` 時に display mode 制御（スクリーンショット化等）を `useSiteboardDisplayEngine` と連携予定
 
 ## 主要定数
 

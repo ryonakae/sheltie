@@ -16,10 +16,34 @@
 - Siteboard 内 UI のスケーリングは `--canvas-zoom` を使った CSS 計算で対応し、不要な再レンダーを避ける。
 - コメントは「なぜ必要か」がコードだけで伝わらない箇所に限定する。
 
-## React Flow
+## React Flow（フェーズ 1 以降）
 
-- `nodeTypes` 定数は**必ずモジュールスコープで定義**すること。コンポーネント内で定義すると毎レンダーで全ノードが再マウント（unmount → mount）されるため。
-- `nodeTypes` の定義は `src/components/ReactFlowNodes/types.ts` に一元化する。
+### ノード位置管理と Flow ラッパー
+
+- **位置は React Flow が管理**: React Flow ノードの `position: {x, y}` には常に node の座標を設定。React Flow が `.react-flow__node` の CSS transform で絶対配置を制御
+- **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
+- **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化。ドラッグハンドルは `dragHandle: '.node-drag-handle'` で タイトルバーに限定
+- **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `nodesDraggable={true}` + `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
+- `nodeTypes` 定数は**モジュールスコープで定義**。コンポーネント内に定義するとレンダーのたびにノードが再マウント（unmount→mount）される
+- `nodeTypes` の定義は `src/components/ReactFlowNodes/nodeTypes.ts` に一元化（循環依存防止）
+
+### ドラッグ機能
+
+- **ドラッグ中の位置管理**: `Siteboard.tsx` の `draggingNodePositions` state（React state）でドラッグ中の一時位置を管理。ストアへの書き込みは `onNodeDragStop` 完了時のみ（Undo/Redo 履歴の汚染防止）
+- **ハンドル指定**: `dragHandle: '.node-drag-handle'` でタイトルバーのみをドラッグ起点に。ノード本体のドラッグはスキップ
+- **DisplayEngine 連携**: `onNodeDragStart` で `prepareInteractionStart('drag', nodeId)` を呼び出してスクリーンショット準備（`useSiteboardDisplayEngine` 統合）
+- **重なり補正**: `onNodeDragStop` で `handleRepositionOnDragEnd` を呼び出し、禁止された重なりを単軸補正（`siteboard-runtime.md` 参照）
+
+### ビューポート管理
+
+- **React Flow ネイティブ委譲**: `panActivationKeyCode="Space"`（スペースキーでパン）、`panOnDrag={[0, 1]}`（マウス左/中ボタンでパン）、`zoomOnScroll={true}`（ホイールズーム）
+- `onViewportChange` で React Flow viewport を `zoomRef/panXRef/panYRef` に同期し、同時に `--canvas-zoom` CSS 変数を更新（`zoomPx()` calc 関数が UI スケーリングを計算するため必須）
+- viewport 変更をプロジェクト state に反映する場合は debounce で遅延更新し、高頻度な setState を避ける
+
+### ラッパー内部構造
+
+- Flow ノードの `style` に `width`, `height`（ズーム補正後）をセット
+- Flow ノードの `data` に `nodeProps` 構造体を格納し、ラッパー内で子コンポーネント（`StickyNoteNode`/`WebPageNode`）にスプレッド。位置（`x`, `y`）は `{x: 0, y: 0}` に正規化してコンポーネント側で無視させる
 
 ## Siteboard/Webview 変更時の必読
 

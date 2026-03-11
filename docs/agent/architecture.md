@@ -25,20 +25,23 @@ src/
 - `components/Project/Sidebar.tsx`: node 一覧（種別アイコン + タイトル/説明）
 - `components/Common/ContextMenu.tsx`: createPortal で body 直下に fixed 配置するコンテキストメニュー
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
-- `components/Siteboard/Siteboard.tsx`: 描画と hook 結線
+- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/handleResetZoom をコンポーネント state で管理。flowNodes を useMemo で構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`nodesDraggable={true}` で React Flow ネイティブドラッグを有効化。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装、`onNodesChange` で位置変更を state に反映
 - `components/Siteboard/FloatingToolbar.tsx`: Web ページ/付箋追加ボタン群
 - `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン
 - `components/Siteboard/InteractionOverlay.tsx`: 操作中カーソル上書き用オーバーレイ
-- `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI
-- `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI
-- `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`, `nodeTypes` 定数）
-- `hooks/siteboard/*`: 表示制御・ビューポート・ノードランタイム・キーボード操作を分担
+- `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI（props インターフェース export）
+- `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（props インターフェース export）
+- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（nodrag/nopan、x/y=0 固定）
+- `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー
+- `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`）
+- `components/ReactFlowNodes/nodeTypes.ts`: React Flow `nodeTypes` 定数（循環依存防止のため types.ts から分離）
+- `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作・ドラッグリサイズを分担（pan/zoom は React Flow に委譲）
 - `store/tab-store.ts`: プロジェクト・node・ビューポート状態と、プロジェクト単位 node 履歴（Undo/Redo）を管理
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
 - `lib/file-commands.ts`: File メニューの `open` / `save` / `save-as` を処理し、`.siteboard` の入出力とローカル store 連携を担当する
 - `lib/project-close.ts`: dirty 判定・保存/破棄確認・タブクローズ・アプリ終了時の close orchestration を担当する
-- `lib/reactflow-adapter.ts`: `BoardNode[]` を React Flow `Node[]` に変換し、React Flow の変更を Zustand に適用するアダプター
+- `lib/reactflow-adapter.ts`: `BoardNode[]` を React Flow `Node[]` に変換し、React Flow の変更を Zustand に適用するアダプター（フェーズ 1 以降で使用）
 - `main.tsx`: `edit-command` と `file-command` の listener を起動時に 1 回だけ登録する
 
 ## `.siteboard` とローカル状態
@@ -51,10 +54,25 @@ src/
 - 起動時はローカル状態を復元し、`.siteboard` の自動再読込はしない
 - タブクローズ時とアプリ終了時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的なウィンドウ破棄だけ `close_ready` を使う
 
-## Siteboard の責務分離
+## Siteboard と React Flow の協業
+
+### ビューポート管理
+
+- **React Flow**: ビューポート（pan/zoom）とノード位置の React state を管理
+- **Zustand**: ノード内容（title, url, width, height 等）とプロジェクト状態を管理
+- `handleViewportChange` で React Flow の viewport 変更を `zoomRef/panXRef/panYRef` に同期し、Zustand への更新は debounce を通して遅延更新
+
+### ノード位置管理
+
+- React Flow ノード（`<Node>`）の `position` は常に node の `{x, y}` を反映
+- ノードコンポーネント（`StickyNoteNode`, `WebPageNode`）から `position: absolute` と `left/top` スタイルを削除（React Flow が `.react-flow__node` の CSS transform で管理するため不要）
+- ノード位置の実際の変更はカスタム hook（`useSiteboardViewportEngine`）が Zustand に書き込み
+- React Flow の `onNodesChange` は フェーズ 1 では用途がないため、callback として登録するが実装は空（位置変更は hook で直接 Zustand に書き込み）
+
+### 責務分離
 
 - `useSiteboardDisplayEngine`: `DisplayMode` 判定、Webview 表示/非表示、スクリーンショット管理
-- `useSiteboardViewportEngine`: ズーム・パン・ドラッグ・リサイズの入力処理
+- `useSiteboardViewportEngine`: ドラッグ・リサイズの入力処理（pan/zoom は React Flow に委譲）
 - `useSiteboardNodeRuntime`: webpage ノード単位のナビゲーション状態・タイトル同期・スクリーンショット契機を管理
 - `useSiteboardKeyboard`: Delete/Backspace・Undo/Redo のショートカットを処理し、共通編集コマンドへ委譲
 
@@ -85,7 +103,7 @@ Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/li
 | Tailwind CSS v4 | スタイリング |
 | HeroUI v3 | UI コンポーネントライブラリ |
 | Zustand | 状態管理（プロジェクト・ノード・テーマ） |
-| @xyflow/react v12 | React Flow（フェーズ 0 以降で段階的採用） |
+| @xyflow/react v12 | React Flow（フェーズ 1 以降で採用。ビューポート管理 pan/zoom を担当） |
 | Framer Motion | アニメーション |
 | Tauri v2 JS API | ネイティブ統合（IPC・Webview 管理） |
 

@@ -11,7 +11,7 @@ import { zoomPx } from '@/lib/canvas-zoom';
 import { isNodeEmpty, isNodeMoved } from '@/types';
 import type { DisplayMode, WebPageNode as WebPageNodeModel } from '@/types';
 
-interface WebPageNodeProps {
+export interface WebPageNodeProps {
   node: WebPageNodeModel;
   isActive: boolean;
   title: string;
@@ -30,7 +30,6 @@ interface WebPageNodeProps {
   onReload: (nodeId: string) => void;
   onPinUrl: (nodeId: string) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
-  onDragStart: (e: React.MouseEvent, nodeId: string) => void;
   onResizeStart: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
   onResizePreset: (nodeId: string, width: number, height: number) => void;
   onNavigated: (nodeId: string, url: string, title: string) => void;
@@ -68,7 +67,6 @@ export const WebPageNode = memo(function WebPageNode({
   onReload,
   onPinUrl,
   onContextMenu,
-  onDragStart,
   onResizeStart,
   onResizePreset,
   onNavigated,
@@ -113,19 +111,9 @@ export const WebPageNode = memo(function WebPageNode({
   const handleGoForwardBound = useCallback(() => onGoForward(node.id), [node.id, onGoForward]);
   const handleReloadBound = useCallback(() => onReload(node.id), [node.id, onReload]);
   const handlePinUrlBound = useCallback(() => onPinUrl(node.id), [node.id, onPinUrl]);
-  const handleDragStartBound = useCallback(
-    (e: React.MouseEvent) => onDragStart(e, node.id),
-    [node.id, onDragStart],
-  );
   const handleResizePresetBound = useCallback(
     (width: number, height: number) => onResizePreset(node.id, width, height),
     [node.id, onResizePreset],
-  );
-  const handleTitleBarMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      handleDragStartBound(e);
-    },
-    [handleDragStartBound],
   );
   const handleResizeStart = useCallback(
     (e: React.MouseEvent, direction: NodeResizeDirection) => {
@@ -217,10 +205,8 @@ export const WebPageNode = memo(function WebPageNode({
   return (
     <div
       ref={frameRef}
-      className="absolute flex flex-col shadow-lg outline-offset-0"
+      className="flex flex-col shadow-lg outline-offset-0"
       style={{
-        left: node.x,
-        top: node.y,
         width: node.width,
         borderRadius: zoomPx(16),
         outline: isActive
@@ -243,7 +229,6 @@ export const WebPageNode = memo(function WebPageNode({
         onReload={isNodeEmpty(node) ? undefined : handleReloadBound}
         onPinUrl={isNodeMoved(node) ? handlePinUrlBound : undefined}
         hideNavigationControls={hideTopNavControls}
-        onMouseDown={handleTitleBarMouseDown}
       />
 
       <div

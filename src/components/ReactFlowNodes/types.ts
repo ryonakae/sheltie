@@ -1,19 +1,8 @@
-import type { StickyNoteNode, WebPageNode } from '@/types';
+import type { StickyNoteNodeProps } from '@/components/Node/StickyNoteNode';
+import type { WebPageNodeProps } from '@/components/Node/WebPageNode';
 
-import type { NodeTypes } from '@xyflow/react';
+/** WebPageFlowNode の data 型 */
+export type WebPageFlowNodeData = { nodeProps: WebPageNodeProps };
 
-// WebPageFlowNode のデータ型（元の BoardNode WebPage フィールドをそのまま保持）
-export type WebPageFlowNodeData = WebPageNode;
-
-// StickyNoteFlowNode のデータ型（元の BoardNode StickyNote フィールドをそのまま保持）
-export type StickyNoteFlowNodeData = StickyNoteNode;
-
-/**
- * React Flow の nodeTypes 定数。
- * コンポーネント内で定義すると毎レンダーで全ノードが再マウントされるため、
- * 必ずモジュールスコープで定義すること。
- */
-export const nodeTypes: NodeTypes = {
-  webPageFlowNode: () => null,
-  stickyNoteFlowNode: () => null,
-};
+/** StickyNoteFlowNode の data 型 */
+export type StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps };

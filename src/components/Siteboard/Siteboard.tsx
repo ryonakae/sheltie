@@ -31,6 +31,7 @@ import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplay
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
 import { useSiteboardViewportEngine } from '@/hooks/siteboard/useSiteboardViewportEngine';
+import { getNodeFrameHeight } from '@/lib/siteboard-node-frame';
 import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
 import {
   selectActiveProject,
@@ -132,6 +133,7 @@ export function Siteboard({
     Record<string, { x: number; y: number }>
   >({});
   const viewportUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uiZoomRafRef = useRef<number | null>(null);
   // setViewport のみ使用するため広い型で保持
   const reactFlowInstanceRef = useRef<Pick<ReactFlowInstance, 'setViewport'> | null>(null);
   const prefersReducedMotion = useReducedMotion();
@@ -431,7 +433,13 @@ export function Siteboard({
         containerRef.current.style.setProperty('--canvas-zoom', String(viewport.zoom));
       }
 
-      setUiZoom(viewport.zoom);
+      // setUiZoom は rAF で1フレームに1回に制限（毎フレームの re-render を防ぐ）
+      if (uiZoomRafRef.current === null) {
+        uiZoomRafRef.current = requestAnimationFrame(() => {
+          uiZoomRafRef.current = null;
+          setUiZoom(zoomRef.current);
+        });
+      }
 
       // debounce でストアへ永続化
       if (viewportUpdateTimerRef.current) clearTimeout(viewportUpdateTimerRef.current);
@@ -467,12 +475,11 @@ export function Siteboard({
     setTimeout(() => scheduleZoomRestoreAfterReflow(), prefersReducedMotion ? 0 : 260);
   }, [cancelZoomRestore, prefersReducedMotion, scheduleZoomRestoreAfterReflow]);
 
-  // ビューポートの debounce タイマーのクリーンアップ
+  // ビューポートの debounce タイマーと rAF のクリーンアップ
   useEffect(() => {
     return () => {
-      if (viewportUpdateTimerRef.current) {
-        clearTimeout(viewportUpdateTimerRef.current);
-      }
+      if (viewportUpdateTimerRef.current) clearTimeout(viewportUpdateTimerRef.current);
+      if (uiZoomRafRef.current !== null) cancelAnimationFrame(uiZoomRafRef.current);
     };
   }, []);
 
@@ -499,24 +506,30 @@ export function Siteboard({
             onColorCycle: handleStickyNoteColorCycle,
           },
         };
+        // top-level width/height を明示することで、flowNodes 再生成時に React Flow の
+        // nodeHasDimensions チェックが失敗して visibility:hidden になるちらつきを防ぐ
         return {
           id: node.id,
           type: 'stickyNoteFlowNode',
           position,
+          width: node.width,
+          height: getNodeFrameHeight({ type: 'stickynote', height: node.height }, zoomRef.current),
           style,
           dragHandle: '.node-drag-handle',
           data: nodeData as unknown as Record<string, unknown>,
         };
       }
 
+      const contentWidth = resizingSize?.nodeId === node.id ? resizingSize.width : node.width;
+      const contentHeight = resizingSize?.nodeId === node.id ? resizingSize.height : node.height;
       const nodeData: WebPageFlowNodeData = {
         nodeProps: {
           // isStickyNoteNode の早期 return 後に WebPageNode と確定しているが spread で型が広がるため cast
           node: { ...node, x: 0, y: 0 } as WebPageNode,
           isActive: node.id === selectedNodeId,
           title: node.title,
-          displayWidth: resizingSize?.nodeId === node.id ? resizingSize.width : node.width,
-          displayHeight: resizingSize?.nodeId === node.id ? resizingSize.height : node.height,
+          displayWidth: contentWidth,
+          displayHeight: contentHeight,
           displayMode: displayModes[node.id] ?? 'hidden',
           screenshotUrl: screenshotUrls[node.id] ?? null,
           hideTopNavControls: hideCompactControls,
@@ -548,10 +561,14 @@ export function Siteboard({
           onPositionCorrectionAnimationComplete: handlePositionCorrectionAnimationComplete,
         },
       };
+      // top-level width/height を明示することで、flowNodes 再生成時に React Flow の
+      // nodeHasDimensions チェックが失敗して visibility:hidden になるちらつきを防ぐ
       return {
         id: node.id,
         type: 'webPageFlowNode',
         position,
+        width: contentWidth,
+        height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, zoomRef.current),
         style,
         dragHandle: '.node-drag-handle',
         data: nodeData as unknown as Record<string, unknown>,

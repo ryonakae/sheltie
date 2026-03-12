@@ -101,3 +101,22 @@
 - React 18 は Promise の `.then()` 内の `setState` を自動バッチングし、同一レンダーサイクルに合流させる。
 - 「DOM 状態 A の React レンダー → ブラウザ描画 → DOM 状態 B の React レンダー」という順序が必要な場合は、A の `setState` の後に `requestAnimationFrame` を挟んでから B の `setState` を呼ぶ。
 - 具体例: コンテキストメニュー表示フローで `setDisplayModes`（スクリーンショット差し替え）完了後に `requestAnimationFrame(() => setContextMenu(...))` でメニューを表示（`siteboard-runtime.md` 参照）。
+
+## rAF スロットリングで高頻度 setState を抑制
+
+- `onViewportChange` など毎フレーム呼ばれるイベントハンドラー内で `setState` を直呼び出しすると、React が毎フレーム再レンダリングする。
+- 高頻度更新のうち「フレームごとに1回の更新で十分」な場合は、`useRef<number | null>` で rAF ID を保持し、既に進行中なら呼び出しをスキップする。
+  - パターン: ref が `null` なら `requestAnimationFrame` で callback 登録（ref に ID 保存）、callback 内で `ref = null` にリセットしてから `setState` 実行
+  - **重要**: クリーンアップ effect で `cancelAnimationFrame()` を忘れずに（コンポーネント unmount 時にメモリリーク防止）
+  - 具体例: `Siteboard.tsx` の `uiZoomRafRef`（パン/ズーム中の `setUiZoom` スロットリング）
+- ref パターンで 1-2 フレーム遅延が許容される用途（インジケーター更新等）に適用。即座の反映が必須な場合（ドラッグ追従等）は state 直更新が必要。
+
+## React Flow ノードには top-level `width`/`height` を必ず指定する
+
+- React Flow は `adoptUserNodes` 内で `userNode === internalNode?.internals.userNode` の参照等価チェックを行う。
+- `flowNodes` useMemo が再計算されると全ノードが新参照になりチェックが失敗し、新しい internal node が作成される。
+- このとき `node.width` / `node.height`（top-level）がなければ `nodeHasDimensions()` が `false` を返し、ノードが `visibility: hidden` になる。ResizeObserver が再計測するまで1フレーム非表示になり**全ノードちらつき**が発生する。
+- **対策**: `flowNodes` の各 Node オブジェクトに必ず top-level `width` と `height` を指定する。`style.width/height` ではなく Node 直下のプロパティ。
+  - WebPage ノード: `width: contentWidth, height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, zoomRef.current)`
+  - StickyNote ノード: `width: node.width, height: getNodeFrameHeight({ type: 'stickynote', height: node.height }, zoomRef.current)`
+  - `getNodeFrameHeight` は chrome（top/bottom bar / header）込みの論理高さを返す（`src/lib/siteboard-node-frame.ts`）

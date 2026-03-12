@@ -136,6 +136,7 @@ export function Siteboard({
   const uiZoomRafRef = useRef<number | null>(null);
   // setViewport のみ使用するため広い型で保持
   const reactFlowInstanceRef = useRef<Pick<ReactFlowInstance, 'setViewport'> | null>(null);
+  const moveInteractionTypeRef = useRef<'pan' | 'zoom' | null>(null);
   const prefersReducedMotion = useReducedMotion();
 
   const {
@@ -451,17 +452,35 @@ export function Siteboard({
     [activeId, containerRef, panXRef, updateViewport, zoomRef],
   );
 
-  const handleMoveStart = useCallback(() => {
-    scheduleInteractionUpdate();
-  }, [scheduleInteractionUpdate]);
+  const handleMoveStart = useCallback(
+    (_event: MouseEvent | TouchEvent | null, _viewport: FlowViewport) => {
+      // WheelEvent（zoom）か TouchEvent の多指（ピンチ zoom）か null（プログラマティック）は zoom として扱う
+      const type: 'pan' | 'zoom' =
+        _event === null
+          ? 'zoom'
+          : 'deltaY' in _event
+            ? 'zoom'
+            : _event instanceof TouchEvent && _event.touches.length >= 2
+              ? 'zoom'
+              : 'pan';
+
+      moveInteractionTypeRef.current = type;
+      // zoom 時は cursor を空文字（falsy）にして InteractionOverlay を非表示にする。
+      // overlay が pointer-events-auto で画面全体を覆うとホイールイベントが遮断されるため。
+      handleInteractionChange(true, type === 'pan' ? 'grabbing' : '', type);
+    },
+    [handleInteractionChange],
+  );
 
   const handleMove = useCallback(() => {
     scheduleInteractionUpdate();
   }, [scheduleInteractionUpdate]);
 
   const handleMoveEnd = useCallback(() => {
-    computeDisplayModes();
-  }, [computeDisplayModes]);
+    const type = moveInteractionTypeRef.current ?? 'pan';
+    moveInteractionTypeRef.current = null;
+    handleInteractionChange(false, 'default', type);
+  }, [handleInteractionChange]);
 
   const handleResetZoom = useCallback(() => {
     const instance = reactFlowInstanceRef.current;

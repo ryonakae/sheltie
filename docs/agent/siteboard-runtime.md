@@ -44,6 +44,39 @@
 - 保存済みスクショがないページは、操作開始前に capture を待つ。capture 不能な場合のみ `hidden` を最後の退避先として使う。
 - `pan/zoom` 中は rAF 単位で `computeInteractionModes` が `screenshot/hidden` を再判定する。操作中に `native` へ戻さない。
 
+## pan/zoom 判定（Siteboard.tsx）
+
+React Flow の `onMoveStart/onMove/onMoveEnd` は pan と zoom を区別しない。`Siteboard.tsx` の `handleMoveStart` で event 型から **開始時点で** 操作種別を即時判定する:
+
+- `event === null` → プログラマティック操作（ダブルクリック zoom など）→ `'zoom'`
+- `'deltaY' in event` → WheelEvent → `'zoom'`
+- `event instanceof TouchEvent && event.touches.length >= 2` → ピンチ → `'zoom'`
+- その他（MouseEvent、1指 TouchEvent） → `'pan'`
+
+### InteractionOverlay の cursor 制御
+
+- zoom 操作時は `cursor = ''`（falsy）で `InteractionOverlay` を非表示にする
+- `InteractionOverlay` は `pointer-events-auto absolute inset-0 z-50` でスクリーン全体を覆うため、表示中はマウスイベント（ホイール含む）が遮断される
+- zoom 中は overlay を非表示にして React Flow にホイールイベントを到達させる必要がある
+
+### isPanOnly 分岐（useSiteboardDisplayEngine）
+
+`computeInteractionModes` 内で:
+
+```ts
+const isPanOnly =
+  activeInteractionsRef.current.has('pan') && !activeInteractionsRef.current.has('zoom');
+```
+
+| isPanOnly | 呼ぶ IPC | 効果 |
+|---|---|---|
+| `true` | `updateAllPositions()` | 位置のみ更新。zoom 不変で軽量（60fps 維持） |
+| `false` | `updateAllBounds()` | サイズ含むフル更新。重いが zoom 変化に必須 |
+
+### zoom 終了後の native 復帰
+
+`handleMoveEnd` で `type = 'zoom'` を渡すと、`handleInteractionChange(false, ..., 'zoom')` 内で自動的に `scheduleZoomRestoreAfterReflow()` が呼ばれ、zoom 後のリフロー完了後に Webview 座標を復帰させる。`type = 'pan'` の場合は呼ばない。
+
 ## drag 終了後の重なり補正
 
 - React Flow ネイティブドラッグで `Siteboard.tsx` の `draggingNodePositions` state に一時位置を管理し、`onNodeDragStop` 後にのみ store 座標を確定する

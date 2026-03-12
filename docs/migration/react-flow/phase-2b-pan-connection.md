@@ -11,6 +11,7 @@ React Flow の `onMoveStart`/`onMove`/`onMoveEnd` から pan と zoom を区別�
 
 **前提**: フェーズ 2A 完了済み。
 **変更ファイル**: `src/components/Siteboard/Siteboard.tsx` のみ。
+**ステータス**: ✅ 実装完了（`feature/react-flow2` ブランチ）
 
 ## 背景: なぜ pan と zoom を区別する必要があるか
 

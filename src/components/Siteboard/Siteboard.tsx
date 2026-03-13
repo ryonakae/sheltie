@@ -1,8 +1,11 @@
-import { Background, BackgroundVariant, ReactFlow, ReactFlowProvider } from '@xyflow/react';
 import {
+  Background,
+  BackgroundVariant,
   type Node,
   type NodeChange,
   type NodePositionChange,
+  ReactFlow,
+  ReactFlowProvider,
   type ReactFlowInstance,
   type Viewport as FlowViewport,
 } from '@xyflow/react';
@@ -417,10 +420,13 @@ export function Siteboard({
   );
 
   // ペイン（空白エリア）クリックで選択解除
-  const handlePaneClick = useCallback(() => {
-    setContextMenu(null);
-    onClearSelection();
-  }, [onClearSelection]);
+  const handlePaneClick = useCallback(
+    (_event: React.MouseEvent) => {
+      setContextMenu(null);
+      onClearSelection();
+    },
+    [onClearSelection],
+  );
 
   // React Flow のビューポート変更ハンドラー
   const handleViewportChange = useCallback(
@@ -452,35 +458,65 @@ export function Siteboard({
     [activeId, containerRef, panXRef, updateViewport, zoomRef],
   );
 
-  const handleMoveStart = useCallback(
-    (_event: MouseEvent | TouchEvent | null, _viewport: FlowViewport) => {
-      // WheelEvent（zoom）か TouchEvent の多指（ピンチ zoom）か null（プログラマティック）は zoom として扱う
-      const type: 'pan' | 'zoom' =
-        _event === null
+  // WheelEvent（zoom）か TouchEvent の多指（ピンチ zoom）か null（プログラマティック）は zoom として扱う。
+  // Tauri WKWebView 環境では TouchEvent グローバルが未定義のため typeof ガードが必須。
+  const resolveViewportInteractionType = useCallback(
+    (event: MouseEvent | TouchEvent | null): 'pan' | 'zoom' =>
+      event === null
+        ? 'zoom'
+        : 'deltaY' in event
           ? 'zoom'
-          : 'deltaY' in _event
+          : typeof TouchEvent !== 'undefined' &&
+              event instanceof TouchEvent &&
+              event.touches.length >= 2
             ? 'zoom'
-            : _event instanceof TouchEvent && _event.touches.length >= 2
-              ? 'zoom'
-              : 'pan';
+            : 'pan',
+    [],
+  );
 
+  // pan/zoom のインタラクション開始を記録し display engine を起動する共通処理。
+  // handleMoveStart（主経路）と handleMove（fallback）の両方から呼ばれる。
+  const beginViewportInteraction = useCallback(
+    (event: MouseEvent | TouchEvent | null) => {
+      const type = resolveViewportInteractionType(event);
       moveInteractionTypeRef.current = type;
+      void prepareInteractionStart(type);
       // zoom 時は cursor を空文字（falsy）にして InteractionOverlay を非表示にする。
       // overlay が pointer-events-auto で画面全体を覆うとホイールイベントが遮断されるため。
       handleInteractionChange(true, type === 'pan' ? 'grabbing' : '', type);
+      return type;
+    },
+    [resolveViewportInteractionType, prepareInteractionStart, handleInteractionChange],
+  );
+
+  const handleMoveStart = useCallback(
+    (_event: MouseEvent | TouchEvent | null, _viewport: FlowViewport) => {
+      beginViewportInteraction(_event);
+    },
+    [beginViewportInteraction],
+  );
+
+  const handleMove = useCallback(
+    (_event: MouseEvent | TouchEvent | null, _viewport: FlowViewport) => {
+      // onMoveStart が取りこぼされた場合のフォールバック。
+      // onMove は viewport が実際に動いた時のみ発火するためクリック誤発火がない。
+      if (moveInteractionTypeRef.current === null) {
+        beginViewportInteraction(_event);
+      }
+      scheduleInteractionUpdate();
+    },
+    [beginViewportInteraction, scheduleInteractionUpdate],
+  );
+
+  const handleMoveEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | null, _viewport: FlowViewport) => {
+      // start が取りこぼされた場合も 'pan' にフォールバックして display engine を正常終了させる
+      const type = moveInteractionTypeRef.current ?? 'pan';
+      moveInteractionTypeRef.current = null;
+      handleInteractionChange(false, 'default', type);
     },
     [handleInteractionChange],
   );
-
-  const handleMove = useCallback(() => {
-    scheduleInteractionUpdate();
-  }, [scheduleInteractionUpdate]);
-
-  const handleMoveEnd = useCallback(() => {
-    const type = moveInteractionTypeRef.current ?? 'pan';
-    moveInteractionTypeRef.current = null;
-    handleInteractionChange(false, 'default', type);
-  }, [handleInteractionChange]);
 
   const handleResetZoom = useCallback(() => {
     const instance = reactFlowInstanceRef.current;

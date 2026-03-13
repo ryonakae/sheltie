@@ -163,9 +163,17 @@ export const webviewApi = {
     }
   },
 
-  async saveScreenshot(pageId: string, projectId: string): Promise<string | null> {
+  async saveScreenshot(
+    pageId: string,
+    projectId: string,
+    options?: { hideAfterSnapshotRequest?: boolean },
+  ): Promise<string | null> {
     try {
-      return await invoke<string>('save_webview_screenshot', { pageId, projectId });
+      return await invoke<string>('save_webview_screenshot', {
+        pageId,
+        projectId,
+        hideAfterSnapshotRequest: options?.hideAfterSnapshotRequest,
+      });
     } catch {
       return null;
     }

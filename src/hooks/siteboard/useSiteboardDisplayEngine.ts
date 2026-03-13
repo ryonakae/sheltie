@@ -6,11 +6,7 @@ import { getPlatformInfo, webviewApi } from '@/lib/tauri-bridge';
 import type { DisplayMode, WebPageNode } from '@/types';
 
 import { getWebPageElements, setDisplayModeAttribute } from './display-engine/dom';
-import {
-  isFullyInsideNativeSafeArea,
-  isOutsideExpandedViewport,
-  resolveViewportDisplayMode,
-} from './display-engine/mode';
+import { isOutsideExpandedViewport, resolveViewportDisplayMode } from './display-engine/mode';
 
 import type { InteractionType } from './types';
 
@@ -37,6 +33,7 @@ interface UseSiteboardDisplayEngineParams {
 
 interface CaptureScreenshotOptions {
   forceDuringInteraction?: boolean;
+  hideAfterSnapshotRequest?: boolean;
   source?: 'default' | 'interaction-start' | 'resize-end';
   waitForPresentation?: boolean;
 }
@@ -123,6 +120,9 @@ export function useSiteboardDisplayEngine({
   const contextMenuNodeIdRef = useRef<string | null>(null);
   const settlingNodeIdsRef = useRef<Set<string>>(new Set());
   const forceHiddenInteractionNodeIdsRef = useRef<Set<string>>(new Set());
+  const nativeHiddenByInteractionCaptureRef = useRef<Set<string>>(new Set());
+  const interactionCaptureRetryNodeIdsRef = useRef<Set<string>>(new Set());
+  const interactionCaptureRetryTimerRef = useRef<number | null>(null);
 
   const screenshotUrlsRef = useRef<Record<string, string>>(seededScreenshotUrls);
   const presentedScreenshotUrlRef = useRef<Record<string, string>>({});
@@ -192,8 +192,18 @@ export function useSiteboardDisplayEngine({
     }
   }, []);
 
+  const cancelInteractionCaptureRetry = useCallback(() => {
+    if (interactionCaptureRetryTimerRef.current === null) return;
+    clearTimeout(interactionCaptureRetryTimerRef.current);
+    interactionCaptureRetryTimerRef.current = null;
+  }, []);
+
   const hasDisplayableScreenshot = useCallback((nodeId: string) => {
     return Boolean(screenshotReadyRef.current[nodeId] && screenshotUrlsRef.current[nodeId]);
+  }, []);
+
+  const isPanOrZoomInteractionActive = useCallback(() => {
+    return activeInteractionsRef.current.has('pan') || activeInteractionsRef.current.has('zoom');
   }, []);
 
   const mergeCaptureOptions = useCallback(
@@ -206,6 +216,9 @@ export function useSiteboardDisplayEngine({
       return {
         forceDuringInteraction: Boolean(
           current.forceDuringInteraction || next.forceDuringInteraction,
+        ),
+        hideAfterSnapshotRequest: Boolean(
+          current.hideAfterSnapshotRequest || next.hideAfterSnapshotRequest,
         ),
         source: next.source ?? current.source,
         waitForPresentation: Boolean(current.waitForPresentation || next.waitForPresentation),
@@ -331,6 +344,7 @@ export function useSiteboardDisplayEngine({
     async (type: InteractionPreparationType, targetNodeId?: string) => {
       const nodeIds = getInteractionPreparationNodeIds(type, targetNodeId);
       if (nodeIds.length === 0) return true;
+      const useNativeHideAfterSnapshot = type === 'pan' || type === 'zoom';
 
       const results = await Promise.all(
         nodeIds.map(async (nodeId) => {
@@ -340,15 +354,20 @@ export function useSiteboardDisplayEngine({
           }
 
           const ready = await ensureScreenshotReady(nodeId, {
+            hideAfterSnapshotRequest: useNativeHideAfterSnapshot,
             source: 'interaction-start',
           });
 
           if (ready || hasDisplayableScreenshot(nodeId)) {
             forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
+            interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
             return true;
           }
 
           forceHiddenInteractionNodeIdsRef.current.add(nodeId);
+          if (useNativeHideAfterSnapshot) {
+            interactionCaptureRetryNodeIdsRef.current.add(nodeId);
+          }
           return false;
         }),
       );
@@ -368,6 +387,9 @@ export function useSiteboardDisplayEngine({
   );
 
   const computeDisplayModes = useCallback(() => {
+    // 操作中は applyPreparedInteractionModes + computeInteractionModes が表示を管理する。
+    // ここで走ると native に復帰して webview が表示されてしまう。
+    if (activeInteractionsRef.current.size > 0) return;
     if (!containerRef.current || !canvasRef.current) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
@@ -518,6 +540,20 @@ export function useSiteboardDisplayEngine({
     });
   }, [computeDisplayModes]);
 
+  const shouldSkipImmediateInteractionHide = useCallback(
+    (nodeId: string) => {
+      if (!nativeHiddenByInteractionCaptureRef.current.has(nodeId)) {
+        return false;
+      }
+
+      // zoom は native 側の snapshot 要求直後 hide に任せた方が安定している。
+      // pan は drag 開始直後に JS 側からも hide しないと visible のまま残るケースがあるため、
+      // skip せず applyPreparedInteractionModes / computeInteractionModes 側で即 hide させる。
+      return activeInteractionsRef.current.has('zoom') && isPanOrZoomInteractionActive();
+    },
+    [isPanOrZoomInteractionActive],
+  );
+
   const applyPreparedInteractionModes = useCallback(() => {
     const containerRect = containerRef.current?.getBoundingClientRect();
     if (!containerRect || !canvasRef.current) return;
@@ -537,23 +573,33 @@ export function useSiteboardDisplayEngine({
 
       if (isOutsideExpanded) {
         setNodeDisplayMode(page.id, 'hidden', wrapper);
-        hideNodeWebview(page.id, label);
+        if (!shouldSkipImmediateInteractionHide(page.id)) {
+          hideNodeWebview(page.id, label);
+        }
         continue;
       }
 
       if (hasDisplayableScreenshot(page.id)) {
         setNodeDisplayMode(page.id, 'screenshot', wrapper);
-        hideNodeWebview(page.id, label);
+        if (!shouldSkipImmediateInteractionHide(page.id)) {
+          hideNodeWebview(page.id, label);
+        }
         continue;
       }
 
       if (forceHiddenInteractionNodeIdsRef.current.has(page.id)) {
         setNodeDisplayMode(page.id, 'hidden', wrapper);
-        hideNodeWebview(page.id, label);
+        if (!shouldSkipImmediateInteractionHide(page.id)) {
+          hideNodeWebview(page.id, label);
+        }
         continue;
       }
 
-      setNodeDisplayMode(page.id, 'native', wrapper);
+      // 操作開始直後は native を残さず hidden に退避し、fresh capture 完了後に screenshot へ差し替える。
+      setNodeDisplayMode(page.id, 'hidden', wrapper);
+      if (!shouldSkipImmediateInteractionHide(page.id)) {
+        hideNodeWebview(page.id, label);
+      }
     }
   }, [
     canvasRef,
@@ -563,6 +609,7 @@ export function useSiteboardDisplayEngine({
     hasDisplayableScreenshot,
     hideNodeWebview,
     setNodeDisplayMode,
+    shouldSkipImmediateInteractionHide,
     webPageNodes,
   ]);
 
@@ -570,95 +617,39 @@ export function useSiteboardDisplayEngine({
     const containerRect = containerRectRef.current;
     if (!containerRect || !canvasRef.current) return;
 
-    const boundsEntries: {
-      pageId: string;
-      x: number;
-      y: number;
-      w: number;
-      h: number;
-      zoom: number;
-    }[] = [];
-    const positionEntries: { pageId: string; x: number; y: number }[] = [];
-
-    // パン専用の場合は位置のみ更新（size/zoom は変化しないため IPC を軽量化）
-    const isPanOnly =
-      activeInteractionsRef.current.has('pan') && !activeInteractionsRef.current.has('zoom');
-
     for (const page of webPageNodes) {
       const label = getWebviewLabel(page.id);
       const { wrapper, placeholder } = getWebPageElements(canvasRef.current, page.id);
       if (!placeholder || !wrapper) continue;
 
       const placeholderRect = placeholder.getBoundingClientRect();
-      const currentMode = (wrapper.getAttribute('data-display-mode') ?? 'native') as DisplayMode;
-
       const isOutsideExpanded = isOutsideExpandedViewport(placeholderRect, containerRect);
-      const isFullyInside = isFullyInsideNativeSafeArea(placeholderRect, containerRect);
 
       if (!label) {
         setNodeDisplayMode(page.id, getFallbackDisplayMode(page.id, isOutsideExpanded), wrapper);
         continue;
       }
 
-      if (currentMode === 'native') {
-        if (isOutsideExpanded) {
-          setNodeDisplayMode(page.id, 'hidden', wrapper);
-          hideNodeWebview(page.id, label);
-        } else if (!isFullyInside) {
-          if (hasDisplayableScreenshot(page.id)) {
-            setNodeDisplayMode(page.id, 'screenshot', wrapper);
-            hideNodeWebview(page.id, label);
-          } else {
-            if (isPanOnly) {
-              positionEntries.push({
-                pageId: page.id,
-                x: placeholderRect.left,
-                y: placeholderRect.top,
-              });
-            } else {
-              boundsEntries.push({
-                pageId: page.id,
-                x: placeholderRect.left,
-                y: placeholderRect.top,
-                w: placeholderRect.width,
-                h: placeholderRect.height,
-                zoom: zoomRef.current,
-              });
-            }
-          }
-        } else {
-          if (isPanOnly) {
-            positionEntries.push({
-              pageId: page.id,
-              x: placeholderRect.left,
-              y: placeholderRect.top,
-            });
-          } else {
-            boundsEntries.push({
-              pageId: page.id,
-              x: placeholderRect.left,
-              y: placeholderRect.top,
-              w: placeholderRect.width,
-              h: placeholderRect.height,
-              zoom: zoomRef.current,
-            });
-          }
-        }
-      } else if (currentMode === 'hidden') {
-        if (!isOutsideExpanded && hasDisplayableScreenshot(page.id)) {
-          setNodeDisplayMode(page.id, 'screenshot', wrapper);
-        }
-      } else if (isOutsideExpanded) {
+      if (isOutsideExpanded) {
         setNodeDisplayMode(page.id, 'hidden', wrapper);
+        if (!shouldSkipImmediateInteractionHide(page.id)) {
+          hideNodeWebview(page.id, label);
+        }
+        continue;
       }
-    }
 
-    if (isPanOnly) {
-      if (positionEntries.length > 0) {
-        void webviewApi.updateAllPositions(positionEntries);
+      if (hasDisplayableScreenshot(page.id)) {
+        setNodeDisplayMode(page.id, 'screenshot', wrapper);
+        if (!shouldSkipImmediateInteractionHide(page.id)) {
+          hideNodeWebview(page.id, label);
+        }
+        continue;
       }
-    } else if (boundsEntries.length > 0) {
-      void webviewApi.updateAllBounds(boundsEntries);
+
+      setNodeDisplayMode(page.id, 'hidden', wrapper);
+      if (!shouldSkipImmediateInteractionHide(page.id)) {
+        hideNodeWebview(page.id, label);
+      }
     }
   }, [
     canvasRef,
@@ -666,10 +657,34 @@ export function useSiteboardDisplayEngine({
     getWebviewLabel,
     hasDisplayableScreenshot,
     hideNodeWebview,
-    webPageNodes,
     setNodeDisplayMode,
-    zoomRef,
+    shouldSkipImmediateInteractionHide,
+    webPageNodes,
   ]);
+
+  const scheduleInteractionCaptureRetry = useCallback(() => {
+    cancelInteractionCaptureRetry();
+    if (interactionCaptureRetryNodeIdsRef.current.size === 0) return;
+
+    interactionCaptureRetryTimerRef.current = window.setTimeout(() => {
+      interactionCaptureRetryTimerRef.current = null;
+      if (activeInteractionsRef.current.size > 0 || !canvasRef.current) return;
+
+      const retryNodeIds = Array.from(interactionCaptureRetryNodeIdsRef.current);
+      interactionCaptureRetryNodeIdsRef.current.clear();
+
+      for (const nodeId of retryNodeIds) {
+        const label = getWebviewLabel(nodeId);
+        const { wrapper } = getWebPageElements(canvasRef.current, nodeId);
+        if (!label || wrapper?.getAttribute('data-display-mode') !== 'native') continue;
+
+        void captureScreenshotRef.current?.(nodeId, {
+          source: 'default',
+          waitForPresentation: false,
+        });
+      }
+    }, WEBVIEW_REVEAL_DELAY_MS + 32);
+  }, [cancelInteractionCaptureRetry, canvasRef, getWebviewLabel]);
 
   const scheduleInteractionUpdate = useCallback(() => {
     if (activeInteractionsRef.current.has('drag') || activeInteractionsRef.current.has('resize'))
@@ -706,6 +721,7 @@ export function useSiteboardDisplayEngine({
           queuedFreshCaptureRef.current[nodeId] = false;
 
           const forceDuringInteraction = nextOptions?.forceDuringInteraction ?? false;
+          const hideAfterSnapshotRequest = nextOptions?.hideAfterSnapshotRequest ?? false;
           if (
             !forceDuringInteraction &&
             (activeInteractionsRef.current.has('drag') ||
@@ -713,8 +729,17 @@ export function useSiteboardDisplayEngine({
           ) {
             lastResult = false;
           } else {
-            const filePath = await webviewApi.saveScreenshot(nodeId, projectId);
+            if (hideAfterSnapshotRequest) {
+              nativeHiddenByInteractionCaptureRef.current.add(nodeId);
+            }
+
+            const filePath = await webviewApi.saveScreenshot(nodeId, projectId, {
+              hideAfterSnapshotRequest,
+            });
             if (!filePath) {
+              if (nextOptions?.source === 'interaction-start' && hideAfterSnapshotRequest) {
+                interactionCaptureRetryNodeIdsRef.current.add(nodeId);
+              }
               lastResult = false;
             } else if (
               !forceDuringInteraction &&
@@ -736,6 +761,7 @@ export function useSiteboardDisplayEngine({
               screenshotReadyRef.current[nodeId] = true;
               delete presentedScreenshotUrlRef.current[nodeId];
               forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
+              interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
               setCachedScreenshotUrl(projectId, nodeId, assetUrl);
 
               setScreenshotUrls((prev) => {
@@ -755,7 +781,9 @@ export function useSiteboardDisplayEngine({
 
                 if (shouldUseScreenshotNow) {
                   setNodeDisplayMode(nodeId, 'screenshot');
-                  hideNodeWebview(nodeId, label);
+                  if (!hideAfterSnapshotRequest) {
+                    hideNodeWebview(nodeId, label);
+                  }
                 }
               }
 
@@ -908,6 +936,7 @@ export function useSiteboardDisplayEngine({
   const handleInteractionChange = useCallback(
     (active: boolean, cursor = 'default', type: InteractionType = 'drag') => {
       if (active) {
+        cancelInteractionCaptureRetry();
         cancelZoomRestore();
         cancelAllNativeReveals();
         activeInteractionsRef.current.add(type);
@@ -931,6 +960,7 @@ export function useSiteboardDisplayEngine({
         containerRectRef.current = null;
         setInteractionCursor(null);
         forceHiddenInteractionNodeIdsRef.current.clear();
+        nativeHiddenByInteractionCaptureRef.current.clear();
 
         if (type === 'zoom') {
           scheduleZoomRestoreAfterReflow();
@@ -939,15 +969,19 @@ export function useSiteboardDisplayEngine({
         } else {
           computeDisplayModes();
         }
+
+        scheduleInteractionCaptureRetry();
       }
     },
     [
+      cancelInteractionCaptureRetry,
       cancelAllNativeReveals,
       cancelZoomRestore,
       applyPreparedInteractionModes,
       computeDisplayModes,
       computeInteractionModes,
       containerRef,
+      scheduleInteractionCaptureRetry,
       scheduleZoomRestoreAfterReflow,
     ],
   );
@@ -1029,6 +1063,8 @@ export function useSiteboardDisplayEngine({
       delete presentedScreenshotUrlRef.current[nodeId];
       delete screenshotPresentationWaitersRef.current[nodeId];
       forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
+      nativeHiddenByInteractionCaptureRef.current.delete(nodeId);
+      interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
       settlingNodeIdsRef.current.delete(nodeId);
       clearCachedScreenshotUrl(projectId, nodeId);
       if (resizingNodeIdRef.current === nodeId) {
@@ -1141,9 +1177,12 @@ export function useSiteboardDisplayEngine({
       }
 
       containerRectRef.current = null;
+      cancelInteractionCaptureRetry();
       cancelZoomRestore();
       cancelAllNativeReveals();
       forceHiddenInteractionNodeIdsRef.current.clear();
+      nativeHiddenByInteractionCaptureRef.current.clear();
+      interactionCaptureRetryNodeIdsRef.current.clear();
       settlingNodeIdsRef.current.clear();
       resizingNodeIdRef.current = null;
       setInteractionCursor(null);
@@ -1152,7 +1191,12 @@ export function useSiteboardDisplayEngine({
 
     window.addEventListener('blur', handleBlur);
     return () => window.removeEventListener('blur', handleBlur);
-  }, [cancelAllNativeReveals, cancelZoomRestore, computeDisplayModes]);
+  }, [
+    cancelAllNativeReveals,
+    cancelInteractionCaptureRetry,
+    cancelZoomRestore,
+    computeDisplayModes,
+  ]);
 
   useEffect(() => {
     if (!centeredNodeId) return;
@@ -1173,12 +1217,17 @@ export function useSiteboardDisplayEngine({
 
   useEffect(() => {
     const settlingNodeIds = settlingNodeIdsRef.current;
+    const nativeHiddenByInteractionCaptureNodeIds = nativeHiddenByInteractionCaptureRef.current;
+    const interactionCaptureRetryNodeIds = interactionCaptureRetryNodeIdsRef.current;
     return () => {
+      cancelInteractionCaptureRetry();
       cancelAllNativeReveals();
+      nativeHiddenByInteractionCaptureNodeIds.clear();
+      interactionCaptureRetryNodeIds.clear();
       settlingNodeIds.clear();
       resizingNodeIdRef.current = null;
     };
-  }, [cancelAllNativeReveals]);
+  }, [cancelAllNativeReveals, cancelInteractionCaptureRetry]);
 
   return {
     activeInteractionsRef,

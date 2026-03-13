@@ -8,26 +8,26 @@
 
 ## フェーズ一覧
 
-| フェーズ | ファイル | 内容 | 難易度 |
-|---|---|---|---|
-| 0 | [phase-0-install.md](./phase-0-install.md) | パッケージ導入 + アダプター層 | 低 |
-| 1 | [phase-1-reactflow-container.md](./phase-1-reactflow-container.md) | ReactFlow コンテナに切り替え（pan/zoom のみ） | 中 |
-| 2 | [phase-2-display-engine.md](./phase-2-display-engine.md) | Display Engine を React Flow イベントに接続 | 高 |
+| フェーズ | ファイル | 内容 | 難易度 | 状態 |
+|---|---|---|---|---|
+| 0 | [phase-0-install.md](./phase-0-install.md) | パッケージ導入 + アダプター層 | 低 | ✅ 完了 |
+| 1 | [phase-1-reactflow-container.md](./phase-1-reactflow-container.md) | ReactFlow コンテナに切り替え（pan/zoom のみ） | 中 | ✅ 完了 |
+| 2 | [phase-2-display-engine.md](./phase-2-display-engine.md) | Display Engine を React Flow イベントに接続 | 高 | ✅ 完了 |
 
 **フェーズ 2 サブフェーズ一覧**
 
-| サブフェーズ | ファイル | 内容 |
-|---|---|---|
-| 2A | [phase-2a-throttle-ui-zoom.md](./phase-2a-throttle-ui-zoom.md) | setUiZoom の rAF スロットリング |
-| 2B | [phase-2b-pan-connection.md](./phase-2b-pan-connection.md) | pan 操作の基本接続 |
-| 2C | [phase-2c-pre-capture.md](./phase-2c-pre-capture.md) | prepareInteractionStart の接続 |
-| 2D | [phase-2d-pan-zoom-detection.md](./phase-2d-pan-zoom-detection.md) | pan/zoom 判定の導入 |
-| 2E | [phase-2e-integration-test.md](./phase-2e-integration-test.md) | 統合テスト・微調整 |
+| サブフェーズ | ファイル | 内容 | 状態 |
+|---|---|---|---|
+| 2A | [phase-2a-throttle-ui-zoom.md](./phase-2a-throttle-ui-zoom.md) | setUiZoom の rAF スロットリング | ✅ 完了 |
+| 2B | [phase-2b-pan-connection.md](./phase-2b-pan-connection.md) | pan 操作の基本接続 | ✅ 完了 |
+| 2C | [phase-2c-pre-capture.md](./phase-2c-pre-capture.md) | prepareInteractionStart の接続 | ✅ 完了 |
+| 2D | [phase-2d-pan-zoom-detection.md](./phase-2d-pan-zoom-detection.md) | pan/zoom 判定の導入 | ✅ 完了 |
+| 2E | [phase-2e-integration-test.md](./phase-2e-integration-test.md) | 統合テスト・微調整 | ✅ 完了 |
 
-| 3 | [phase-3-stickynote-drag-resize.md](./phase-3-stickynote-drag-resize.md) | 付箋のドラッグ/リサイズを React Flow ネイティブに | 中 |
-| 4 | [phase-4-webpage-drag.md](./phase-4-webpage-drag.md) | WebPageNode のドラッグを React Flow ネイティブに | 高 |
-| 5 | [phase-5-webpage-resize.md](./phase-5-webpage-resize.md) | WebPageNode のリサイズを React Flow ネイティブに | 中 |
-| 6 | [phase-6-cleanup.md](./phase-6-cleanup.md) | 旧コード削除 + ドキュメント更新 | 低 |
+| 3 | [phase-3-stickynote-drag-resize.md](./phase-3-stickynote-drag-resize.md) | 付箋のドラッグ/リサイズを React Flow ネイティブに | 中 | ⬜ 未着手 |
+| 4 | [phase-4-webpage-drag.md](./phase-4-webpage-drag.md) | WebPageNode のドラッグを React Flow ネイティブに | 高 | 🔄 一部実装済み |
+| 5 | [phase-5-webpage-resize.md](./phase-5-webpage-resize.md) | WebPageNode のリサイズを React Flow ネイティブに | 中 | ⬜ 未着手 |
+| 6 | [phase-6-cleanup.md](./phase-6-cleanup.md) | 旧コード削除 + ドキュメント更新 | 低 | ⬜ 未着手 |
 
 ## 移行方針
 

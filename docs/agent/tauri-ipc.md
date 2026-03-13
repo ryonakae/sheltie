@@ -31,7 +31,7 @@
 - `go_forward_page_webview(pageId)`
 - `get_navigation_state_page_webview(pageId)`
 - `capture_webview_screenshot(pageId)` - base64 Data URL を返す（内部用途のみ）
-- `save_webview_screenshot(pageId, projectId)` - PNG ファイルを保存しファイルパスを返す（macOS のみ）
+- `save_webview_screenshot(pageId, projectId, hideAfterSnapshotRequest?)` - PNG ファイルを保存しファイルパスを返す（macOS のみ）。`hideAfterSnapshotRequest=true` の時は snapshot 要求直後に同じ Rust コマンド内で Webview を hide する
 - `get_existing_screenshot_paths(projectId, pageIds)` - 存在するスクリーンショットのパスを一括取得
 - `delete_screenshot(pageId, projectId)` - スクリーンショットファイルを削除
 
@@ -60,7 +60,7 @@
 - `create`, `updateBounds`, `updateAllBounds`, `updateAllPositions`
 - `show`, `hide`, `destroy`, `hideAll`, `showAllWithBounds`
 - `setOpacity`, `reload`, `goBack`, `goForward`, `getNavigationState`
-- `captureScreenshot`, `saveScreenshot`, `getExistingScreenshotPaths`, `deleteScreenshot`
+- `captureScreenshot`, `saveScreenshot(options?)`, `getExistingScreenshotPaths`, `deleteScreenshot`
 - `onPageNavigated`, `onPageTitleChanged`, `onPageScrollEnded`
 
 ## メニュー連携

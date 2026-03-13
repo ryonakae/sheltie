@@ -1,5 +1,7 @@
 # フェーズ 2C: prepareInteractionStart の接続
 
+> **ステータス: ✅ 実装済み**
+
 ## 目的
 
 pan 開始時にビューポート内の WebPage ノードのスクリーンショットを事前撮影し、操作中の screenshot モード表示品質を向上させる。
@@ -48,6 +50,21 @@ const handleMoveStart = useCallback(() => {
 - [ ] pan 開始に体感遅延がない（fire-and-forget のため遅延ゼロが期待値）
 - [ ] pan 中にバックグラウンドでスクリーンショット撮影が完了し、次回 pan 開始時には即座に表示される
 
-## 次フェーズへの依存
+## 実際の実装（計画との差異）
 
-フェーズ 2D で pan/zoom の区別を導入する際、`prepareInteractionStart('pan')` の引数を正しく渡せるようになる。現状は常に `'pan'` を渡しているが、2D 完了後は `'zoom'` も渡せる（ただし `InteractionType` の区別は Display Engine 側で処理するため動作に実質的な違いはない）。
+本ドキュメントは常に `'pan'` を渡す設計だったが、フェーズ 2D と統合する形で実装された。`beginViewportInteraction` 内で `resolveViewportInteractionType(event)` が先に type を決定し、その type（'pan' または 'zoom'）を `prepareInteractionStart` に渡す:
+
+```ts
+const beginViewportInteraction = useCallback(
+  (event: MouseEvent | TouchEvent | null) => {
+    const type = resolveViewportInteractionType(event);
+    moveInteractionTypeRef.current = type;
+    void prepareInteractionStart(type);          // ← pan/zoom どちらも正しく渡す
+    handleInteractionChange(true, type === 'pan' ? 'grabbing' : '', type);
+    return type;
+  },
+  [resolveViewportInteractionType, prepareInteractionStart, handleInteractionChange],
+);
+```
+
+この方式により、2C（プリキャプチャ）と 2D（型判定）が統合され、別々のステップなく一度に機能する。

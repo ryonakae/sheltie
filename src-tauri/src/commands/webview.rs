@@ -420,8 +420,15 @@ pub async fn save_webview_screenshot(
     app: AppHandle,
     page_id: String,
     project_id: String,
+    hide_after_snapshot_request: Option<bool>,
 ) -> Result<String, String> {
-    save_screenshot_impl(app, page_id, project_id).await
+    save_screenshot_impl(
+        app,
+        page_id,
+        project_id,
+        hide_after_snapshot_request.unwrap_or(false),
+    )
+    .await
 }
 
 #[cfg(target_os = "macos")]
@@ -429,8 +436,14 @@ async fn save_screenshot_impl(
     app: AppHandle,
     page_id: String,
     project_id: String,
+    hide_after_snapshot_request: bool,
 ) -> Result<String, String> {
-    let png_bytes = snapshot::capture_webview_png_bytes(&app, &page_id).await?;
+    let png_bytes = snapshot::capture_webview_png_bytes_with_options(
+        &app,
+        &page_id,
+        hide_after_snapshot_request,
+    )
+    .await?;
 
     let data_dir = app
         .path()
@@ -451,6 +464,7 @@ async fn save_screenshot_impl(
     _app: AppHandle,
     _page_id: String,
     _project_id: String,
+    _hide_after_snapshot_request: bool,
 ) -> Result<String, String> {
     Err("この OS ではサポートされていません".to_string())
 }

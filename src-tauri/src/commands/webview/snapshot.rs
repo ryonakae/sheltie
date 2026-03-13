@@ -8,6 +8,15 @@ pub async fn capture_webview_png_bytes(
     app: &AppHandle,
     page_id: &str,
 ) -> Result<Vec<u8>, String> {
+    capture_webview_png_bytes_with_options(app, page_id, false).await
+}
+
+#[cfg(target_os = "macos")]
+pub async fn capture_webview_png_bytes_with_options(
+    app: &AppHandle,
+    page_id: &str,
+    hide_after_snapshot_request: bool,
+) -> Result<Vec<u8>, String> {
     use std::sync::{Arc, Mutex};
     use tokio::sync::oneshot;
 
@@ -26,6 +35,16 @@ pub async fn capture_webview_png_bytes(
         })
         .map_err(|e| format!("with_webview エラー: {e}"))?;
 
+    if hide_after_snapshot_request {
+        if let Err(error) = webview.hide() {
+            log::warn!(
+                "Webview を snapshot 要求直後に hide できませんでした: page_id={}, error={}",
+                page_id,
+                error
+            );
+        }
+    }
+
     rx.await
         .map_err(|_| "スクリーンショットチャネルが閉じられました".to_string())?
 }
@@ -34,6 +53,15 @@ pub async fn capture_webview_png_bytes(
 pub async fn capture_webview_png_bytes(
     _app: &AppHandle,
     _page_id: &str,
+) -> Result<Vec<u8>, String> {
+    Err("この OS ではサポートされていません".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn capture_webview_png_bytes_with_options(
+    _app: &AppHandle,
+    _page_id: &str,
+    _hide_after_snapshot_request: bool,
 ) -> Result<Vec<u8>, String> {
     Err("この OS ではサポートされていません".to_string())
 }

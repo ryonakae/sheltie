@@ -17,6 +17,18 @@ WebPageNode のドラッグを React Flow に切り替える。
 
 React Flow のドラッグに移行する際、`beforeDragStart()` の async 待機は `onNodeDragStart` で行えないため、別の戦略が必要になる（後述）。
 
+## 現在の実装状況
+
+`Siteboard.tsx` 内の以下は**実装済み**:
+- `handleNodeDragStart`: `prepareInteractionStart('drag', node.id)` + `handleInteractionChange(true, 'grabbing', 'drag')`
+- `handleNodeDragStop`: 位置補正ロジック（`resolveDraggedNodePosition`）+ アニメーション + ストア保存
+- `handleNodesChange`: `'position'` change のみ対応（ドラッグ中の一時位置を `draggingNodePositions` に保持）
+
+**未実装**（このフェーズで対応):
+- `WebPageFlowNode` の dragHandle クラス設定（TopBar のみドラッグ可能にする）
+- `ReactFlow` への `dragHandle=".drag-handle"` + `nodeDragThreshold={3}` prop 追加
+- 両ノードの `nodrag` クラスの現状整理（コメントには書かれているが実際は付いていない）
+
 ## 作業内容
 
 ### 1. WebPageFlowNode の dragHandle 設定

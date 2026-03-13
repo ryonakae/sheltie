@@ -1,8 +1,10 @@
 # フェーズ 2D: pan/zoom 判定の導入
 
+> **ステータス: ✅ 実装済み（設計を簡略化して実装）**
+
 ## 目的
 
-React Flow の `onMoveStart`/`onMove`/`onMoveEnd` は pan と zoom を区別しない。`viewport.zoom` の変化を `onMove` で検出し、`activeInteractionsRef` を `'pan'` から `'zoom'` に昇格させることで `isPanOnly` 分岐を正しく動作させる。
+React Flow の `onMoveStart`/`onMove`/`onMoveEnd` は pan と zoom を区別しない。操作開始時点で event の型から pan/zoom を判定し、`handleInteractionChange` に正しい type を渡すことで `isPanOnly` 分岐を正しく動作させる。
 
 **前提**: フェーズ 2B 完了済み（2C は独立）。
 **変更ファイル**: `src/components/Siteboard/Siteboard.tsx` のみ。
@@ -111,6 +113,31 @@ const handleMoveEnd = useCallback(() => {
 - [ ] zoom 終了後に `scheduleZoomRestoreAfterReflow` が呼ばれ native 復帰する
 - [ ] zoom 後に pan して Webview 位置がずれていない
 - [ ] 高速で zoom/pan を交互に繰り返しても状態が壊れない
+
+## 実際の実装（計画との差異）
+
+本ドキュメントの設計（`handleMove` で zoom 変化を検出して `'pan' → 'zoom'` に昇格）は採用しなかった。代わりに、**操作開始時点でイベント型から即時判定**するシンプルな方式を実装:
+
+```ts
+// event 型から pan/zoom を即時判定
+const resolveViewportInteractionType = useCallback(
+  (event: MouseEvent | TouchEvent | null): 'pan' | 'zoom' =>
+    event === null
+      ? 'zoom'
+      : 'deltaY' in event                       // WheelEvent → zoom
+        ? 'zoom'
+        : typeof TouchEvent !== 'undefined' &&
+            event instanceof TouchEvent &&
+            event.touches.length >= 2            // 2指タッチ → zoom
+          ? 'zoom'
+          : 'pan',
+  [],
+);
+```
+
+`moveInteractionTypeRef` で type を保持し、`handleMoveEnd` で `handleInteractionChange(false, 'default', type)` に渡す。`handleMove` での `'pan' → 'zoom'` 昇格ロジックは不要になった。
+
+> **Tauri WKWebView 注意**: `TouchEvent` グローバルが未定義のため `typeof TouchEvent !== 'undefined'` ガードが必須（これがないと `ReferenceError` で全操作が壊れる）。
 
 ## 次フェーズへの依存
 

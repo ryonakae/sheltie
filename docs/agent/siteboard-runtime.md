@@ -39,39 +39,53 @@
 
 `InteractionType = 'pan' | 'zoom' | 'drag' | 'resize'`
 
-- すべての操作開始前に、対象ページの **fresh capture を毎回要求** する。
-- 保存済みスクショがあるページは、それを即 `screenshot` として見せたまま fresh capture をバックグラウンドで取り直し、準備完了後に stale → fresh へ差し替える。
-- 保存済みスクショがないページは、操作開始前に capture を待つ。capture 不能な場合のみ `hidden` を最後の退避先として使う。
-- `pan/zoom` 中は rAF 単位で `computeInteractionModes` が `screenshot/hidden` を再判定する。操作中に `native` へ戻さない。
+### 操作中の Webview 表示制御ポリシー
+
+- `pan/zoom` 開始時は、可視 `WebPage` ノードの `native` を即座に降ろし、保存済みスクリーンショットがあれば `screenshot`、なければ `hidden` に切り替える
+- 同時に fresh capture をバックグラウンドで開始し、完了後は操作中でも `stale -> fresh` または `hidden -> fresh` に差し替える
+- fresh capture の開始と native hide は `save_webview_screenshot(..., hideAfterSnapshotRequest=true)` を 1 回の Rust コマンド内で直列化し、JS の `saveScreenshot()` / `hide()` race を避ける
+- `computeDisplayModes()` は操作中（`activeInteractionsRef.current.size > 0`）に即リターンするため、操作中に誤って `native` へ復帰しない
+
+### プリキャプチャ戦略
+
+- `pan/zoom/drag/resize` 操作開始時に `prepareInteractionStart(type)` を呼び出す
+- `pan/zoom` は Siteboard.tsx の `handleMoveStart` で fire-and-forget で先行起動し、保存済みスクショの即表示と native-side fresh capture を同じ経路に乗せる
+- 保存済みスクショがあるページは stale を即利用し、fresh capture 完了後に差し替える
+- 保存済みスクショがないページは `hidden` を許容し、fresh capture 完了後に `hidden -> screenshot` へ遷移する
+- interaction-start capture が失敗したページは current interaction 中は `hidden` のまま維持し、終了後の native 復帰後に 1 回だけ retry する
 
 ## pan/zoom 判定（Siteboard.tsx）
 
-React Flow の `onMoveStart/onMove/onMoveEnd` は pan と zoom を区別しない。`Siteboard.tsx` の `handleMoveStart` で event 型から **開始時点で** 操作種別を即時判定する:
+React Flow の `onMoveStart/onMove/onMoveEnd` は pan と zoom を区別しない。`Siteboard.tsx` の `resolveViewportInteractionType` で event 型から **開始時点で** 操作種別を即時判定する:
 
 - `event === null` → プログラマティック操作（ダブルクリック zoom など）→ `'zoom'`
 - `'deltaY' in event` → WheelEvent → `'zoom'`
-- `event instanceof TouchEvent && event.touches.length >= 2` → ピンチ → `'zoom'`
+- `typeof TouchEvent !== 'undefined' && event instanceof TouchEvent && event.touches.length >= 2` → ピンチ → `'zoom'` 【Tauri WKWebView での `TouchEvent` グローバル未定義ガード必須（後述）】
 - その他（MouseEvent、1指 TouchEvent） → `'pan'`
+
+`resolveViewportInteractionType` は純粋関数として event 型を判定し、その結果を `beginViewportInteraction` へ渡す。`handleMoveStart` / `handleMove` / `handleMoveEnd` から共通で呼び出される。
+
+### pan/zoom 開始時の fire-and-forget プリキャプチャ
+
+`Siteboard.tsx` の `handleMoveStart` では `beginViewportInteraction(event)` を呼び出す。この関数内で以下の順序で実行される（fire-and-forget）:
+
+```ts
+const type = resolveViewportInteractionType(event);
+moveInteractionTypeRef.current = type;
+void prepareInteractionStart(type);
+handleInteractionChange(true, type === 'pan' ? 'grabbing' : '', type);
+return type;
+```
+
+`prepareInteractionStart` は可視ページに対して stale screenshot の即時利用判定を行い、同時に `save_webview_screenshot(..., hideAfterSnapshotRequest=true)` で fresh capture を開始する。並行して `applyPreparedInteractionModes()` が走り、その時点で stale screenshot があれば `screenshot`、なければ `hidden` へ切り替える。fresh 完了後は `captureScreenshot()` 成功ハンドラが `screenshotUrl` を更新し、そのまま `fresh` に差し替える。
+
+`handleMove` は `onMoveStart` 取りこぼし時のフォールバックとして機能する。viewport が実際に動いた時のみ発火するため、`moveInteractionTypeRef.current === null` なら `beginViewportInteraction` を呼んで type を確定し、その後 `scheduleInteractionUpdate()` で display mode を更新する。
 
 ### InteractionOverlay の cursor 制御
 
 - zoom 操作時は `cursor = ''`（falsy）で `InteractionOverlay` を非表示にする
 - `InteractionOverlay` は `pointer-events-auto absolute inset-0 z-50` でスクリーン全体を覆うため、表示中はマウスイベント（ホイール含む）が遮断される
 - zoom 中は overlay を非表示にして React Flow にホイールイベントを到達させる必要がある
-
-### isPanOnly 分岐（useSiteboardDisplayEngine）
-
-`computeInteractionModes` 内で:
-
-```ts
-const isPanOnly =
-  activeInteractionsRef.current.has('pan') && !activeInteractionsRef.current.has('zoom');
-```
-
-| isPanOnly | 呼ぶ IPC | 効果 |
-|---|---|---|
-| `true` | `updateAllPositions()` | 位置のみ更新。zoom 不変で軽量（60fps 維持） |
-| `false` | `updateAllBounds()` | サイズ含むフル更新。重いが zoom 変化に必須 |
 
 ### zoom 終了後の native 復帰
 
@@ -95,18 +109,13 @@ const isPanOnly =
 - センタリングや可視判定の fallback 計算も同じ外枠矩形を使い、DOM 実測がない場合でも content だけで過小評価しない
 - 一方でネイティブ Webview の bounds 更新や safe area 判定は従来どおり placeholder 矩形を使う。外枠判定と Webview 実表示判定は責務を分ける
 
-## pan 専用最適化
-
-- pan 中で zoom が変わらない場合は `updateAllPositions` を使う。
-- zoom 変化を伴う場合は `updateAllBounds` を使う。
-
-この分岐を壊すと追従遅延が再発しやすい。
-
 ## 遷移ルール
 
-- 操作中は `native -> screenshot/hidden` 遷移を許可。
-- 操作中の `screenshot/hidden -> native` は抑制し、終了後の最終計算で復帰。
-- コンテキストメニュー表示中のページは `native` への復帰を抑制（後述）。
+- **操作中（drag/resize を除く）は全ノードを強制的に `screenshot/hidden` へ遷移** — `applyPreparedInteractionModes()` が初期状態を確定
+- `pan/zoom` 中は rAF 単位で `computeInteractionModes()` が `screenshot/hidden` を再判定し、`native` への遷移は許可しない
+- 操作終了（`activeInteractionsRef.current.size === 0`）で `computeDisplayModes()` が最終判定・native 復帰を再開
+- `drag/resize` 中は相対的に少ない display mode 更新を行い、リサイズ終了後に最終的な表示を確定
+- コンテキストメニュー表示中のページは `native` への復帰を抑制（`contextMenuNodeIdRef` が設定されている場合）
 
 ## コンテキストメニューと Webview 制御
 
@@ -136,7 +145,7 @@ const isPanOnly =
 - `pageId` は node id をそのまま使う。webpage 系 Webview IPC では歴史的理由で `pageId` 命名を維持している
 
 **フロー（撮影時）**:
-1. Rust `save_webview_screenshot(pageId, projectId)` → WKWebView スナップショット → PNG → ファイル保存 → ファイルパス返却
+1. Rust `save_webview_screenshot(pageId, projectId, hideAfterSnapshotRequest?)` → WKWebView スナップショット要求。`hideAfterSnapshotRequest=true` の時は要求直後に同じ Rust コマンド内で Webview を hide
 2. JS: `convertFileSrc(filePath) + '?t=Date.now()'` でアセット URL 生成 → `<img src>` に設定
 3. `Image.decode()` でデコード完了を待つ
 4. 既存 screenshot が表示中でも新 URL が準備できるまで差し替えない
@@ -163,7 +172,7 @@ const isPanOnly =
 
 ## スクリーンショット撮影タイミング
 
-- pan/zoom 操作開始時（毎回 fresh capture）
+- pan/zoom 操作開始時（保存済みがあれば stale を即表示しつつ fresh capture）
 - drag 操作開始時（毎回 fresh capture）
 - ナビゲーション後（遅延あり）
 - 初回ロード完了時
@@ -189,11 +198,11 @@ const isPanOnly =
 
 即時に mode を戻すと OS 側描画が追いつかず、ちらつきが出る。
 
-`native -> screenshot` 側は逆に「Webview を先に hide しない」ことが重要。
+`native -> screenshot` 側は逆に「スクショ要求と hide を分離しない」ことが重要。
 
-1. スクショ未準備なら `ensureScreenshotReady()` を待つ。
-2. `data-display-mode='screenshot'` を反映する。
-3. 最後に Webview を hide する。
+1. interaction-start では `save_webview_screenshot(..., hideAfterSnapshotRequest=true)` を先に投げる。
+2. `applyPreparedInteractionModes()` が stale screenshot または `hidden` を反映する。
+3. fresh 完了後に `screenshotUrl` を差し替える。
 
 ## Webview 生成・破棄の注意
 
@@ -275,9 +284,49 @@ canGoBack / canGoForward は `nodeId` 単位の runtime model で管理する。
 - `handleNavigated`: `currentUrl` と `pendingAction[nodeId]` を見て `backDepth / forwardDepth` を調整する。通常遷移は `backDepth + 1, forwardDepth = 0`、戻る/進むはそれぞれ深度を増減させる
 - スクリーンショット撮影待ち (`1000ms`) と nav 再問い合わせ待ち (`300ms`) はどちらも `nodeId` 単位で timer を管理し、削除・unmount 時に必ず clear する
 
+## Tauri WKWebView での TouchEvent グローバル未定義の罠
+
+Tauri v2 の WKWebView 環境では、デスクトップ OS 上で `TouchEvent` グローバルが定義されていません。
+
+**問題**:
+- `event instanceof TouchEvent` をガード無しで実行すると `ReferenceError: TouchEvent is not defined` が発生
+- この例外が `beginViewportInteraction` など上位関数を中断し、パン/ズーム操作中の webview hide/screenshot 切り替えが完全に機能しなくなる
+
+**対策**:
+- `resolveViewportInteractionType` 内で `typeof TouchEvent !== 'undefined'` ガードを必ず先行させる
+- ピンチ判定は `typeof TouchEvent !== 'undefined' && event instanceof TouchEvent && event.touches.length >= 2` の順序で記述
+
+```ts
+// 正例
+const resolveViewportInteractionType = useCallback(
+  (event: MouseEvent | TouchEvent | null): 'pan' | 'zoom' =>
+    event === null
+      ? 'zoom'
+      : 'deltaY' in event
+        ? 'zoom'
+        : typeof TouchEvent !== 'undefined' &&
+            event instanceof TouchEvent &&
+            event.touches.length >= 2
+          ? 'zoom'
+          : 'pan',
+  [],
+);
+```
+
+## handleMoveEnd の start 取りこぼし対応
+
+React Flow の `onMoveStart` が火かない（ユーザー操作が high-latency 環境で遅延）場合、`moveInteractionTypeRef.current === null` のまま `onMoveEnd` に到達することがあります。
+
+**対策**:
+- `handleMoveEnd` 冒頭で `const type = moveInteractionTypeRef.current ?? 'pan';` で確実に type を確定
+- `handleMove` もフォールバック機構を持ち、`moveInteractionTypeRef.current === null` なら `beginViewportInteraction` を呼んで type を立てる
+- これらの fallback により、start が取りこぼされた場合でも `handleInteractionChange` が呼ばれ、最終的に `computeDisplayModes()` で webview 位置が正しく復帰する
+
 ## 変更時チェックリスト
 
-- 表示モード変更時: `computeDisplayModes` と `computeInteractionModes` の両方を確認。
+- 表示モード変更時: `computeDisplayModes`・`computeInteractionModes`・`applyPreparedInteractionModes` の 3 関数の役割分担を確認（操作外・操作中・準備フェーズ）。
+- 操作中の表示制御を変更した時: `activeInteractionsRef.current.size > 0` で guard してる部分が想定どおり機能してるか確認。特に `computeDisplayModes` が操作中に呼ばれても即リターンすること。
+- プリキャプチャ戦略を変更した時: `prepareInteractionStart` が `pan/zoom/drag/resize` 各タイプで正しく呼ばれ、完了後に `forceHiddenInteractionNodeIdsRef` の状態が正しく遷移することを確認。
 - スクショ切替を変更した時: `ensureScreenshotReady` と `handleScreenshotPresented` の待機条件が崩れていないことを確認。
 - `webviewLabel` の扱いを変えた時: 再マウント直後に `native` が選ばれず、保存済みスクリーンショットなら `screenshot`、未保存なら `hidden` へ落ちることを確認。
 - しきい値変更時: pan/zoom 中と終了時で振動・ちらつきがないか確認。

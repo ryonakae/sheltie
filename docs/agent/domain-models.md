@@ -95,9 +95,10 @@
 - `onViewportChange` で `--canvas-zoom` CSS 変数を更新し、UI スケーリングと `zoomPx()` を同期
 - ドラッグ・リサイズはカスタムハンドラー（`useSiteboardViewportEngine` + component level イベント）で処理
 
-**フェーズ 2 以降の計画**:
-- `onMove` / `onMoveEnd` コールバックで React Flow ドラッグを Zustand に適用予定
-- `onNodeDragStart` 時に display mode 制御（スクリーンショット化等）を `useSiteboardDisplayEngine` と連携予定
+フェーズ 3（現在）：
+- **ドラッグ**: React Flow ネイティブ（`nodesDraggable={true}` + `onNodeDragStart` / `onNodeDragStop`）。`dragHandle: '.node-drag-handle'` でタイトルバーのみに限定
+- **付箋リサイズ**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックで ストア更新
+- **WebPageNode リサイズ**: `useSiteboardViewportEngine` 内の `usePageResize` で入力処理（Webview 非表示化とセットで実装）
 
 ## 主要定数
 

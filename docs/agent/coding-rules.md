@@ -24,6 +24,7 @@
 - **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
 - **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化。ドラッグハンドルは `dragHandle: '.node-drag-handle'` で タイトルバーに限定
 - **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `nodesDraggable={true}` + `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
+- **Framer Motion との競合**: ノードコンポーネント内で `motion.div layout="position"` を使用しない。React Flow が CSS transform で位置を管理しているため、`layout="position"` のスプリングアニメーション（レイアウトシフト補正）がドラッグ方向を反転させる。Canvas や外側 UI の `motion.div` には使用可（ノード外）
 - `nodeTypes` 定数は**モジュールスコープで定義**。コンポーネント内に定義するとレンダーのたびにノードが再マウント（unmount→mount）される
 - `nodeTypes` の定義は `src/components/ReactFlowNodes/nodeTypes.ts` に一元化（循環依存防止）
 
@@ -33,6 +34,19 @@
 - **ハンドル指定**: `dragHandle: '.node-drag-handle'` でタイトルバーのみをドラッグ起点に。ノード本体のドラッグはスキップ
 - **DisplayEngine 連携**: `onNodeDragStart` で `prepareInteractionStart('drag', nodeId)` を呼び出してスクリーンショット準備（`useSiteboardDisplayEngine` 統合）
 - **重なり補正**: `onNodeDragStop` で `handleRepositionOnDragEnd` を呼び出し、禁止された重なりを単軸補正（`siteboard-runtime.md` 参照）
+
+### リサイズ機能（フェーズ 3 以降）
+
+- **StickyNoteNode リサイズ**: React Flow の `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックで リサイズ完了時にストア更新。
+  - `minHeight` は動的計算: `STICKY_NOTE_HEADER_HEIGHT / zoom + STICKY_NOTE_MIN_HEIGHT`（ズーム時にヘッダー高さが変わるため）
+  - `onResizeEnd(params)` で受け取る高さは **全体高さ** なため、ストア保存前にボディ高さへ変換: `params.height - STICKY_NOTE_HEADER_HEIGHT / zoom`
+  - ルート要素は `size-full` でレスポンシブ化。内部コンテンツは NodeResizer のラッパーに追従
+  - Framer Motion `layout` prop は使用しない（React Flow 位置管理との競合）
+  - ノード内部コンテンツが fixed width/height を持つと NodeResizer による resize に追従しないため、`flex` で内部を伸縮可能にする
+- **React Flow controlled mode 必須設定**:
+  - `flowNodes` 構築時に `selected: node.id === selectedNodeId` を必ず明示的に設定（無いと NodeResizer の `isVisible` が常に `false` になる）
+  - `onNodesChange` の `dimensions` 変更を追跡して `rfMeasured` state に保存し、`flowNodes` の `measured` プロパティに付与（未初期化状態の防止）
+- **WebPageNode リサイズ**: `useSiteboardViewportEngine` 内の `usePageResize` で入力処理。リサイズ開始時に `prepareInteractionStart('resize', nodeId)` を呼び出し、Webview を非表示化（スクリーンショット表示）してからリサイズ実行。
 
 ### ビューポート管理
 
@@ -81,11 +95,22 @@
 
 ## リサイズハンドルとカーソル制御
 
+### WebPageNode（ネイティブ Webview リサイズ）
+
 - `NodeResizeHandle` のカーソルは Tailwind cursor クラスでなく **inline style** で設定する（CSS 優先度問題の回避）。
 - e/w ハンドルはネイティブ Webview に覆われるため、ハンドル要素を **外側 -4px 拡張**（16px 幅）して Webview 外に突き出す。
 - リサイズ中の `InteractionOverlay` カーソルは `useSiteboardViewportEngine` が `onInteractionChange(direction)` 経由で `RESIZE_CURSOR_MAP` から解決して渡す。
 - `overflow-hidden` + `border-radius` をノード外側 div に設定するとコーナーハンドルがクリッピングされる。**`overflow-hidden` は TopBar/BottomBar などの子要素側に移動し、外側 div には設定しない。**
 - `onMouseDown` で `e.stopPropagation()` を呼ぶハンドラーには **必ず `if (e.button !== 0) return;` を先頭に置く**。右クリック（button=2）時に伝播を止めると `contextmenu` イベントが親コンポーネントに届かなくなる。`startDrag` / `startResize` も同様。
+
+### StickyNoteNode（React Flow `NodeResizer` でリサイズ）
+
+- React Flow の `NodeResizer` コンポーネントでリサイズ UI を提供（`isVisible={selected}` で選択時のみ表示）。
+- **リアルタイム追従（controlled mode）**: `NodeResizer` の `onResize` コールバックで毎フレームの座標・寸法を state に保持し、`flowNodes` useMemo で即座に反映する（スナップバック防止）。上辺・左辺リサイズ時も `params.x / params.y` で位置を同期する。
+- `onResizeEnd` コールバックで リサイズ完了時にストアを更新。
+- `minWidth` / `minHeight` 制約は `NodeResizer` の props で指定（150px）。
+- リサイズ中のカーソル管理は React Flow が自動実行。
+- **選択時のフォーカス表示は NodeResizer のハンドル（青枠線）のみに依存**: React Flow 移行前の独自 `outline` スタイル（`isActive` で CSS outline を制御）は削除する。NodeResizer は選択時に自動的にリサイズハンドル（取得可能な8方向ハンドル）を表示するため、独自 outline は二重表示になる。
 
 ## アニメーション
 

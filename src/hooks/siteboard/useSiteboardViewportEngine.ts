@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { STICKY_NOTE_MIN_HEIGHT, STICKY_NOTE_MIN_WIDTH } from '@/constants';
 import { usePageResize } from '@/hooks/usePageResize';
 
 import { RESIZE_CURSOR_MAP, type InteractionType, type NodeResizeDirection } from './types';
@@ -66,50 +65,6 @@ export function useSiteboardViewportEngine({
     ),
   });
 
-  const resolveStickyNoteMinHeight = useCallback(
-    ({ frameEl, width }: { frameEl: HTMLElement; width: number }) => {
-      const measureEl = frameEl.querySelector(
-        '[data-sticky-note-content-measure]',
-      ) as HTMLElement | null;
-      if (!measureEl) return STICKY_NOTE_MIN_HEIGHT;
-
-      const prevWidth = measureEl.style.width;
-      measureEl.style.width = `${Math.max(width, STICKY_NOTE_MIN_WIDTH)}px`;
-      const contentHeight = Math.ceil(measureEl.getBoundingClientRect().height);
-      measureEl.style.width = prevWidth;
-
-      return Math.max(STICKY_NOTE_MIN_HEIGHT, contentHeight);
-    },
-    [],
-  );
-
-  const { startResize: startStickyNoteResize } = usePageResize({
-    zoom: zoomRef,
-    onResizeStart: useCallback(
-      (nodeId: string) => {
-        onNodeResizeStart?.(nodeId);
-      },
-      [onNodeResizeStart],
-    ),
-    onResizeEnd: useCallback(
-      (nodeId, width, height) => {
-        updateNodeSize(activeId, nodeId, width, height);
-        onNodeResizeEnd?.(nodeId);
-      },
-      [activeId, onNodeResizeEnd, updateNodeSize],
-    ),
-    onInteractionChange: useCallback(
-      (active: boolean, direction?: NodeResizeDirection) => {
-        const cursor = active && direction ? RESIZE_CURSOR_MAP[direction] : 'default';
-        onInteractionChange(active, cursor, 'resize');
-      },
-      [onInteractionChange],
-    ),
-    minWidth: STICKY_NOTE_MIN_WIDTH,
-    minHeight: STICKY_NOTE_MIN_HEIGHT,
-    resolveMinHeight: resolveStickyNoteMinHeight,
-  });
-
   // resizingSize が残ったままノードが削除された場合のクリーンアップ
   useEffect(() => {
     if (!resizingSize) return;
@@ -121,6 +76,5 @@ export function useSiteboardViewportEngine({
   return {
     resizingSize,
     startResize,
-    startStickyNoteResize,
   };
 }

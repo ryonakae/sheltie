@@ -1,7 +1,7 @@
 import Display from '@gravity-ui/icons/Display';
 import Moon from '@gravity-ui/icons/Moon';
 import Sun from '@gravity-ui/icons/Sun';
-import { Dropdown, Label, Separator, type Selection } from '@heroui/react';
+import { Dropdown, Label, Separator, toast, type Selection } from '@heroui/react';
 
 import { AppButton } from '@/components/Common/AppButton';
 import { useThemeStore } from '@/store/theme-store';
@@ -41,7 +41,10 @@ export function ThemeToggle() {
             const nextMode = getThemeMode(selection);
 
             if (nextMode) {
-              void setMode(nextMode);
+              void setMode(nextMode).catch((error: unknown) => {
+                console.error('[ThemeToggle] テーマ変更に失敗:', error);
+                toast.danger('テーマの変更に失敗しました');
+              });
             }
           }}
         >

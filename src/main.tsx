@@ -63,7 +63,12 @@ setupThemeListener();
 setupEditCommandListener();
 setupFileCommandListener();
 // 非同期で初期テーマを適用（React マウントをブロックしない）
-void useThemeStore.getState().initialize();
+void useThemeStore
+  .getState()
+  .initialize()
+  .catch((error: unknown) => {
+    console.error('[theme-store] 初期テーマの適用に失敗:', error);
+  });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

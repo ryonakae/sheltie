@@ -3,7 +3,9 @@ import {
   BackgroundVariant,
   type Node,
   type NodeChange,
+  type NodeDimensionChange,
   type NodePositionChange,
+  type NodeSelectionChange,
   ReactFlow,
   ReactFlowProvider,
   type ReactFlowInstance,
@@ -135,6 +137,18 @@ export function Siteboard({
   const [draggingNodePositions, setDraggingNodePositions] = useState<
     Record<string, { x: number; y: number }>
   >({});
+  // React Flow が ResizeObserver で測定したノード寸法（controlled mode でのノード初期化に必要）
+  const [rfMeasured, setRfMeasured] = useState<Record<string, { width: number; height: number }>>(
+    {},
+  );
+  // 付箋リサイズ中の中間サイズ（controlled mode でのリアルタイム追従用）
+  const [stickyResizing, setStickyResizing] = useState<{
+    nodeId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number; // 全体高さ（header + body）
+  } | null>(null);
   const viewportUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiZoomRafRef = useRef<number | null>(null);
   // setViewport のみ使用するため広い型で保持
@@ -182,7 +196,7 @@ export function Siteboard({
   const positionCorrectionAnimationsRef = useRef<Record<string, PositionCorrectionAnimation>>({});
   const positionCorrectionSequenceRef = useRef(0);
 
-  const { resizingSize, startResize, startStickyNoteResize } = useSiteboardViewportEngine({
+  const { resizingSize, startResize } = useSiteboardViewportEngine({
     zoomRef,
     activeId,
     onInteractionChange: handleInteractionChange,
@@ -324,20 +338,51 @@ export function Siteboard({
     ],
   );
 
-  // ドラッグ中の position 変更を一時ステートに反映（ストアは dragStop 時のみ更新）
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    const positionChanges = changes.filter(
-      (c): c is NodePositionChange => c.type === 'position' && c.dragging === true,
-    );
-    if (positionChanges.length === 0) return;
-    setDraggingNodePositions((prev) => {
-      const next = { ...prev };
-      for (const change of positionChanges) {
-        if (change.position) next[change.id] = change.position;
+  // ノード変更を処理: ドラッグ中の位置追跡 + dimension 測定結果の保持（ノード初期化に必要）
+  // React Flow controlled mode では select/position/dimensions 全ての変更を処理する必要がある
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      // dimension 変更を追跡（React Flow controlled mode でのノード初期化に必須）
+      const dimensionChanges = changes.filter(
+        (c): c is NodeDimensionChange => c.type === 'dimensions' && c.dimensions !== undefined,
+      );
+      if (dimensionChanges.length > 0) {
+        setRfMeasured((prev) => {
+          const next = { ...prev };
+          for (const change of dimensionChanges) {
+            if (change.dimensions) next[change.id] = change.dimensions;
+          }
+          return next;
+        });
       }
-      return next;
-    });
-  }, []);
+
+      // select 変更を処理（React Flow 内部の選択状態と外部 state を同期。
+      // これを無視すると内部状態が矛盾し、選択解除や NodeResizer が正常動作しない）
+      const selectChanges = changes.filter((c): c is NodeSelectionChange => c.type === 'select');
+      if (selectChanges.length > 0) {
+        const newlySelected = selectChanges.find((c) => c.selected);
+        if (newlySelected) {
+          onSelectNode(newlySelected.id);
+        } else {
+          onClearSelection();
+        }
+      }
+
+      // ドラッグ中の position を一時ステートに反映（ストアは dragStop 時のみ更新）
+      const positionChanges = changes.filter(
+        (c): c is NodePositionChange => c.type === 'position' && c.dragging === true,
+      );
+      if (positionChanges.length === 0) return;
+      setDraggingNodePositions((prev) => {
+        const next = { ...prev };
+        for (const change of positionChanges) {
+          if (change.position) next[change.id] = change.position;
+        }
+        return next;
+      });
+    },
+    [onSelectNode, onClearSelection],
+  );
 
   const handleRemoveNodeWithSettleReset = useCallback(
     (nodeId: string) => {
@@ -345,6 +390,21 @@ export function Siteboard({
       handleRemoveNode(nodeId);
     },
     [clearPositionCorrectionAnimation, handleRemoveNode],
+  );
+
+  const handleStickyNoteResize = useCallback(
+    (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
+      setStickyResizing({ nodeId, ...params });
+    },
+    [],
+  );
+
+  const handleStickyNoteResizeEnd = useCallback(
+    (nodeId: string, width: number, height: number) => {
+      updateNodeSize(activeId, nodeId, width, height);
+      setStickyResizing(null);
+    },
+    [activeId, updateNodeSize],
   );
 
   useEffect(() => {
@@ -548,29 +608,38 @@ export function Siteboard({
       const style = { width: node.width };
 
       if (isStickyNoteNode(node)) {
+        const isResizing = stickyResizing?.nodeId === node.id;
+        const stickyPosition = isResizing ? { x: stickyResizing.x, y: stickyResizing.y } : position;
+        const nodeWidth = isResizing ? stickyResizing.width : node.width;
+        const nodeHeight = isResizing
+          ? stickyResizing.height
+          : getNodeFrameHeight({ type: 'stickynote', height: node.height }, zoomRef.current);
         const nodeData: StickyNoteFlowNodeData = {
           nodeProps: {
             node: { ...node, x: 0, y: 0 },
             isActive: node.id === selectedNodeId,
-            hideColorCycleButton: hideCompactControls,
             onActivate: onSelectNode,
             onContextMenu: handleNodeContextMenu,
-            onResizeStart: startStickyNoteResize,
             onContentChange: handleStickyNoteContentChange,
             onAutoHeightChange: handleStickyNoteAutoHeightChange,
-            onColorCycle: handleStickyNoteColorCycle,
           },
+          onResize: handleStickyNoteResize,
+          onResizeEnd: handleStickyNoteResizeEnd,
+          getZoom,
+          onColorCycle: handleStickyNoteColorCycle,
+          colorIndex: node.colorIndex ?? 0,
         };
         // top-level width/height を明示することで、flowNodes 再生成時に React Flow の
         // nodeHasDimensions チェックが失敗して visibility:hidden になるちらつきを防ぐ
+        // style は付与しない（NodeResizer がラッパーサイズを直接制御するため）
         return {
           id: node.id,
           type: 'stickyNoteFlowNode',
-          position,
-          width: node.width,
-          height: getNodeFrameHeight({ type: 'stickynote', height: node.height }, zoomRef.current),
-          style,
-          dragHandle: '.node-drag-handle',
+          position: stickyPosition,
+          width: nodeWidth,
+          height: nodeHeight,
+          selected: node.id === selectedNodeId,
+          measured: rfMeasured[node.id],
           data: nodeData as unknown as Record<string, unknown>,
         };
       }
@@ -626,14 +695,18 @@ export function Siteboard({
         height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, zoomRef.current),
         style,
         dragHandle: '.node-drag-handle',
+        selected: node.id === selectedNodeId,
+        measured: rfMeasured[node.id],
         data: nodeData as unknown as Record<string, unknown>,
       };
     });
   }, [
     nodes,
     draggingNodePositions,
+    rfMeasured,
     selectedNodeId,
     hideCompactControls,
+    stickyResizing,
     resizingSize,
     displayModes,
     screenshotUrls,
@@ -641,7 +714,8 @@ export function Siteboard({
     positionCorrectionAnimations,
     onSelectNode,
     handleNodeContextMenu,
-    startStickyNoteResize,
+    handleStickyNoteResize,
+    handleStickyNoteResizeEnd,
     handleStickyNoteContentChange,
     handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,
@@ -696,8 +770,9 @@ export function Siteboard({
           }}
           defaultViewport={defaultViewport}
           panActivationKeyCode="Space"
-          panOnDrag={[0, 1]}
-          panOnScroll={false}
+          panOnDrag={[1]}
+          panOnScroll={true}
+          selectionOnDrag={true}
           zoomOnScroll={true}
           zoomOnPinch={true}
           zoomOnDoubleClick={false}

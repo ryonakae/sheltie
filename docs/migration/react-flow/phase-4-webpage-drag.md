@@ -146,17 +146,20 @@ React Flow のデフォルトのドラッグ開始閾値は `nodeDragThreshold` 
 
 ## 検証
 
-- [ ] WebPageNode が TopBar からのみドラッグできる
-- [ ] ドラッグ中に Webview が hide される
-- [ ] ドラッグ後の位置補正（重なり検出）が動作する
-- [ ] 位置補正アニメーションが滑らかに動作する
-- [ ] アニメーション完了後に Webview が正しい位置に復帰する
-- [ ] ドラッグ閾値が機能する（クリックでドラッグが発火しない）
-- [ ] Undo/Redo がドラッグ後の位置変更で動作する
-- [ ] 付箋のドラッグが引き続き正常動作（回帰なし）
-- [ ] `npm run typecheck` / `npm run lint` 通過
+- [x] WebPageNode が TopBar からのみドラッグできる（`dragHandle: '.node-drag-handle'`）
+- [x] ドラッグ中に Webview が hide される
+- [x] ドラッグ後の位置補正（重なり検出）が動作する
+- [x] 位置補正アニメーションが滑らかに動作する
+- [x] アニメーション完了後に Webview が正しい位置に復帰する
+- [x] ドラッグ閾値が機能する（`nodeDragThreshold={3}`）
+- [x] Undo/Redo がドラッグ後の位置変更で動作する
+- [x] 付箋のドラッグが引き続き正常動作（回帰なし）
+- [x] `npm run typecheck` / `npm run lint` 通過
 
-## 廃止予定（このフェーズで削除）
+## 完了（2026-03-14）
 
-- `src/hooks/usePageDrag.ts`
-- `useSiteboardViewportEngine` 内のドラッグ関連コード
+- `handleNodeDragStart` / `handleNodeDragStop` は Phase 3 実装時に既に組み込み済み
+- `dragHandle: '.node-drag-handle'` は Siteboard.tsx の flowNodes 構築時に設定済み
+- `nodeDragThreshold={3}` を `<ReactFlow>` に追加（2026-03-14）
+- `usePageDrag.ts` を削除（未使用のまま残存していたため、2026-03-14 に削除）
+- `useSiteboardViewportEngine` のドラッグ関連コードは Phase 1 完了時点で既に削除済み

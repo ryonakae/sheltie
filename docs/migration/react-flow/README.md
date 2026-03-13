@@ -24,8 +24,8 @@
 | 2D | [phase-2d-pan-zoom-detection.md](./phase-2d-pan-zoom-detection.md) | pan/zoom 判定の導入 | ✅ 完了 |
 | 2E | [phase-2e-integration-test.md](./phase-2e-integration-test.md) | 統合テスト・微調整 | ✅ 完了 |
 
-| 3 | [phase-3-stickynote-drag-resize.md](./phase-3-stickynote-drag-resize.md) | 付箋のドラッグ/リサイズを React Flow ネイティブに | 中 | ⬜ 未着手 |
-| 4 | [phase-4-webpage-drag.md](./phase-4-webpage-drag.md) | WebPageNode のドラッグを React Flow ネイティブに | 高 | 🔄 一部実装済み |
+| 3 | [phase-3-stickynote-drag-resize.md](./phase-3-stickynote-drag-resize.md) | 付箋のドラッグ/リサイズを React Flow ネイティブに | 中 | ✅ 完了 |
+| 4 | [phase-4-webpage-drag.md](./phase-4-webpage-drag.md) | WebPageNode のドラッグを React Flow ネイティブに | 高 | ✅ 完了 |
 | 5 | [phase-5-webpage-resize.md](./phase-5-webpage-resize.md) | WebPageNode のリサイズを React Flow ネイティブに | 中 | ⬜ 未着手 |
 | 6 | [phase-6-cleanup.md](./phase-6-cleanup.md) | 旧コード削除 + ドキュメント更新 | 低 | ⬜ 未着手 |
 

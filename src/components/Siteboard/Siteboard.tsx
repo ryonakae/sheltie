@@ -773,6 +773,7 @@ export function Siteboard({
           panOnDrag={[1]}
           panOnScroll={true}
           selectionOnDrag={true}
+          nodeDragThreshold={3}
           zoomOnScroll={true}
           zoomOnPinch={true}
           zoomOnDoubleClick={false}

@@ -2,7 +2,7 @@
 
 ## 目的
 
-WebPageNode のリサイズを `NodeResizeControl` に切り替える。
+WebPageNode のリサイズを React Flow の `NodeResizer` に切り替える。
 Display Engine（リサイズ開始/終了時の Webview 制御）との接続も含む。
 
 ## 背景: 現在のリサイズ実装の特殊性
@@ -13,110 +13,117 @@ Display Engine（リサイズ開始/終了時の Webview 制御）との接続�
 2. `zoom` で delta を割ってキャンバス座標系を維持
 3. `frameEl.style.width/height` と `webviewEl` を DOM 直操作
 4. `resolveMinHeight(node)`: chrome 高さを含む動的な最小高さ計算
-5. リサイズ開始/終了時に `handlePageResizeStart` / `handlePageResizeEnd` を呼ぶ
+5. リサイズ開始前に `beforeResizeStart()` を async で await（スクリーンショット準備）
 
-React Flow の `NodeResizeControl` はリサイズ幅・高さを `onNodesChange` の `NodeDimensionChange` として通知するため、DOM 直操作は不要になる。
+React Flow の `NodeResizer` はリサイズ座標を `onResize` / `onResizeEnd` コールバックで通知するため、DOM 直操作は不要になる。
+
+## 設計方針（Phase 3 の教訓を踏まえた修正）
+
+### NodeResizer vs NodeResizeControl
+
+文書の旧案では `NodeResizeControl` を8方向分個別配置する方針だったが、**Phase 3（付箋）で `NodeResizer` の方が簡潔で実績あり**。WebPage も `NodeResizer` で統一する。
+- `NodeResizer`: 全8方向を自動生成、`isVisible` で選択時のみ表示
+- `NodeResizeControl`: 個別方向指定（不要な複雑さ）
+
+### リアルタイム追従（controlled mode）
+
+Phase 3 の Lesson #45 から、controlled mode では `onResize` コールバックで中間サイズを state に追跡しないとスナップバックが発生する。
+**実装**: `stickyResizing` と同様の `webPageResizing: { nodeId, x, y, width, height } | null` state を追加し、`flowNodes` useMemo でリサイズ中のサイズを優先適用。
+
+### Display Engine 接続（async 問題）
+
+`usePageResize` は `beforeResizeStart()` を async で await してからリサイズ開始していた。`NodeResizer` の `onResizeStart` は同期コールバックのため await 不可。
+**Phase 4 ドラッグと同じ fire-and-forget パターンを適用**:
+
+```ts
+onResizeStart={() => {
+  void prepareInteractionStart('resize', id);
+  handleInteractionChange(true, 'default', 'resize');
+}}
+```
 
 ## 作業内容
 
-### 1. WebPageFlowNode に NodeResizeControl を配置
+### 1. WebPageFlowNode に NodeResizer を配置
 
 ```tsx
-import { NodeResizeControl } from '@xyflow/react';
-
-const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
-
-export const WebPageFlowNode = memo(({ id, data }: NodeProps<WebPageFlowNodeData>) => {
-  const minHeight = getNodeChromeHeight(data.node, data.zoom) + MIN_CONTENT_HEIGHT;
+export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selected }: NodeProps) {
+  const { nodeProps, onResize, onResizeEnd, onResizeStart, onResizeEndCallback, getZoom } =
+    data as unknown as WebPageFlowNodeData;
+  const zoom = getZoom();
+  const minHeight = getNodeChromeHeight({ type: 'webpage' }, zoom) + MIN_CONTENT_HEIGHT;
 
   return (
-    <div>
-      {RESIZE_DIRECTIONS.map((dir) => (
-        <NodeResizeControl
-          key={dir}
-          position={dir}
-          minWidth={MIN_NODE_WIDTH}
-          minHeight={minHeight}
-          onResizeStart={() => data.onResizeStart(id)}
-          onResizeEnd={() => data.onResizeEnd(id)}
-        />
-      ))}
-      <WebPageNodeTopBar className="drag-handle" ... />
-      <div data-webview-placeholder ... />
-      <WebPageNodeBottomBar ... />
+    <div className="nopan">
+      <NodeResizer
+        isVisible={selected}
+        minWidth={MIN_NODE_WIDTH}
+        minHeight={minHeight}
+        onResizeStart={onResizeStart}
+        onResize={(_, params) => onResize(id, params)}
+        onResizeEnd={(_, params) => onResizeEnd(id, params)}
+      />
+      <WebPageNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
     </div>
   );
 });
 ```
 
-> **注意**: `minHeight` は chrome 高さ（zoom に反比例）を含むため、zoom が変わると変わる。`data.zoom` を渡すか、カスタムノード内で `useStore` でズームを取得する方法を検討する。
-
-### 2. リサイズイベントと Display Engine の接続
-
-`NodeResizeControl` の `onResizeStart` / `onResizeEnd` コールバックを `WebPageFlowNode` の `data` 経由で渡す:
+### 2. WebPageFlowNodeData 型拡張
 
 ```ts
-// Siteboard.tsx → boardNodesToFlowNodes() 内
-data: {
-  node,
-  zoom: zoomRef.current,
-  onResizeStart: handlePageResizeStart,   // Display Engine
-  onResizeEnd: handlePageResizeEnd,       // Display Engine
-  ...
+export type WebPageFlowNodeData = {
+  nodeProps: WebPageNodeProps;
+  onResizeStart: () => void;
+  onResize: (nodeId: string, params: ResizeParams) => void;
+  onResizeEnd: (nodeId: string, params: ResizeParams) => void;
+  getZoom: () => number;
+};
+```
+
+### 3. Siteboard.tsx の統合
+
+- `webPageResizing` state を追加（`stickyResizing` と同パターン）
+- `handleWebPageResize` / `handleWebPageResizeEnd` コールバックを実装
+- `flowNodes` useMemo で `webPageResizing` を優先適用
+- `onResizeStart` で fire-and-forget + DisplayEngine 通知
+- `onResizeEnd` で `updateNodeSize`（履歴あり）+ `setWebPageResizing(null)`
+
+### 4. WebPageNode のリサイズハンドル削除
+
+- `WebPageNode.tsx` から `NodeResizeHandle` の import と8方向レンダリングを削除
+- `onResizeStart` prop を削除
+
+### 5. e/w ハンドルの Webview 被り対策
+
+現在の `NodeResizeHandle.tsx` は e/w ハンドルをノード外側に -4px 拡張して Webview に覆われないようにしている。`NodeResizer` ではハンドルの CSS カスタムで同等の対策が必要:
+
+```css
+/* NodeResizer の e/w ハンドルを外側に拡張 */
+.react-flow__resize-control.handle.right,
+.react-flow__resize-control.handle.left {
+  width: 16px;
+  transform: translateX(-50%); /* 外側に拡張 */
 }
 ```
 
-### 3. onNodesChange でのリサイズ処理
+### 6. リサイズプリセット（BottomBar）
 
-```ts
-case 'dimensions':
-  if (change.dimensions) {
-    const { width, height } = change.dimensions;
-    if (isResizingRef.current) {
-      // リサイズ中は履歴なし（ドラッグ中と同様）
-      updateNodeSizeWithoutHistory(activeId, change.id, width, height);
-    } else {
-      // リサイズ完了時は履歴あり
-      updateNodeSize(activeId, change.id, width, height);
-    }
-  }
-  break;
-```
+controlled mode では `flowNodes` useMemo がストアの値で上書きする。プリセットボタンは `updateNodeSize(activeId, nodeId, width, height)` でストアを更新するだけでよい（`flowNodes` が自動再計算される）。
 
-`isResizingRef` の代わりに `resizingNodeId` を使う設計でもよい。
+### 7. useSiteboardViewportEngine / usePageResize の廃止
 
-### 4. リサイズ中の表示サイズ（resizingSize）
-
-現在の `resizingSize` state（リサイズ中に `displayWidth` / `displayHeight` として使われる）は、`NodeDimensionChange` から最新サイズを取得できるため、React Flow が内部で管理するサイズをそのまま使う形に変更できる。
-
-### 5. リサイズプリセット（BottomBar）
-
-BottomBar の「モバイル/タブレット/PC」ボタンは `handleResizePreset()` を呼ぶ。React Flow への移行後は:
-
-```ts
-const handleResizePreset = useCallback((nodeId: string, width: number, height: number) => {
-  updateNodeSize(activeId, nodeId, width, height);
-  // React Flow 内部状態も更新
-  setNodes((nds) =>
-    nds.map((n) =>
-      n.id === nodeId
-        ? { ...n, style: { ...n.style, width, height } }
-        : n
-    )
-  );
-}, [...]);
-```
-
-### 6. リサイズハンドルのスタイル
-
-React Flow の `NodeResizeControl` はデフォルトのスタイルを持つが、既存の `NodeResizeHandle.tsx` のスタイル（`zoomPx()` によるズーム補正、ヒット領域）を踏襲するには `NodeResizeControl` に `className` を指定してカスタム CSS を当てる。
+リサイズ処理が `NodeResizer` に移行したら:
+- `usePageResize.ts` を削除
+- `useSiteboardViewportEngine.ts` が空になるため削除
 
 ## 検証
 
 - [ ] WebPageNode の8方向リサイズが動作する
-- [ ] リサイズ中に Webview が screenshot モードに切り替わる
+- [ ] リサイズ中に Webview が screenshot モードに切り替わる（fire-and-forget で間に合う）
 - [ ] リサイズ終了後に Webview が正しいサイズで native に復帰する
-- [ ] リサイズ中の `displayWidth` / `displayHeight` が BottomBar に正しく表示される
+- [ ] リサイズ中の表示サイズがリアルタイムに追従する（スナップバックなし）
+- [ ] e/w ハンドルが Webview に覆われずクリック可能
 - [ ] リサイズプリセットボタン（モバイル/タブレット/PC）が動作する
 - [ ] 最小サイズの制限が動作する（chrome 高さを含む動的計算）
 - [ ] Undo/Redo がリサイズ後のサイズ変更で動作する
@@ -127,4 +134,4 @@ React Flow の `NodeResizeControl` はデフォルトのスタイルを持つが
 
 - `src/hooks/usePageResize.ts`
 - `src/components/Node/NodeResizeHandle.tsx`
-- `useSiteboardViewportEngine` 内のリサイズ関連コード
+- `src/hooks/siteboard/useSiteboardViewportEngine.ts`（空になるため）

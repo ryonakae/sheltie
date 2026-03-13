@@ -193,3 +193,42 @@ React Flow のドラッグはフロー座標系で行われるため、`--canvas
 - 付箋のルート `motion.div layout="position"` と CSS `width` / `height` スタイル（React Flow の `size-full` + `flex-1` で置き換え）
 - 付箋の独自 8方向リサイズハンドル（`NodeResizeHandle` コンポーネント）
 - 付箋の CSS `outline: isActive ? ... : 'none'`（NodeResizer のハンドル表示に統一）
+
+---
+
+## 追加実装（2026-03-14）: インラインヘッダー → NodeToolbar 移行
+
+### 実装内容
+
+- `StickyNoteFlowNode.tsx`:
+  - `NodeToolbar`（`position={Position.Top}`, `isVisible`, `align="start"`, `offset={4}`）を追加
+  - タイトルラベル「Sticky Note」は常時表示（ノード外側 = Figma フレーム名ライク）
+  - 色変更ボタンは `selected` 時のみ表示
+  - `dragHandle` プロパティを削除（NodeToolbar はポータル外レンダリングのため `dragHandle` セレクタ非互換）
+  - `handleResizeEnd` からヘッダー高さの減算を削除（ノード高さ = ボディ高さのみ）
+  - `STICKY_NOTE_HEADER_HEIGHT` のインポートを削除
+
+- `StickyNoteNode.tsx`:
+  - インラインヘッダー（タイトルバー）を完全削除
+  - `hideColorCycleButton` / `onColorCycle` を props から削除
+  - ルート div に `cursor-grab active:cursor-grabbing` を追加
+  - `textarea` に `nodrag` クラスを追加
+
+- `StickyNoteFlowNodeData` 型拡張:
+  - `onColorCycle: (nodeId: string) => void`
+  - `colorIndex: number`
+
+- `siteboard-node-frame.ts`:
+  - `getNodeChromeScreenHeight()` の stickynote 分岐で `0` を返すよう変更（ヘッダーがノード外に移行したため）
+
+### Lessons Learned
+
+**#47: NodeToolbar はポータル外レンダリングのため `dragHandle` セレクタ非互換**
+- `NodeToolbar` は `.react-flow__renderer` へのポータル経由でレンダリングされる（ノード DOM ツリーの外側）。
+- `dragHandle: '.node-drag-handle'` のセレクタはノード内 DOM のみを検索するため、ツールバー内要素はドラッグハンドルとして機能しない。
+- **解決策**: `dragHandle` プロパティを削除し、ノード全体をドラッグ可能にする。`textarea` には `nodrag` クラスで保護。
+
+**#48: NodeToolbar コンテンツは画面固定サイズ（scale 補正不要）**
+- `NodeToolbar` はビューポート transform の外側にレンダリングされるため、コンテンツは最初から画面ピクセル単位の固定サイズ。
+- `scale(1/zoom)` の逆補正は不要どころか逆効果（zoom=0.2 で 5倍になる）。
+- `offset` も画面ピクセル単位なので固定値を指定すればよい（ワールド座標補正不要）。

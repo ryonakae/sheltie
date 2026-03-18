@@ -1,11 +1,9 @@
 import { useReducedMotion } from 'motion/react';
 import { memo, useCallback, useLayoutEffect, useRef } from 'react';
 
-import { NodeResizeHandle } from '@/components/Node/NodeResizeHandle';
 import { WebPageNodeBottomBar } from '@/components/Node/WebPageNodeBottomBar';
 import { WebPageNodeTopBar } from '@/components/Node/WebPageNodeTopBar';
 import { WebPageNodeUrlForm } from '@/components/Node/WebPageNodeUrlForm';
-import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import { useWebPageWebviewLifecycle } from '@/hooks/siteboard/useWebPageWebviewLifecycle';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { isNodeEmpty, isNodeMoved } from '@/types';
@@ -30,7 +28,6 @@ export interface WebPageNodeProps {
   onReload: (nodeId: string) => void;
   onPinUrl: (nodeId: string) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
-  onResizeStart: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
   onResizePreset: (nodeId: string, width: number, height: number) => void;
   onNavigated: (nodeId: string, url: string, title: string) => void;
   onTitleUpdated: (nodeId: string, title: string) => void;
@@ -67,7 +64,6 @@ export const WebPageNode = memo(function WebPageNode({
   onReload,
   onPinUrl,
   onContextMenu,
-  onResizeStart,
   onResizePreset,
   onNavigated,
   onTitleUpdated,
@@ -114,13 +110,6 @@ export const WebPageNode = memo(function WebPageNode({
   const handleResizePresetBound = useCallback(
     (width: number, height: number) => onResizePreset(node.id, width, height),
     [node.id, onResizePreset],
-  );
-  const handleResizeStart = useCallback(
-    (e: React.MouseEvent, direction: NodeResizeDirection) => {
-      handleActivate();
-      onResizeStart(e, node.id, direction);
-    },
-    [handleActivate, node.id, onResizeStart],
   );
 
   useLayoutEffect(() => {
@@ -205,9 +194,8 @@ export const WebPageNode = memo(function WebPageNode({
   return (
     <div
       ref={frameRef}
-      className="flex flex-col shadow-lg outline-offset-0"
+      className="flex size-full flex-col shadow-lg outline-offset-0"
       style={{
-        width: node.width,
         borderRadius: zoomPx(16),
         outline: isActive
           ? `${zoomPx(2)} solid var(--color-focus)`
@@ -234,11 +222,7 @@ export const WebPageNode = memo(function WebPageNode({
       <div
         ref={placeholderRef}
         data-webview-placeholder
-        className="relative rounded-none bg-background"
-        style={{
-          width: node.width,
-          height: node.height,
-        }}
+        className="relative w-full flex-1 rounded-none bg-background"
       >
         {isNodeEmpty(node) ? (
           <WebPageNodeUrlForm onSubmit={(url) => onUrlSubmit(node.id, url)} />
@@ -262,10 +246,6 @@ export const WebPageNode = memo(function WebPageNode({
         hidePresetControls={hideBottomPresetControls}
         onResizePreset={handleResizePresetBound}
       />
-
-      {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as NodeResizeDirection[]).map((direction) => (
-        <NodeResizeHandle key={direction} direction={direction} onMouseDown={handleResizeStart} />
-      ))}
     </div>
   );
 });

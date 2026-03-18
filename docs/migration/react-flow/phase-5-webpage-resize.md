@@ -54,7 +54,10 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
   const minHeight = getNodeChromeHeight({ type: 'webpage' }, zoom) + MIN_CONTENT_HEIGHT;
 
   return (
-    <div className="nopan">
+    <div className="nopan size-full">
+      <WebPageNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
+      {/* NodeResizer は WebPageNode より後に配置し stacking order を上にすることで
+          size-full のコンテンツに覆われずポインターイベントを受け取れるようにする */}
       <NodeResizer
         isVisible={selected}
         minWidth={MIN_NODE_WIDTH}
@@ -63,7 +66,6 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
         onResize={(_, params) => onResize(id, params)}
         onResizeEnd={(_, params) => onResizeEnd(id, params)}
       />
-      <WebPageNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
     </div>
   );
 });
@@ -119,19 +121,19 @@ controlled mode では `flowNodes` useMemo がストアの値で上書きする�
 
 ## 検証
 
-- [ ] WebPageNode の8方向リサイズが動作する
-- [ ] リサイズ中に Webview が screenshot モードに切り替わる（fire-and-forget で間に合う）
-- [ ] リサイズ終了後に Webview が正しいサイズで native に復帰する
-- [ ] リサイズ中の表示サイズがリアルタイムに追従する（スナップバックなし）
-- [ ] e/w ハンドルが Webview に覆われずクリック可能
-- [ ] リサイズプリセットボタン（モバイル/タブレット/PC）が動作する
-- [ ] 最小サイズの制限が動作する（chrome 高さを含む動的計算）
-- [ ] Undo/Redo がリサイズ後のサイズ変更で動作する
-- [ ] 付箋のリサイズが引き続き正常動作（回帰なし）
-- [ ] `npm run typecheck` / `npm run lint` 通過
+- [x] WebPageNode の8方向リサイズが動作する
+- [x] リサイズ中に Webview が screenshot モードに切り替わる（fire-and-forget で間に合う）
+- [x] リサイズ終了後に Webview が正しいサイズで native に復帰する
+- [x] リサイズ中の表示サイズがリアルタイムに追従する（スナップバックなし）
+- [x] e/w ハンドルが Webview に覆われずクリック可能
+- [x] リサイズプリセットボタン（モバイル/タブレット/PC）が動作する
+- [x] 最小サイズの制限が動作する（chrome 高さを含む動的計算）
+- [x] Undo/Redo がリサイズ後のサイズ変更で動作する
+- [x] 付箋のリサイズが引き続き正常動作（回帰なし）
+- [x] `npm run typecheck` / `npm run lint` 通過
 
-## 廃止予定（このフェーズで削除）
+## 廃止済み（このフェーズで削除完了）
 
-- `src/hooks/usePageResize.ts`
-- `src/components/Node/NodeResizeHandle.tsx`
-- `src/hooks/siteboard/useSiteboardViewportEngine.ts`（空になるため）
+- ✅ `src/hooks/usePageResize.ts`
+- ✅ `src/components/Node/NodeResizeHandle.tsx`
+- ✅ `src/hooks/siteboard/useSiteboardViewportEngine.ts`（空になったため削除）

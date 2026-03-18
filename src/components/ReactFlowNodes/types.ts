@@ -2,7 +2,23 @@ import type { StickyNoteNodeProps } from '@/components/Node/StickyNoteNode';
 import type { WebPageNodeProps } from '@/components/Node/WebPageNode';
 
 /** WebPageFlowNode の data 型 */
-export type WebPageFlowNodeData = { nodeProps: WebPageNodeProps };
+export type WebPageFlowNodeData = {
+  nodeProps: WebPageNodeProps;
+  /** リサイズ開始コールバック（fire-and-forget で DisplayEngine を起動） */
+  onResizeStart: (nodeId: string) => void;
+  /** リサイズ中の毎フレームコールバック（リアルタイム追従用） */
+  onResize: (
+    nodeId: string,
+    params: { x: number; y: number; width: number; height: number },
+  ) => void;
+  /** リサイズ完了コールバック（ストア更新 + DisplayEngine 復帰） */
+  onResizeEnd: (
+    nodeId: string,
+    params: { x: number; y: number; width: number; height: number },
+  ) => void;
+  /** 現在のキャンバスズームを取得（minHeight 計算に使用） */
+  getZoom: () => number;
+};
 
 /** StickyNoteFlowNode の data 型 */
 export type StickyNoteFlowNodeData = {

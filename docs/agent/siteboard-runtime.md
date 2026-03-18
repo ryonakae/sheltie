@@ -5,7 +5,6 @@
 
 - `src/components/Siteboard/Siteboard.tsx`
 - `src/hooks/siteboard/useSiteboardDisplayEngine.ts`
-- `src/hooks/siteboard/useSiteboardViewportEngine.ts`
 - `src/hooks/siteboard/useSiteboardNodeRuntime.ts`
 - `src/components/Node/WebPageNode.tsx`
 

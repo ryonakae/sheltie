@@ -46,7 +46,12 @@
 - **React Flow controlled mode 必須設定**:
   - `flowNodes` 構築時に `selected: node.id === selectedNodeId` を必ず明示的に設定（無いと NodeResizer の `isVisible` が常に `false` になる）
   - `onNodesChange` の `dimensions` 変更を追跡して `rfMeasured` state に保存し、`flowNodes` の `measured` プロパティに付与（未初期化状態の防止）
-- **WebPageNode リサイズ**: `useSiteboardViewportEngine` 内の `usePageResize` で入力処理。リサイズ開始時に `prepareInteractionStart('resize', nodeId)` を呼び出し、Webview を非表示化（スクリーンショット表示）してからリサイズ実行。
+- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizer` コンポーネント（StickyNote と同パターン）。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
+  - リサイズ開始時に `onResizeStart` で `prepareInteractionStart('resize', nodeId)` を fire-and-forget で実行し、Webview スクリーンショット準備とスクリーンショット表示を非同期で開始
+  - `onResize` で毎フレームの寸法を `webPageResizing` state に保持し、`flowNodes` useMemo で優先適用（スナップバック防止）
+  - `onResizeEnd` でストア更新と `webPageResizing` クリア、DisplayEngine 復帰
+  - **NodeResizer はコンテンツ要素の後に配置すること**: これにより stacking order が上になり、`size-full` で高さを埋めるコンテンツに覆われずポインターイベントを受け取れる。また visual stacking も正しく表示される
+  - **ラッパー div と内部コンポーネント両方に `size-full` が必須**: ラッパーだけでなく内部の flex コンテナにも `size-full`（= `w-full h-full`）を付けること。`w-full` のみでは高さが intrinsic になり、`flex-1` で伸縮する子要素（placeholder など）が高さ 0 に潰れる
 
 ### ビューポート管理
 
@@ -95,13 +100,11 @@
 
 ## リサイズハンドルとカーソル制御
 
-### WebPageNode（ネイティブ Webview リサイズ）
+### WebPageNode（React Flow NodeResizer）
 
-- `NodeResizeHandle` のカーソルは Tailwind cursor クラスでなく **inline style** で設定する（CSS 優先度問題の回避）。
-- e/w ハンドルはネイティブ Webview に覆われるため、ハンドル要素を **外側 -4px 拡張**（16px 幅）して Webview 外に突き出す。
-- リサイズ中の `InteractionOverlay` カーソルは `useSiteboardViewportEngine` が `onInteractionChange(direction)` 経由で `RESIZE_CURSOR_MAP` から解決して渡す。
-- `overflow-hidden` + `border-radius` をノード外側 div に設定するとコーナーハンドルがクリッピングされる。**`overflow-hidden` は TopBar/BottomBar などの子要素側に移動し、外側 div には設定しない。**
-- `onMouseDown` で `e.stopPropagation()` を呼ぶハンドラーには **必ず `if (e.button !== 0) return;` を先頭に置く**。右クリック（button=2）時に伝播を止めると `contextmenu` イベントが親コンポーネントに届かなくなる。`startDrag` / `startResize` も同様。
+- React Flow の `NodeResizer` コンポーネントでリサイズ UI を提供（`isVisible={selected}` で選択時のみ表示）。
+- e/w ハンドルはネイティブ Webview に覆われるため、CSS カスタムで **幅 16px に拡張** して Webview 外に突き出す。対応 CSS ルールは `src/index.css` で定義
+- リサイズ中のカーソル管理は React Flow が自動実行。
 
 ### StickyNoteNode（React Flow `NodeResizer` でリサイズ）
 

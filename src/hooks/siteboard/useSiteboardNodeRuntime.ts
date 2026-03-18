@@ -1,7 +1,6 @@
 import { toast } from '@heroui/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import type { NavigationState } from '@/lib/tauri-bridge';
 import { webviewApi } from '@/lib/tauri-bridge';
 import type { BoardNode } from '@/types';
@@ -11,7 +10,6 @@ interface UseSiteboardNodeRuntimeParams {
   nodes: BoardNode[];
   selectedNodeId: string | null;
   onClearSelection: () => void;
-  startResize: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
   updateWebNodeUrl: (projectId: string, nodeId: string, url: string, title: string) => void;
   updateNodeTitle: (projectId: string, nodeId: string, title: string) => void;
   removeNode: (projectId: string, nodeId: string) => void;
@@ -45,7 +43,6 @@ export function useSiteboardNodeRuntime({
   nodes,
   selectedNodeId,
   onClearSelection,
-  startResize,
   updateWebNodeUrl,
   updateNodeTitle,
   removeNode,
@@ -270,13 +267,6 @@ export function useSiteboardNodeRuntime({
     [activeId, refreshNavigationState, updateNodeTitle],
   );
 
-  const handleResizeStart = useCallback(
-    (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => {
-      startResize(e, nodeId, direction);
-    },
-    [startResize],
-  );
-
   const handleWebviewCreated = useCallback(
     (nodeId: string, label: string) => {
       setWebNodeWebviewLabel(activeId, nodeId, label);
@@ -414,7 +404,6 @@ export function useSiteboardNodeRuntime({
     handleReloadWebNode,
     handleRemoveNode,
     handleResizePreset,
-    handleResizeStart,
     handleScrollEnded,
     handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,

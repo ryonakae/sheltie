@@ -72,8 +72,8 @@
 
 ### Node 型と Flow ノード
 
-- `WebPageFlowNodeData = { nodeProps: WebPageNodeProps }`
-- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps }`
+- `WebPageFlowNodeData = { nodeProps: WebPageNodeProps; onResizeStart, onResize, onResizeEnd, getZoom }`
+- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps; onResize, onResizeEnd, getZoom, onColorCycle, colorIndex }`
 - Flow ノードの `x`, `y` は常に 0 に設定（実位置は親 `.react-flow__node` の transform で管理）
 - Flow ノードの `style` には `width/zoom`, `height/zoom` でズーム補正を適用
 
@@ -93,12 +93,10 @@
 - pan/zoom は React Flow ネイティブ（`panActivationKeyCode="Space"` + `panOnDrag={[0, 1]}`）
 - ホイール = React Flow ズーム（`zoomOnScroll={true}`）
 - `onViewportChange` で `--canvas-zoom` CSS 変数を更新し、UI スケーリングと `zoomPx()` を同期
-- ドラッグ・リサイズはカスタムハンドラー（`useSiteboardViewportEngine` + component level イベント）で処理
 
-フェーズ 3（現在）：
+フェーズ 3-5（現在）：
 - **ドラッグ**: React Flow ネイティブ（`nodesDraggable={true}` + `onNodeDragStart` / `onNodeDragStop`）。`dragHandle: '.node-drag-handle'` でタイトルバーのみに限定
-- **付箋リサイズ**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックで ストア更新
-- **WebPageNode リサイズ**: `useSiteboardViewportEngine` 内の `usePageResize` で入力処理（Webview 非表示化とセットで実装）
+- **リサイズ（StickyNote・WebPage）**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックで ストア更新
 
 ## 主要定数
 

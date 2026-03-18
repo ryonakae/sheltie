@@ -29,3 +29,10 @@
 [data-display-mode='hidden'] [data-screenshot-img] {
   display: none;
 }
+
+/* WebPage NodeResizer の左右ハンドルを Webview に覆われないよう外側に拡張する。
+ * デフォルトの 8px では Webview の上に乗っているためクリックを受け取れない。 */
+.react-flow__node-webPageFlowNode .react-flow__resize-control.handle.left,
+.react-flow__node-webPageFlowNode .react-flow__resize-control.handle.right {
+  width: 16px;
+}

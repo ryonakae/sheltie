@@ -29,14 +29,14 @@ import {
   LOW_ZOOM_HIDE_THRESHOLD,
   MIN_ZOOM,
   MAX_ZOOM,
+  PAGE_MIN_HEIGHT,
   ZOOM_END_DEBOUNCE_MS,
   ZOOM_RESET_TARGET,
 } from '@/constants';
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
-import { useSiteboardViewportEngine } from '@/hooks/siteboard/useSiteboardViewportEngine';
-import { getNodeFrameHeight } from '@/lib/siteboard-node-frame';
+import { getNodeChromeHeight, getNodeFrameHeight } from '@/lib/siteboard-node-frame';
 import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
 import {
   selectActiveProject,
@@ -149,6 +149,14 @@ export function Siteboard({
     width: number;
     height: number; // 全体高さ（header + body）
   } | null>(null);
+  // WebPage リサイズ中の中間サイズ（controlled mode でのリアルタイム追従用。height はコンテンツ高さ）
+  const [webPageResizing, setWebPageResizing] = useState<{
+    nodeId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number; // コンテンツ高さ（chrome 除く）
+  } | null>(null);
   const viewportUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiZoomRafRef = useRef<number | null>(null);
   // setViewport のみ使用するため広い型で保持
@@ -196,15 +204,44 @@ export function Siteboard({
   const positionCorrectionAnimationsRef = useRef<Record<string, PositionCorrectionAnimation>>({});
   const positionCorrectionSequenceRef = useRef(0);
 
-  const { resizingSize, startResize } = useSiteboardViewportEngine({
-    zoomRef,
-    activeId,
-    onInteractionChange: handleInteractionChange,
-    prepareInteractionStart,
-    onNodeResizeStart: handlePageResizeStart,
-    onNodeResizeEnd: handlePageResizeEnd,
-    updateNodeSize,
-  });
+  // WebPage NodeResizer コールバック群
+  const handleWebPageResizeStart = useCallback(
+    (nodeId: string) => {
+      // Phase 4 ドラッグと同じ fire-and-forget パターン
+      void prepareInteractionStart('resize', nodeId);
+      handleInteractionChange(true, 'default', 'resize');
+      handlePageResizeStart(nodeId);
+    },
+    [handleInteractionChange, handlePageResizeStart, prepareInteractionStart],
+  );
+
+  const handleWebPageResize = useCallback(
+    (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
+      // NodeResizer の params.height は chrome 込みのフレーム全体高さ
+      const chromeHeight = getNodeChromeHeight({ type: 'webpage' }, zoomRef.current);
+      const contentHeight = Math.max(PAGE_MIN_HEIGHT, params.height - chromeHeight);
+      setWebPageResizing({
+        nodeId,
+        x: params.x,
+        y: params.y,
+        width: Math.round(params.width),
+        height: Math.round(contentHeight),
+      });
+    },
+    [zoomRef],
+  );
+
+  const handleWebPageResizeEnd = useCallback(
+    (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
+      const chromeHeight = getNodeChromeHeight({ type: 'webpage' }, zoomRef.current);
+      const contentHeight = Math.max(PAGE_MIN_HEIGHT, params.height - chromeHeight);
+      updateNodeSize(activeId, nodeId, Math.round(params.width), Math.round(contentHeight));
+      setWebPageResizing(null);
+      handleInteractionChange(false, 'default', 'resize');
+      handlePageResizeEnd(nodeId);
+    },
+    [activeId, handleInteractionChange, handlePageResizeEnd, updateNodeSize, zoomRef],
+  );
 
   const hideCompactControls = Math.round(uiZoom * 100) <= Math.round(LOW_ZOOM_HIDE_THRESHOLD * 100);
 
@@ -216,7 +253,6 @@ export function Siteboard({
     handleReloadWebNode,
     handleRemoveNode,
     handleResizePreset,
-    handleResizeStart,
     handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,
     handleStickyNoteContentChange,
@@ -232,7 +268,6 @@ export function Siteboard({
     nodes,
     selectedNodeId,
     onClearSelection,
-    startResize,
     updateWebNodeUrl,
     updateNodeTitle,
     removeNode,
@@ -604,9 +639,6 @@ export function Siteboard({
     return nodes.map((node): Node => {
       // ドラッグ中は一時位置を使用。dragStop 時にストアへ反映する
       const position = draggingNodePositions[node.id] ?? { x: node.x, y: node.y };
-      // React Flow の viewport が scale(zoom) を管理するため論理サイズをそのまま渡す
-      const style = { width: node.width };
-
       if (isStickyNoteNode(node)) {
         const isResizing = stickyResizing?.nodeId === node.id;
         const stickyPosition = isResizing ? { x: stickyResizing.x, y: stickyResizing.y } : position;
@@ -644,8 +676,12 @@ export function Siteboard({
         };
       }
 
-      const contentWidth = resizingSize?.nodeId === node.id ? resizingSize.width : node.width;
-      const contentHeight = resizingSize?.nodeId === node.id ? resizingSize.height : node.height;
+      const isResizing = webPageResizing?.nodeId === node.id;
+      const webPagePosition = isResizing
+        ? { x: webPageResizing.x, y: webPageResizing.y }
+        : position;
+      const contentWidth = isResizing ? webPageResizing.width : node.width;
+      const contentHeight = isResizing ? webPageResizing.height : node.height;
       const nodeData: WebPageFlowNodeData = {
         nodeProps: {
           // isStickyNoteNode の早期 return 後に WebPageNode と確定しているが spread で型が広がるため cast
@@ -667,7 +703,6 @@ export function Siteboard({
           onReload: handleReloadWebNode,
           onPinUrl: handlePinWebNodeUrl,
           onContextMenu: handleNodeContextMenu,
-          onResizeStart: handleResizeStart,
           onResizePreset: handleResizePreset,
           onNavigated: handleNavigated,
           onTitleUpdated: handleTitleUpdated,
@@ -684,16 +719,19 @@ export function Siteboard({
           positionCorrectionToY: positionCorrectionAnimations[node.id]?.toY ?? null,
           onPositionCorrectionAnimationComplete: handlePositionCorrectionAnimationComplete,
         },
+        onResizeStart: handleWebPageResizeStart,
+        onResize: handleWebPageResize,
+        onResizeEnd: handleWebPageResizeEnd,
+        getZoom,
       };
       // top-level width/height を明示することで、flowNodes 再生成時に React Flow の
       // nodeHasDimensions チェックが失敗して visibility:hidden になるちらつきを防ぐ
       return {
         id: node.id,
         type: 'webPageFlowNode',
-        position,
+        position: webPagePosition,
         width: contentWidth,
         height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, zoomRef.current),
-        style,
         dragHandle: '.node-drag-handle',
         selected: node.id === selectedNodeId,
         measured: rfMeasured[node.id],
@@ -707,7 +745,7 @@ export function Siteboard({
     selectedNodeId,
     hideCompactControls,
     stickyResizing,
-    resizingSize,
+    webPageResizing,
     displayModes,
     screenshotUrls,
     navStates,
@@ -724,7 +762,9 @@ export function Siteboard({
     handleGoForward,
     handleReloadWebNode,
     handlePinWebNodeUrl,
-    handleResizeStart,
+    handleWebPageResizeStart,
+    handleWebPageResize,
+    handleWebPageResizeEnd,
     handleResizePreset,
     handleNavigated,
     handleTitleUpdated,

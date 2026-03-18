@@ -35,7 +35,7 @@ src/
 - `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー
 - `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`）
 - `components/ReactFlowNodes/nodeTypes.ts`: React Flow `nodeTypes` 定数（循環依存防止のため types.ts から分離）
-- `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作を分担。リサイズは WebPageNode（`usePageResize`）のみ。付箋はリサイズは React Flow `NodeResizer` に委譲（pan/zoom は React Flow に委譲）
+- `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
 - `store/tab-store.ts`: プロジェクト・node・ビューポート状態と、プロジェクト単位 node 履歴（Undo/Redo）を管理
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
@@ -66,13 +66,12 @@ src/
 
 - React Flow ノード（`<Node>`）の `position` は常に node の `{x, y}` を反映
 - ノードコンポーネント（`StickyNoteNode`, `WebPageNode`）から `position: absolute` と `left/top` スタイルを削除（React Flow が `.react-flow__node` の CSS transform で管理するため不要）
-- ノード位置の実際の変更はカスタム hook（`useSiteboardViewportEngine`）が Zustand に書き込み
+- ノード位置の実際の変更は React Flow の `onNodesChange` と各操作コールバック（ドラッグ終了・リサイズ終了）で Zustand に書き込み
 - React Flow の `onNodesChange` は フェーズ 1 では用途がないため、callback として登録するが実装は空（位置変更は hook で直接 Zustand に書き込み）
 
 ### 責務分離
 
 - `useSiteboardDisplayEngine`: `DisplayMode` 判定、Webview 表示/非表示、スクリーンショット管理
-- `useSiteboardViewportEngine`: WebPageNode リサイズの入力処理のみ（付箋リサイズは React Flow `NodeResizer` に移行）。ドラッグ・パン・ズームは React Flow に委譲
 - `useSiteboardNodeRuntime`: webpage ノード単位のナビゲーション状態・タイトル同期・スクリーンショット契機を管理
 - `useSiteboardKeyboard`: Delete/Backspace・Undo/Redo のショートカットを処理し、共通編集コマンドへ委譲
 

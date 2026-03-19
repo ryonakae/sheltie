@@ -243,12 +243,18 @@ export function Siteboard({
     (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
       const chromeHeight = getNodeChromeHeight({ type: 'webpage' }, zoomRef.current);
       const contentHeight = Math.max(PAGE_MIN_HEIGHT, params.height - chromeHeight);
-      updateNodeSize(activeId, nodeId, Math.round(params.width), Math.round(contentHeight));
+      const nextX = Math.round(params.x);
+      const nextY = Math.round(params.y);
+      const nextWidth = Math.round(params.width);
+      const nextHeight = Math.round(contentHeight);
+      useProjectStore
+        .getState()
+        .updateNodeBounds(activeId, nodeId, nextX, nextY, nextWidth, nextHeight);
       setWebPageResizing(null);
       handleInteractionChange(false, 'default', 'resize');
       handlePageResizeEnd(nodeId);
     },
-    [activeId, handleInteractionChange, handlePageResizeEnd, updateNodeSize, zoomRef],
+    [activeId, handleInteractionChange, handlePageResizeEnd, zoomRef],
   );
 
   const hideCompactControls = Math.round(uiZoom * 100) <= Math.round(LOW_ZOOM_HIDE_THRESHOLD * 100);

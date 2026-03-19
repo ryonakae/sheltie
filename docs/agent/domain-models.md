@@ -37,6 +37,7 @@
 - `ProjectStore`（`tab-store.ts` 内部）
   - `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `nodeHistories`, `webviewRuntime`
+  - node 更新 action: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`
   - runtime action: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
 - `ProjectNodeHistory`（`tab-store.ts` 内部）
   - `past`: 直前までの `BoardNode[]` スナップショット配列
@@ -86,7 +87,7 @@
 - **viewport 同期**: `handleViewportChange` で store へ debounce 保存し、store 側の viewport 変更は `setViewport()` で React Flow に反映する
 - **ドラッグ**: React Flow ネイティブ。WebPage は `dragHandle: '.node-drag-handle'` で TopBar のみに限定し、付箋はノード本体をドラッグ可能にする
 - **リサイズ（StickyNote）**: React Flow `NodeResizeControl` は四隅ハンドルだけに絞り、選択枠の線は別オーバーレイで描く。手動変更は横幅のみ許可し、高さは本文から自動計測して `updateNodeSizeWithoutHistory` で反映する
-- **リサイズ（WebPage）**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックでストア更新
+- **リサイズ（WebPage）**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResize` では中間の `x/y/width/height` を state に保持し、`onResizeEnd` では `updateNodeBounds` で最終の `x/y/width/height` を 1 回で store に確定する。Undo/Redo 履歴も 1 エントリにまとめる
 
 ## 主要定数
 

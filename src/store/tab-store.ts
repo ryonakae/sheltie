@@ -292,6 +292,14 @@ interface ProjectActions {
   removeNode: (projectId: string, nodeId: string) => void;
   updateNodePosition: (projectId: string, nodeId: string, x: number, y: number) => void;
   updateNodeSize: (projectId: string, nodeId: string, width: number, height: number) => void;
+  updateNodeBounds: (
+    projectId: string,
+    nodeId: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) => void;
   updateNodeSizeWithoutHistory: (
     projectId: string,
     nodeId: string,
@@ -615,6 +623,22 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           if (node.width === width && node.height === height) return node;
           changed = true;
           return { ...node, width, height };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  updateNodeBounds: (projectId, nodeId, x, y, width, height) =>
+    set((state) =>
+      replaceProjectNodes(state, projectId, (nodes) => {
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          if (node.x === x && node.y === y && node.width === width && node.height === height) {
+            return node;
+          }
+          changed = true;
+          return { ...node, x, y, width, height };
         });
         return changed ? nextNodes : null;
       }),

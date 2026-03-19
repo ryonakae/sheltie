@@ -31,7 +31,7 @@
   - `nodes`
 - `Project`
   - ローカルワークスペース用
-  - `id`, `title`, `nodes`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `filePath?`, `lastSavedDocument`
+  - `id`, `title`, `nodes`, `viewport`, `lastOpenedAt`, `filePath?`, `lastSavedDocument`
 - `ProjectState`
   - `projects`, `openIds`, `activeId`
 - `ProjectStore`（`tab-store.ts` 内部）
@@ -47,9 +47,9 @@
 
 - `.siteboard` は共有用ドキュメント形式
   - 保存する: `schemaVersion`, `title`, `nodes`
-  - 保存しない: ローカル project id, `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, Webview runtime label
+  - 保存しない: ローカル project id, `filePath`, `viewport`, `lastOpenedAt`, Webview runtime label
 - ローカル状態は再起動復元用
-  - `nodes` に加えて `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保持する
+  - `nodes` に加えて `filePath`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保持する
   - 未保存編集もローカルから復元する
   - Tauri Store の project state key は `projectStateV2` を使用する。旧 key は migration せず読み捨てる
   - `webviewRuntime` と `nodeHistories` は runtime-only のため復元しない
@@ -57,7 +57,7 @@
 ## 未保存変更の判定
 
 - 未保存判定は current project の `.siteboard` 相当内容（`title`, `nodes`）と `lastSavedDocument` の差分で行う
-- `viewport`, `sidebarWidth`, `lastOpenedAt`, `filePath` の差分は未保存確認の対象に含めない
+- `viewport`, `lastOpenedAt`, `filePath` の差分は未保存確認の対象に含めない
 - 新規未保存プロジェクトは作成時点の空 document を `lastSavedDocument` として持つ
 - `restoreProjectFromLastSaved` は `title` と `nodes` を `lastSavedDocument` に戻し、対応する `nodeHistories` も破棄する
 - `.siteboard` 未保存かつ clean なプロジェクトは、タブクローズまたはアプリ終了時にローカル state から削除する

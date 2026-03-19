@@ -96,10 +96,18 @@ return type;
 - `Siteboard.tsx` は `handleViewportChange` で React Flow の現在 viewport を内部 ref と `zoomRef` に同期し、rAF で `uiZoom` も更新する
 - `uiZoom` は `flowNodes` の外枠高さと `WebPageFlowNode` の resize control `minHeight` 制約に使う reactive な layout 用 zoom の正本
 - `zoomRef` は resize 中の content height 逆算や Webview runtime 連携など、イベントハンドラ内の即時計算専用に使う
-- project 切り替え、Sidebar からの centering、新規ノード追加後の centering、起動時復元では store 側 `viewport` が先に変わる
+- project 切り替え、新規ノード追加後の centering、右下 viewport controls、起動時復元では store 側 `viewport` が先に変わる
 - この時は `reactFlowInstanceRef.current.setViewport(storeViewport, { duration: 0 })` で React Flow 実体へ再同期し、同時に `uiZoom` も store 値へ揃える
 - 既に同じ viewport が反映済みなら差分比較で `setViewport()` をスキップし、無限ループや余計な再描画を避ける
 - これにより WebPage 外枠高さは zoom 操作中の毎 tick で current zoom に追従し、zoom 終了後の display-mode 復帰や viewport 保存 debounce で後追い補正しない
+
+## 右下 viewport controls
+
+- 右下 controls は `Siteboard.tsx` が持ち、`全体表示` と `100%` の 2 ボタンを横並びで描画する
+- `全体表示` は `getNodeFrameRect(node, zoom)` を使って全ノード外枠の union を zoom ごとに再計算し、`64px` padding を残したまま最大倍率で収まる viewport を二分探索で求める
+- `100%` は zoom を `1` に固定し、同じ union の中心が viewport 中央に来る pan を計算する。全体が収まらなくても zoom は変えない
+- ノードが 0 件の時は `全体表示` を disabled にし、`100%` だけ `{ x: 0, y: 0, zoom: 1 }` へ戻す
+- どちらも `setViewport()` の duration は通常 `240ms`、reduced motion 時 `0ms` とし、zoom が変わる操作では `cancelZoomRestore()` と `scheduleZoomRestoreAfterReflow()` を既存 reset zoom と同じタイミングで使う
 
 ## drag 終了後の重なり補正
 

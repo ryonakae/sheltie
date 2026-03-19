@@ -6,10 +6,7 @@ export const DEFAULT_PAGE_HEIGHT = 812;
 export const DEFAULT_STICKY_NOTE_WIDTH = 200;
 export const DEFAULT_STICKY_NOTE_HEIGHT = 200;
 
-// サイドバー・ページ自動配置に関する既定値
-export const SIDEBAR_MIN_WIDTH = 160;
-export const SIDEBAR_MAX_WIDTH = 384;
-export const SIDEBAR_DEFAULT_WIDTH = 240;
+// ページ自動配置に関する既定値
 export const PAGE_GAP = 100;
 export const MAX_VERTICAL_SEARCH_STEPS = 60;
 

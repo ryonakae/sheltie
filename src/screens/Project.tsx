@@ -1,11 +1,6 @@
-import ChevronsCollapseHorizontal from '@gravity-ui/icons/ChevronsCollapseHorizontal';
-import ChevronsExpandHorizontal from '@gravity-ui/icons/ChevronsExpandHorizontal';
 import { animate, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { AppButton } from '@/components/Common/AppButton';
-import { ResizeHandle } from '@/components/Project/ResizeHandle';
-import { Sidebar } from '@/components/Project/Sidebar';
 import { Siteboard } from '@/components/Siteboard/Siteboard';
 import {
   DEFAULT_PAGE_HEIGHT,
@@ -15,9 +10,6 @@ import {
   CANVAS_CENTER_ANIMATION_DURATION_SEC,
   CANVAS_CENTER_ANIMATION_EASE,
   MIN_ZOOM,
-  SIDEBAR_DEFAULT_WIDTH,
-  SIDEBAR_MAX_WIDTH,
-  SIDEBAR_MIN_WIDTH,
 } from '@/constants';
 import {
   getNodeChromeScreenHeight,
@@ -53,45 +45,19 @@ function getViewportCenterPos(
 export function ProjectScreen() {
   const activeProject = useProjectStore(selectActiveProject);
   const activeId = useProjectStore((s) => s.activeId);
-  const updateSidebarWidth = useProjectStore((s) => s.updateSidebarWidth);
   const addWebNode = useProjectStore((s) => s.addWebNode);
   const addStickyNoteNode = useProjectStore((s) => s.addStickyNoteNode);
-  const removeNode = useProjectStore((s) => s.removeNode);
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = activeProject?.viewport;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [centeredNodeId, setCenteredNodeId] = useState<string | null>(null);
-  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
-
-  const sidebarRef = useRef<HTMLElement>(null);
-  const isResizing = useRef(false);
-  const dragInfo = useRef({ startX: 0, startWidth: 0 });
   const centeringAnimationRef = useRef<Array<{ stop: () => void }>>([]);
   const activeIdRef = useRef<string | null>(null);
   const prefersReducedMotion = useReducedMotion();
 
-  const sidebarWidth = activeProject?.sidebarWidth ?? SIDEBAR_DEFAULT_WIDTH;
-
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizing.current = true;
-    dragInfo.current = {
-      startX: e.clientX,
-      startWidth: sidebarRef.current?.offsetWidth ?? 0,
-    };
-    document.body.style.userSelect = 'none';
-  }, []);
-
-  const handleDoubleClick = useCallback(() => {
-    if (sidebarRef.current) {
-      sidebarRef.current.style.width = `${SIDEBAR_DEFAULT_WIDTH}px`;
-    }
-    updateSidebarWidth(activeId, SIDEBAR_DEFAULT_WIDTH);
-  }, [updateSidebarWidth, activeId]);
 
   const handleSelectNode = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -100,13 +66,6 @@ export function ProjectScreen() {
   const handleClearSelection = useCallback(() => {
     setSelectedNodeId(null);
   }, []);
-
-  const handleRemoveNode = useCallback(
-    (nodeId: string) => {
-      removeNode(activeId, nodeId);
-    },
-    [removeNode, activeId],
-  );
 
   const handleCenteredNode = useCallback((nodeId: string) => {
     setCenteredNodeId(nodeId);
@@ -122,10 +81,6 @@ export function ProjectScreen() {
   }, []);
 
   useEffect(() => cancelCentering, [cancelCentering]);
-
-  const toggleSidebar = useCallback(() => {
-    setIsSidebarVisible((prev) => !prev);
-  }, []);
 
   /**
    * ページ追加後にビューポートをアニメーションしてページを中央・フィット表示する。
@@ -284,62 +239,8 @@ export function ProjectScreen() {
     }
   }, [selectedNodeId, activeProject?.nodes]);
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing.current) return;
-      const { startX, startWidth } = dragInfo.current;
-      const delta = e.clientX - startX;
-      const newWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + delta));
-      if (sidebarRef.current) {
-        sidebarRef.current.style.width = `${newWidth}px`;
-      }
-    };
-
-    const handleMouseUp = () => {
-      if (!isResizing.current) return;
-      isResizing.current = false;
-      document.body.style.userSelect = '';
-      if (sidebarRef.current) {
-        updateSidebarWidth(activeId, sidebarRef.current.offsetWidth);
-      }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      isResizing.current = false;
-      document.body.style.userSelect = '';
-    };
-  }, [updateSidebarWidth, activeId]);
-
   return (
     <div className="relative flex flex-1 overflow-hidden">
-      <Sidebar
-        ref={sidebarRef}
-        initialWidth={isSidebarVisible ? sidebarWidth : 0}
-        isVisible={isSidebarVisible}
-        selectedNodeId={selectedNodeId}
-        onSelectNode={handleSelectNode}
-        onRemoveNode={handleRemoveNode}
-        onCentered={handleCenteredNode}
-      />
-      {isSidebarVisible && (
-        <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
-      )}
-      <div className="absolute bottom-4 left-4 z-30">
-        <AppButton
-          size="sm"
-          variant="ghost"
-          tooltipMessage={isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}
-          onPress={toggleSidebar}
-          aria-label={isSidebarVisible ? 'サイドバーを非表示' : 'サイドバーを表示'}
-          className={isSidebarVisible ? undefined : 'border border-border shadow-md'}
-        >
-          {isSidebarVisible ? <ChevronsCollapseHorizontal /> : <ChevronsExpandHorizontal />}
-        </AppButton>
-      </div>
       <Siteboard
         selectedNodeId={selectedNodeId}
         onSelectNode={handleSelectNode}

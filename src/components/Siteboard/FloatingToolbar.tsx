@@ -1,4 +1,4 @@
-import Plus from '@gravity-ui/icons/Plus';
+import { Globe } from '@gravity-ui/icons';
 import Sticker from '@gravity-ui/icons/Sticker';
 import { Surface } from '@heroui/react';
 
@@ -24,7 +24,7 @@ export function FloatingToolbar({ onAddWebNode, onAddStickyNote }: FloatingToolb
             onPress={onAddWebNode}
             aria-label="Webページを追加"
           >
-            <Plus className="size-5" />
+            <Globe className="size-5" />
           </AppButton>
           <AppButton
             size="lg"

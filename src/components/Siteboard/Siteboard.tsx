@@ -1,3 +1,4 @@
+import ArrowsExpand from '@gravity-ui/icons/ArrowsExpand';
 import {
   Background,
   BackgroundVariant,
@@ -15,6 +16,7 @@ import { useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { AppButton } from '@/components/Common/AppButton';
 import { ContextMenu } from '@/components/Common/ContextMenu';
 import { nodeTypes } from '@/components/ReactFlowNodes/nodeTypes';
 import type {
@@ -39,6 +41,11 @@ import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
 import { getNodeChromeHeight, getNodeFrameHeight } from '@/lib/siteboard-node-frame';
 import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
+import {
+  resolveCenteredViewport,
+  resolveFitViewport,
+  type SiteboardViewportTarget,
+} from '@/lib/siteboard-viewport';
 import {
   selectActiveProject,
   selectActiveProjectWebviewRuntime,
@@ -166,6 +173,7 @@ export function Siteboard({
     height: number; // コンテンツ高さ（chrome 除く）
   } | null>(null);
   const viewportUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiZoomRafRef = useRef<number | null>(null);
   // setViewport のみ使用するため広い型で保持
   const reactFlowInstanceRef = useRef<Pick<ReactFlowInstance, 'setViewport'> | null>(null);
@@ -655,22 +663,57 @@ export function Siteboard({
     [handleInteractionChange],
   );
 
-  const handleResetZoom = useCallback(() => {
-    const instance = reactFlowInstanceRef.current;
-    if (!instance) return;
-    cancelZoomRestore();
-    instance.setViewport(
-      { x: 0, y: 0, zoom: ZOOM_RESET_TARGET },
-      { duration: prefersReducedMotion ? 0 : 240 },
-    );
-    // ズームリセット完了後に Webview 座標を再計算
-    setTimeout(() => scheduleZoomRestoreAfterReflow(), prefersReducedMotion ? 0 : 260);
-  }, [cancelZoomRestore, prefersReducedMotion, scheduleZoomRestoreAfterReflow]);
+  const applyViewportTarget = useCallback(
+    (target: SiteboardViewportTarget) => {
+      const instance = reactFlowInstanceRef.current;
+      if (!instance) return;
+
+      const currentViewport = flowViewportRef.current;
+      const zoomChanged =
+        !currentViewport || Math.abs(currentViewport.zoom - target.zoom) >= VIEWPORT_SYNC_EPSILON;
+      const animationDurationMs = prefersReducedMotion ? 0 : 240;
+
+      cancelZoomRestore();
+      if (zoomRestoreTimerRef.current) clearTimeout(zoomRestoreTimerRef.current);
+      instance.setViewport(target, { duration: animationDurationMs });
+
+      if (!zoomChanged) return;
+      zoomRestoreTimerRef.current = setTimeout(
+        () => {
+          zoomRestoreTimerRef.current = null;
+          scheduleZoomRestoreAfterReflow();
+        },
+        prefersReducedMotion ? 0 : animationDurationMs + 20,
+      );
+    },
+    [cancelZoomRestore, prefersReducedMotion, scheduleZoomRestoreAfterReflow],
+  );
+
+  const handleCenterViewportAtDefaultZoom = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+
+    applyViewportTarget(resolveCenteredViewport(nodes, rect.width, rect.height, ZOOM_RESET_TARGET));
+  }, [applyViewportTarget, nodes]);
+
+  const handleFitAllNodes = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+
+    const target = resolveFitViewport(nodes, rect.width, rect.height);
+    if (!target) return;
+    applyViewportTarget(target);
+  }, [applyViewportTarget, nodes]);
+
+  const handleResetViewport = useCallback(() => {
+    handleCenterViewportAtDefaultZoom();
+  }, [handleCenterViewportAtDefaultZoom]);
 
   // ビューポートの debounce タイマーと rAF のクリーンアップ
   useEffect(() => {
     return () => {
       if (viewportUpdateTimerRef.current) clearTimeout(viewportUpdateTimerRef.current);
+      if (zoomRestoreTimerRef.current) clearTimeout(zoomRestoreTimerRef.current);
       if (uiZoomRafRef.current !== null) cancelAnimationFrame(uiZoomRafRef.current);
     };
   }, []);
@@ -873,7 +916,24 @@ export function Siteboard({
             bgColor={isDark ? '#18181b' : '#f9fafb'}
           />
           <FloatingToolbar onAddWebNode={onAddWebNode} onAddStickyNote={onAddStickyNote} />
-          <ZoomIndicator zoom={uiZoom} onReset={handleResetZoom} />
+          <div className="pointer-events-none absolute right-4 bottom-4 z-20 flex items-center gap-2">
+            <div className="pointer-events-auto">
+              <AppButton
+                size="sm"
+                isIconOnly={true}
+                tooltipMessage="全体を表示"
+                onPress={handleFitAllNodes}
+                aria-label="全体を表示"
+                isDisabled={nodes.length === 0}
+                className="border border-border bg-surface shadow-md"
+              >
+                <ArrowsExpand className="size-4" />
+              </AppButton>
+            </div>
+            <div className="pointer-events-auto">
+              <ZoomIndicator zoom={uiZoom} onResetViewport={handleResetViewport} />
+            </div>
+          </div>
         </ReactFlow>
 
         {contextMenu && (

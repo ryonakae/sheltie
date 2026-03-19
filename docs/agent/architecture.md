@@ -21,13 +21,12 @@ src/
 ## フロントエンド責務
 
 - `screens/Home.tsx`: `.siteboard` 保存済みプロジェクト一覧。`lastOpenedAt` 降順で表示する
-- `screens/Project.tsx`: Sidebar + Siteboard の統括
-- `components/Project/Sidebar.tsx`: node 一覧（種別アイコン + タイトル/説明）
+- `screens/Project.tsx`: Siteboard 画面の統括。新規ノード追加後のセンタリングと選択状態を管理する
 - `components/Common/ContextMenu.tsx`: createPortal で body 直下に fixed 配置するコンテキストメニュー
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
-- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/handleResetZoom をコンポーネント state で管理。flowNodes を `useMemo` で直接構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装し、`onNodesChange` で選択状態・計測寸法・ドラッグ中座標を同期する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
+- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/右下 viewport controls をコンポーネント state と helper で管理する。flowNodes を `useMemo` で直接構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装し、`onNodesChange` で選択状態・計測寸法・ドラッグ中座標を同期する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
 - `components/Siteboard/FloatingToolbar.tsx`: Web ページ/付箋追加ボタン群
-- `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン
+- `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン。押下で `100% + 全ノード中央寄せ`
 - `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI（props インターフェース export）
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（props インターフェース export）
 - `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`WebPageNode` 本体内の上下 bar shell + 透明な上下 `NodeToolbar` + 上下 gutter dragHandle + 8 方向 `NodeResizeControl`）
@@ -47,7 +46,7 @@ src/
 - `.siteboard` は共有用ドキュメント
   - `schemaVersion`, `title`, `nodes` のみ保存する
 - Zustand + Tauri Store はローカルワークスペースの復元用
-  - `nodes` に加えて `filePath`, `sidebarWidth`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保存する
+  - `nodes` に加えて `filePath`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保存する
   - project state は Tauri Store の `projectStateV2` key に保存し、旧 key は参照しない
 - 起動時はローカル状態を復元し、`.siteboard` の自動再読込はしない
 - タブクローズ時とアプリ終了時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的なウィンドウ破棄だけ `close_ready` を使う

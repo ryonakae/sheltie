@@ -12,7 +12,6 @@
 ## SHOULD
 
 - グローバル共有状態は Zustand、ローカル状態は `useState` を優先する。
-- サイドバー幅変更のような高頻度更新は、レンダリング外の DOM 更新を使い確定時のみ store に反映する。
 - Siteboard 内 UI のスケーリングは `--canvas-zoom` を使った CSS 計算で対応し、不要な再レンダーを避ける。
 - コメントは「なぜ必要か」がコードだけで伝わらない箇所に限定する。
 
@@ -96,11 +95,11 @@
 - ノード右上の閉じるボタン（インライン Xmark）は設けない。削除は以下の 3 経路に統一する:
   1. Delete / Backspace キー（`useSiteboardKeyboard` で処理。テキスト入力フォーカス中はスキップ）
   2. メニューバー `Edit -> Delete`（Tauri メニューイベントを `edit-command` として受信）
-  3. ノードまたはサイドバーアイテムの右クリック → コンテキストメニュー「ノードを削除」
+  3. ノードの右クリック → コンテキストメニュー「ノードを削除」
 - Undo/Redo は `CmdOrCtrl+Z` / `CmdOrCtrl+Shift+Z` とメニューバー `Edit -> Undo / Redo` を同じ `edit-command` 経路で処理する。
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `components/Common/ContextMenu` を使い createPortal で body 直下に描画する。
-- node 削除の呼び出しは `screens/Project.tsx` に集約し、`Sidebar` と `Siteboard` には `onRemoveNode` prop として渡す。
+- node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
 - File メニューの `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
 
 ## リサイズハンドルとカーソル制御

@@ -1,12 +1,14 @@
 import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 
+import { AppButton } from '@/components/Common/AppButton';
+
 interface ZoomIndicatorProps {
   zoom: number;
-  onReset: () => void;
+  onResetViewport: () => void;
 }
 
-export function ZoomIndicator({ zoom, onReset }: ZoomIndicatorProps) {
+export function ZoomIndicator({ zoom, onResetViewport }: ZoomIndicatorProps) {
   const zoomPercent = Math.round(zoom * 100);
   // ズーム操作が止まった時だけ pop アニメーションを再生するためのフラグ
   const [settled, setSettled] = useState(false);
@@ -20,13 +22,13 @@ export function ZoomIndicator({ zoom, onReset }: ZoomIndicatorProps) {
   }, [zoomPercent]);
 
   return (
-    <motion.button
-      type="button"
-      className="absolute right-4 bottom-4 z-20 rounded-full border border-border bg-surface px-2 py-1 text-xs text-foreground shadow-md"
-      onClick={onReset}
-      whileHover={{ y: -1, scale: 1.04 }}
-      whileTap={{ scale: 0.96 }}
-      aria-label="ズームを100%に戻す"
+    <AppButton
+      size="sm"
+      isIconOnly={false}
+      tooltipMessage="100%で中央表示"
+      onPress={onResetViewport}
+      aria-label="100%で中央表示"
+      className="w-14 justify-center border border-border bg-surface px-3 tabular-nums shadow-md"
     >
       <motion.span
         animate={settled ? { scale: [1.08, 1] } : undefined}
@@ -34,6 +36,6 @@ export function ZoomIndicator({ zoom, onReset }: ZoomIndicatorProps) {
       >
         {zoomPercent}%
       </motion.span>
-    </motion.button>
+    </AppButton>
   );
 }

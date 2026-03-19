@@ -81,7 +81,6 @@ export interface Project {
   id: string;
   title: string;
   filePath?: string;
-  sidebarWidth: number;
   lastOpenedAt: number;
   nodes: BoardNode[];
   viewport: Viewport;

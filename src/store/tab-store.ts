@@ -11,7 +11,6 @@ import {
   MAX_VERTICAL_SEARCH_STEPS,
   MIN_ZOOM,
   PAGE_GAP,
-  SIDEBAR_DEFAULT_WIDTH,
 } from '@/constants';
 import {
   createProjectDocument,
@@ -67,7 +66,6 @@ function createProject(count: number): Project {
   return {
     id: crypto.randomUUID(),
     title,
-    sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
     lastOpenedAt: Date.now(),
     nodes,
     viewport: DEFAULT_VIEWPORT,
@@ -255,10 +253,6 @@ function sanitizeProject(rawProject: Partial<Project>, fallbackOrder: number): P
       typeof rawProject?.filePath === 'string' && rawProject.filePath
         ? rawProject.filePath
         : undefined,
-    sidebarWidth:
-      typeof rawProject?.sidebarWidth === 'number'
-        ? rawProject.sidebarWidth
-        : SIDEBAR_DEFAULT_WIDTH,
     lastOpenedAt:
       typeof rawProject?.lastOpenedAt === 'number'
         ? rawProject.lastOpenedAt
@@ -277,7 +271,6 @@ interface ProjectActions {
   renameProject: (id: string, title: string) => void;
   setActive: (id: string) => void;
   reorderOpenProjects: (openIds: string[]) => void;
-  updateSidebarWidth: (id: string, width: number) => void;
   importProjectFromFile: (document: SiteboardDocumentV1, filePath: string) => string;
   markProjectSaved: (projectId: string, filePath: string, document: SiteboardDocumentV1) => void;
   restoreProjectFromLastSaved: (projectId: string) => void;
@@ -439,13 +432,6 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   reorderOpenProjects: (openIds) => set({ openIds }),
 
-  updateSidebarWidth: (id, width) =>
-    set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === id ? { ...project, sidebarWidth: width } : project,
-      ),
-    })),
-
   importProjectFromFile: (document, filePath) => {
     const now = Date.now();
     const nodes = document.nodes.map(documentNodeToBoardNode);
@@ -453,7 +439,6 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       id: crypto.randomUUID(),
       title: document.title,
       filePath,
-      sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
       lastOpenedAt: now,
       nodes,
       viewport: DEFAULT_VIEWPORT,

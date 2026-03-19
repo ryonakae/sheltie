@@ -26,7 +26,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   // 編集中テキスト。ストア反映は 500ms デバウンス + blur 時 flush で行う。
   const [editingContent, setEditingContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const contentMeasureRef = useRef<HTMLDivElement>(null);
+  const contentMeasureRef = useRef<HTMLTextAreaElement>(null);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCommittedContentRef = useRef(node.content ?? '');
 
@@ -35,14 +35,13 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   const noteContent = isEditing ? editingContent : (node.content ?? '');
 
   useEffect(() => {
-    if (!isEditing) return;
     const measureEl = contentMeasureRef.current;
     if (!measureEl) return;
-    const contentHeight = Math.ceil(measureEl.getBoundingClientRect().height);
+    const contentHeight = Math.ceil(measureEl.scrollHeight);
     const nextHeight = Math.max(STICKY_NOTE_MIN_HEIGHT, contentHeight);
-    if (nextHeight <= node.height) return;
+    if (nextHeight === node.height) return;
     onAutoHeightChange(node.id, nextHeight);
-  }, [editingContent, isEditing, node.height, node.id, node.width, onAutoHeightChange]);
+  }, [node.height, node.id, node.width, noteContent, onAutoHeightChange]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -120,17 +119,18 @@ export const StickyNoteNode = memo(function StickyNoteNode({
 
   const noteClassName = twMerge(
     'flex flex-col shadow-lg',
-    'border-solid outline-offset-0',
+    'rounded-xl border-solid outline-offset-0',
     color.bgClass,
     isActive ? '' : 'border',
     color.borderClass,
+    isEditing ? 'cursor-text' : '',
   );
   const noteBodyColorClassName = node.content ? 'text-[#333]' : 'text-[#aaa]';
   return (
     <div
-      className={twMerge('size-full cursor-grab active:cursor-grabbing', noteClassName)}
+      className={twMerge('size-full', noteClassName)}
       style={{
-        borderRadius: zoomPx(16),
+        // borderRadius: zoomPx(16),
         borderWidth: zoomPx(1),
       }}
       data-node-id={node.id}
@@ -143,20 +143,22 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         className="relative box-border min-h-0 w-full flex-1 overflow-hidden"
         onDoubleClick={handleDoubleClick}
       >
-        <div
+        <textarea
           ref={contentMeasureRef}
           data-sticky-note-content-measure
           aria-hidden
-          className="pointer-events-none absolute top-0 left-0 box-border p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap opacity-0"
-          style={{ width: '100%' }}
-        >
-          {noteContent || ' '}
-        </div>
+          readOnly
+          tabIndex={-1}
+          value={noteContent}
+          className="pointer-events-none absolute top-0 left-0 m-0 box-border block min-h-0 resize-none overflow-hidden border-0 bg-transparent p-2 text-[18px] leading-normal text-transparent focus:outline-none"
+          style={{ width: '100%', height: 0, fontFamily: 'inherit' }}
+        />
 
         {isEditing ? (
           <textarea
             ref={textareaRef}
             className="nodrag m-0 box-border block size-full min-h-0 resize-none overflow-auto border-0 bg-transparent p-2 text-[18px] leading-normal text-[#333] focus:outline-none"
+            style={{ fontFamily: 'inherit' }}
             value={editingContent}
             onChange={(e) => setEditingContent(e.target.value)}
             onBlur={handleBlur}
@@ -166,7 +168,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         ) : (
           <div
             className={twMerge(
-              'size-full cursor-text p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap',
+              'size-full p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap',
               noteBodyColorClassName,
             )}
           >

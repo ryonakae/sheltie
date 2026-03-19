@@ -1,8 +1,8 @@
 // リサイズとドラッグの操作上限
 export const PAGE_MIN_WIDTH = 320;
 export const PAGE_MIN_HEIGHT = 200;
-export const STICKY_NOTE_MIN_WIDTH = 150;
-export const STICKY_NOTE_MIN_HEIGHT = 150;
+export const STICKY_NOTE_MIN_WIDTH = 200;
+export const STICKY_NOTE_MIN_HEIGHT = 200;
 export const DRAG_THRESHOLD = 3;
 export const DRAG_REPOSITION_GAP = 20;
 

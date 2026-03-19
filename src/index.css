@@ -30,9 +30,30 @@
   display: none;
 }
 
-/* WebPage NodeResizer の左右ハンドルを Webview に覆われないよう外側に拡張する。
- * デフォルトの 8px では Webview の上に乗っているためクリックを受け取れない。 */
-.react-flow__node-webPageFlowNode .react-flow__resize-control.handle.left,
-.react-flow__node-webPageFlowNode .react-flow__resize-control.handle.right {
-  width: 16px;
+/* WebPage の NodeResizer line は可視線ではなく side resize 用の hit area として使う。
+ * 選択線そのものは共通 SelectionFrameOverlay が外側に描画する。 */
+.react-flow__node-webPageFlowNode .react-flow__resize-control.line.webpage-resize-hit-area.left,
+.react-flow__node-webPageFlowNode .react-flow__resize-control.line.webpage-resize-hit-area.right {
+  width: calc(16px / var(--canvas-zoom, 1));
+}
+
+.react-flow__node-webPageFlowNode .react-flow__resize-control.line.webpage-resize-hit-area.top,
+.react-flow__node-webPageFlowNode .react-flow__resize-control.line.webpage-resize-hit-area.bottom {
+  height: calc(16px / var(--canvas-zoom, 1));
+}
+
+.react-flow__node-webPageFlowNode .react-flow__resize-control.line.webpage-resize-hit-area.left {
+  transform: translate(-100%, 0);
+}
+
+.react-flow__node-webPageFlowNode .react-flow__resize-control.line.webpage-resize-hit-area.right {
+  transform: none;
+}
+
+.react-flow__node-webPageFlowNode .react-flow__resize-control.line.webpage-resize-hit-area.top {
+  transform: translate(0, -100%);
+}
+
+.react-flow__node-webPageFlowNode .react-flow__resize-control.line.webpage-resize-hit-area.bottom {
+  transform: none;
 }

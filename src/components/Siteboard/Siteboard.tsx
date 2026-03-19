@@ -29,6 +29,8 @@ import {
   MIN_ZOOM,
   MAX_ZOOM,
   PAGE_MIN_HEIGHT,
+  STICKY_NOTE_MIN_HEIGHT,
+  STICKY_NOTE_MIN_WIDTH,
   ZOOM_END_DEBOUNCE_MS,
   ZOOM_RESET_TARGET,
 } from '@/constants';
@@ -694,19 +696,28 @@ export function Siteboard({
       if (isStickyNoteNode(node)) {
         const isResizing = stickyResizing?.nodeId === node.id;
         const stickyPosition = isResizing ? { x: stickyResizing.x, y: stickyResizing.y } : position;
-        const nodeWidth = isResizing ? stickyResizing.width : node.width;
-        const nodeHeight = isResizing
-          ? stickyResizing.height
-          : getNodeFrameHeight({ type: 'stickynote', height: node.height }, uiZoom);
+        const contentWidth = Math.max(
+          isResizing ? stickyResizing.width : node.width,
+          STICKY_NOTE_MIN_WIDTH,
+        );
+        const contentHeight = Math.max(
+          isResizing ? stickyResizing.height : node.height,
+          STICKY_NOTE_MIN_HEIGHT,
+        );
+        const nodeHeight = getNodeFrameHeight(
+          { type: 'stickynote', height: contentHeight },
+          uiZoom,
+        );
         const nodeData: StickyNoteFlowNodeData = {
           nodeProps: {
-            node: { ...node, x: 0, y: 0 },
+            node: { ...node, x: 0, y: 0, width: contentWidth, height: contentHeight },
             isActive: node.id === selectedNodeId,
             onActivate: onSelectNode,
             onContextMenu: handleNodeContextMenu,
             onContentChange: handleStickyNoteContentChange,
             onAutoHeightChange: handleStickyNoteAutoHeightChange,
           },
+          displayWidth: contentWidth,
           onResize: handleStickyNoteResize,
           onResizeEnd: handleStickyNoteResizeEnd,
           onColorCycle: handleStickyNoteColorCycle,
@@ -719,7 +730,7 @@ export function Siteboard({
           id: node.id,
           type: 'stickyNoteFlowNode',
           position: stickyPosition,
-          width: nodeWidth,
+          width: contentWidth,
           height: nodeHeight,
           selected: node.id === selectedNodeId,
           measured: rfMeasured[node.id],

@@ -47,7 +47,6 @@ export interface WebPageNodeProps {
 
 export const WebPageNode = memo(function WebPageNode({
   node,
-  isActive,
   title,
   displayWidth,
   displayHeight,
@@ -197,9 +196,7 @@ export const WebPageNode = memo(function WebPageNode({
       className="flex size-full flex-col shadow-lg outline-offset-0"
       style={{
         borderRadius: zoomPx(16),
-        outline: isActive
-          ? `${zoomPx(2)} solid var(--color-focus)`
-          : `${zoomPx(1)} solid var(--color-border)`,
+        outline: `${zoomPx(1)} solid var(--color-border)`,
       }}
       data-node-id={node.id}
       data-display-mode={displayMode}

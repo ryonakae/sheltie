@@ -39,16 +39,17 @@
 
 ### リサイズ機能（フェーズ 3 以降）
 
-- **StickyNoteNode リサイズ**: React Flow の `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックでリサイズ完了時にストア更新。
-  - `NodeToolbar` はノード外描画のため、保存する高さと `NodeResizer` の高さは同じ
-  - `minWidth` / `minHeight` は `STICKY_NOTE_MIN_WIDTH` / `STICKY_NOTE_MIN_HEIGHT`
-  - ルート要素は `size-full` でレスポンシブ化。内部コンテンツは NodeResizer のラッパーに追従
+- **StickyNoteNode リサイズ**: React Flow の `NodeResizeControl` は四隅ハンドルだけを使い、選択枠の線は共通 `SelectionFrameOverlay` で外側に描く。手動リサイズは**横幅変更のみ**許可し、高さは入力内容に応じた自動調整に委譲する。
+  - `NodeToolbar` はノード外描画のため、高さの保存値は本文エリアの高さそのもの
+  - 手動リサイズの制約は `minWidth = STICKY_NOTE_MIN_WIDTH` のみを使う
+  - 自動高さは `STICKY_NOTE_MIN_HEIGHT` を下限に `updateNodeSizeWithoutHistory` で反映し、Undo/Redo 履歴を積まない
+  - ルート要素は `size-full` でレスポンシブ化。内部コンテンツは横方向の width 変更に追従する
   - Framer Motion `layout` prop は使用しない（React Flow 位置管理との競合）
-  - ノード内部コンテンツが fixed width/height を持つと NodeResizer による resize に追従しないため、`flex` で内部を伸縮可能にする
+  - ノード内部コンテンツが fixed width/height を持つと width リサイズ後の折り返しと自動高さが破綻するため、`flex` で内部を伸縮可能にする
 - **React Flow controlled mode 必須設定**:
-  - `flowNodes` 構築時に `selected: node.id === selectedNodeId` を必ず明示的に設定（無いと NodeResizer の `isVisible` が常に `false` になる）
+  - `flowNodes` 構築時に `selected: node.id === selectedNodeId` を必ず明示的に設定（無いと選択連動のリサイズ UI が表示されない）
   - `onNodesChange` の `dimensions` 変更を追跡して `rfMeasured` state に保存し、`flowNodes` の `measured` プロパティに付与（未初期化状態の防止）
-- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizer` コンポーネント（StickyNote と同パターン）。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
+- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizer` コンポーネント。可視の選択枠は共通 `SelectionFrameOverlay` で外側に描き、`NodeResizer` の line は上下左右リサイズ用の不可視 hit area として使う。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
   - リサイズ開始時に `onResizeStart` で `prepareInteractionStart('resize', nodeId)` を fire-and-forget で実行し、Webview スクリーンショット準備とスクリーンショット表示を非同期で開始
   - `onResize` で毎フレームの寸法を `webPageResizing` state に保持し、`flowNodes` useMemo で優先適用（スナップバック防止）
   - `onResizeEnd` でストア更新と `webPageResizing` クリア、DisplayEngine 復帰
@@ -107,17 +108,19 @@
 ### WebPageNode（React Flow NodeResizer）
 
 - React Flow の `NodeResizer` コンポーネントでリサイズ UI を提供（`isVisible={selected}` で選択時のみ表示）。
-- e/w ハンドルはネイティブ Webview に覆われるため、CSS カスタムで **幅 16px に拡張** して Webview 外に突き出す。対応 CSS ルールは `src/index.css` で定義
+- 可視の青い選択線は共通 `SelectionFrameOverlay` が外側に描き、`NodeResizer` の line 要素は `src/index.css` で不可視の hit area に拡張する。
 - リサイズ中のカーソル管理は React Flow が自動実行。
 
-### StickyNoteNode（React Flow `NodeResizer` でリサイズ）
+### StickyNoteNode（React Flow `NodeResizeControl` で四隅ハンドルのみ表示）
 
-- React Flow の `NodeResizer` コンポーネントでリサイズ UI を提供（`isVisible={selected}` で選択時のみ表示）。
-- **リアルタイム追従（controlled mode）**: `NodeResizer` の `onResize` コールバックで毎フレームの座標・寸法を state に保持し、`flowNodes` useMemo で即座に反映する（スナップバック防止）。上辺・左辺リサイズ時も `params.x / params.y` で位置を同期する。
-- `onResizeEnd` コールバックで リサイズ完了時にストアを更新。
-- `minWidth` / `minHeight` 制約は `NodeResizer` の props で指定（150px）。
+- React Flow の `NodeResizeControl` は四隅の 4 個だけ配置し、`top-left`/`bottom-left` は left 制御、`top-right`/`bottom-right` は right 制御として扱う。
+- 選択枠の四辺の青線は `NodeResizeControl` の line ではなく、共通 `SelectionFrameOverlay` がノード外側に描く。
+- **リアルタイム追従（controlled mode）**: 四隅ハンドルの `onResize` コールバックで毎フレームの座標・寸法を state に保持し、`flowNodes` useMemo で即座に反映する（スナップバック防止）。左側ハンドル使用時は `params.x` で位置も同期する。
+- `onResizeEnd` コールバックで横幅だけをストア更新し、高さは現在の本文高さをそのまま維持する。
+- `minWidth` 制約は `STICKY_NOTE_MIN_WIDTH` のみを指定し、`minHeight` は使わない。
+- 本文高さはテキスト内容と現在幅から自動計測し、`STICKY_NOTE_MIN_HEIGHT` を下限に `updateNodeSizeWithoutHistory` で反映する。
 - リサイズ中のカーソル管理は React Flow が自動実行。
-- **選択時のフォーカス表示は NodeResizer のハンドル（青枠線）のみに依存**: React Flow 移行前の独自 `outline` スタイル（`isActive` で CSS outline を制御）は削除する。NodeResizer は選択時に自動的にリサイズハンドル（取得可能な8方向ハンドル）を表示するため、独自 outline は二重表示になる。
+- **選択時のフォーカス表示は React Flow のリサイズ UI のみに依存**: React Flow 移行前の独自 `outline` スタイル（`isActive` で CSS outline を制御）は削除する。独自 outline を重ねると二重表示になる。
 
 ## アニメーション
 

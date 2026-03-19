@@ -7,6 +7,8 @@ import {
 import { memo, useCallback } from 'react';
 
 import { WebPageNode } from '@/components/Node/WebPageNode';
+import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionChromeStyles';
+import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
 import { PAGE_MIN_HEIGHT, PAGE_MIN_WIDTH } from '@/constants';
 import { getNodeChromeHeight } from '@/lib/siteboard-node-frame';
 
@@ -42,16 +44,22 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
     },
     [id, onResizeEnd],
   );
+  const resizeLineStyle = { opacity: 0 } as const;
 
   return (
-    <div className="nopan size-full">
+    <div className="nopan relative size-full">
       <WebPageNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
+      {selected && <SelectionFrameOverlay />}
       {/* NodeResizer は WebPageNode より後に配置し stacking order を上にすることで
           size-full のコンテンツに覆われずポインターイベントを受け取れるようにする */}
       <NodeResizer
         isVisible={selected}
         minWidth={PAGE_MIN_WIDTH}
         minHeight={minHeight}
+        autoScale={false}
+        lineClassName="webpage-resize-hit-area"
+        lineStyle={resizeLineStyle}
+        handleStyle={selectionHandleBaseStyle}
         onResizeStart={handleResizeStart}
         onResize={handleResize}
         onResizeEnd={handleResizeEnd}

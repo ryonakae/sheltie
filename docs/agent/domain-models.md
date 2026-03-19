@@ -73,7 +73,7 @@
 ### Node 型と Flow ノード
 
 - `WebPageFlowNodeData = { nodeProps: WebPageNodeProps; onResizeStart, onResize, onResizeEnd, getZoom }`
-- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps; onResize, onResizeEnd, onColorCycle, colorIndex }`
+- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps; displayWidth; onResize; onResizeEnd; onColorCycle; colorIndex }`
 - `BoardNode[]` から React Flow `Node[]` を作る正本は `Siteboard.tsx` の `flowNodes` `useMemo`
 - Flow ノードの `position` には常に store 上の `{x, y}` を入れる
 - ノード内部コンポーネントには `{ x: 0, y: 0 }` を渡し、実位置は親 `.react-flow__node` の transform に委譲する
@@ -85,7 +85,8 @@
 - **viewport**: `panOnDrag={[1]}` + `panOnScroll={true}` + `zoomOnScroll={true}` + `zoomOnPinch={true}`。修飾なしホイールは pan、`CmdOrCtrl + ホイール` とピンチは zoom として扱う
 - **viewport 同期**: `handleViewportChange` で store へ debounce 保存し、store 側の viewport 変更は `setViewport()` で React Flow に反映する
 - **ドラッグ**: React Flow ネイティブ。WebPage は `dragHandle: '.node-drag-handle'` で TopBar のみに限定し、付箋はノード本体をドラッグ可能にする
-- **リサイズ（StickyNote・WebPage）**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックで ストア更新
+- **リサイズ（StickyNote）**: React Flow `NodeResizeControl` は四隅ハンドルだけに絞り、選択枠の線は別オーバーレイで描く。手動変更は横幅のみ許可し、高さは本文から自動計測して `updateNodeSizeWithoutHistory` で反映する
+- **リサイズ（WebPage）**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックでストア更新
 
 ## 主要定数
 

@@ -25,12 +25,14 @@ export type WebPageFlowNodeData = {
 /** StickyNoteFlowNode の data 型 */
 export type StickyNoteFlowNodeData = {
   nodeProps: StickyNoteNodeProps;
-  /** リサイズ中の毎フレームコールバック（リアルタイム追従用。height はノード高さ） */
+  /** ツールバー幅計算に使う現在の表示幅（リサイズ中は中間 width に追従） */
+  displayWidth: number;
+  /** 横幅リサイズ中の毎フレームコールバック（リアルタイム追従用。height は現在の本文高さを維持） */
   onResize: (
     nodeId: string,
     params: { x: number; y: number; width: number; height: number },
   ) => void;
-  /** リサイズ完了時のコールバック（React Flow NodeResizer から呼ばれる。height はノード高さ） */
+  /** リサイズ完了時のコールバック（React Flow NodeResizeControl から呼ばれる） */
   onResizeEnd: (nodeId: string, width: number, height: number) => void;
   /** 付箋の色変更コールバック（NodeToolbar の色ボタンから呼ばれる） */
   onColorCycle: (nodeId: string) => void;

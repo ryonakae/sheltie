@@ -19,7 +19,6 @@ interface UseSiteboardDisplayEngineParams {
   cachedScreenshotUrlsByNodeId: Record<string, string>;
   projectId: string;
   containerRef: React.RefObject<HTMLDivElement | null>;
-  canvasRef: React.RefObject<HTMLDivElement | null>;
   zoomRef: React.RefObject<number>;
   centeredNodeId?: string | null;
   onCenteredNodeHandled?: () => void;
@@ -81,7 +80,6 @@ export function useSiteboardDisplayEngine({
   cachedScreenshotUrlsByNodeId,
   projectId,
   containerRef,
-  canvasRef,
   zoomRef,
   centeredNodeId = null,
   onCenteredNodeHandled,
@@ -237,7 +235,7 @@ export function useSiteboardDisplayEngine({
 
   const setNodeDisplayMode = useCallback(
     (nodeId: string, mode: DisplayMode, wrapper?: HTMLElement | null) => {
-      const targetWrapper = wrapper ?? getWebPageElements(canvasRef.current, nodeId).wrapper;
+      const targetWrapper = wrapper ?? getWebPageElements(containerRef.current, nodeId).wrapper;
       setDisplayModeAttribute(targetWrapper, mode);
 
       setDisplayModes((prev) => {
@@ -245,7 +243,7 @@ export function useSiteboardDisplayEngine({
         return { ...prev, [nodeId]: mode };
       });
     },
-    [canvasRef],
+    [containerRef],
   );
 
   const hideNodeWebview = useCallback((nodeId: string, label: string) => {
@@ -316,7 +314,7 @@ export function useSiteboardDisplayEngine({
 
   const getInteractionPreparationNodeIds = useCallback(
     (type: InteractionPreparationType, targetNodeId?: string) => {
-      if (!canvasRef.current) return [];
+      if (!containerRef.current) return [];
 
       if (type === 'context-menu') {
         return targetNodeId ? [targetNodeId] : [];
@@ -327,7 +325,7 @@ export function useSiteboardDisplayEngine({
 
       const nodeIds: string[] = [];
       for (const page of webPageNodes) {
-        const { placeholder } = getWebPageElements(canvasRef.current, page.id);
+        const { placeholder } = getWebPageElements(containerRef.current, page.id);
         if (!placeholder) continue;
 
         const placeholderRect = placeholder.getBoundingClientRect();
@@ -337,7 +335,7 @@ export function useSiteboardDisplayEngine({
 
       return nodeIds;
     },
-    [canvasRef, containerRef, webPageNodes],
+    [containerRef, webPageNodes],
   );
 
   const prepareInteractionStart = useCallback(
@@ -390,7 +388,7 @@ export function useSiteboardDisplayEngine({
     // 操作中は applyPreparedInteractionModes + computeInteractionModes が表示を管理する。
     // ここで走ると native に復帰して webview が表示されてしまう。
     if (activeInteractionsRef.current.size > 0) return;
-    if (!containerRef.current || !canvasRef.current) return;
+    if (!containerRef.current || !containerRef.current) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const modes: Record<string, DisplayMode> = {};
@@ -399,7 +397,7 @@ export function useSiteboardDisplayEngine({
 
     for (const page of webPageNodes) {
       const label = getWebviewLabel(page.id);
-      const { wrapper, placeholder } = getWebPageElements(canvasRef.current, page.id);
+      const { wrapper, placeholder } = getWebPageElements(containerRef.current, page.id);
       if (!placeholder || !wrapper) {
         modes[page.id] = 'hidden';
         cancelNativeReveal(page.id);
@@ -468,7 +466,7 @@ export function useSiteboardDisplayEngine({
                   pendingNativeRevealRef.current.delete(page.id);
                   delete nativeRevealTokenRef.current[page.id];
 
-                  const latestWrapper = getWebPageElements(canvasRef.current, page.id).wrapper;
+                  const latestWrapper = getWebPageElements(containerRef.current, page.id).wrapper;
                   if (!latestWrapper) return;
 
                   setDisplayModeAttribute(latestWrapper, 'native');
@@ -516,9 +514,8 @@ export function useSiteboardDisplayEngine({
       setDisplayModes(modes);
     }
   }, [
-    canvasRef,
-    cancelNativeReveal,
     containerRef,
+    cancelNativeReveal,
     getFallbackDisplayMode,
     getWebviewLabel,
     hasDisplayableScreenshot,
@@ -556,11 +553,11 @@ export function useSiteboardDisplayEngine({
 
   const applyPreparedInteractionModes = useCallback(() => {
     const containerRect = containerRef.current?.getBoundingClientRect();
-    if (!containerRect || !canvasRef.current) return;
+    if (!containerRect || !containerRef.current) return;
 
     for (const page of webPageNodes) {
       const label = getWebviewLabel(page.id);
-      const { wrapper, placeholder } = getWebPageElements(canvasRef.current, page.id);
+      const { wrapper, placeholder } = getWebPageElements(containerRef.current, page.id);
       if (!wrapper || !placeholder) continue;
 
       const placeholderRect = placeholder.getBoundingClientRect();
@@ -602,7 +599,6 @@ export function useSiteboardDisplayEngine({
       }
     }
   }, [
-    canvasRef,
     containerRef,
     getFallbackDisplayMode,
     getWebviewLabel,
@@ -615,11 +611,11 @@ export function useSiteboardDisplayEngine({
 
   const computeInteractionModes = useCallback(() => {
     const containerRect = containerRectRef.current;
-    if (!containerRect || !canvasRef.current) return;
+    if (!containerRect || !containerRef.current) return;
 
     for (const page of webPageNodes) {
       const label = getWebviewLabel(page.id);
-      const { wrapper, placeholder } = getWebPageElements(canvasRef.current, page.id);
+      const { wrapper, placeholder } = getWebPageElements(containerRef.current, page.id);
       if (!placeholder || !wrapper) continue;
 
       const placeholderRect = placeholder.getBoundingClientRect();
@@ -652,7 +648,7 @@ export function useSiteboardDisplayEngine({
       }
     }
   }, [
-    canvasRef,
+    containerRef,
     getFallbackDisplayMode,
     getWebviewLabel,
     hasDisplayableScreenshot,
@@ -668,14 +664,14 @@ export function useSiteboardDisplayEngine({
 
     interactionCaptureRetryTimerRef.current = window.setTimeout(() => {
       interactionCaptureRetryTimerRef.current = null;
-      if (activeInteractionsRef.current.size > 0 || !canvasRef.current) return;
+      if (activeInteractionsRef.current.size > 0 || !containerRef.current) return;
 
       const retryNodeIds = Array.from(interactionCaptureRetryNodeIdsRef.current);
       interactionCaptureRetryNodeIdsRef.current.clear();
 
       for (const nodeId of retryNodeIds) {
         const label = getWebviewLabel(nodeId);
-        const { wrapper } = getWebPageElements(canvasRef.current, nodeId);
+        const { wrapper } = getWebPageElements(containerRef.current, nodeId);
         if (!label || wrapper?.getAttribute('data-display-mode') !== 'native') continue;
 
         void captureScreenshotRef.current?.(nodeId, {
@@ -684,7 +680,7 @@ export function useSiteboardDisplayEngine({
         });
       }
     }, WEBVIEW_REVEAL_DELAY_MS + 32);
-  }, [cancelInteractionCaptureRetry, canvasRef, getWebviewLabel]);
+  }, [cancelInteractionCaptureRetry, containerRef, getWebviewLabel]);
 
   const scheduleInteractionUpdate = useCallback(() => {
     if (activeInteractionsRef.current.has('drag') || activeInteractionsRef.current.has('resize'))
@@ -842,7 +838,7 @@ export function useSiteboardDisplayEngine({
 
       cancelNativeReveal(nodeId);
 
-      const { wrapper } = getWebPageElements(canvasRef.current, nodeId);
+      const { wrapper } = getWebPageElements(containerRef.current, nodeId);
       if (hasDisplayableScreenshot(nodeId)) {
         setNodeDisplayMode(nodeId, 'screenshot', wrapper);
         hideNodeWebview(nodeId, label);
@@ -855,7 +851,7 @@ export function useSiteboardDisplayEngine({
       }
     },
     [
-      canvasRef,
+      containerRef,
       cancelNativeReveal,
       getWebviewLabel,
       hasDisplayableScreenshot,
@@ -881,7 +877,7 @@ export function useSiteboardDisplayEngine({
       requestAnimationFrame(() => {
         if (activeInteractionsRef.current.has('resize')) return;
 
-        const { wrapper, placeholder } = getWebPageElements(canvasRef.current, nodeId);
+        const { wrapper, placeholder } = getWebPageElements(containerRef.current, nodeId);
         if (!wrapper || !placeholder) {
           if (activeInteractionsRef.current.size === 0) {
             computeDisplayModes();
@@ -924,7 +920,7 @@ export function useSiteboardDisplayEngine({
       });
     },
     [
-      canvasRef,
+      containerRef,
       computeDisplayModes,
       getWebviewLabel,
       setNodeDisplayMode,
@@ -999,7 +995,7 @@ export function useSiteboardDisplayEngine({
 
       contextMenuNodeIdRef.current = nodeId;
 
-      const { wrapper } = getWebPageElements(canvasRef.current, nodeId);
+      const { wrapper } = getWebPageElements(containerRef.current, nodeId);
 
       const newMode: DisplayMode = hasDisplayableScreenshot(nodeId) ? 'screenshot' : 'hidden';
       setNodeDisplayMode(nodeId, newMode, wrapper);
@@ -1009,7 +1005,7 @@ export function useSiteboardDisplayEngine({
       }
     },
     [
-      canvasRef,
+      containerRef,
       cancelNativeReveal,
       ensureScreenshotReady,
       getWebviewLabel,

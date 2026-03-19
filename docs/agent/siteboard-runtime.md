@@ -57,10 +57,11 @@
 
 React Flow の `onMoveStart/onMove/onMoveEnd` は pan と zoom を区別しない。`Siteboard.tsx` の `resolveViewportInteractionType` で event 型から **開始時点で** 操作種別を即時判定する:
 
-- `event === null` → プログラマティック操作（ダブルクリック zoom など）→ `'zoom'`
-- `'deltaY' in event` → WheelEvent → `'zoom'`
+- `event == null` → プログラマティック操作（zoom reset、project 切り替え後の viewport 再同期など）→ `'zoom'`
+- `'deltaY' in event && (event.metaKey || event.ctrlKey)` → 修飾キー付き WheelEvent → `'zoom'`
+- `'deltaY' in event` → 修飾なし WheelEvent → `'pan'`
 - `typeof TouchEvent !== 'undefined' && event instanceof TouchEvent && event.touches.length >= 2` → ピンチ → `'zoom'` 【Tauri WKWebView での `TouchEvent` グローバル未定義ガード必須（後述）】
-- その他（MouseEvent、1指 TouchEvent） → `'pan'`
+- その他（ミドルドラッグなどの MouseEvent、1指 TouchEvent） → `'pan'`
 
 `resolveViewportInteractionType` は純粋関数として event 型を判定し、その結果を `beginViewportInteraction` へ渡す。`handleMoveStart` / `handleMove` / `handleMoveEnd` から共通で呼び出される。
 
@@ -72,7 +73,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan と zoom を区別しな�
 const type = resolveViewportInteractionType(event);
 moveInteractionTypeRef.current = type;
 void prepareInteractionStart(type);
-handleInteractionChange(true, type === 'pan' ? 'grabbing' : '', type);
+handleInteractionChange(true, resolveViewportInteractionCursor(event, type), type);
 return type;
 ```
 
@@ -80,15 +81,27 @@ return type;
 
 `handleMove` は `onMoveStart` 取りこぼし時のフォールバックとして機能する。viewport が実際に動いた時のみ発火するため、`moveInteractionTypeRef.current === null` なら `beginViewportInteraction` を呼んで type を確定し、その後 `scheduleInteractionUpdate()` で display mode を更新する。
 
-### InteractionOverlay の cursor 制御
+### オーバーレイの cursor 制御（Siteboard.tsx インライン化）
 
-- zoom 操作時は `cursor = ''`（falsy）で `InteractionOverlay` を非表示にする
-- `InteractionOverlay` は `pointer-events-auto absolute inset-0 z-50` でスクリーン全体を覆うため、表示中はマウスイベント（ホイール含む）が遮断される
-- zoom 中は overlay を非表示にして React Flow にホイールイベントを到達させる必要がある
+- wheel pan / zoom / pinch / programmatic viewport change では `cursor = ''`（falsy）でオーバーレイを非表示にする
+- pointer drag の pan のみ `cursor = 'grabbing'` を表示する
+- オーバーレイ（`pointer-events-auto absolute inset-0 z-50` の div）はスクリーン全体を覆うため、表示中はマウスイベント（ホイール含む）が遮断される
+- wheel ベースの pan / zoom 中はオーバーレイを非表示にして React Flow にホイールイベントを到達させる必要がある
+- `Siteboard.tsx` の `handleMoveStart` で event 種別を見て cursor を切り替える
 
 ### zoom 終了後の native 復帰
 
 `handleMoveEnd` で `type = 'zoom'` を渡すと、`handleInteractionChange(false, ..., 'zoom')` 内で自動的に `scheduleZoomRestoreAfterReflow()` が呼ばれ、zoom 後のリフロー完了後に Webview 座標を復帰させる。`type = 'pan'` の場合は呼ばない。
+
+## viewport の store 同期
+
+- `Siteboard.tsx` は `handleViewportChange` で React Flow の現在 viewport を内部 ref と `zoomRef` に同期し、rAF で `uiZoom` も更新する
+- `uiZoom` は `flowNodes` の外枠高さと `WebPageFlowNode` の `NodeResizer.minHeight` に使う reactive な layout 用 zoom の正本
+- `zoomRef` は resize 中の content height 逆算や Webview runtime 連携など、イベントハンドラ内の即時計算専用に使う
+- project 切り替え、Sidebar からの centering、新規ノード追加後の centering、起動時復元では store 側 `viewport` が先に変わる
+- この時は `reactFlowInstanceRef.current.setViewport(storeViewport, { duration: 0 })` で React Flow 実体へ再同期し、同時に `uiZoom` も store 値へ揃える
+- 既に同じ viewport が反映済みなら差分比較で `setViewport()` をスキップし、無限ループや余計な再描画を避ける
+- これにより WebPage 外枠高さは zoom 操作中の毎 tick で current zoom に追従し、zoom 終了後の display-mode 復帰や viewport 保存 debounce で後追い補正しない
 
 ## drag 終了後の重なり補正
 

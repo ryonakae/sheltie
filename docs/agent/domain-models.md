@@ -68,34 +68,23 @@
 - `isWebPageNode(node)`: webpage 判定の型ガード（`type` 未定義も webpage 扱い）
 - `isNodeMoved(node)`: `addedUrl` と現在 `url` の差分判定
 
-## React Flow アダプター（`src/lib/reactflow-adapter.ts`）
+## React Flow ノード構成
 
 ### Node 型と Flow ノード
 
 - `WebPageFlowNodeData = { nodeProps: WebPageNodeProps; onResizeStart, onResize, onResizeEnd, getZoom }`
-- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps; onResize, onResizeEnd, getZoom, onColorCycle, colorIndex }`
-- Flow ノードの `x`, `y` は常に 0 に設定（実位置は親 `.react-flow__node` の transform で管理）
-- Flow ノードの `style` には `width/zoom`, `height/zoom` でズーム補正を適用
-
-### `boardNodesToFlowNodes(nodes: BoardNode[], zoom: number): Node[]`
-
-`BoardNode[]` を React Flow の `Node[]` に変換する。`Siteboard.tsx` の `useMemo` で直接構築（別関数にはしない。理由：ノード型定義の循環依存を避けるため）。
-
-- `BoardNode.x/y` → `Node.position.{x: 0, y: 0}`（位置は親 `.react-flow__node` の transform で管理）
-- `BoardNode.width/height` → `Node.style.{width: ... / zoom, height: ... / zoom}`（ズーム値で逆スケーリングし、CSS calc で寸法を正規化）
-- `BoardNode.type === 'stickynote'` → `Node.type = 'stickyNoteFlowNode'`（そうでなければ `'webPageFlowNode'`）
-- `Node.data` に `{ nodeProps: ... }` を格納（WebPageFlowNode / StickyNoteFlowNode が `node.data.nodeProps` で受け取る）
-- `Node` に `draggable={false}` / `selectable={false}` を設定し、React Flow ネイティブ操作を無効化
+- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps; onResize, onResizeEnd, onColorCycle, colorIndex }`
+- `BoardNode[]` から React Flow `Node[]` を作る正本は `Siteboard.tsx` の `flowNodes` `useMemo`
+- Flow ノードの `position` には常に store 上の `{x, y}` を入れる
+- ノード内部コンポーネントには `{ x: 0, y: 0 }` を渡し、実位置は親 `.react-flow__node` の transform に委譲する
+- `width` / `height` は `Node.style` ではなく top-level prop に入れる
+- `selected` と `measured` を明示して controlled mode の選択状態と初期化状態を安定させる
 
 ### React Flow インタラクション制御
 
-フェーズ 1：
-- pan/zoom は React Flow ネイティブ（`panActivationKeyCode="Space"` + `panOnDrag={[0, 1]}`）
-- ホイール = React Flow ズーム（`zoomOnScroll={true}`）
-- `onViewportChange` で `--canvas-zoom` CSS 変数を更新し、UI スケーリングと `zoomPx()` を同期
-
-フェーズ 3-5（現在）：
-- **ドラッグ**: React Flow ネイティブ（`nodesDraggable={true}` + `onNodeDragStart` / `onNodeDragStop`）。`dragHandle: '.node-drag-handle'` でタイトルバーのみに限定
+- **viewport**: `panOnDrag={[1]}` + `panOnScroll={true}` + `zoomOnScroll={true}` + `zoomOnPinch={true}`。修飾なしホイールは pan、`CmdOrCtrl + ホイール` とピンチは zoom として扱う
+- **viewport 同期**: `handleViewportChange` で store へ debounce 保存し、store 側の viewport 変更は `setViewport()` で React Flow に反映する
+- **ドラッグ**: React Flow ネイティブ。WebPage は `dragHandle: '.node-drag-handle'` で TopBar のみに限定し、付箋はノード本体をドラッグ可能にする
 - **リサイズ（StickyNote・WebPage）**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックで ストア更新
 
 ## 主要定数
@@ -117,10 +106,6 @@
 - ズーム: `MIN_ZOOM = 0.2`, `MAX_ZOOM = 1.5`
 - しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 25`
 - ドラッグ補正: `DRAG_REPOSITION_GAP = 20`
-
-`src/hooks/siteboard/types.ts`
-
-- `RESIZE_CURSOR_MAP`: 8 方向の `ResizeDirection` -> CSS cursor 値のマップ
 
 `src/store/tab-store.ts`
 

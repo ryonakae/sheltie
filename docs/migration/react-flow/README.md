@@ -26,8 +26,8 @@
 
 | 3 | [phase-3-stickynote-drag-resize.md](./phase-3-stickynote-drag-resize.md) | 付箋のドラッグ/リサイズを React Flow ネイティブに | 中 | ✅ 完了 |
 | 4 | [phase-4-webpage-drag.md](./phase-4-webpage-drag.md) | WebPageNode のドラッグを React Flow ネイティブに | 高 | ✅ 完了 |
-| 5 | [phase-5-webpage-resize.md](./phase-5-webpage-resize.md) | WebPageNode のリサイズを React Flow ネイティブに | 中 | ⬜ 未着手 |
-| 6 | [phase-6-cleanup.md](./phase-6-cleanup.md) | 旧コード削除 + ドキュメント更新 | 低 | ⬜ 未着手 |
+| 5 | [phase-5-webpage-resize.md](./phase-5-webpage-resize.md) | WebPageNode のリサイズを React Flow ネイティブに | 中 | ✅ 完了 |
+| 6 | [phase-6-cleanup.md](./phase-6-cleanup.md) | 旧コード削除 + ドキュメント更新 | 低 | ✅ 完了 |
 
 ## 移行方針
 
@@ -51,8 +51,15 @@
 | `useSiteboardZoom.ts` | React Flow 組み込み zoom |
 | `useSiteboardViewportEngine.ts` | React Flow ビューポート + `onViewportChange` |
 | `usePageDrag.ts` | React Flow ノードドラッグ (`onNodeDragStart/Stop`) |
-| `usePageResize.ts` + `NodeResizeHandle.tsx` | React Flow `NodeResizeControl` |
+| `usePageResize.ts` + `NodeResizeHandle.tsx` | React Flow `NodeResizer` |
 | `InteractionOverlay.tsx` | React Flow のカーソル管理 |
+
+## 最終状態
+
+- pan / zoom / drag / resize は React Flow ベースに統一済み
+- WebPage は TopBar のみドラッグ可能、付箋はノード本体をドラッグ可能
+- viewport は Zustand に永続化しつつ、`Siteboard.tsx` の `setViewport()` 同期で project 切り替え・センタリング・復元を同じ経路で反映する
+- migration 完了後の正本は `docs/agent/*.md` と現行実装
 
 ## 重要な設計決定
 

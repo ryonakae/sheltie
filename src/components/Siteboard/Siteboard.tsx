@@ -22,7 +22,6 @@ import type {
   WebPageFlowNodeData,
 } from '@/components/ReactFlowNodes/types';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
-import { InteractionOverlay } from '@/components/Siteboard/InteractionOverlay';
 import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
 import {
   DRAG_REPOSITION_GAP,
@@ -63,6 +62,18 @@ interface PositionCorrectionAnimation {
   fromY: number;
   toX: number;
   toY: number;
+}
+
+const VIEWPORT_SYNC_EPSILON = 0.001;
+
+function isSameViewport(a: FlowViewport | null, b: FlowViewport): boolean {
+  if (!a) return false;
+
+  return (
+    Math.abs(a.x - b.x) < VIEWPORT_SYNC_EPSILON &&
+    Math.abs(a.y - b.y) < VIEWPORT_SYNC_EPSILON &&
+    Math.abs(a.zoom - b.zoom) < VIEWPORT_SYNC_EPSILON
+  );
 }
 
 export function Siteboard({
@@ -125,12 +136,7 @@ export function Siteboard({
   const webPageNodes = useMemo(() => nodes.filter(isWebPageNode), [nodes]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  // React Flow 移行後: canvasRef は containerRef と同じ DOM ツリーを指すスコープとして使う
-  // (useSiteboardDisplayEngine の querySelector スコープとして機能)
-  const canvasRef = containerRef;
   const zoomRef = useRef(activeProject?.viewport.zoom ?? 1);
-  const panXRef = useRef(activeProject?.viewport.panX ?? 0);
-  const panYRef = useRef(activeProject?.viewport.panY ?? 0);
 
   const [uiZoom, setUiZoom] = useState(() => activeProject?.viewport.zoom ?? 1);
   // React Flow ネイティブドラッグ中のノード位置（ストアへの反映は dragStop 時のみ）
@@ -147,7 +153,7 @@ export function Siteboard({
     x: number;
     y: number;
     width: number;
-    height: number; // 全体高さ（header + body）
+    height: number; // NodeToolbar はノード外なので body 高さと一致する
   } | null>(null);
   // WebPage リサイズ中の中間サイズ（controlled mode でのリアルタイム追従用。height はコンテンツ高さ）
   const [webPageResizing, setWebPageResizing] = useState<{
@@ -161,6 +167,7 @@ export function Siteboard({
   const uiZoomRafRef = useRef<number | null>(null);
   // setViewport のみ使用するため広い型で保持
   const reactFlowInstanceRef = useRef<Pick<ReactFlowInstance, 'setViewport'> | null>(null);
+  const flowViewportRef = useRef<FlowViewport | null>(null);
   const moveInteractionTypeRef = useRef<'pan' | 'zoom' | null>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -188,7 +195,6 @@ export function Siteboard({
     cachedScreenshotUrlsByNodeId: activeProjectWebviewRuntime.screenshotUrlsByNodeId,
     projectId: activeId ?? '',
     containerRef,
-    canvasRef,
     zoomRef,
     centeredNodeId,
     onCenteredNodeHandled,
@@ -526,10 +532,8 @@ export function Siteboard({
   // React Flow のビューポート変更ハンドラー
   const handleViewportChange = useCallback(
     (viewport: FlowViewport) => {
+      flowViewportRef.current = viewport;
       zoomRef.current = viewport.zoom;
-      panXRef.current = viewport.x;
-      panYRef.current = viewport.y;
-
       // --canvas-zoom CSS 変数を同期（zoomPx() が引き続き動作するために必要）
       if (containerRef.current) {
         containerRef.current.style.setProperty('--canvas-zoom', String(viewport.zoom));
@@ -550,17 +554,50 @@ export function Siteboard({
         updateViewport(activeId, { zoom: viewport.zoom, panX: viewport.x, panY: viewport.y });
       }, ZOOM_END_DEBOUNCE_MS);
     },
-    [activeId, containerRef, panXRef, updateViewport, zoomRef],
+    [activeId, containerRef, updateViewport, zoomRef],
   );
 
-  // WheelEvent（zoom）か TouchEvent の多指（ピンチ zoom）か null（プログラマティック）は zoom として扱う。
+  const storeViewport = useMemo<FlowViewport>(
+    () => ({
+      x: activeProject?.viewport.panX ?? 0,
+      y: activeProject?.viewport.panY ?? 0,
+      zoom: activeProject?.viewport.zoom ?? 1,
+    }),
+    [activeProject?.viewport.panX, activeProject?.viewport.panY, activeProject?.viewport.zoom],
+  );
+
+  const syncViewportFromStore = useCallback(
+    (instance = reactFlowInstanceRef.current) => {
+      if (!instance) return;
+      if (isSameViewport(flowViewportRef.current, storeViewport)) return;
+
+      flowViewportRef.current = storeViewport;
+      zoomRef.current = storeViewport.zoom;
+      setUiZoom(storeViewport.zoom);
+      if (containerRef.current) {
+        containerRef.current.style.setProperty('--canvas-zoom', String(storeViewport.zoom));
+      }
+
+      void instance.setViewport(storeViewport, { duration: 0 });
+    },
+    [containerRef, storeViewport, zoomRef],
+  );
+
+  useEffect(() => {
+    syncViewportFromStore();
+  }, [syncViewportFromStore]);
+
+  // React Flow は pan/zoom を同じ onMove 系 callback で通知するため、event から操作種別を復元する。
+  // 現構成ではホイールは pan、Cmd/Ctrl+ホイールとピンチは zoom、programmatic setViewport は zoom 扱いにする。
   // Tauri WKWebView 環境では TouchEvent グローバルが未定義のため typeof ガードが必須。
   const resolveViewportInteractionType = useCallback(
-    (event: MouseEvent | TouchEvent | null): 'pan' | 'zoom' =>
-      event === null
+    (event: MouseEvent | TouchEvent | null | undefined): 'pan' | 'zoom' =>
+      event == null
         ? 'zoom'
         : 'deltaY' in event
-          ? 'zoom'
+          ? event.metaKey || event.ctrlKey
+            ? 'zoom'
+            : 'pan'
           : typeof TouchEvent !== 'undefined' &&
               event instanceof TouchEvent &&
               event.touches.length >= 2
@@ -569,19 +606,34 @@ export function Siteboard({
     [],
   );
 
+  const resolveViewportInteractionCursor = useCallback(
+    (event: MouseEvent | TouchEvent | null | undefined, type: 'pan' | 'zoom') => {
+      if (event == null) return '';
+      if ('deltaY' in event) return '';
+      if (typeof TouchEvent !== 'undefined' && event instanceof TouchEvent) return '';
+      return type === 'pan' ? 'grabbing' : '';
+    },
+    [],
+  );
+
   // pan/zoom のインタラクション開始を記録し display engine を起動する共通処理。
   // handleMoveStart（主経路）と handleMove（fallback）の両方から呼ばれる。
   const beginViewportInteraction = useCallback(
-    (event: MouseEvent | TouchEvent | null) => {
+    (event: MouseEvent | TouchEvent | null | undefined) => {
       const type = resolveViewportInteractionType(event);
       moveInteractionTypeRef.current = type;
       void prepareInteractionStart(type);
-      // zoom 時は cursor を空文字（falsy）にして InteractionOverlay を非表示にする。
-      // overlay が pointer-events-auto で画面全体を覆うとホイールイベントが遮断されるため。
-      handleInteractionChange(true, type === 'pan' ? 'grabbing' : '', type);
+      // ホイール・ピンチ・プログラマティック操作では cursor overlay を出さず、
+      // pointer drag の pan のみ grabbing を表示する。
+      handleInteractionChange(true, resolveViewportInteractionCursor(event, type), type);
       return type;
     },
-    [resolveViewportInteractionType, prepareInteractionStart, handleInteractionChange],
+    [
+      resolveViewportInteractionType,
+      prepareInteractionStart,
+      handleInteractionChange,
+      resolveViewportInteractionCursor,
+    ],
   );
 
   const handleMoveStart = useCallback(
@@ -645,7 +697,7 @@ export function Siteboard({
         const nodeWidth = isResizing ? stickyResizing.width : node.width;
         const nodeHeight = isResizing
           ? stickyResizing.height
-          : getNodeFrameHeight({ type: 'stickynote', height: node.height }, zoomRef.current);
+          : getNodeFrameHeight({ type: 'stickynote', height: node.height }, uiZoom);
         const nodeData: StickyNoteFlowNodeData = {
           nodeProps: {
             node: { ...node, x: 0, y: 0 },
@@ -657,7 +709,6 @@ export function Siteboard({
           },
           onResize: handleStickyNoteResize,
           onResizeEnd: handleStickyNoteResizeEnd,
-          getZoom,
           onColorCycle: handleStickyNoteColorCycle,
           colorIndex: node.colorIndex ?? 0,
         };
@@ -719,6 +770,7 @@ export function Siteboard({
           positionCorrectionToY: positionCorrectionAnimations[node.id]?.toY ?? null,
           onPositionCorrectionAnimationComplete: handlePositionCorrectionAnimationComplete,
         },
+        layoutZoom: uiZoom,
         onResizeStart: handleWebPageResizeStart,
         onResize: handleWebPageResize,
         onResizeEnd: handleWebPageResizeEnd,
@@ -731,7 +783,7 @@ export function Siteboard({
         type: 'webPageFlowNode',
         position: webPagePosition,
         width: contentWidth,
-        height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, zoomRef.current),
+        height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, uiZoom),
         dragHandle: '.node-drag-handle',
         selected: node.id === selectedNodeId,
         measured: rfMeasured[node.id],
@@ -746,6 +798,7 @@ export function Siteboard({
     hideCompactControls,
     stickyResizing,
     webPageResizing,
+    uiZoom,
     displayModes,
     screenshotUrls,
     navStates,
@@ -777,21 +830,15 @@ export function Siteboard({
     handlePositionCorrectionAnimationComplete,
   ]);
 
-  // React Flow はノードの変更（NodeChange）を onNodesChange で通知するが、
-  const defaultViewport = useMemo(
-    () => ({
-      x: activeProject?.viewport.panX ?? 0,
-      y: activeProject?.viewport.panY ?? 0,
-      zoom: activeProject?.viewport.zoom ?? 1,
-    }),
-    [],
-  );
-  // 初期値のみ使用するため deps は空でよい（プロジェクト切り替えは別途対応）
-
   return (
     <ReactFlowProvider>
       <div ref={containerRef} data-siteboard-container className="relative flex-1 overflow-hidden">
-        {interactionCursor && <InteractionOverlay cursor={interactionCursor} />}
+        {interactionCursor && (
+          <div
+            className="pointer-events-auto absolute inset-0 z-50"
+            style={{ cursor: interactionCursor }}
+          />
+        )}
 
         <ReactFlow
           nodes={flowNodes}
@@ -807,8 +854,8 @@ export function Siteboard({
           onPaneClick={handlePaneClick}
           onInit={(instance) => {
             reactFlowInstanceRef.current = instance;
+            syncViewportFromStore(instance);
           }}
-          defaultViewport={defaultViewport}
           panActivationKeyCode="Space"
           panOnDrag={[1]}
           panOnScroll={true}

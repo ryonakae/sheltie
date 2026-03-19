@@ -22,8 +22,10 @@
 
 - **位置は React Flow が管理**: React Flow ノードの `position: {x, y}` には常に node の座標を設定。React Flow が `.react-flow__node` の CSS transform で絶対配置を制御
 - **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
-- **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化。ドラッグハンドルは `dragHandle: '.node-drag-handle'` で タイトルバーに限定
-- **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `nodesDraggable={true}` + `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
+- **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化する
+- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` で TopBar のみに限定する
+- **付箋のドラッグ起点**: `NodeToolbar` はポータル外に描画されるため dragHandle に使わない。ノード本体をドラッグ可能にし、textarea や色ボタンを `nodrag` で保護する
+- **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用する。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
 - **Framer Motion との競合**: ノードコンポーネント内で `motion.div layout="position"` を使用しない。React Flow が CSS transform で位置を管理しているため、`layout="position"` のスプリングアニメーション（レイアウトシフト補正）がドラッグ方向を反転させる。Canvas や外側 UI の `motion.div` には使用可（ノード外）
 - `nodeTypes` 定数は**モジュールスコープで定義**。コンポーネント内に定義するとレンダーのたびにノードが再マウント（unmount→mount）される
 - `nodeTypes` の定義は `src/components/ReactFlowNodes/nodeTypes.ts` に一元化（循環依存防止）
@@ -31,15 +33,15 @@
 ### ドラッグ機能
 
 - **ドラッグ中の位置管理**: `Siteboard.tsx` の `draggingNodePositions` state（React state）でドラッグ中の一時位置を管理。ストアへの書き込みは `onNodeDragStop` 完了時のみ（Undo/Redo 履歴の汚染防止）
-- **ハンドル指定**: `dragHandle: '.node-drag-handle'` でタイトルバーのみをドラッグ起点に。ノード本体のドラッグはスキップ
+- **ハンドル指定**: WebPage のみ `dragHandle: '.node-drag-handle'` を使う。付箋はノード本体をドラッグ起点にする
 - **DisplayEngine 連携**: `onNodeDragStart` で `prepareInteractionStart('drag', nodeId)` を呼び出してスクリーンショット準備（`useSiteboardDisplayEngine` 統合）
 - **重なり補正**: `onNodeDragStop` で `handleRepositionOnDragEnd` を呼び出し、禁止された重なりを単軸補正（`siteboard-runtime.md` 参照）
 
 ### リサイズ機能（フェーズ 3 以降）
 
-- **StickyNoteNode リサイズ**: React Flow の `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックで リサイズ完了時にストア更新。
-  - `minHeight` は動的計算: `STICKY_NOTE_HEADER_HEIGHT / zoom + STICKY_NOTE_MIN_HEIGHT`（ズーム時にヘッダー高さが変わるため）
-  - `onResizeEnd(params)` で受け取る高さは **全体高さ** なため、ストア保存前にボディ高さへ変換: `params.height - STICKY_NOTE_HEADER_HEIGHT / zoom`
+- **StickyNoteNode リサイズ**: React Flow の `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResizeEnd` コールバックでリサイズ完了時にストア更新。
+  - `NodeToolbar` はノード外描画のため、保存する高さと `NodeResizer` の高さは同じ
+  - `minWidth` / `minHeight` は `STICKY_NOTE_MIN_WIDTH` / `STICKY_NOTE_MIN_HEIGHT`
   - ルート要素は `size-full` でレスポンシブ化。内部コンテンツは NodeResizer のラッパーに追従
   - Framer Motion `layout` prop は使用しない（React Flow 位置管理との競合）
   - ノード内部コンテンツが fixed width/height を持つと NodeResizer による resize に追従しないため、`flex` で内部を伸縮可能にする
@@ -55,13 +57,15 @@
 
 ### ビューポート管理
 
-- **React Flow ネイティブ委譲**: `panActivationKeyCode="Space"`（スペースキーでパン）、`panOnDrag={[0, 1]}`（マウス左/中ボタンでパン）、`zoomOnScroll={true}`（ホイールズーム）
-- `onViewportChange` で React Flow viewport を `zoomRef/panXRef/panYRef` に同期し、同時に `--canvas-zoom` CSS 変数を更新（`zoomPx()` calc 関数が UI スケーリングを計算するため必須）
+- **React Flow ネイティブ委譲**: `panOnDrag={[1]}`（ミドルドラッグでパン）、`panOnScroll={true}`（修飾なしホイールでパン）、`zoomOnScroll={true}`（`CmdOrCtrl + ホイール` でズーム）、`zoomOnPinch={true}`（ピンチズーム）
+- `onViewportChange` で React Flow viewport を `zoomRef` と内部 viewport ref に同期し、同時に `--canvas-zoom` CSS 変数を更新する
+- layout 用 zoom は `uiZoom` を正本にし、rAF スロットリング経由で `flowNodes` の高さ計算と `NodeResizer` 制約へ反映する
+- project 切り替え・centering・復元で store 側 viewport が変わった時は `setViewport()` で React Flow 実体へ反映する
 - viewport 変更をプロジェクト state に反映する場合は debounce で遅延更新し、高頻度な setState を避ける
 
 ### ラッパー内部構造
 
-- Flow ノードの `style` に `width`, `height`（ズーム補正後）をセット
+- Flow ノードの top-level `width`, `height` に寸法をセットする
 - Flow ノードの `data` に `nodeProps` 構造体を格納し、ラッパー内で子コンポーネント（`StickyNoteNode`/`WebPageNode`）にスプレッド。位置（`x`, `y`）は `{x: 0, y: 0}` に正規化してコンポーネント側で無視させる
 
 ## Siteboard/Webview 変更時の必読
@@ -145,6 +149,7 @@
 - `flowNodes` useMemo が再計算されると全ノードが新参照になりチェックが失敗し、新しい internal node が作成される。
 - このとき `node.width` / `node.height`（top-level）がなければ `nodeHasDimensions()` が `false` を返し、ノードが `visibility: hidden` になる。ResizeObserver が再計測するまで1フレーム非表示になり**全ノードちらつき**が発生する。
 - **対策**: `flowNodes` の各 Node オブジェクトに必ず top-level `width` と `height` を指定する。`style.width/height` ではなく Node 直下のプロパティ。
-  - WebPage ノード: `width: contentWidth, height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, zoomRef.current)`
-  - StickyNote ノード: `width: node.width, height: getNodeFrameHeight({ type: 'stickynote', height: node.height }, zoomRef.current)`
+  - WebPage ノード: `width: contentWidth, height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, uiZoom)`
+  - StickyNote ノード: `width: node.width, height: getNodeFrameHeight({ type: 'stickynote', height: node.height }, uiZoom)`
   - `getNodeFrameHeight` は chrome（top/bottom bar / header）込みの論理高さを返す（`src/lib/siteboard-node-frame.ts`）
+  - `uiZoom` は layout 用の reactive 値、`zoomRef.current` はイベント中の即時計算用として役割を分ける

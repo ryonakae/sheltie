@@ -19,12 +19,11 @@ import type { WebPageFlowNodeData } from './types';
  * - NodeResizer で8方向リサイズを提供（選択時のみ表示）
  */
 export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selected }: NodeProps) {
-  const { nodeProps, onResizeStart, onResize, onResizeEnd, getZoom } =
+  const { nodeProps, layoutZoom, onResizeStart, onResize, onResizeEnd } =
     data as unknown as WebPageFlowNodeData;
 
-  const zoom = getZoom();
   // chrome 高さ（TopBar + BottomBar）はズームに応じて変わるため動的に計算
-  const minHeight = getNodeChromeHeight({ type: 'webpage' }, zoom) + PAGE_MIN_HEIGHT;
+  const minHeight = getNodeChromeHeight({ type: 'webpage' }, layoutZoom) + PAGE_MIN_HEIGHT;
 
   const handleResizeStart = useCallback(() => {
     onResizeStart(id);

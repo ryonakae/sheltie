@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
-import { STICKY_NOTE_COLORS, STICKY_NOTE_MIN_HEIGHT } from '@/constants';
+import { STICKY_NOTE_COLORS, STICKY_NOTE_HEADER_HEIGHT, STICKY_NOTE_MIN_HEIGHT } from '@/constants';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
 
@@ -118,9 +118,8 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   const handleActivate = useCallback(() => onActivate(node.id), [node.id, onActivate]);
 
   const noteClassName = twMerge(
-    'flex flex-col shadow-lg',
-    'rounded-xl border-solid outline-offset-0',
-    color.bgClass,
+    'flex flex-col overflow-hidden shadow-lg',
+    'border-solid outline-offset-0',
     isActive ? '' : 'border',
     color.borderClass,
     isEditing ? 'cursor-text' : '',
@@ -130,17 +129,25 @@ export const StickyNoteNode = memo(function StickyNoteNode({
     <div
       className={twMerge('size-full', noteClassName)}
       style={{
-        // borderRadius: zoomPx(16),
+        borderRadius: zoomPx(16),
         borderWidth: zoomPx(1),
       }}
       data-node-id={node.id}
       onMouseDown={handleActivate}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
+      <div
+        className={twMerge('shrink-0', color.bgClass)}
+        style={{ height: zoomPx(STICKY_NOTE_HEADER_HEIGHT) }}
+      />
+
       {/* テキスト表示/編集エリア */}
       <div
         data-webview-placeholder
-        className="relative box-border min-h-0 w-full flex-1 overflow-hidden"
+        className={twMerge(
+          'relative box-border min-h-0 w-full flex-1 overflow-hidden',
+          color.bgClass,
+        )}
         onDoubleClick={handleDoubleClick}
       >
         <textarea

@@ -10,5 +10,5 @@ export const selectionHandleBaseStyle = {
 } satisfies CSSProperties;
 
 export const selectionFrameOverlayStyle = {
-  boxShadow: '0 0 0 calc(1px / var(--canvas-zoom, 1)) #3b82f6',
+  outline: 'calc(2px / var(--canvas-zoom, 1)) solid #3b82f6',
 } satisfies CSSProperties;

@@ -45,7 +45,7 @@ export const TabItem = memo(function TabItem({
     <motion.div
       ref={ref}
       className={twMerge(
-        'relative flex h-full cursor-pointer items-center gap-1 border-r border-b-2 border-border px-3 text-sm',
+        'relative flex h-full items-center gap-1 border-r border-b-2 border-border px-3 text-sm',
         isActive
           ? 'border-b-transparent bg-surface text-foreground'
           : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',

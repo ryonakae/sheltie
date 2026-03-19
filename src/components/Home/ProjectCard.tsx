@@ -27,7 +27,7 @@ export function ProjectCard({ project, onOpen }: ProjectCardProps) {
         transition={{ duration: 0.15 }}
         onClick={onOpen}
       >
-        <Card className="relative min-h-[120px] cursor-pointer">
+        <Card className="relative min-h-30">
           <Card.Header className="flex items-start justify-between pr-2">
             <Card.Title className="text-sm">{project.title}</Card.Title>
 

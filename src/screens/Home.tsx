@@ -27,7 +27,7 @@ export function HomeScreen() {
 
         {/* 新規プロジェクト追加カード */}
         <motion.button
-          className="flex min-h-30 cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-border-secondary text-muted hover:border-border-tertiary hover:text-foreground"
+          className="flex min-h-30 items-center justify-center rounded-2xl border-2 border-dashed border-border-secondary text-muted hover:border-border-tertiary hover:text-foreground"
           onClick={() => createProject()}
           aria-label="新規プロジェクトを追加"
           whileHover={{ scale: 1.02 }}

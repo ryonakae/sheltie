@@ -85,9 +85,9 @@
 
 - **viewport**: `panOnDrag={[1]}` + `panOnScroll={true}` + `zoomOnScroll={true}` + `zoomOnPinch={true}`。修飾なしホイールは pan、`CmdOrCtrl + ホイール` とピンチは zoom として扱う
 - **viewport 同期**: `handleViewportChange` で store へ debounce 保存し、store 側の viewport 変更は `setViewport()` で React Flow に反映する
-- **ドラッグ**: React Flow ネイティブ。WebPage は `dragHandle: '.node-drag-handle'` で TopBar のみに限定し、付箋はノード本体をドラッグ可能にする
+- **ドラッグ**: React Flow ネイティブ。WebPage は `WebPageNode` 本体内の上下 chrome shell に付けた `dragHandle: '.node-drag-handle'` だけでドラッグし、付箋はノード本体をドラッグ可能にする
 - **リサイズ（StickyNote）**: React Flow `NodeResizeControl` は四隅ハンドルだけに絞り、選択枠の線は別オーバーレイで描く。手動変更は横幅のみ許可し、高さは本文から自動計測して `updateNodeSizeWithoutHistory` で反映する
-- **リサイズ（WebPage）**: React Flow `NodeResizer` コンポーネント（`isVisible={selected}` で選択時のみ表示）。`onResize` では中間の `x/y/width/height` を state に保持し、`onResizeEnd` では `updateNodeBounds` で最終の `x/y/width/height` を 1 回で store に確定する。Undo/Redo 履歴も 1 エントリにまとめる
+- **リサイズ（WebPage）**: React Flow `NodeResizeControl` を 8 個明示配置し、line 4 本は不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準で描く。見えている上下バー面は `WebPageNode` 本体側、`NodeToolbar` は透明な操作レイヤとして重ねる。`onResize` では中間の `x/y/width/height` を state に保持し、`onResizeEnd` では `updateNodeBounds` で最終の `x/y/width/height` を 1 回で store に確定する。Undo/Redo 履歴も 1 エントリにまとめる
 
 ## 主要定数
 

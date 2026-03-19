@@ -44,7 +44,7 @@ export function AppButton({
   const mergedStyle = zoomScaledXsStyle ? { ...zoomScaledXsStyle, ...style } : style;
   const mergedClassName =
     typeof className === 'string'
-      ? twMerge('outline-none focus-visible:outline-none', className)
+      ? twMerge('cursor-default outline-none focus-visible:outline-none', className)
       : className;
 
   const tooltipContent = tooltipMessage ? (

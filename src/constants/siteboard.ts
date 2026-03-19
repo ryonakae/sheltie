@@ -26,8 +26,28 @@ export const WEBVIEW_REVEAL_DELAY_MS = 100;
 
 // 付箋色
 export const STICKY_NOTE_COLORS = [
-  { bgClass: 'bg-yellow-100', borderClass: 'border-yellow-300', textClass: 'text-yellow-500' }, // 薄黄色
-  { bgClass: 'bg-pink-100', borderClass: 'border-pink-300', textClass: 'text-pink-500' }, // 薄ピンク
-  { bgClass: 'bg-cyan-100', borderClass: 'border-cyan-300', textClass: 'text-cyan-500' }, // 薄水色
-  { bgClass: 'bg-emerald-100', borderClass: 'border-emerald-300', textClass: 'text-emerald-500' }, // 薄緑
+  {
+    bgClass: 'bg-yellow-100',
+    borderClass: 'border-yellow-300',
+    textClass: 'text-yellow-500',
+    dividerColor: 'var(--color-yellow-300)',
+  }, // 薄黄色
+  {
+    bgClass: 'bg-pink-100',
+    borderClass: 'border-pink-300',
+    textClass: 'text-pink-500',
+    dividerColor: 'var(--color-pink-300)',
+  }, // 薄ピンク
+  {
+    bgClass: 'bg-cyan-100',
+    borderClass: 'border-cyan-300',
+    textClass: 'text-cyan-500',
+    dividerColor: 'var(--color-cyan-300)',
+  }, // 薄水色
+  {
+    bgClass: 'bg-emerald-100',
+    borderClass: 'border-emerald-300',
+    textClass: 'text-emerald-500',
+    dividerColor: 'var(--color-emerald-300)',
+  }, // 薄緑
 ] as const;

@@ -58,7 +58,7 @@ export function ContextMenu({ x, y, items, onAction, onClose }: ContextMenuProps
           key={item.id}
           type="button"
           className={twMerge(
-            'flex w-full cursor-pointer items-center px-3 py-1.5 text-left text-sm hover:bg-default-hover',
+            'flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-default-hover',
             item.variant === 'danger' ? 'text-danger' : 'text-foreground',
           )}
           onPointerDown={(e) => {

@@ -25,13 +25,13 @@ src/
 - `components/Project/Sidebar.tsx`: node 一覧（種別アイコン + タイトル/説明）
 - `components/Common/ContextMenu.tsx`: createPortal で body 直下に fixed 配置するコンテキストメニュー
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
-- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/handleResetZoom をコンポーネント state で管理。flowNodes を `useMemo` で直接構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装し、`onNodesChange` で選択状態・計測寸法・ドラッグ中座標を同期する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する。操作中のカーソル上書き用オーバーレイ（z-50 div）もインライン化
+- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/handleResetZoom をコンポーネント state で管理。flowNodes を `useMemo` で直接構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装し、`onNodesChange` で選択状態・計測寸法・ドラッグ中座標を同期する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
 - `components/Siteboard/FloatingToolbar.tsx`: Web ページ/付箋追加ボタン群
 - `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン
 - `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI（props インターフェース export）
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（props インターフェース export）
-- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、TopBar のみ dragHandle）
-- `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + `NodeToolbar`）
+- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`WebPageNode` 本体内の上下 bar shell + 透明な上下 `NodeToolbar` + 上下 gutter dragHandle + 8 方向 `NodeResizeControl`）
+- `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + sticky header 上の `NodeToolbar`）
 - `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`）
 - `components/ReactFlowNodes/nodeTypes.ts`: React Flow `nodeTypes` 定数（循環依存防止のため types.ts から分離）
 - `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。

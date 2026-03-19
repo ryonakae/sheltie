@@ -96,7 +96,6 @@ export function useSiteboardDisplayEngine({
   );
   const [screenshotUrls, setScreenshotUrls] =
     useState<Record<string, string>>(seededScreenshotUrls);
-  const [interactionCursor, setInteractionCursor] = useState<string | null>(null);
 
   const screenshotReadyRef = useRef<Record<string, boolean>>(
     buildScreenshotReadyState(seededScreenshotUrls),
@@ -930,13 +929,12 @@ export function useSiteboardDisplayEngine({
   );
 
   const handleInteractionChange = useCallback(
-    (active: boolean, cursor = 'default', type: InteractionType = 'drag') => {
+    (active: boolean, type: InteractionType = 'drag') => {
       if (active) {
         cancelInteractionCaptureRetry();
         cancelZoomRestore();
         cancelAllNativeReveals();
         activeInteractionsRef.current.add(type);
-        setInteractionCursor(cursor);
 
         applyPreparedInteractionModes();
 
@@ -954,7 +952,6 @@ export function useSiteboardDisplayEngine({
           interactionRafRef.current = null;
         }
         containerRectRef.current = null;
-        setInteractionCursor(null);
         forceHiddenInteractionNodeIdsRef.current.clear();
         nativeHiddenByInteractionCaptureRef.current.clear();
 
@@ -1181,7 +1178,6 @@ export function useSiteboardDisplayEngine({
       interactionCaptureRetryNodeIdsRef.current.clear();
       settlingNodeIdsRef.current.clear();
       resizingNodeIdRef.current = null;
-      setInteractionCursor(null);
       computeDisplayModes();
     };
 
@@ -1241,7 +1237,6 @@ export function useSiteboardDisplayEngine({
     prepareInteractionStart,
     handleScreenshotPresented,
     holdNodeDuringPositionSettle,
-    interactionCursor,
     releaseNodeAfterPositionSettle,
     scheduleInteractionUpdate,
     scheduleZoomRestoreAfterReflow,

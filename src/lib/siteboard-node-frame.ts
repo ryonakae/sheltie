@@ -1,4 +1,8 @@
-import { WEB_PAGE_BOTTOM_BAR_HEIGHT, WEB_PAGE_TOP_BAR_HEIGHT } from '@/constants';
+import {
+  STICKY_NOTE_HEADER_HEIGHT,
+  WEB_PAGE_BOTTOM_BAR_HEIGHT,
+  WEB_PAGE_TOP_BAR_HEIGHT,
+} from '@/constants';
 import type { BoardNode } from '@/types';
 
 export interface NodeFrameRect {
@@ -17,9 +21,8 @@ function resolveLayoutZoom(zoom: number): number {
 }
 
 export function getNodeChromeScreenHeight(node: Pick<BoardNode, 'type'>): number {
-  // 付箋はヘッダーを NodeToolbar（ノード外側）に移行したため chrome 高さは 0
   if (node.type === 'stickynote') {
-    return 0;
+    return STICKY_NOTE_HEADER_HEIGHT;
   }
 
   return WEB_PAGE_TOP_BAR_HEIGHT + WEB_PAGE_BOTTOM_BAR_HEIGHT;

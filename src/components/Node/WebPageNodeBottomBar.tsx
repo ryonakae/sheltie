@@ -4,8 +4,7 @@ import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/components/Common/AppButton';
 import { NodeTabletIcon } from '@/components/Node/NodeTabletIcon';
-import { SIZE_PRESETS, WEB_PAGE_BOTTOM_BAR_HEIGHT } from '@/constants';
-import { zoomPx } from '@/lib/canvas-zoom';
+import { SIZE_PRESETS } from '@/constants';
 
 import type { ComponentType, SVGProps } from 'react';
 
@@ -30,22 +29,21 @@ export function WebPageNodeBottomBar({
   hidePresetControls,
   onResizePreset,
 }: WebPageNodeBottomBarProps) {
-  const bottomBarStyle = {
-    height: zoomPx(WEB_PAGE_BOTTOM_BAR_HEIGHT),
-    paddingInline: zoomPx(8),
-    fontSize: zoomPx(11),
-    lineHeight: zoomPx(15),
-    borderRadius: `0 0 ${zoomPx(16)} ${zoomPx(16)}`,
-  };
-  const presetGroupStyle = { gap: zoomPx(2) };
   const presetIconStyle = {
-    width: zoomPx(14),
-    height: zoomPx(14),
+    width: 14,
+    height: 14,
   };
+  const toolbarButtonStyle = {
+    width: 24,
+    minWidth: 24,
+    height: 24,
+    minHeight: 24,
+    padding: 0,
+  } as const;
 
   return (
-    <div className="flex shrink-0 items-center overflow-hidden bg-default" style={bottomBarStyle}>
-      <div className="flex shrink-0 items-center" style={presetGroupStyle}>
+    <div className="flex h-8 w-full items-center overflow-hidden bg-transparent px-2 text-[11px] leading-[15px]">
+      <div className="flex shrink-0 items-center gap-0.5">
         {!hidePresetControls &&
           SIZE_PRESETS.map((preset) => {
             const isActive = width === preset.width && height === preset.height;
@@ -53,12 +51,12 @@ export function WebPageNodeBottomBar({
             return (
               <AppButton
                 size="xs"
-                scaleWithCanvasZoom
                 key={preset.label}
                 className={twMerge(
-                  'shrink-0 hover:bg-default-hover',
+                  'pointer-events-auto shrink-0 hover:bg-default-hover',
                   isActive ? 'text-accent' : 'text-muted hover:text-foreground',
                 )}
+                style={toolbarButtonStyle}
                 onMouseDown={(e) => e.stopPropagation()}
                 onPress={() => onResizePreset(preset.width, preset.height)}
                 aria-label={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
@@ -69,7 +67,7 @@ export function WebPageNodeBottomBar({
           })}
       </div>
 
-      <span className="ml-auto shrink-0 text-muted">
+      <span className="ml-auto shrink-0 px-1 text-muted">
         {width} × {height}
       </span>
     </div>

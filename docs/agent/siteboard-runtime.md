@@ -73,7 +73,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan と zoom を区別しな�
 const type = resolveViewportInteractionType(event);
 moveInteractionTypeRef.current = type;
 void prepareInteractionStart(type);
-handleInteractionChange(true, resolveViewportInteractionCursor(event, type), type);
+handleInteractionChange(true, type);
 return type;
 ```
 
@@ -81,22 +81,20 @@ return type;
 
 `handleMove` は `onMoveStart` 取りこぼし時のフォールバックとして機能する。viewport が実際に動いた時のみ発火するため、`moveInteractionTypeRef.current === null` なら `beginViewportInteraction` を呼んで type を確定し、その後 `scheduleInteractionUpdate()` で display mode を更新する。
 
-### オーバーレイの cursor 制御（Siteboard.tsx インライン化）
+### 操作中カーソルの扱い
 
-- wheel pan / zoom / pinch / programmatic viewport change では `cursor = ''`（falsy）でオーバーレイを非表示にする
-- pointer drag の pan のみ `cursor = 'grabbing'` を表示する
-- オーバーレイ（`pointer-events-auto absolute inset-0 z-50` の div）はスクリーン全体を覆うため、表示中はマウスイベント（ホイール含む）が遮断される
-- wheel ベースの pan / zoom 中はオーバーレイを非表示にして React Flow にホイールイベントを到達させる必要がある
-- `Siteboard.tsx` の `handleMoveStart` で event 種別を見て cursor を切り替える
+- Siteboard は全画面の cursor overlay を持たない
+- pan / zoom / drag のカーソルは React Flow とブラウザ既定の挙動に委譲する
+- ノードのリサイズカーソルは各 `NodeResizeControl` の class と `src/index.css` で管理する
 
 ### zoom 終了後の native 復帰
 
-`handleMoveEnd` で `type = 'zoom'` を渡すと、`handleInteractionChange(false, ..., 'zoom')` 内で自動的に `scheduleZoomRestoreAfterReflow()` が呼ばれ、zoom 後のリフロー完了後に Webview 座標を復帰させる。`type = 'pan'` の場合は呼ばない。
+`handleMoveEnd` で `type = 'zoom'` を渡すと、`handleInteractionChange(false, 'zoom')` 内で自動的に `scheduleZoomRestoreAfterReflow()` が呼ばれ、zoom 後のリフロー完了後に Webview 座標を復帰させる。`type = 'pan'` の場合は呼ばない。
 
 ## viewport の store 同期
 
 - `Siteboard.tsx` は `handleViewportChange` で React Flow の現在 viewport を内部 ref と `zoomRef` に同期し、rAF で `uiZoom` も更新する
-- `uiZoom` は `flowNodes` の外枠高さと `WebPageFlowNode` の `NodeResizer.minHeight` に使う reactive な layout 用 zoom の正本
+- `uiZoom` は `flowNodes` の外枠高さと `WebPageFlowNode` の resize control `minHeight` 制約に使う reactive な layout 用 zoom の正本
 - `zoomRef` は resize 中の content height 逆算や Webview runtime 連携など、イベントハンドラ内の即時計算専用に使う
 - project 切り替え、Sidebar からの centering、新規ノード追加後の centering、起動時復元では store 側 `viewport` が先に変わる
 - この時は `reactFlowInstanceRef.current.setViewport(storeViewport, { duration: 0 })` で React Flow 実体へ再同期し、同時に `uiZoom` も store 値へ揃える
@@ -120,6 +118,7 @@ return type;
 - 新規ノード追加時の自動配置も drag 補正と同じ zoom-aware な外枠矩形を使う
 - センタリングや可視判定の fallback 計算も同じ外枠矩形を使い、DOM 実測がない場合でも content だけで過小評価しない
 - 一方でネイティブ Webview の bounds 更新や safe area 判定は従来どおり placeholder 矩形を使う。外枠判定と Webview 実表示判定は責務を分ける
+- WebPage の placeholder は上下 chrome gutter を除いた content 領域だけを指す。`NodeToolbar` 化した上下バーは外枠に含めるが、Webview bounds には含めない
 
 ## 遷移ルール
 

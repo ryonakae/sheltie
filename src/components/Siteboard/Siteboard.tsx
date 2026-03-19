@@ -155,7 +155,7 @@ export function Siteboard({
     x: number;
     y: number;
     width: number;
-    height: number; // NodeToolbar はノード外なので body 高さと一致する
+    height: number; // 本文高さ（sticky header 除く）
   } | null>(null);
   // WebPage リサイズ中の中間サイズ（controlled mode でのリアルタイム追従用。height はコンテンツ高さ）
   const [webPageResizing, setWebPageResizing] = useState<{
@@ -185,7 +185,6 @@ export function Siteboard({
     handlePageResizeStart,
     prepareInteractionStart,
     handleScreenshotPresented,
-    interactionCursor,
     holdNodeDuringPositionSettle,
     scheduleInteractionUpdate,
     scheduleZoomRestoreAfterReflow,
@@ -212,12 +211,12 @@ export function Siteboard({
   const positionCorrectionAnimationsRef = useRef<Record<string, PositionCorrectionAnimation>>({});
   const positionCorrectionSequenceRef = useRef(0);
 
-  // WebPage NodeResizer コールバック群
+  // WebPage の React Flow resize control コールバック群
   const handleWebPageResizeStart = useCallback(
     (nodeId: string) => {
       // Phase 4 ドラッグと同じ fire-and-forget パターン
       void prepareInteractionStart('resize', nodeId);
-      handleInteractionChange(true, 'default', 'resize');
+      handleInteractionChange(true, 'resize');
       handlePageResizeStart(nodeId);
     },
     [handleInteractionChange, handlePageResizeStart, prepareInteractionStart],
@@ -225,7 +224,7 @@ export function Siteboard({
 
   const handleWebPageResize = useCallback(
     (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
-      // NodeResizer の params.height は chrome 込みのフレーム全体高さ
+      // React Flow の resize params.height は chrome 込みのフレーム全体高さ
       const chromeHeight = getNodeChromeHeight({ type: 'webpage' }, zoomRef.current);
       const contentHeight = Math.max(PAGE_MIN_HEIGHT, params.height - chromeHeight);
       setWebPageResizing({
@@ -251,7 +250,7 @@ export function Siteboard({
         .getState()
         .updateNodeBounds(activeId, nodeId, nextX, nextY, nextWidth, nextHeight);
       setWebPageResizing(null);
-      handleInteractionChange(false, 'default', 'resize');
+      handleInteractionChange(false, 'resize');
       handlePageResizeEnd(nodeId);
     },
     [activeId, handleInteractionChange, handlePageResizeEnd, zoomRef],
@@ -326,7 +325,7 @@ export function Siteboard({
     async (_event: React.MouseEvent, node: Node) => {
       clearPositionCorrectionAnimation(node.id);
       await prepareInteractionStart('drag', node.id);
-      handleInteractionChange(true, 'grabbing', 'drag');
+      handleInteractionChange(true, 'drag');
     },
     [clearPositionCorrectionAnimation, prepareInteractionStart, handleInteractionChange],
   );
@@ -334,7 +333,7 @@ export function Siteboard({
   // React Flow ネイティブドラッグ終了: 位置補正後にストアへ反映
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      handleInteractionChange(false, 'grabbing', 'drag');
+      handleInteractionChange(false, 'drag');
 
       // ドラッグ中の一時位置をクリア
       setDraggingNodePositions((prev) => {
@@ -406,7 +405,7 @@ export function Siteboard({
       }
 
       // select 変更を処理（React Flow 内部の選択状態と外部 state を同期。
-      // これを無視すると内部状態が矛盾し、選択解除や NodeResizer が正常動作しない）
+      // これを無視すると内部状態が矛盾し、選択解除やリサイズ UI が正常動作しない）
       const selectChanges = changes.filter((c): c is NodeSelectionChange => c.type === 'select');
       if (selectChanges.length > 0) {
         const newlySelected = selectChanges.find((c) => c.selected);
@@ -614,16 +613,6 @@ export function Siteboard({
     [],
   );
 
-  const resolveViewportInteractionCursor = useCallback(
-    (event: MouseEvent | TouchEvent | null | undefined, type: 'pan' | 'zoom') => {
-      if (event == null) return '';
-      if ('deltaY' in event) return '';
-      if (typeof TouchEvent !== 'undefined' && event instanceof TouchEvent) return '';
-      return type === 'pan' ? 'grabbing' : '';
-    },
-    [],
-  );
-
   // pan/zoom のインタラクション開始を記録し display engine を起動する共通処理。
   // handleMoveStart（主経路）と handleMove（fallback）の両方から呼ばれる。
   const beginViewportInteraction = useCallback(
@@ -631,17 +620,10 @@ export function Siteboard({
       const type = resolveViewportInteractionType(event);
       moveInteractionTypeRef.current = type;
       void prepareInteractionStart(type);
-      // ホイール・ピンチ・プログラマティック操作では cursor overlay を出さず、
-      // pointer drag の pan のみ grabbing を表示する。
-      handleInteractionChange(true, resolveViewportInteractionCursor(event, type), type);
+      handleInteractionChange(true, type);
       return type;
     },
-    [
-      resolveViewportInteractionType,
-      prepareInteractionStart,
-      handleInteractionChange,
-      resolveViewportInteractionCursor,
-    ],
+    [resolveViewportInteractionType, prepareInteractionStart, handleInteractionChange],
   );
 
   const handleMoveStart = useCallback(
@@ -668,7 +650,7 @@ export function Siteboard({
       // start が取りこぼされた場合も 'pan' にフォールバックして display engine を正常終了させる
       const type = moveInteractionTypeRef.current ?? 'pan';
       moveInteractionTypeRef.current = null;
-      handleInteractionChange(false, 'default', type);
+      handleInteractionChange(false, type);
     },
     [handleInteractionChange],
   );
@@ -731,7 +713,7 @@ export function Siteboard({
         };
         // top-level width/height を明示することで、flowNodes 再生成時に React Flow の
         // nodeHasDimensions チェックが失敗して visibility:hidden になるちらつきを防ぐ
-        // style は付与しない（NodeResizer がラッパーサイズを直接制御するため）
+        // style は付与しない（React Flow がラッパーサイズを直接制御するため）
         return {
           id: node.id,
           type: 'stickyNoteFlowNode',
@@ -850,13 +832,6 @@ export function Siteboard({
   return (
     <ReactFlowProvider>
       <div ref={containerRef} data-siteboard-container className="relative flex-1 overflow-hidden">
-        {interactionCursor && (
-          <div
-            className="pointer-events-auto absolute inset-0 z-50"
-            style={{ cursor: interactionCursor }}
-          />
-        )}
-
         <ReactFlow
           nodes={flowNodes}
           edges={[]}

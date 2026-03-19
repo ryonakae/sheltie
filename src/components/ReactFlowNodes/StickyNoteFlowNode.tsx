@@ -2,6 +2,7 @@ import {
   NodeResizeControl,
   NodeToolbar,
   Position,
+  ResizeControlVariant,
   type NodeProps,
   type ResizeDragEvent,
   type ResizeParams,
@@ -13,19 +14,23 @@ import { AppButton } from '@/components/Common/AppButton';
 import { StickyNoteNode } from '@/components/Node/StickyNoteNode';
 import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionChromeStyles';
 import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
-import { STICKY_NOTE_COLORS, STICKY_NOTE_MIN_HEIGHT, STICKY_NOTE_MIN_WIDTH } from '@/constants';
+import {
+  STICKY_NOTE_COLORS,
+  STICKY_NOTE_HEADER_HEIGHT,
+  STICKY_NOTE_MIN_HEIGHT,
+  STICKY_NOTE_MIN_WIDTH,
+} from '@/constants';
 
 import type { StickyNoteFlowNodeData } from './types';
 
 /**
  * React Flow 用の StickyNoteNode ラッパー。
- * - NodeToolbar: Figma フレーム名ライクな外側ラベル（常時表示）+ 色変更ボタン（選択時のみ）
- *   - NodeToolbar はビューポート transform の外側（ポータル）にレンダリングされるため、
- *     コンテンツは最初から画面固定サイズ。scale 補正は不要。
- * - NodeResizeControl: 四隅のハンドルだけを表示し、左右の幅リサイズとして扱う
+ * - NodeToolbar: sticky header gutter に重ねる chrome 風ラベル（常時表示）+ 色変更ボタン
+ *   - NodeToolbar はビューポート transform の外側に描画されるため、幅だけ canvas zoom に追従させる
+ * - NodeResizeControl: 左右辺 + 四隅のハンドルだけを表示し、左右の幅リサイズとして扱う
  *   - 高さは入力内容の自動調整に委譲し、選択枠の線は軽量オーバーレイで描く
  * - nopan: パン操作がノード内で起動しないよう制御
- * - dragHandle 不使用: NodeToolbar はポータル外レンダリングのため、ノード全体をドラッグ可能とする
+ * - dragHandle 不使用: 付箋はノード本体全体をドラッグ可能にする
  */
 export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
   id,
@@ -56,46 +61,75 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
   );
 
   const safeColorIndex = colorIndex ?? 0;
+  const currentColor = STICKY_NOTE_COLORS[safeColorIndex];
   const nextColor = STICKY_NOTE_COLORS[(safeColorIndex + 1) % STICKY_NOTE_COLORS.length];
 
-  const colorButtonClassName = twMerge(
-    'flex shrink-0 cursor-pointer items-center justify-center border',
+  const colorButtonClassName =
+    'pointer-events-auto shrink-0 overflow-hidden rounded-full text-muted';
+  const colorDotClassName = twMerge(
+    'size-full rounded-full border-2',
     nextColor.borderClass,
     nextColor.bgClass,
-    nextColor.textClass,
-    'hover:opacity-80',
   );
+  const colorButtonStyle = {
+    width: 24,
+    minWidth: 24,
+    height: 24,
+    minHeight: 24,
+    padding: 0,
+  } as const;
+  const resizeLineConfigs = [
+    { key: 'left', position: 'left' as const, className: 'siteboard-sticky-resize-line' },
+    { key: 'right', position: 'right' as const, className: 'siteboard-sticky-resize-line' },
+  ];
   const resizeHandleConfigs = [
-    { key: 'top-left', position: 'left' as const, style: { top: 0 } },
-    { key: 'bottom-left', position: 'left' as const, style: { top: '100%' } },
-    { key: 'top-right', position: 'right' as const, style: { top: 0 } },
-    { key: 'bottom-right', position: 'right' as const, style: { top: '100%' } },
+    {
+      key: 'top-left',
+      position: 'top-left' as const,
+      className: 'siteboard-sticky-resize-handle',
+    },
+    {
+      key: 'bottom-left',
+      position: 'bottom-left' as const,
+      className: 'siteboard-sticky-resize-handle',
+    },
+    {
+      key: 'top-right',
+      position: 'top-right' as const,
+      className: 'siteboard-sticky-resize-handle',
+    },
+    {
+      key: 'bottom-right',
+      position: 'bottom-right' as const,
+      className: 'siteboard-sticky-resize-handle',
+    },
   ];
 
   return (
     <div className="nopan relative size-full">
-      {/* Figma フレーム名ライクな外側ラベル。
-          NodeToolbar はビューポート transform 外（ポータル）でレンダリングされるため
-          コンテンツは画面固定サイズ。offset も画面 px 単位。 */}
-      <NodeToolbar isVisible position={Position.Top} offset={4} align="start">
+      <NodeToolbar
+        isVisible
+        position={Position.Top}
+        offset={-STICKY_NOTE_HEADER_HEIGHT}
+        align="start"
+        className="pointer-events-none"
+      >
         <div
-          className="flex min-w-0 items-center gap-1.5 overflow-hidden"
-          style={{ width: toolbarWidth, maxWidth: toolbarWidth }}
+          className="flex h-8 min-w-0 items-center gap-1 overflow-hidden rounded-t-[16px] bg-transparent px-2 text-xs/4"
+          style={{
+            width: toolbarWidth,
+            maxWidth: toolbarWidth,
+            boxShadow: `inset 0 -1px 0 ${currentColor.dividerColor}`,
+          }}
         >
-          <span
-            className="min-w-0 flex-1 truncate text-[11px] font-medium text-[#555] select-none"
-            title="Sticky Note"
-          >
+          <span className="min-w-0 flex-1 truncate px-1 text-foreground" title="Sticky Note">
             Sticky Note
           </span>
           <AppButton
             size="xs"
-            className={twMerge('shrink-0', colorButtonClassName)}
+            className={colorButtonClassName}
             style={{
-              width: 18,
-              minWidth: 18,
-              height: 18,
-              minHeight: 18,
+              ...colorButtonStyle,
               visibility: selected ? 'visible' : 'hidden',
               pointerEvents: selected ? 'auto' : 'none',
             }}
@@ -104,17 +138,32 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
             onPress={() => onColorCycle(id)}
             aria-label="色を切り替え"
           >
-            <span />
+            <span className={colorDotClassName} />
           </AppButton>
         </div>
       </NodeToolbar>
 
       <StickyNoteNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
       {selected && <SelectionFrameOverlay />}
-      {/* 四隅のハンドルは FigJam 風の見た目に寄せつつ、実際の操作は左右幅リサイズだけに制限する */}
+      {/* 左右辺と四隅は FigJam 風の見た目に寄せつつ、実際の操作は左右幅リサイズだけに制限する */}
       {selected && (
         <>
-          {resizeHandleConfigs.map(({ key, position, style }) => (
+          {resizeLineConfigs.map(({ key, position, className }) => (
+            <NodeResizeControl
+              key={key}
+              nodeId={id}
+              position={position}
+              variant={ResizeControlVariant.Line}
+              resizeDirection="horizontal"
+              autoScale={false}
+              minWidth={STICKY_NOTE_MIN_WIDTH}
+              style={{ opacity: 0 }}
+              className={className}
+              onResize={handleResize}
+              onResizeEnd={handleResizeEnd}
+            />
+          ))}
+          {resizeHandleConfigs.map(({ key, position, className }) => (
             <NodeResizeControl
               key={key}
               nodeId={id}
@@ -122,7 +171,8 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
               resizeDirection="horizontal"
               autoScale={false}
               minWidth={STICKY_NOTE_MIN_WIDTH}
-              style={{ ...selectionHandleBaseStyle, ...style, cursor: 'ew-resize' }}
+              style={selectionHandleBaseStyle}
+              className={className}
               onResize={handleResize}
               onResizeEnd={handleResizeEnd}
             />

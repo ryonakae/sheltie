@@ -1,12 +1,11 @@
 import { useReducedMotion } from 'motion/react';
 import { memo, useCallback, useLayoutEffect, useRef } from 'react';
 
-import { WebPageNodeBottomBar } from '@/components/Node/WebPageNodeBottomBar';
-import { WebPageNodeTopBar } from '@/components/Node/WebPageNodeTopBar';
 import { WebPageNodeUrlForm } from '@/components/Node/WebPageNodeUrlForm';
+import { WEB_PAGE_BOTTOM_BAR_HEIGHT, WEB_PAGE_TOP_BAR_HEIGHT } from '@/constants';
 import { useWebPageWebviewLifecycle } from '@/hooks/siteboard/useWebPageWebviewLifecycle';
 import { zoomPx } from '@/lib/canvas-zoom';
-import { isNodeEmpty, isNodeMoved } from '@/types';
+import { isNodeEmpty } from '@/types';
 import type { DisplayMode, WebPageNode as WebPageNodeModel } from '@/types';
 
 export interface WebPageNodeProps {
@@ -47,23 +46,11 @@ export interface WebPageNodeProps {
 
 export const WebPageNode = memo(function WebPageNode({
   node,
-  title,
-  displayWidth,
-  displayHeight,
   displayMode,
   screenshotUrl,
-  hideTopNavControls,
-  hideBottomPresetControls,
-  canGoBack,
-  canGoForward,
   getZoom,
-  onGoBack,
-  onGoForward,
   onActivate,
-  onReload,
-  onPinUrl,
   onContextMenu,
-  onResizePreset,
   onNavigated,
   onTitleUpdated,
   onWebviewCreated,
@@ -102,15 +89,6 @@ export const WebPageNode = memo(function WebPageNode({
   });
 
   const handleActivate = useCallback(() => onActivate(node.id), [node.id, onActivate]);
-  const handleGoBackBound = useCallback(() => onGoBack(node.id), [node.id, onGoBack]);
-  const handleGoForwardBound = useCallback(() => onGoForward(node.id), [node.id, onGoForward]);
-  const handleReloadBound = useCallback(() => onReload(node.id), [node.id, onReload]);
-  const handlePinUrlBound = useCallback(() => onPinUrl(node.id), [node.id, onPinUrl]);
-  const handleResizePresetBound = useCallback(
-    (width: number, height: number) => onResizePreset(node.id, width, height),
-    [node.id, onResizePreset],
-  );
-
   useLayoutEffect(() => {
     const frameEl = frameRef.current;
     if (!frameEl) return;
@@ -193,7 +171,7 @@ export const WebPageNode = memo(function WebPageNode({
   return (
     <div
       ref={frameRef}
-      className="flex size-full flex-col shadow-lg outline-offset-0"
+      className="relative flex size-full flex-col overflow-hidden shadow-lg outline-offset-0"
       style={{
         borderRadius: zoomPx(16),
         outline: `${zoomPx(1)} solid var(--color-border)`,
@@ -203,17 +181,12 @@ export const WebPageNode = memo(function WebPageNode({
       onMouseDown={handleActivate}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
-      <WebPageNodeTopBar
-        title={title}
-        url={node.url}
-        isMoved={isNodeMoved(node)}
-        canGoBack={isNodeEmpty(node) ? false : canGoBack}
-        canGoForward={isNodeEmpty(node) ? false : canGoForward}
-        onGoBack={isNodeEmpty(node) ? undefined : handleGoBackBound}
-        onGoForward={isNodeEmpty(node) ? undefined : handleGoForwardBound}
-        onReload={isNodeEmpty(node) ? undefined : handleReloadBound}
-        onPinUrl={isNodeMoved(node) ? handlePinUrlBound : undefined}
-        hideNavigationControls={hideTopNavControls}
+      <div
+        className="node-drag-handle shrink-0 bg-default"
+        style={{
+          height: zoomPx(WEB_PAGE_TOP_BAR_HEIGHT),
+          borderBottom: `${zoomPx(1)} solid var(--color-border)`,
+        }}
       />
 
       <div
@@ -237,11 +210,12 @@ export const WebPageNode = memo(function WebPageNode({
         )}
       </div>
 
-      <WebPageNodeBottomBar
-        width={displayWidth}
-        height={displayHeight}
-        hidePresetControls={hideBottomPresetControls}
-        onResizePreset={handleResizePresetBound}
+      <div
+        className="node-drag-handle shrink-0 bg-default"
+        style={{
+          height: zoomPx(WEB_PAGE_BOTTOM_BAR_HEIGHT),
+          borderTop: `${zoomPx(1)} solid var(--color-border)`,
+        }}
       />
     </div>
   );

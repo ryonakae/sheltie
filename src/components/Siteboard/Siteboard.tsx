@@ -910,8 +910,8 @@ export function Siteboard({
         >
           <Background
             variant={BackgroundVariant.Dots}
-            gap={24}
-            size={2}
+            gap={20}
+            size={3}
             color={isDark ? '#27272a' : '#d1d5db'}
             bgColor={isDark ? '#18181b' : '#f9fafb'}
           />

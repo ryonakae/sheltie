@@ -1,6 +1,5 @@
 import { DragDropProvider } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
-import House from '@gravity-ui/icons/House';
 import HouseFill from '@gravity-ui/icons/HouseFill';
 import Plus from '@gravity-ui/icons/Plus';
 import { motion } from 'motion/react';
@@ -13,6 +12,7 @@ import { ThemeToggle } from '@/components/TabBar/ThemeToggle';
 import { HOME_ID } from '@/constants';
 import { useWindowControlsInset } from '@/hooks/useWindowControlsInset';
 import { requestProjectTabClose } from '@/lib/project-close';
+import { isProjectDirty } from '@/lib/project-document';
 import { useProjectStore } from '@/store/tab-store';
 
 export function TabBar() {
@@ -47,10 +47,10 @@ export function TabBar() {
       {/* ホームボタン: クリックでホームキャンバスに切り替え */}
       <motion.button
         className={twMerge(
-          'ml-2 flex shrink-0 items-center border-r border-b-2 border-border px-3',
+          'ml-2 flex shrink-0 items-center border-r border-border px-3',
           isHomeActive
-            ? 'border-b-transparent bg-surface text-foreground'
-            : 'border-b-transparent text-muted hover:bg-default/50 hover:text-foreground',
+            ? 'bg-surface text-foreground'
+            : 'text-muted hover:bg-default/50 hover:text-foreground',
         )}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
@@ -58,7 +58,7 @@ export function TabBar() {
         onClick={() => setActive(HOME_ID)}
         aria-label="ホームに切り替え"
       >
-        {isHomeActive ? <HouseFill className="size-4" /> : <House className="size-4" />}
+        <HouseFill className="size-4" />
       </motion.button>
 
       {/* タブリスト: DragDropProvider 内でタブの並び替えを管理 */}
@@ -83,6 +83,7 @@ export function TabBar() {
               key={project.id}
               project={project}
               index={index}
+              isDirty={isProjectDirty(project)}
               isActive={project.id === activeId}
               onActivate={() => setActive(project.id)}
               onClose={() => {

@@ -29,6 +29,12 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   const contentMeasureRef = useRef<HTMLTextAreaElement>(null);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCommittedContentRef = useRef(node.content ?? '');
+  const contentClickStateRef = useRef({
+    wasActive: false,
+    startX: 0,
+    startY: 0,
+    moved: false,
+  });
 
   const colorIndex = node.colorIndex ?? 0;
   const color = STICKY_NOTE_COLORS[colorIndex];
@@ -88,7 +94,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
     [],
   );
 
-  const handleDoubleClick = useCallback(() => {
+  const beginEditing = useCallback(() => {
     const nextContent = node.content ?? '';
     // 編集開始時にストアの現在値で初期化
     setEditingContent(nextContent);
@@ -100,6 +106,35 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       textareaRef.current?.select();
     });
   }, [node.content]);
+
+  const handleContentMouseDownCapture = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      contentClickStateRef.current = {
+        wasActive: isActive,
+        startX: event.clientX,
+        startY: event.clientY,
+        moved: false,
+      };
+    },
+    [isActive],
+  );
+
+  const handleContentMouseMoveCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if ((event.buttons & 1) === 0) return;
+    const { startX, startY, moved } = contentClickStateRef.current;
+    if (moved) return;
+    const deltaX = Math.abs(event.clientX - startX);
+    const deltaY = Math.abs(event.clientY - startY);
+    if (deltaX >= 3 || deltaY >= 3) {
+      contentClickStateRef.current.moved = true;
+    }
+  }, []);
+
+  const handleContentClick = useCallback(() => {
+    const { wasActive, moved } = contentClickStateRef.current;
+    if (!wasActive || moved || isEditing) return;
+    beginEditing();
+  }, [beginEditing, isEditing]);
 
   const handleTextareaDoubleClick = useCallback(() => {
     textareaRef.current?.select();
@@ -148,7 +183,9 @@ export const StickyNoteNode = memo(function StickyNoteNode({
           'relative box-border min-h-0 w-full flex-1 overflow-hidden',
           color.bgClass,
         )}
-        onDoubleClick={handleDoubleClick}
+        onMouseDownCapture={handleContentMouseDownCapture}
+        onMouseMoveCapture={handleContentMouseMoveCapture}
+        onClick={handleContentClick}
       >
         <textarea
           ref={contentMeasureRef}
@@ -179,7 +216,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
               noteBodyColorClassName,
             )}
           >
-            {node.content || 'ダブルクリックで編集'}
+            {node.content || 'Type anything'}
           </div>
         )}
       </div>

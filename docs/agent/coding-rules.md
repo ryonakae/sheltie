@@ -25,6 +25,7 @@
 - **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` 本体内の上下 chrome shell に付け、上下バーの空き領域からだけドラッグできるようにする
 - **NodeToolbar の click-through**: WebPage / StickyNote とも `NodeToolbar` wrapper は `pointer-events-none` にし、ボタン類だけ `pointer-events-auto` を付ける。空白領域の pointer を下の dragHandle やノード本体へ透過させる
 - **付箋のドラッグ起点**: `NodeToolbar` はポータル外に描画されるため dragHandle に使わない。ノード本体をドラッグ可能にし、textarea や色ボタンを `nodrag` / `pointer-events-auto` で保護する
+- **付箋本文の編集開始**: 付箋本文は未選択時のクリックで選択だけ行い、選択済みの本文エリアを再度クリックした時だけ編集を開始する。ヘッダーや色ボタン、リサイズ操作からは編集開始しない
 - **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用する。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
 - **Framer Motion との競合**: ノードコンポーネント内で `motion.div layout="position"` を使用しない。React Flow が CSS transform で位置を管理しているため、`layout="position"` のスプリングアニメーション（レイアウトシフト補正）がドラッグ方向を反転させる。Canvas や外側 UI の `motion.div` には使用可（ノード外）
 - `nodeTypes` 定数は**モジュールスコープで定義**。コンポーネント内に定義するとレンダーのたびにノードが再マウント（unmount→mount）される

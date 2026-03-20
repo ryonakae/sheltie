@@ -16,7 +16,7 @@ import {
   getNodeFrameHeight,
   getNodeFrameRect,
 } from '@/lib/siteboard-node-frame';
-import { selectActiveProject, useProjectStore } from '@/store/tab-store';
+import { selectProject, useProjectStore } from '@/store/tab-store';
 import { type BoardNode } from '@/types';
 
 /** 現在のビューポート中央のワールド座標を起点とした、指定サイズの要素の配置位置を算出する */
@@ -43,21 +43,15 @@ function getViewportCenterPos(
 }
 
 export function ProjectScreen() {
-  const activeProject = useProjectStore(selectActiveProject);
-  const activeId = useProjectStore((s) => s.activeId);
+  const project = useProjectStore(selectProject);
   const addWebNode = useProjectStore((s) => s.addWebNode);
   const addStickyNoteNode = useProjectStore((s) => s.addStickyNoteNode);
   const updateViewport = useProjectStore((s) => s.updateViewport);
-  const viewport = activeProject?.viewport;
+  const viewport = project?.viewport;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [centeredNodeId, setCenteredNodeId] = useState<string | null>(null);
   const centeringAnimationRef = useRef<Array<{ stop: () => void }>>([]);
-  const activeIdRef = useRef<string | null>(null);
   const prefersReducedMotion = useReducedMotion();
-
-  useEffect(() => {
-    activeIdRef.current = activeId;
-  }, [activeId]);
 
   const handleSelectNode = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -109,11 +103,8 @@ export function ProjectScreen() {
       const targetPanY = rect.height / 2 - (node.y + frameRect.height / 2) * targetZoom;
 
       cancelCentering();
-      const currentId = activeIdRef.current ?? activeId;
-
       if (prefersReducedMotion) {
-        if (currentId)
-          updateViewport(currentId, { zoom: targetZoom, panX: targetPanX, panY: targetPanY });
+        updateViewport({ zoom: targetZoom, panX: targetPanX, panY: targetPanY });
         onComplete?.();
         return;
       }
@@ -121,8 +112,7 @@ export function ProjectScreen() {
       let completed = false;
       const latestState = { x: viewport.panX, y: viewport.panY, zoom: viewport.zoom };
       const updateAll = () => {
-        if (!currentId) return;
-        updateViewport(currentId, {
+        updateViewport({
           zoom: latestState.zoom,
           panX: latestState.x,
           panY: latestState.y,
@@ -131,9 +121,8 @@ export function ProjectScreen() {
       const handleComplete = () => {
         if (completed) return;
         completed = true;
-        if (!currentId) return;
         centeringAnimationRef.current = [];
-        updateViewport(currentId, { zoom: targetZoom, panX: targetPanX, panY: targetPanY });
+        updateViewport({ zoom: targetZoom, panX: targetPanX, panY: targetPanY });
         onComplete?.();
       };
 
@@ -167,7 +156,7 @@ export function ProjectScreen() {
 
       centeringAnimationRef.current = [xControls, yControls, zoomControls];
     },
-    [activeId, updateViewport, viewport, cancelCentering, prefersReducedMotion],
+    [updateViewport, viewport, cancelCentering, prefersReducedMotion],
   );
 
   /** FloatingToolbar の＋ボタンから呼ばれる: 空フレームをキャンバス中央に追加してセンタリング */
@@ -180,7 +169,6 @@ export function ProjectScreen() {
       getNodeFrameHeight({ type: 'webpage', height: DEFAULT_PAGE_HEIGHT }, viewport?.zoom ?? 1),
     );
     const created = addWebNode(
-      activeId,
       undefined,
       centerPos
         ? { x: centerPos.x, y: centerPos.y, width: DEFAULT_PAGE_WIDTH, height: DEFAULT_PAGE_HEIGHT }
@@ -191,7 +179,7 @@ export function ProjectScreen() {
       handleSelectNode(created.id);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [addWebNode, activeId, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
+  }, [addWebNode, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
 
   /** FloatingToolbar の付箋ボタンから呼ばれる: 付箋をキャンバス中央に追加してセンタリング */
   const handleAddStickyNote = useCallback(() => {
@@ -206,7 +194,6 @@ export function ProjectScreen() {
       ),
     );
     const created = addStickyNoteNode(
-      activeId,
       centerPos
         ? {
             x: centerPos.x,
@@ -221,23 +208,16 @@ export function ProjectScreen() {
       handleSelectNode(created.id);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [
-    addStickyNoteNode,
-    activeId,
-    viewport,
-    centerOnNewNode,
-    handleSelectNode,
-    handleCenteredNode,
-  ]);
+  }, [addStickyNoteNode, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
 
   useEffect(() => {
     if (!selectedNodeId) return;
-    const exists = activeProject?.nodes.some((node) => node.id === selectedNodeId) ?? false;
+    const exists = project?.nodes.some((node) => node.id === selectedNodeId) ?? false;
     if (!exists) {
       // effect 内での直接 setState を避けるため非同期で実行
       queueMicrotask(() => setSelectedNodeId(null));
     }
-  }, [selectedNodeId, activeProject?.nodes]);
+  }, [selectedNodeId, project?.nodes]);
 
   return (
     <div className="relative flex flex-1 overflow-hidden">

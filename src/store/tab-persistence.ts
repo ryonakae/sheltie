@@ -1,90 +1,40 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
-
-import { SAVE_DEBOUNCE_MS } from '@/constants';
 import { requestAppClose } from '@/lib/project-close';
-import { api, webviewApi } from '@/lib/tauri-bridge';
+import { parseProjectDocument } from '@/lib/project-document';
+import { api } from '@/lib/tauri-bridge';
 import { useProjectStore } from '@/store/tab-store';
-import { isWebPageNode } from '@/types';
 
-async function preloadOpenProjectScreenshots(): Promise<void> {
-  const { projects, openIds, hydrateProjectScreenshotUrls } = useProjectStore.getState();
-  const openProjectIds = new Set(openIds);
-
-  await Promise.all(
-    projects
-      .filter((project) => openProjectIds.has(project.id))
-      .map(async (project) => {
-        const pageIds = project.nodes
-          .filter((node) => isWebPageNode(node) && Boolean(node.url))
-          .map((node) => node.id);
-        if (pageIds.length === 0) return;
-
-        const entries = await webviewApi.getExistingScreenshotPaths(project.id, pageIds);
-        if (entries.length === 0) return;
-
-        const screenshotUrlsByNodeId: Record<string, string> = {};
-        for (const [nodeId, filePath] of entries) {
-          screenshotUrlsByNodeId[nodeId] = `${convertFileSrc(filePath)}?t=restored`;
-        }
-
-        if (Object.keys(screenshotUrlsByNodeId).length === 0) return;
-        hydrateProjectScreenshotUrls(project.id, screenshotUrlsByNodeId);
-      }),
-  );
-}
-
-// HMR で setupProjectPersistence() が再実行されても多重登録を防ぐためのガード
 let initialized = false;
 
-/**
- * プロジェクト状態の永続化をセットアップする。
- * React マウント前に 1 度だけ呼び出すこと。
- *
- * - 起動時: Tauri Store から状態を読み込んで復元
- * - 変更時: 500ms デバウンスで Tauri Store に保存
- * - クローズ前: 未保存変更を解決してから最終状態を保存し、ウィンドウを破棄
- */
 export function setupProjectPersistence(): void {
   if (initialized) return;
   initialized = true;
 
-  // 1. 起動時: 保存済み状態を読み込んで復元
   api
-    .loadProjectState()
-    .then(async (saved) => {
-      useProjectStore.getState()._restoreState(saved);
-      await preloadOpenProjectScreenshots();
+    .loadWindowContext()
+    .then(async (context) => {
+      let document;
+      if (context.filePath) {
+        try {
+          const contents = await api.loadProjectFile(context.filePath);
+          document = parseProjectDocument(contents);
+        } catch {
+          document = undefined;
+        }
+      }
+
+      useProjectStore.getState().initializeProject({
+        filePath: context.filePath ?? undefined,
+        untitledIndex: context.untitledIndex,
+        document,
+      });
       useProjectStore.getState()._setLoaded();
     })
     .catch(() => {
+      useProjectStore.getState().initializeProject({ untitledIndex: 1 });
       useProjectStore.getState()._setLoaded();
     });
 
-  // 2. 状態変更時: デバウンスで保存
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
-
-  useProjectStore.subscribe((state, prevState) => {
-    if (!state.isLoaded) return;
-    // projects, openIds, activeId のいずれかが変わった場合のみ保存
-    if (
-      state.projects === prevState.projects &&
-      state.openIds === prevState.openIds &&
-      state.activeId === prevState.activeId
-    )
-      return;
-
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      const { projects, openIds, activeId } = useProjectStore.getState();
-      api.saveProjectState({ projects, openIds, activeId }).catch(() => {
-        // 保存失敗は無視（次の変更時に再試行される）
-      });
-    }, SAVE_DEBOUNCE_MS);
-  });
-
-  // 3. ウィンドウクローズ前の最終保存
   api.onSaveBeforeClose(async () => {
-    if (saveTimer) clearTimeout(saveTimer);
     await requestAppClose();
   });
 }

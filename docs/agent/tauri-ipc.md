@@ -7,9 +7,10 @@
 
 ### プロジェクト状態
 
-- `load_project_state`
-- `save_project_state`
-- `close_ready`
+- `load_window_context` - 現在の document window に紐づく `filePath` / `untitledIndex` を読む
+- `new_document_window` - 新しい untitled document window を開く
+- `open_document_window(path)` - 対象 `.siteboard` 用の document window を開く。既に開いていればその window を前面化する
+- `close_ready` - 現在の document window を破棄する
 - `load_project_file(path)` - `.siteboard` ファイルを UTF-8 文字列として読む
 - `save_project_file(path, contents)` - `.siteboard` ファイルを書き込み、実際の保存パスを返す
 
@@ -22,16 +23,16 @@
 ### Webview
 
 - `create_page_webview(pageId, url, x, y, width, height, zoom)`
-- `update_page_webview_bounds(pageId, x, y, width, height, zoom)`
-- `batch_update_page_webview_bounds(entries[])`
-- `batch_update_webview_positions(entries[])`
-- `set_page_webview_opacity(pageId, opacity)`
-- `reload_page_webview(pageId, url)`
-- `go_back_page_webview(pageId)`
-- `go_forward_page_webview(pageId)`
-- `get_navigation_state_page_webview(pageId)`
-- `capture_webview_screenshot(pageId)` - base64 Data URL を返す（内部用途のみ）
-- `save_webview_screenshot(pageId, projectId, hideAfterSnapshotRequest?)` - PNG ファイルを保存しファイルパスを返す（macOS のみ）。`hideAfterSnapshotRequest=true` の時は snapshot 要求直後に同じ Rust コマンド内で Webview を hide する
+- `update_page_webview_bounds(label, x, y, width, height, zoom)`
+- `batch_update_page_webview_bounds(entries[])` - 各 entry は `label, x, y, width, height, zoom`
+- `batch_update_webview_positions(entries[])` - 各 entry は `label, x, y`
+- `set_page_webview_opacity(label, opacity)`
+- `reload_page_webview(label, url)`
+- `go_back_page_webview(label)`
+- `go_forward_page_webview(label)`
+- `get_navigation_state_page_webview(label)`
+- `capture_webview_screenshot(label)` - base64 Data URL を返す（内部用途のみ）
+- `save_webview_screenshot(label, pageId, projectId, hideAfterSnapshotRequest?)` - PNG ファイルを保存しファイルパスを返す（macOS のみ）。`hideAfterSnapshotRequest=true` の時は snapshot 要求直後に同じ Rust コマンド内で Webview を hide する
 - `get_existing_screenshot_paths(projectId, pageIds)` - 存在するスクリーンショットのパスを一括取得
 - `delete_screenshot(pageId, projectId)` - スクリーンショットファイルを削除
 
@@ -41,7 +42,7 @@
 - `page-title-changed-{pageId}`: タイトル変更通知
 - `page-scroll-ended-{pageId}`: Webview 内スクロール完了通知
 - `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
-- `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `open` / `save` / `save-as`）
+- `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new` / `open` / `save` / `save-as`）
 
 ## JS ブリッジ API
 
@@ -49,7 +50,7 @@
 
 ### `api`
 
-- `loadProjectState`, `saveProjectState`, `closeReady`
+- `loadWindowContext`, `newDocumentWindow`, `openDocumentWindow`, `closeReady`
 - `loadProjectFile`, `saveProjectFile`
 - `loadTheme`, `saveTheme`, `getPlatformInfo`
 - `onEditCommand`
@@ -57,18 +58,22 @@
 
 ### `webviewApi`
 
-- `create`, `updateBounds`, `updateAllBounds`, `updateAllPositions`
-- `show`, `hide`, `destroy`, `hideAll`, `showAllWithBounds`
-- `setOpacity`, `reload`, `goBack`, `goForward`, `getNavigationState`
-- `captureScreenshot`, `saveScreenshot(options?)`, `getExistingScreenshotPaths`, `deleteScreenshot`
+- `create(nodeId, ...) -> label`
+- `updateBounds(label, ...)`, `updateAllBounds(entries[])`, `updateAllPositions(entries[])`
+- `show(label)`, `hide(label)`, `destroy(label)`, `hideAll(labels)`, `showAllWithBounds(entries[])`
+- `setOpacity(label, opacity)`, `reload(label, url)`, `goBack(label)`, `goForward(label)`, `getNavigationState(label)`
+- `captureScreenshot(label)`, `saveScreenshot(label, pageId, projectId, options?)`, `getExistingScreenshotPaths`, `deleteScreenshot`
 - `onPageNavigated`, `onPageTitleChanged`, `onPageScrollEnded`
 
 ## メニュー連携
 
 - `Edit` メニューは `src/lib/edit-commands.ts` と `src/main.tsx` を経由して renderer に流す
 - `File` メニューは `src/lib/file-commands.ts` と `src/main.tsx` を経由して renderer に流す
+- `File > New` は新しい document window を作る
+- `File > Open` は既存 window を置き換えず、対象 `.siteboard` 用の document window を開く
 - `Save` は保存先 `filePath` 未設定時に `Save As` へフォールバックする
 - `save_project_file` は常に拡張子を `.siteboard` に正規化する
+- window-local な IPC では `main` のような固定 label を前提にしない
 
 ## プラットフォーム差分
 
@@ -82,3 +87,9 @@
 - イベント名を変更したら listener 側（`WebPageNode` / runtime hooks / `main.tsx`）も同時更新する
 - `edit-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/edit-commands.ts` を同時更新する
 - `file-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/file-commands.ts` を同時更新する
+- document window を増やす/閉じる/前面化する処理を変えたら、`src-tauri/src/lib.rs`・`src/lib/file-commands.ts`・`src/lib/project-close.ts` を同時更新する
+## Multiwebview command context
+
+- child webview から invoke される可能性がある command は `tauri::WebviewWindow` ではなく `tauri::Window` を受ける。
+- `Window` は command を発火した webview の hosting document window を返すため、top-level webview / child webview のどちらから呼ばれても同じ window label を解決できる。
+- child webview 対応 command で `WebviewWindow` を受けると `current webview is not a WebviewWindow` が発生するため使わない。

@@ -8,11 +8,9 @@ import {
 } from '@/lib/unsaved-changes-dialog-display';
 
 export type UnsavedChangesDecision = 'save' | 'discard' | 'cancel';
-export type UnsavedChangesReason = 'tab-close' | 'app-close';
 
 interface UnsavedChangesDialogOptions {
   projectTitle: string;
-  reason: UnsavedChangesReason;
 }
 
 interface PendingUnsavedChangesDialogRequest extends UnsavedChangesDialogOptions {
@@ -73,11 +71,7 @@ export function UnsavedChangesDialog() {
     setRequest(null);
   };
 
-  const isAppClose = request?.reason === 'app-close';
-  const discardLabel = isAppClose ? '保存せず終了' : '保存せず閉じる';
-  const bodyText = isAppClose
-    ? `「${request?.projectTitle ?? ''}」には未保存の変更があります。保存してからアプリを終了しますか？`
-    : `「${request?.projectTitle ?? ''}」には未保存の変更があります。保存してからタブを閉じますか？`;
+  const bodyText = `「${request?.projectTitle ?? ''}」には未保存の変更があります。保存してからウィンドウを閉じますか？`;
 
   return (
     <AlertDialog.Backdrop
@@ -111,7 +105,7 @@ export function UnsavedChangesDialog() {
               variant="danger"
               onPress={() => resolveRequest('discard')}
             >
-              {discardLabel}
+              保存せず閉じる
             </AppButton>
             <AppButton isIconOnly={false} variant="primary" onPress={() => resolveRequest('save')}>
               保存

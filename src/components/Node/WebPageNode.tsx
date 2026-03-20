@@ -1,11 +1,13 @@
 import { useReducedMotion } from 'motion/react';
 import { memo, useCallback, useLayoutEffect, useRef } from 'react';
 
+import { WebPageNodeBottomBar } from '@/components/Node/WebPageNodeBottomBar';
+import { WebPageNodeTopBar } from '@/components/Node/WebPageNodeTopBar';
 import { WebPageNodeUrlForm } from '@/components/Node/WebPageNodeUrlForm';
 import { WEB_PAGE_BOTTOM_BAR_HEIGHT, WEB_PAGE_TOP_BAR_HEIGHT } from '@/constants';
 import { useWebPageWebviewLifecycle } from '@/hooks/siteboard/useWebPageWebviewLifecycle';
 import { zoomPx } from '@/lib/canvas-zoom';
-import { isNodeEmpty } from '@/types';
+import { isNodeEmpty, isNodeMoved } from '@/types';
 import type { DisplayMode, WebPageNode as WebPageNodeModel } from '@/types';
 
 export interface WebPageNodeProps {
@@ -46,11 +48,23 @@ export interface WebPageNodeProps {
 
 export const WebPageNode = memo(function WebPageNode({
   node,
+  title,
+  displayWidth,
+  displayHeight,
   displayMode,
   screenshotUrl,
+  hideTopNavControls,
+  hideBottomPresetControls,
+  canGoBack,
+  canGoForward,
   getZoom,
+  onGoBack,
+  onGoForward,
   onActivate,
+  onReload,
+  onPinUrl,
   onContextMenu,
+  onResizePreset,
   onNavigated,
   onTitleUpdated,
   onWebviewCreated,
@@ -182,12 +196,25 @@ export const WebPageNode = memo(function WebPageNode({
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
       <div
-        className="node-drag-handle shrink-0 bg-default"
+        className="node-drag-handle shrink-0 overflow-hidden bg-default"
         style={{
           height: zoomPx(WEB_PAGE_TOP_BAR_HEIGHT),
           borderBottom: `${zoomPx(1)} solid var(--color-border)`,
         }}
-      />
+      >
+        <WebPageNodeTopBar
+          title={title}
+          url={node.url}
+          isMoved={isNodeMoved(node)}
+          canGoBack={isNodeEmpty(node) ? false : canGoBack}
+          canGoForward={isNodeEmpty(node) ? false : canGoForward}
+          onGoBack={isNodeEmpty(node) ? undefined : () => onGoBack(node.id)}
+          onGoForward={isNodeEmpty(node) ? undefined : () => onGoForward(node.id)}
+          onReload={isNodeEmpty(node) ? undefined : () => onReload(node.id)}
+          onPinUrl={isNodeMoved(node) ? () => onPinUrl(node.id) : undefined}
+          hideNavigationControls={hideTopNavControls}
+        />
+      </div>
 
       <div
         ref={placeholderRef}
@@ -211,12 +238,19 @@ export const WebPageNode = memo(function WebPageNode({
       </div>
 
       <div
-        className="node-drag-handle shrink-0 bg-default"
+        className="node-drag-handle shrink-0 overflow-hidden bg-default"
         style={{
           height: zoomPx(WEB_PAGE_BOTTOM_BAR_HEIGHT),
           borderTop: `${zoomPx(1)} solid var(--color-border)`,
         }}
-      />
+      >
+        <WebPageNodeBottomBar
+          width={displayWidth}
+          height={displayHeight}
+          hidePresetControls={hideBottomPresetControls}
+          onResizePreset={(width, height) => onResizePreset(node.id, width, height)}
+        />
+      </div>
     </div>
   );
 });

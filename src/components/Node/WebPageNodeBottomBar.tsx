@@ -5,6 +5,7 @@ import { twMerge } from 'tailwind-merge';
 import { AppButton } from '@/components/Common/AppButton';
 import { NodeTabletIcon } from '@/components/Node/NodeTabletIcon';
 import { SIZE_PRESETS } from '@/constants';
+import { zoomPx } from '@/lib/canvas-zoom';
 
 import type { ComponentType, SVGProps } from 'react';
 
@@ -30,20 +31,24 @@ export function WebPageNodeBottomBar({
   onResizePreset,
 }: WebPageNodeBottomBarProps) {
   const presetIconStyle = {
-    width: 14,
-    height: 14,
+    width: zoomPx(14),
+    height: zoomPx(14),
   };
   const toolbarButtonStyle = {
-    width: 24,
-    minWidth: 24,
-    height: 24,
-    minHeight: 24,
     padding: 0,
   } as const;
 
   return (
-    <div className="flex h-8 w-full items-center overflow-hidden bg-transparent px-2 text-[11px] leading-[15px]">
-      <div className="flex shrink-0 items-center gap-0.5">
+    <div
+      className="flex w-full items-center overflow-hidden bg-transparent"
+      style={{
+        height: zoomPx(32),
+        paddingInline: zoomPx(8),
+        fontSize: zoomPx(11),
+        lineHeight: zoomPx(15),
+      }}
+    >
+      <div className="flex shrink-0 items-center" style={{ gap: zoomPx(2) }}>
         {!hidePresetControls &&
           SIZE_PRESETS.map((preset) => {
             const isActive = width === preset.width && height === preset.height;
@@ -51,9 +56,10 @@ export function WebPageNodeBottomBar({
             return (
               <AppButton
                 size="xs"
+                scaleWithCanvasZoom
                 key={preset.label}
                 className={twMerge(
-                  'pointer-events-auto shrink-0 hover:bg-default-hover',
+                  'nodrag shrink-0 hover:bg-default-hover',
                   isActive ? 'text-accent' : 'text-muted hover:text-foreground',
                 )}
                 style={toolbarButtonStyle}
@@ -67,7 +73,7 @@ export function WebPageNodeBottomBar({
           })}
       </div>
 
-      <span className="ml-auto shrink-0 px-1 text-muted">
+      <span className="ml-auto shrink-0 text-muted" style={{ paddingInline: zoomPx(4) }}>
         {width} × {height}
       </span>
     </div>

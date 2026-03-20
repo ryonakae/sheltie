@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
+import { AppButton } from '@/components/Common/AppButton';
 import { STICKY_NOTE_COLORS, STICKY_NOTE_HEADER_HEIGHT, STICKY_NOTE_MIN_HEIGHT } from '@/constants';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
@@ -12,6 +13,7 @@ export interface StickyNoteNodeProps {
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
   onContentChange: (nodeId: string, content: string) => void;
   onAutoHeightChange: (nodeId: string, height: number) => void;
+  onColorCycle: (nodeId: string) => void;
 }
 
 export const StickyNoteNode = memo(function StickyNoteNode({
@@ -21,6 +23,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   onContextMenu,
   onContentChange,
   onAutoHeightChange,
+  onColorCycle,
 }: StickyNoteNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   // 編集中テキスト。ストア反映は 500ms デバウンス + blur 時 flush で行う。
@@ -38,6 +41,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
 
   const colorIndex = node.colorIndex ?? 0;
   const color = STICKY_NOTE_COLORS[colorIndex];
+  const nextColor = STICKY_NOTE_COLORS[(colorIndex + 1) % STICKY_NOTE_COLORS.length];
   const noteContent = isEditing ? editingContent : (node.content ?? '');
 
   useEffect(() => {
@@ -174,7 +178,49 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       <div
         className={twMerge('shrink-0', color.bgClass)}
         style={{ height: zoomPx(STICKY_NOTE_HEADER_HEIGHT) }}
-      />
+      >
+        <div
+          className="flex size-full min-w-0 items-center"
+          style={{
+            gap: zoomPx(4),
+            paddingInline: zoomPx(8),
+            fontSize: zoomPx(12),
+            lineHeight: zoomPx(16),
+            boxShadow: `inset 0 ${zoomPx(-1)} 0 ${color.dividerColor}`,
+          }}
+        >
+          <span
+            className="min-w-0 flex-1 truncate text-foreground"
+            style={{ paddingInline: zoomPx(4) }}
+            title="Sticky Note"
+          >
+            Sticky Note
+          </span>
+          <AppButton
+            size="xs"
+            scaleWithCanvasZoom
+            className="nodrag shrink-0 overflow-hidden rounded-full text-muted"
+            style={{
+              padding: 0,
+              visibility: isActive ? 'visible' : 'hidden',
+              pointerEvents: isActive ? 'auto' : 'none',
+            }}
+            aria-hidden={!isActive}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPress={() => onColorCycle(node.id)}
+            aria-label="色を切り替え"
+          >
+            <span
+              className={twMerge(
+                'block size-full rounded-full border-2',
+                nextColor.borderClass,
+                nextColor.bgClass,
+              )}
+              style={{ borderWidth: zoomPx(2) }}
+            />
+          </AppButton>
+        </div>
+      </div>
 
       {/* テキスト表示/編集エリア */}
       <div

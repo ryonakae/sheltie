@@ -15,6 +15,16 @@
 - Siteboard 内 UI のスケーリングは `--canvas-zoom` を使った CSS 計算で対応し、不要な再レンダーを避ける。
 - コメントは「なぜ必要か」がコードだけで伝わらない箇所に限定する。
 
+## Document App
+
+- 1 window = 1 document を前提にする。ホーム画面やプロジェクト一覧は置かない。
+- 表示名はファイル basename を正本にし、未保存時だけ `名称未設定` 系の仮名を使う。
+- `project.title` のような表示名を永続状態の正本にしない。必要なら `filePath` から導出する。
+- `main` のような固定 window label を前提にしない。window-local な処理は現在の window から解決する。
+- macOS の document window は native tabs 前提で同じ `tabbingIdentifier` を使う。
+- `File > New/Open/Save/Save As` は document window のコマンドとして扱い、メニューやショートカットの実装を window-local に保つ。
+- 表示名の変更は `Save As` で行う。rename 専用 UI や project title 編集を増やさない。
+
 ## React Flow（フェーズ 1 以降）
 
 ### ノード位置管理と Flow ラッパー
@@ -23,8 +33,9 @@
 - **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
 - **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化する
 - **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` 本体内の上下 chrome shell に付け、上下バーの空き領域からだけドラッグできるようにする
-- **NodeToolbar の click-through**: WebPage / StickyNote とも `NodeToolbar` wrapper は `pointer-events-none` にし、ボタン類だけ `pointer-events-auto` を付ける。空白領域の pointer を下の dragHandle やノード本体へ透過させる
-- **付箋のドラッグ起点**: `NodeToolbar` はポータル外に描画されるため dragHandle に使わない。ノード本体をドラッグ可能にし、textarea や色ボタンを `nodrag` / `pointer-events-auto` で保護する
+- **node 内ツールバー**: WebPage / StickyNote のツールバーは `NodeToolbar` を使わず、ノード本体と同じ DOM 階層に描く。重なり順はノード本体と一体で扱い、ポータル前提の click-through は使わない
+- **ツールバーの固定サイズ**: canvas zoom 中も文字・ボタン・アイコンの画面上サイズを固定したい UI は `zoomPx()` と `AppButton scaleWithCanvasZoom` を使う。高さ、padding、gap、font-size、icon size、border 幅を world 座標へ直接ハードコードしない
+- **付箋のドラッグ起点**: 付箋はノード本体をドラッグ可能にし、textarea や色ボタンなどの操作要素だけを `nodrag` で保護する。header は node 内描画だが dragHandle 専用にはしない
 - **付箋本文の編集開始**: 付箋本文は未選択時のクリックで選択だけ行い、選択済みの本文エリアを再度クリックした時だけ編集を開始する。ヘッダーや色ボタン、リサイズ操作からは編集開始しない
 - **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用する。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
 - **Framer Motion との競合**: ノードコンポーネント内で `motion.div layout="position"` を使用しない。React Flow が CSS transform で位置を管理しているため、`layout="position"` のスプリングアニメーション（レイアウトシフト補正）がドラッグ方向を反転させる。Canvas や外側 UI の `motion.div` には使用可（ノード外）
@@ -41,7 +52,7 @@
 ### リサイズ機能（フェーズ 3 以降）
 
 - **StickyNoteNode リサイズ**: React Flow の `NodeResizeControl` は四隅ハンドルだけを使い、選択枠の線は共通 `SelectionFrameOverlay` で外側に描く。手動リサイズは**横幅変更のみ**許可し、高さは入力内容に応じた自動調整に委譲する。
-  - sticky header は `NodeToolbar` を重ねる専用 gutter で、保存する `height` は本文エリアの高さそのもの
+  - sticky header は node 内描画の chrome で、保存する `height` は本文エリアの高さそのもの
   - 手動リサイズの制約は `minWidth = STICKY_NOTE_MIN_WIDTH` のみを使う
   - 自動高さは `STICKY_NOTE_MIN_HEIGHT` を下限に `updateNodeSizeWithoutHistory` で反映し、Undo/Redo 履歴を積まない
   - ルート要素は `size-full` でレスポンシブ化。内部コンテンツは横方向の width 変更に追従する
@@ -50,7 +61,7 @@
 - **React Flow controlled mode 必須設定**:
   - `flowNodes` 構築時に `selected: node.id === selectedNodeId` を必ず明示的に設定（無いと選択連動のリサイズ UI が表示されない）
   - `onNodesChange` の `dimensions` 変更を追跡して `rfMeasured` state に保存し、`flowNodes` の `measured` プロパティに付与（未初期化状態の防止）
-- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizeControl` を 8 個明示配置する。可視の選択枠は共通 `SelectionFrameOverlay` で描き、line 4 本は上下左右リサイズ用の不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準に置く。見えている上下バー面は `WebPageNode` 本体が持ち、`NodeToolbar` はタイトル/操作ボタンだけを載せる透明レイヤとして重ねる。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
+- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizeControl` を 8 個明示配置する。可視の選択枠は共通 `SelectionFrameOverlay` で描き、line 4 本は上下左右リサイズ用の不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準に置く。見えている上下バー面とタイトル/操作 UI はどちらも `WebPageNode` 本体内に描く。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
   - リサイズ開始時に `onResizeStart` で `prepareInteractionStart('resize', nodeId)` を fire-and-forget で実行し、Webview スクリーンショット準備とスクリーンショット表示を非同期で開始
   - `onResize` で毎フレームの寸法を `webPageResizing` state に保持し、`flowNodes` useMemo で優先適用（スナップバック防止）
   - `onResizeEnd` でストア更新と `webPageResizing` クリア、DisplayEngine 復帰
@@ -101,17 +112,20 @@
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `components/Common/ContextMenu` を使い createPortal で body 直下に描画する。
 - node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
-- File メニューの `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
+- File メニューの `new` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
+- document window 関連のコマンドや IPC は window-local に閉じ、`main` 固定の参照を増やさない。
+- child webview の label は `page-{windowLabel}-{pageId}` のように親 document window を含めて一意化する。
 
 ## リサイズハンドルとカーソル制御
 
 ### WebPageNode（React Flow `NodeResizeControl` を 8 方向で明示配置）
 
 - React Flow の `NodeResizeControl` を 8 個配置し、選択時のみ表示する。
-- 見えている上下バー面は `WebPageNode` 本体内に描き、`NodeToolbar` はタイトル/ボタンなどの操作レイヤだけを透明で重ねる。
+- 見えている上下バー面とタイトル/ボタンなどの操作 UI はどちらも `WebPageNode` 本体内に描く。
 - 可視の青い選択線は共通 `SelectionFrameOverlay` が描き、Web の line 要素は `src/index.css` で選択線をまたぐ resize hit area とカーソルを持たせる。
 - 角ハンドルは付箋ノードと同じく選択線の交点に中心が乗る配置を使う。
 - リサイズカーソルは inline style ではなく `NodeResizeControl` の class と `src/index.css` で管理する。
+- top / bottom chrome は `dragHandle: '.node-drag-handle'` を維持し、ボタン類は `nodrag` と `onMouseDown` で drag 開始を止める。
 
 ### StickyNoteNode（React Flow `NodeResizeControl` で左右辺 + 四隅ハンドルを表示）
 

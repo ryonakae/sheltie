@@ -2,8 +2,10 @@ mod commands;
 
 use commands::{
     store::{
-        close_ready, load_project_file, load_project_state, save_project_file,
-        save_project_state,
+        close_ready, create_untitled_document_window, focus_document_window,
+        focused_document_window_label, handle_launch_args, load_project_file,
+        load_window_context, new_document_window, open_document_window,
+        save_project_file, DocumentManagerState,
     },
     theme::{get_platform_info, load_theme, set_theme},
     webview::{
@@ -23,6 +25,7 @@ use tauri::{
 
 const EVENT_EDIT_COMMAND: &str = "edit-command";
 const EVENT_FILE_COMMAND: &str = "file-command";
+const MENU_ID_FILE_NEW: &str = "file.new";
 const MENU_ID_FILE_OPEN: &str = "file.open";
 const MENU_ID_FILE_SAVE: &str = "file.save";
 const MENU_ID_FILE_SAVE_AS: &str = "file.save-as";
@@ -31,15 +34,38 @@ const MENU_ID_EDIT_REDO: &str = "edit.redo";
 const MENU_ID_EDIT_DELETE: &str = "edit.delete";
 const MENU_ID_OPEN_DEVTOOLS: &str = "develop.open-devtools";
 
-fn emit_edit_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
-    if let Err(error) = app.emit_to("main", EVENT_EDIT_COMMAND, command) {
-        log::warn!("edit-command の送信に失敗しました: command={command}, error={error}");
+fn emit_window_command<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    event_name: &str,
+    command: &str,
+) -> bool {
+    let Some(label) = focused_document_window_label(app) else {
+        return false;
+    };
+
+    if let Err(error) = app.emit_to(&label, event_name, command) {
+        log::warn!(
+            "window command の送信に失敗しました: label={label}, event={event_name}, command={command}, error={error}"
+        );
+        return false;
     }
+
+    true
+}
+
+fn emit_edit_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
+    let _ = emit_window_command(app, EVENT_EDIT_COMMAND, command);
 }
 
 fn emit_file_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
-    if let Err(error) = app.emit_to("main", EVENT_FILE_COMMAND, command) {
-        log::warn!("file-command の送信に失敗しました: command={command}, error={error}");
+    if emit_window_command(app, EVENT_FILE_COMMAND, command) {
+        return;
+    }
+
+    if command == "new" {
+        if let Err(error) = create_untitled_document_window(app) {
+            log::warn!("new window の生成に失敗しました: {error}");
+        }
     }
 }
 
@@ -150,10 +176,14 @@ fn configure_file_menu<R: tauri::Runtime>(
         fallback
     };
 
+    remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_NEW)?;
     remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_OPEN)?;
     remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_SAVE)?;
     remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_SAVE_AS)?;
 
+    let new_item = MenuItemBuilder::with_id(MENU_ID_FILE_NEW, "New")
+        .accelerator("CmdOrCtrl+N")
+        .build(app)?;
     let open_item = MenuItemBuilder::with_id(MENU_ID_FILE_OPEN, "Open")
         .accelerator("CmdOrCtrl+O")
         .build(app)?;
@@ -164,9 +194,10 @@ fn configure_file_menu<R: tauri::Runtime>(
         .accelerator("CmdOrCtrl+Shift+S")
         .build(app)?;
 
-    file_submenu.insert(&open_item, 0)?;
-    file_submenu.insert(&save_item, 1)?;
-    file_submenu.insert(&save_as_item, 2)?;
+    file_submenu.insert(&new_item, 0)?;
+    file_submenu.insert(&open_item, 1)?;
+    file_submenu.insert(&save_item, 2)?;
+    file_submenu.insert(&save_as_item, 3)?;
 
     Ok(())
 }
@@ -227,6 +258,12 @@ pub fn run() {
     use tauri_plugin_prevent_default::Flags;
 
     let builder = tauri::Builder::default()
+        .manage(DocumentManagerState::default())
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            if let Err(error) = handle_launch_args(app, &argv, Some(cwd.as_str())) {
+                log::error!("single-instance 起動要求の処理に失敗しました: {error}");
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_prevent_default::Builder::new()
@@ -261,8 +298,13 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            let launch_args: Vec<String> = std::env::args().collect();
+            if let Err(error) = handle_launch_args(&app.handle(), &launch_args, None) {
+                log::error!("初期 window の作成に失敗しました: {error}");
+            }
             app.on_menu_event(|app, event| {
                 match event.id().as_ref() {
+                    MENU_ID_FILE_NEW => emit_file_command(app, "new"),
                     MENU_ID_FILE_OPEN => emit_file_command(app, "open"),
                     MENU_ID_FILE_SAVE => emit_file_command(app, "save"),
                     MENU_ID_FILE_SAVE_AS => emit_file_command(app, "save-as"),
@@ -271,9 +313,16 @@ pub fn run() {
                     MENU_ID_EDIT_DELETE => emit_edit_command(app, "delete"),
                     MENU_ID_OPEN_DEVTOOLS => {
                         #[cfg(debug_assertions)]
-                        if let Some(webview) = app.get_webview("main") {
-                            webview.open_devtools();
-                        } else if let Some(window) = app.get_webview_window("main") {
+                        if let Some(label) = focused_document_window_label(app) {
+                            if let Some(window) = app.get_webview_window(&label) {
+                                let _ = focus_document_window(app, &label);
+                                window.open_devtools();
+                            }
+                        } else if let Some(window) = app
+                            .webview_windows()
+                            .into_iter()
+                            .find_map(|(label, window)| label.starts_with("document-").then_some(window))
+                        {
                             window.open_devtools();
                         }
                     }
@@ -283,8 +332,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            load_project_state,
-            save_project_state,
+            load_window_context,
+            new_document_window,
+            open_document_window,
             close_ready,
             load_project_file,
             save_project_file,

@@ -42,6 +42,7 @@ export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
         <TextField
           value={value}
           onChange={setValue}
+          aria-label="開くURL"
           className="w-full"
           isInvalid={hasValue && !isValid}
         >

@@ -1,10 +1,9 @@
 import {
   promptUnsavedChangesDialog,
   type UnsavedChangesDecision,
-  type UnsavedChangesReason,
 } from '@/components/Common/UnsavedChangesDialog';
-import { HOME_ID } from '@/constants';
-import { saveProjectById } from '@/lib/file-commands';
+import { saveCurrentProject } from '@/lib/file-commands';
+import { getProjectDisplayName } from '@/lib/project-display-name';
 import { isProjectDirty } from '@/lib/project-document';
 import { api } from '@/lib/tauri-bridge';
 import { useProjectStore } from '@/store/tab-store';
@@ -27,115 +26,43 @@ function runExclusiveCloseOperation(operation: () => Promise<void>): Promise<voi
   return execution;
 }
 
-function getProjectById(projectId: string): Project | undefined {
-  return useProjectStore.getState().projects.find((project) => project.id === projectId);
+function getProject(): Project | null {
+  return useProjectStore.getState().project;
 }
 
-function getAppCloseProjectOrder(): string[] {
-  const { activeId, openIds } = useProjectStore.getState();
-  if (activeId === HOME_ID) {
-    return [...openIds];
-  }
-  return [activeId, ...openIds.filter((projectId) => projectId !== activeId)];
-}
-
-function discardProjectChanges(projectId: string): void {
-  const project = getProjectById(projectId);
-  if (!project) return;
-
-  if (project.filePath) {
-    useProjectStore.getState().restoreProjectFromLastSaved(projectId);
-    return;
-  }
-
-  useProjectStore.getState().deleteProject(projectId);
-}
-
-async function confirmUnsavedChanges(options: {
-  projectTitle: string;
-  reason: UnsavedChangesReason;
-}): Promise<UnsavedChangesDecision> {
-  return promptUnsavedChangesDialog(options);
-}
-
-async function resolveDirtyProjectBeforeClose(
-  projectId: string,
-  reason: UnsavedChangesReason,
-): Promise<boolean> {
-  const project = getProjectById(projectId);
-  if (!project) return true;
-
-  if (!isProjectDirty(project)) {
-    if (!project.filePath && reason === 'app-close') {
-      useProjectStore.getState().deleteProject(projectId);
-    }
-    return true;
-  }
-
-  const decision = await confirmUnsavedChanges({
-    projectTitle: project.title,
-    reason,
-  });
-
-  if (decision === 'cancel') {
-    return false;
-  }
-
-  if (decision === 'save') {
-    const result = await saveProjectById(projectId);
-    return result.status === 'saved';
-  }
-
-  discardProjectChanges(projectId);
-  return true;
-}
-
-export function requestProjectTabClose(projectId: string): Promise<void> {
-  return runExclusiveCloseOperation(async () => {
-    const project = getProjectById(projectId);
-    if (!project) return;
-
-    if (!isProjectDirty(project)) {
-      if (project.filePath) {
-        useProjectStore.getState().closeProject(projectId);
-      } else {
-        useProjectStore.getState().deleteProject(projectId);
-      }
-      return;
-    }
-
-    const didResolve = await resolveDirtyProjectBeforeClose(projectId, 'tab-close');
-    if (!didResolve) return;
-
-    const latestProject = getProjectById(projectId);
-    if (!latestProject) return;
-
-    if (latestProject.filePath) {
-      useProjectStore.getState().closeProject(projectId);
-      return;
-    }
-
-    useProjectStore.getState().deleteProject(projectId);
+async function confirmUnsavedChanges(project: Project): Promise<UnsavedChangesDecision> {
+  return promptUnsavedChangesDialog({
+    projectTitle: getProjectDisplayName(project),
   });
 }
 
 export function requestAppClose(): Promise<void> {
   return runExclusiveCloseOperation(async () => {
-    for (const projectId of [...useProjectStore.getState().openIds]) {
-      const project = getProjectById(projectId);
-      if (project && !project.filePath && !isProjectDirty(project)) {
-        useProjectStore.getState().deleteProject(projectId);
-      }
+    const project = getProject();
+    if (!project) {
+      await api.closeReady();
+      return;
     }
 
-    for (const projectId of getAppCloseProjectOrder()) {
-      const didResolve = await resolveDirtyProjectBeforeClose(projectId, 'app-close');
-      if (!didResolve) {
+    if (!isProjectDirty(project)) {
+      await api.closeReady();
+      return;
+    }
+
+    const decision = await confirmUnsavedChanges(project);
+    if (decision === 'cancel') {
+      return;
+    }
+
+    if (decision === 'save') {
+      const result = await saveCurrentProject();
+      if (result.status !== 'saved') {
         return;
       }
+      await api.closeReady();
+      return;
     }
 
-    const { projects, openIds, activeId } = useProjectStore.getState();
-    await api.closeReady({ projects, openIds, activeId });
+    await api.closeReady();
   });
 }

@@ -112,7 +112,7 @@ export function useWebPageWebviewLifecycle({
 
         const currentRect = placeholder.getBoundingClientRect();
         void webviewApi.updateBounds(
-          nodeId,
+          label,
           currentRect.left,
           currentRect.top,
           currentRect.width,
@@ -174,12 +174,13 @@ export function useWebPageWebviewLifecycle({
   }, [nodeId, onNavigated, onScrollEnded, onTitleUpdated, onWebviewLoaded]);
 
   useEffect(() => {
-    if (!url || !webviewLabelRef.current) return;
+    const label = webviewLabelRef.current;
+    if (!url || !label) return;
     if (runtimeUrlRef.current === url) return;
 
     runtimeUrlRef.current = url;
-    void webviewApi.reload(nodeId, url);
-  }, [nodeId, url]);
+    void webviewApi.reload(label, url);
+  }, [url]);
 
   useEffect(() => {
     if (!screenshotUrl) return;

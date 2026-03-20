@@ -6,26 +6,21 @@ import { webviewApi } from '@/lib/tauri-bridge';
 import type { BoardNode } from '@/types';
 
 interface UseSiteboardNodeRuntimeParams {
-  activeId: string;
   nodes: BoardNode[];
+  webviewLabelsByNodeId: Record<string, string>;
   selectedNodeId: string | null;
   onClearSelection: () => void;
-  updateWebNodeUrl: (projectId: string, nodeId: string, url: string, title: string) => void;
-  updateNodeTitle: (projectId: string, nodeId: string, title: string) => void;
-  removeNode: (projectId: string, nodeId: string) => void;
-  setWebNodeWebviewLabel: (projectId: string, nodeId: string, label: string) => void;
-  clearWebNodeWebviewLabel: (projectId: string, nodeId: string) => void;
-  setWebNodeUrl: (projectId: string, nodeId: string, url: string) => void;
-  pinWebNodeUrl: (projectId: string, nodeId: string) => void;
-  updateNodeSize: (projectId: string, nodeId: string, width: number, height: number) => void;
-  updateNodeSizeWithoutHistory: (
-    projectId: string,
-    nodeId: string,
-    width: number,
-    height: number,
-  ) => void;
-  updateStickyNoteContent: (projectId: string, nodeId: string, content: string) => void;
-  cycleStickyNoteColor: (projectId: string, nodeId: string) => void;
+  updateWebNodeUrl: (nodeId: string, url: string, title: string) => void;
+  updateNodeTitle: (nodeId: string, title: string) => void;
+  removeNode: (nodeId: string) => void;
+  setWebNodeWebviewLabel: (nodeId: string, label: string) => void;
+  clearWebNodeWebviewLabel: (nodeId: string) => void;
+  setWebNodeUrl: (nodeId: string, url: string) => void;
+  pinWebNodeUrl: (nodeId: string) => void;
+  updateNodeSize: (nodeId: string, width: number, height: number) => void;
+  updateNodeSizeWithoutHistory: (nodeId: string, width: number, height: number) => void;
+  updateStickyNoteContent: (nodeId: string, content: string) => void;
+  cycleStickyNoteColor: (nodeId: string) => void;
   computeDisplayModes: () => void;
   captureScreenshot: (nodeId: string) => Promise<boolean>;
 }
@@ -39,8 +34,8 @@ interface NavigationRuntimeEntry {
 }
 
 export function useSiteboardNodeRuntime({
-  activeId,
   nodes,
+  webviewLabelsByNodeId,
   selectedNodeId,
   onClearSelection,
   updateWebNodeUrl,
@@ -65,6 +60,18 @@ export function useSiteboardNodeRuntime({
   const refreshTimerRef = useRef<Record<string, number>>({});
 
   const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const getLiveWebviewLabel = useCallback(
+    (nodeId: string, command: string, labelOverride?: string): string | null => {
+      const label = labelOverride ?? webviewLabelsByNodeId[nodeId];
+      if (!label && import.meta.env.DEV) {
+        console.warn(`[useSiteboardNodeRuntime] ${command}: WebView label がありません`, {
+          nodeId,
+        });
+      }
+      return label ?? null;
+    },
+    [webviewLabelsByNodeId],
+  );
   const visibleNavStates = useMemo(() => {
     const nodeIds = new Set(nodes.map((node) => node.id));
     const next: Record<string, NavigationState> = {};
@@ -154,13 +161,16 @@ export function useSiteboardNodeRuntime({
   );
 
   const refreshNavigationState = useCallback(
-    async (nodeId: string) => {
-      const state = await webviewApi.getNavigationState(nodeId);
+    async (nodeId: string, labelOverride?: string) => {
+      const label = getLiveWebviewLabel(nodeId, 'getNavigationState', labelOverride);
+      const state = label
+        ? await webviewApi.getNavigationState(label)
+        : { can_go_back: false, can_go_forward: false };
       const runtime = ensureNavigationRuntime(nodeId);
       runtime.nativeState = state;
       updateResolvedNavigationState(nodeId);
     },
-    [ensureNavigationRuntime, updateResolvedNavigationState],
+    [ensureNavigationRuntime, getLiveWebviewLabel, updateResolvedNavigationState],
   );
 
   const scheduleRefreshNavigationState = useCallback(
@@ -188,31 +198,45 @@ export function useSiteboardNodeRuntime({
 
   const handleGoBack = useCallback(
     (nodeId: string) => {
+      const label = getLiveWebviewLabel(nodeId, 'goBack');
+      if (!label) return;
       const runtime = ensureNavigationRuntime(nodeId);
       pendingActionRef.current[nodeId] = 'back';
       runtime.forwardDepth = Math.max(runtime.forwardDepth, 1);
       updateResolvedNavigationState(nodeId);
-      void webviewApi.goBack(nodeId);
+      void webviewApi.goBack(label);
       scheduleRefreshNavigationState(nodeId);
     },
-    [ensureNavigationRuntime, scheduleRefreshNavigationState, updateResolvedNavigationState],
+    [
+      ensureNavigationRuntime,
+      getLiveWebviewLabel,
+      scheduleRefreshNavigationState,
+      updateResolvedNavigationState,
+    ],
   );
 
   const handleGoForward = useCallback(
     (nodeId: string) => {
+      const label = getLiveWebviewLabel(nodeId, 'goForward');
+      if (!label) return;
       const runtime = ensureNavigationRuntime(nodeId);
       pendingActionRef.current[nodeId] = 'forward';
       runtime.backDepth = Math.max(runtime.backDepth, 1);
       updateResolvedNavigationState(nodeId);
-      void webviewApi.goForward(nodeId);
+      void webviewApi.goForward(label);
       scheduleRefreshNavigationState(nodeId);
     },
-    [ensureNavigationRuntime, scheduleRefreshNavigationState, updateResolvedNavigationState],
+    [
+      ensureNavigationRuntime,
+      getLiveWebviewLabel,
+      scheduleRefreshNavigationState,
+      updateResolvedNavigationState,
+    ],
   );
 
   const handleNavigated = useCallback(
     (nodeId: string, url: string, title: string) => {
-      updateWebNodeUrl(activeId, nodeId, url, title);
+      updateWebNodeUrl(nodeId, url, title);
 
       clearCaptureTimer(nodeId);
       captureTimerRef.current[nodeId] = window.setTimeout(() => {
@@ -247,7 +271,6 @@ export function useSiteboardNodeRuntime({
       scheduleRefreshNavigationState(nodeId);
     },
     [
-      activeId,
       captureScreenshot,
       clearCaptureTimer,
       ensureNavigationRuntime,
@@ -261,35 +284,29 @@ export function useSiteboardNodeRuntime({
   const handleTitleUpdated = useCallback(
     (nodeId: string, title: string) => {
       if (!title) return;
-      updateNodeTitle(activeId, nodeId, title);
+      updateNodeTitle(nodeId, title);
       void refreshNavigationState(nodeId);
     },
-    [activeId, refreshNavigationState, updateNodeTitle],
+    [refreshNavigationState, updateNodeTitle],
   );
 
   const handleWebviewCreated = useCallback(
     (nodeId: string, label: string) => {
-      setWebNodeWebviewLabel(activeId, nodeId, label);
+      setWebNodeWebviewLabel(nodeId, label);
       ensureNavigationRuntime(nodeId);
       requestAnimationFrame(() => computeDisplayModes());
-      void refreshNavigationState(nodeId);
+      void refreshNavigationState(nodeId, label);
     },
-    [
-      activeId,
-      computeDisplayModes,
-      ensureNavigationRuntime,
-      refreshNavigationState,
-      setWebNodeWebviewLabel,
-    ],
+    [computeDisplayModes, ensureNavigationRuntime, refreshNavigationState, setWebNodeWebviewLabel],
   );
 
   const handleWebviewDestroyed = useCallback(
     (nodeId: string) => {
-      clearWebNodeWebviewLabel(activeId, nodeId);
+      clearWebNodeWebviewLabel(nodeId);
       clearRefreshTimer(nodeId);
       pendingActionRef.current[nodeId] = undefined;
     },
-    [activeId, clearRefreshTimer, clearWebNodeWebviewLabel],
+    [clearRefreshTimer, clearWebNodeWebviewLabel],
   );
 
   const handleWebviewLoaded = useCallback(
@@ -314,70 +331,65 @@ export function useSiteboardNodeRuntime({
       }
       removeNavigationState(nodeId);
       clearNodeRuntime(nodeId);
-      removeNode(activeId, nodeId);
+      removeNode(nodeId);
     },
-    [
-      activeId,
-      clearNodeRuntime,
-      onClearSelection,
-      removeNavigationState,
-      removeNode,
-      selectedNodeId,
-    ],
+    [clearNodeRuntime, onClearSelection, removeNavigationState, removeNode, selectedNodeId],
   );
 
   const handleReloadWebNode = useCallback(
     (nodeId: string) => {
       const node = nodes.find((candidate) => candidate.id === nodeId);
       if (!node) return;
-      void webviewApi.reload(nodeId, node.addedUrl ?? node.url);
+      const label = getLiveWebviewLabel(nodeId, 'reload');
+      if (!label) return;
+      void webviewApi.reload(label, node.addedUrl ?? node.url);
     },
-    [nodes],
+    [getLiveWebviewLabel, nodes],
   );
 
   const handlePinWebNodeUrl = useCallback(
     (nodeId: string) => {
-      pinWebNodeUrl(activeId, nodeId);
+      pinWebNodeUrl(nodeId);
       toast.success('表示中のページで固定しました');
     },
-    [activeId, pinWebNodeUrl],
+    [pinWebNodeUrl],
   );
 
   const handleUrlSubmit = useCallback(
     (nodeId: string, url: string) => {
-      setWebNodeUrl(activeId, nodeId, url);
+      setWebNodeUrl(nodeId, url);
     },
-    [activeId, setWebNodeUrl],
+    [setWebNodeUrl],
   );
 
   const handleResizePreset = useCallback(
     (nodeId: string, width: number, height: number) => {
-      updateNodeSize(activeId, nodeId, width, height);
+      updateNodeSize(nodeId, width, height);
     },
-    [activeId, updateNodeSize],
+    [updateNodeSize],
   );
 
   const handleStickyNoteContentChange = useCallback(
     (nodeId: string, content: string) => {
-      updateStickyNoteContent(activeId, nodeId, content);
+      updateStickyNoteContent(nodeId, content);
     },
-    [activeId, updateStickyNoteContent],
+    [updateStickyNoteContent],
   );
 
   const handleStickyNoteColorCycle = useCallback(
     (nodeId: string) => {
-      cycleStickyNoteColor(activeId, nodeId);
+      cycleStickyNoteColor(nodeId);
     },
-    [activeId, cycleStickyNoteColor],
+    [cycleStickyNoteColor],
   );
 
   const handleStickyNoteAutoHeightChange = useCallback(
     (nodeId: string, height: number) => {
       const node = nodes.find((candidate) => candidate.id === nodeId);
       if (!node || node.height === height) return;
-      updateNodeSizeWithoutHistory(activeId, nodeId, node.width, height);
+      updateNodeSizeWithoutHistory(nodeId, node.width, height);
     },
-    [activeId, nodes, updateNodeSizeWithoutHistory],
+    [nodes, updateNodeSizeWithoutHistory],
   );
 
   useEffect(() => {

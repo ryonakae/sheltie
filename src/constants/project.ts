@@ -1,5 +1,4 @@
-// ホームID、ビューポート、ページ/付箋の既定値
-export const HOME_ID = '__home__' as const;
+// ビューポート、ページ/付箋の既定値
 export const DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 };
 export const DEFAULT_PAGE_WIDTH = 375;
 export const DEFAULT_PAGE_HEIGHT = 812;

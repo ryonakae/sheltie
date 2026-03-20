@@ -42,7 +42,7 @@
 
 - `pan/zoom` 開始時は、可視 `WebPage` ノードの `native` を即座に降ろし、保存済みスクリーンショットがあれば `screenshot`、なければ `hidden` に切り替える
 - 同時に fresh capture をバックグラウンドで開始し、完了後は操作中でも `stale -> fresh` または `hidden -> fresh` に差し替える
-- fresh capture の開始と native hide は `save_webview_screenshot(..., hideAfterSnapshotRequest=true)` を 1 回の Rust コマンド内で直列化し、JS の `saveScreenshot()` / `hide()` race を避ける
+- fresh capture の開始と native hide は `save_webview_screenshot(label, pageId, ..., hideAfterSnapshotRequest=true)` を 1 回の Rust コマンド内で直列化し、JS の `saveScreenshot()` / `hide()` race を避ける
 - `computeDisplayModes()` は操作中（`activeInteractionsRef.current.size > 0`）に即リターンするため、操作中に誤って `native` へ復帰しない
 
 ### プリキャプチャ戦略
@@ -77,7 +77,7 @@ handleInteractionChange(true, type);
 return type;
 ```
 
-`prepareInteractionStart` は可視ページに対して stale screenshot の即時利用判定を行い、同時に `save_webview_screenshot(..., hideAfterSnapshotRequest=true)` で fresh capture を開始する。並行して `applyPreparedInteractionModes()` が走り、その時点で stale screenshot があれば `screenshot`、なければ `hidden` へ切り替える。fresh 完了後は `captureScreenshot()` 成功ハンドラが `screenshotUrl` を更新し、そのまま `fresh` に差し替える。
+`prepareInteractionStart` は可視ページに対して stale screenshot の即時利用判定を行い、同時に `save_webview_screenshot(label, pageId, ..., hideAfterSnapshotRequest=true)` で fresh capture を開始する。並行して `applyPreparedInteractionModes()` が走り、その時点で stale screenshot があれば `screenshot`、なければ `hidden` へ切り替える。fresh 完了後は `captureScreenshot()` 成功ハンドラが `screenshotUrl` を更新し、そのまま `fresh` に差し替える。
 
 `handleMove` は `onMoveStart` 取りこぼし時のフォールバックとして機能する。viewport が実際に動いた時のみ発火するため、`moveInteractionTypeRef.current === null` なら `beginViewportInteraction` を呼んで type を確定し、その後 `scheduleInteractionUpdate()` で display mode を更新する。
 
@@ -100,6 +100,7 @@ return type;
 - この時は `reactFlowInstanceRef.current.setViewport(storeViewport, { duration: 0 })` で React Flow 実体へ再同期し、同時に `uiZoom` も store 値へ揃える
 - 既に同じ viewport が反映済みなら差分比較で `setViewport()` をスキップし、無限ループや余計な再描画を避ける
 - これにより WebPage 外枠高さは zoom 操作中の毎 tick で current zoom に追従し、zoom 終了後の display-mode 復帰や viewport 保存 debounce で後追い補正しない
+- `useSiteboardDisplayEngine` の container `ResizeObserver` は `computeDisplayModes()` を同期実行せず、rAF で 1 フレームに 1 回へ集約する。observer callback 内の DOM mutation を避け、zoom 中の `ResizeObserver loop completed with undelivered notifications` warning を抑制する
 
 ## 右下 viewport controls
 
@@ -126,7 +127,7 @@ return type;
 - 新規ノード追加時の自動配置も drag 補正と同じ zoom-aware な外枠矩形を使う
 - センタリングや可視判定の fallback 計算も同じ外枠矩形を使い、DOM 実測がない場合でも content だけで過小評価しない
 - 一方でネイティブ Webview の bounds 更新や safe area 判定は従来どおり placeholder 矩形を使う。外枠判定と Webview 実表示判定は責務を分ける
-- WebPage の placeholder は上下 chrome gutter を除いた content 領域だけを指す。`NodeToolbar` 化した上下バーは外枠に含めるが、Webview bounds には含めない
+- WebPage の placeholder は上下 chrome gutter を除いた content 領域だけを指す。node 内に描いた上下 chrome は外枠に含めるが、Webview bounds には含めない
 
 ## 遷移ルール
 
@@ -177,7 +178,7 @@ return type;
 - `pageId` は node id をそのまま使う。webpage 系 Webview IPC では歴史的理由で `pageId` 命名を維持している
 
 **フロー（撮影時）**:
-1. Rust `save_webview_screenshot(pageId, projectId, hideAfterSnapshotRequest?)` → WKWebView スナップショット要求。`hideAfterSnapshotRequest=true` の時は要求直後に同じ Rust コマンド内で Webview を hide
+1. Rust `save_webview_screenshot(label, pageId, projectId, hideAfterSnapshotRequest?)` → WKWebView スナップショット要求。`hideAfterSnapshotRequest=true` の時は要求直後に同じ Rust コマンド内で Webview を hide
 2. JS: `convertFileSrc(filePath) + '?t=Date.now()'` でアセット URL 生成 → `<img src>` に設定
 3. `Image.decode()` でデコード完了を待つ
 4. 既存 screenshot が表示中でも新 URL が準備できるまで差し替えない
@@ -224,7 +225,7 @@ return type;
 `screenshot -> native` への復帰時は以下を守る。
 
 1. 先に `webviewApi.show()` を呼ぶ。
-2. macOS では必要に応じて `setOpacity(pageId, 0)` から始める。
+2. macOS では必要に応じて `setOpacity(label, 0)` から始める。
 3. `requestAnimationFrame` で 1 フレーム待つ。
 4. `data-display-mode='native'` と state 更新を行う。
 
@@ -232,7 +233,7 @@ return type;
 
 `native -> screenshot` 側は逆に「スクショ要求と hide を分離しない」ことが重要。
 
-1. interaction-start では `save_webview_screenshot(..., hideAfterSnapshotRequest=true)` を先に投げる。
+1. interaction-start では `save_webview_screenshot(label, pageId, ..., hideAfterSnapshotRequest=true)` を先に投げる。
 2. `applyPreparedInteractionModes()` が stale screenshot または `hidden` を反映する。
 3. fresh 完了後に `screenshotUrl` を差し替える。
 
@@ -244,9 +245,10 @@ return type;
 - 空フレーム（`url === ''`）は Webview を作成しない。
 - Webview の create/destroy は URL 同期から切り離し、`node.url` 更新では再生成しない。
 - `webviewLabel` は `BoardNode` に持たず、`tab-store` の `webviewRuntime.labelsByNodeId` に保持する。「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。label が無いページは `native` に戻さず `screenshot` または `hidden` を使う。
+- 既存 Webview への後続操作は `pageId` から引き直さず、この `labelsByNodeId` の `label` を正本として使う。`updateBounds`、`setOpacity`、`reload`、`goBack/Forward`、`saveScreenshot` はすべて `label` ベースで呼ぶ。
 - `screenshotUrl` も `BoardNode` には持たず、`tab-store` の `webviewRuntime.screenshotUrlsByNodeId` に runtime cache として保持する。タブ再マウントや起動直後の open tab 復元では、この cache を `useSiteboardDisplayEngine` の初期 state seed に使う。
 - `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、その更新で `reload` を再発火させない。
-- 既存 Webview への URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview` を呼ぶ。
+- 既存 Webview への URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview(label, url)` を呼ぶ。
 
 ## スクロール完了通知チャネル
 
@@ -365,3 +367,8 @@ React Flow の `onMoveStart` が火かない（ユーザー操作が high-latenc
 - イベント変更時: Rust emit と JS listener の名前一致を確認。
 - viewport insets を変更する場合: zoom 変化後の svh/lvh/vh/dvh の各単位が論理サイズと一致することを確認。
 - HTML 要素をネイティブ Webview の上に重ねる場合: 対象ページを screenshot/hidden モードに切り替えてから表示する（`handleContextMenuOpen` パターンを参照）。
+## Multiwebview command context
+
+- 作成後の native Webview への後続操作はすべて `labelsByNodeId` の label を正本にする。
+- 初回 `getNavigationState` は store 反映待ちに依存せず、`onWebviewCreated(nodeId, label)` で受け取った label をそのまま使って取得する。
+- Rust command 側は `tauri::Window` を host context として受け、child webview 配下から呼ばれても pan / zoom / drag / resize / screenshot 更新で同じ document window 上の Webview を解決する。

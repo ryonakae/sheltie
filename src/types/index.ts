@@ -41,6 +41,13 @@ export interface SiteboardDocumentV1 {
   nodes: SiteboardDocumentNode[];
 }
 
+export interface SiteboardDocumentV2 {
+  schemaVersion: 2;
+  nodes: SiteboardDocumentNode[];
+}
+
+export type SiteboardDocument = SiteboardDocumentV1 | SiteboardDocumentV2;
+
 export type SiteboardDocumentNode =
   | {
       id: string;
@@ -79,12 +86,11 @@ export interface SizePreset {
 
 export interface Project {
   id: string;
-  title: string;
   filePath?: string;
-  lastOpenedAt: number;
+  untitledIndex: number;
   nodes: BoardNode[];
   viewport: Viewport;
-  lastSavedDocument: SiteboardDocumentV1;
+  lastSavedDocument: SiteboardDocumentV2;
 }
 
 /** URL 未設定の空フレームかどうか */
@@ -116,12 +122,7 @@ export function isNodeMoved(node: BoardNode): boolean {
 }
 
 export interface ProjectState {
-  /** 全永続プロジェクト */
-  projects: Project[];
-  /** タブバーに表示中のプロジェクト ID（順序がタブの並び順） */
-  openIds: string[];
-  /** 現在アクティブなプロジェクト ID（HOME_ID の場合はホーム画面） */
-  activeId: string;
+  project: Project | null;
 }
 
 export interface ProjectWebviewRuntime {

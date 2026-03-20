@@ -6,21 +6,20 @@ use tauri::Manager;
 #[cfg(target_os = "macos")]
 pub async fn capture_webview_png_bytes(
     app: &AppHandle,
-    page_id: &str,
+    label: &str,
 ) -> Result<Vec<u8>, String> {
-    capture_webview_png_bytes_with_options(app, page_id, false).await
+    capture_webview_png_bytes_with_options(app, label, false).await
 }
 
 #[cfg(target_os = "macos")]
 pub async fn capture_webview_png_bytes_with_options(
     app: &AppHandle,
-    page_id: &str,
+    label: &str,
     hide_after_snapshot_request: bool,
 ) -> Result<Vec<u8>, String> {
     use std::sync::{Arc, Mutex};
     use tokio::sync::oneshot;
 
-    let label = format!("page-{}", page_id);
     let webview = app
         .get_webview(&label)
         .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
@@ -39,7 +38,7 @@ pub async fn capture_webview_png_bytes_with_options(
         if let Err(error) = webview.hide() {
             log::warn!(
                 "Webview を snapshot 要求直後に hide できませんでした: page_id={}, error={}",
-                page_id,
+                label,
                 error
             );
         }
@@ -52,7 +51,7 @@ pub async fn capture_webview_png_bytes_with_options(
 #[cfg(not(target_os = "macos"))]
 pub async fn capture_webview_png_bytes(
     _app: &AppHandle,
-    _page_id: &str,
+    _label: &str,
 ) -> Result<Vec<u8>, String> {
     Err("この OS ではサポートされていません".to_string())
 }
@@ -60,7 +59,7 @@ pub async fn capture_webview_png_bytes(
 #[cfg(not(target_os = "macos"))]
 pub async fn capture_webview_png_bytes_with_options(
     _app: &AppHandle,
-    _page_id: &str,
+    _label: &str,
     _hide_after_snapshot_request: bool,
 ) -> Result<Vec<u8>, String> {
     Err("この OS ではサポートされていません".to_string())
@@ -68,11 +67,11 @@ pub async fn capture_webview_png_bytes_with_options(
 
 pub async fn capture_webview_base64(
     app: &AppHandle,
-    page_id: &str,
+    label: &str,
 ) -> Result<String, String> {
     use base64::Engine as _;
 
-    let bytes = capture_webview_png_bytes(app, page_id).await?;
+    let bytes = capture_webview_png_bytes(app, label).await?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(format!("data:image/png;base64,{encoded}"))
 }

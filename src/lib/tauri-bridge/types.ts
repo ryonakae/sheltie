@@ -1,4 +1,9 @@
-export type FileCommand = 'open' | 'save' | 'save-as';
+export type FileCommand = 'new' | 'open' | 'save' | 'save-as';
+
+export type WindowContext = {
+  filePath: string | null;
+  untitledIndex: number;
+};
 
 export type NavigationState = {
   can_go_back: boolean;

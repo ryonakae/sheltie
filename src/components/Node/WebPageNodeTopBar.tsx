@@ -4,6 +4,7 @@ import ChevronRight from '@gravity-ui/icons/ChevronRight';
 import Pin from '@gravity-ui/icons/Pin';
 
 import { AppButton } from '@/components/Common/AppButton';
+import { zoomPx } from '@/lib/canvas-zoom';
 
 export interface WebPageNodeTopBarProps {
   title: string;
@@ -38,29 +39,43 @@ export function WebPageNodeTopBar({
   hideNavigationControls,
 }: WebPageNodeTopBarProps) {
   const iconStyle = {
-    width: 14,
-    height: 14,
+    width: zoomPx(14),
+    height: zoomPx(14),
   };
   const toolbarButtonStyle = {
-    width: 24,
-    minWidth: 24,
-    height: 24,
-    minHeight: 24,
     padding: 0,
   } as const;
 
   return (
-    <div className="flex h-8 w-full items-center gap-0.5 overflow-hidden bg-transparent px-2 text-xs/4">
-      <span className="min-w-0 flex-1 truncate px-1 text-foreground" title={url}>
+    <div
+      className="flex w-full min-w-0 items-center overflow-hidden bg-transparent"
+      style={{
+        height: zoomPx(32),
+        gap: zoomPx(2),
+        paddingInline: zoomPx(8),
+        fontSize: zoomPx(12),
+        lineHeight: zoomPx(16),
+      }}
+    >
+      <span
+        className="min-w-0 flex-1 truncate text-foreground"
+        style={{ paddingInline: zoomPx(4) }}
+        title={url}
+      >
         {title || formatDisplayUrl(url)}
-        {isMoved && <span className="ml-1 text-muted">(Moved)</span>}
+        {isMoved && (
+          <span className="text-muted" style={{ marginInlineStart: zoomPx(4) }}>
+            (Moved)
+          </span>
+        )}
       </span>
 
       {!hideNavigationControls && (
         <>
           <AppButton
             size="xs"
-            className="pointer-events-auto shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            scaleWithCanvasZoom
+            className="nodrag shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             style={toolbarButtonStyle}
             isDisabled={!onGoBack || !canGoBack}
             onMouseDown={(e) => e.stopPropagation()}
@@ -72,7 +87,8 @@ export function WebPageNodeTopBar({
 
           <AppButton
             size="xs"
-            className="pointer-events-auto shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            scaleWithCanvasZoom
+            className="nodrag shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             style={toolbarButtonStyle}
             isDisabled={!onGoForward || !canGoForward}
             onMouseDown={(e) => e.stopPropagation()}
@@ -84,7 +100,8 @@ export function WebPageNodeTopBar({
 
           <AppButton
             size="xs"
-            className="pointer-events-auto shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            scaleWithCanvasZoom
+            className="nodrag shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             style={toolbarButtonStyle}
             isDisabled={!onReload}
             onMouseDown={(e) => e.stopPropagation()}
@@ -99,7 +116,8 @@ export function WebPageNodeTopBar({
       {isMoved && onPinUrl && (
         <AppButton
           size="xs"
-          className="pointer-events-auto shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
+          scaleWithCanvasZoom
+          className="nodrag shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
           style={toolbarButtonStyle}
           tooltipMessage="表示中のページをデフォルトに固定"
           onMouseDown={(e) => e.stopPropagation()}

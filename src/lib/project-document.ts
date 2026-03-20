@@ -2,8 +2,9 @@ import {
   isStickyNoteNode,
   type BoardNode,
   type Project,
+  type SiteboardDocument,
   type SiteboardDocumentNode,
-  type SiteboardDocumentV1,
+  type SiteboardDocumentV2,
 } from '@/types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,24 +78,36 @@ function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
   throw new Error(`nodes[${index}].type が未対応です: ${type}`);
 }
 
-function parseProjectDocumentValue(value: unknown): SiteboardDocumentV1 {
+function parseProjectDocumentValue(value: unknown): SiteboardDocumentV2 {
   if (!isRecord(value)) {
     throw new Error('ルートはオブジェクトである必要があります');
   }
 
-  if (value.schemaVersion !== 1) {
-    throw new Error('schemaVersion は 1 のみ対応しています');
+  if (value.schemaVersion === 1) {
+    const title = parseString(value.title, 'title').trim() || 'Untitled';
+    const rawNodes = value.nodes;
+    if (!Array.isArray(rawNodes)) {
+      throw new Error('nodes は配列である必要があります');
+    }
+
+    void title;
+    return {
+      schemaVersion: 2,
+      nodes: rawNodes.map((node, index) => parseNode(node, index)),
+    };
   }
 
-  const title = parseString(value.title, 'title').trim() || 'Untitled';
+  if (value.schemaVersion !== 2) {
+    throw new Error('schemaVersion は 1 または 2 のみ対応しています');
+  }
+
   const rawNodes = value.nodes;
   if (!Array.isArray(rawNodes)) {
     throw new Error('nodes は配列である必要があります');
   }
 
   return {
-    schemaVersion: 1,
-    title,
+    schemaVersion: 2,
     nodes: rawNodes.map((node, index) => parseNode(node, index)),
   };
 }
@@ -156,21 +169,18 @@ export function documentNodeToBoardNode(node: SiteboardDocumentNode): BoardNode 
   };
 }
 
-export function createProjectDocument(
-  project: Pick<Project, 'title' | 'nodes'>,
-): SiteboardDocumentV1 {
+export function createProjectDocument(project: Pick<Project, 'nodes'>): SiteboardDocumentV2 {
   return {
-    schemaVersion: 1,
-    title: project.title,
+    schemaVersion: 2,
     nodes: project.nodes.map(boardNodeToDocumentNode),
   };
 }
 
-export function serializeProjectDocument(document: SiteboardDocumentV1): string {
+export function serializeProjectDocument(document: SiteboardDocument): string {
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 
-export function parseProjectDocument(contents: string): SiteboardDocumentV1 {
+export function parseProjectDocument(contents: string): SiteboardDocumentV2 {
   let parsed: unknown;
 
   try {
@@ -184,8 +194,8 @@ export function parseProjectDocument(contents: string): SiteboardDocumentV1 {
 
 export function sanitizeProjectDocument(
   rawDocument: unknown,
-  fallbackProject: Pick<Project, 'title' | 'nodes'>,
-): SiteboardDocumentV1 {
+  fallbackProject: Pick<Project, 'nodes'>,
+): SiteboardDocumentV2 {
   if (rawDocument === undefined) {
     return createProjectDocument(fallbackProject);
   }
@@ -197,9 +207,7 @@ export function sanitizeProjectDocument(
   }
 }
 
-export function isProjectDirty(
-  project: Pick<Project, 'title' | 'nodes' | 'lastSavedDocument'>,
-): boolean {
+export function isProjectDirty(project: Pick<Project, 'nodes' | 'lastSavedDocument'>): boolean {
   return (
     serializeProjectDocument(createProjectDocument(project)) !==
     serializeProjectDocument(project.lastSavedDocument)

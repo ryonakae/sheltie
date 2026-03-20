@@ -47,11 +47,7 @@ import {
   type SiteboardViewportTarget,
 } from '@/lib/siteboard-viewport';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
-import {
-  selectActiveProject,
-  selectActiveProjectWebviewRuntime,
-  useProjectStore,
-} from '@/store/tab-store';
+import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
 import { isStickyNoteNode, isWebPageNode } from '@/types';
 import type { WebPageNode } from '@/types';
@@ -95,14 +91,13 @@ export function Siteboard({
   onAddWebNode,
   onAddStickyNote,
 }: SiteboardProps) {
-  const activeProject = useProjectStore(selectActiveProject);
-  const activeProjectWebviewRuntime = useProjectStore(selectActiveProjectWebviewRuntime);
-  const activeId = useProjectStore((s) => s.activeId);
+  const project = useProjectStore(selectProject);
+  const projectWebviewRuntime = useProjectStore(selectProjectWebviewRuntime);
   const isDark = useThemeStore((s) => s.isDark);
 
   const {
-    undoActiveProject,
-    redoActiveProject,
+    undoProject,
+    redoProject,
     updateViewport,
     updateNodePosition,
     updateNodeSize,
@@ -125,13 +120,13 @@ export function Siteboard({
       cycleStickyNoteColor: s.cycleStickyNoteColor,
       clearWebNodeWebviewLabel: s.clearWebNodeWebviewLabel,
       hydrateProjectScreenshotUrls: s.hydrateProjectScreenshotUrls,
-      redoActiveProject: s.redoActiveProject,
+      redoProject: s.redoProject,
       pinWebNodeUrl: s.pinWebNodeUrl,
       removeNode: s.removeNode,
       setProjectScreenshotUrl: s.setProjectScreenshotUrl,
       setWebNodeUrl: s.setWebNodeUrl,
       setWebNodeWebviewLabel: s.setWebNodeWebviewLabel,
-      undoActiveProject: s.undoActiveProject,
+      undoProject: s.undoProject,
       updateNodePosition: s.updateNodePosition,
       updateNodeSize: s.updateNodeSize,
       updateNodeSizeWithoutHistory: s.updateNodeSizeWithoutHistory,
@@ -142,13 +137,13 @@ export function Siteboard({
     })),
   );
 
-  const nodes = useMemo(() => activeProject?.nodes ?? [], [activeProject?.nodes]);
+  const nodes = useMemo(() => project?.nodes ?? [], [project?.nodes]);
   const webPageNodes = useMemo(() => nodes.filter(isWebPageNode), [nodes]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef(activeProject?.viewport.zoom ?? 1);
+  const zoomRef = useRef(project?.viewport.zoom ?? 1);
 
-  const [uiZoom, setUiZoom] = useState(() => activeProject?.viewport.zoom ?? 1);
+  const [uiZoom, setUiZoom] = useState(() => project?.viewport.zoom ?? 1);
   // React Flow ネイティブドラッグ中のノード位置（ストアへの反映は dragStop 時のみ）
   const [draggingNodePositions, setDraggingNodePositions] = useState<
     Record<string, { x: number; y: number }>
@@ -182,6 +177,25 @@ export function Siteboard({
   const moveInteractionTypeRef = useRef<'pan' | 'zoom' | null>(null);
   const prefersReducedMotion = useReducedMotion();
 
+  const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
+  const hydrateCachedScreenshotUrls = useCallback(
+    (_projectId: string, screenshotUrlsByNodeId: Record<string, string>) => {
+      hydrateProjectScreenshotUrls(screenshotUrlsByNodeId);
+    },
+    [hydrateProjectScreenshotUrls],
+  );
+  const setCachedScreenshotUrl = useCallback(
+    (_projectId: string, nodeId: string, url: string) => {
+      setProjectScreenshotUrl(nodeId, url);
+    },
+    [setProjectScreenshotUrl],
+  );
+  const clearCachedScreenshotUrl = useCallback(
+    (_projectId: string, nodeId: string) => {
+      clearProjectScreenshotUrl(nodeId);
+    },
+    [clearProjectScreenshotUrl],
+  );
   const {
     captureScreenshot,
     cancelZoomRestore,
@@ -203,19 +217,18 @@ export function Siteboard({
     screenshotUrls,
   } = useSiteboardDisplayEngine({
     webPageNodes,
-    webviewLabelsByNodeId: activeProjectWebviewRuntime.labelsByNodeId,
-    cachedScreenshotUrlsByNodeId: activeProjectWebviewRuntime.screenshotUrlsByNodeId,
-    projectId: activeId ?? '',
+    webviewLabelsByNodeId: projectWebviewRuntime.labelsByNodeId,
+    cachedScreenshotUrlsByNodeId: projectWebviewRuntime.screenshotUrlsByNodeId,
+    projectId: project?.id ?? '',
     containerRef,
     zoomRef,
     centeredNodeId,
     onCenteredNodeHandled,
-    hydrateCachedScreenshotUrls: hydrateProjectScreenshotUrls,
-    setCachedScreenshotUrl: setProjectScreenshotUrl,
-    clearCachedScreenshotUrl: clearProjectScreenshotUrl,
+    hydrateCachedScreenshotUrls,
+    setCachedScreenshotUrl,
+    clearCachedScreenshotUrl,
   });
 
-  const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
   const [positionCorrectionAnimations, setPositionCorrectionAnimations] = useState<
     Record<string, PositionCorrectionAnimation>
   >({});
@@ -257,14 +270,12 @@ export function Siteboard({
       const nextY = Math.round(params.y);
       const nextWidth = Math.round(params.width);
       const nextHeight = Math.round(contentHeight);
-      useProjectStore
-        .getState()
-        .updateNodeBounds(activeId, nodeId, nextX, nextY, nextWidth, nextHeight);
+      useProjectStore.getState().updateNodeBounds(nodeId, nextX, nextY, nextWidth, nextHeight);
       setWebPageResizing(null);
       handleInteractionChange(false, 'resize');
       handlePageResizeEnd(nodeId);
     },
-    [activeId, handleInteractionChange, handlePageResizeEnd, zoomRef],
+    [handleInteractionChange, handlePageResizeEnd, zoomRef],
   );
 
   const hideCompactControls = Math.round(uiZoom * 100) <= Math.round(LOW_ZOOM_HIDE_THRESHOLD * 100);
@@ -288,8 +299,8 @@ export function Siteboard({
     handleWebviewLoaded,
     navStates,
   } = useSiteboardNodeRuntime({
-    activeId,
     nodes,
+    webviewLabelsByNodeId: projectWebviewRuntime.labelsByNodeId,
     selectedNodeId,
     onClearSelection,
     updateWebNodeUrl,
@@ -380,21 +391,14 @@ export function Siteboard({
         setPositionCorrectionAnimations((prev) => ({ ...prev, [node.id]: nextAnimation }));
         holdNodeDuringPositionSettle(node.id);
         if (movingNode.x !== resolvedPosition.x || movingNode.y !== resolvedPosition.y) {
-          updateNodePosition(activeId, node.id, resolvedPosition.x, resolvedPosition.y);
+          updateNodePosition(node.id, resolvedPosition.x, resolvedPosition.y);
         }
         return;
       }
 
-      updateNodePosition(activeId, node.id, resolvedPosition.x, resolvedPosition.y);
+      updateNodePosition(node.id, resolvedPosition.x, resolvedPosition.y);
     },
-    [
-      activeId,
-      handleInteractionChange,
-      holdNodeDuringPositionSettle,
-      nodes,
-      updateNodePosition,
-      zoomRef,
-    ],
+    [handleInteractionChange, holdNodeDuringPositionSettle, nodes, updateNodePosition, zoomRef],
   );
 
   // ノード変更を処理: ドラッグ中の位置追跡 + dimension 測定結果の保持（ノード初期化に必要）
@@ -460,10 +464,10 @@ export function Siteboard({
 
   const handleStickyNoteResizeEnd = useCallback(
     (nodeId: string, width: number, height: number) => {
-      updateNodeSize(activeId, nodeId, width, height);
+      updateNodeSize(nodeId, width, height);
       setStickyResizing(null);
     },
-    [activeId, updateNodeSize],
+    [updateNodeSize],
   );
 
   useEffect(() => {
@@ -496,8 +500,8 @@ export function Siteboard({
   useSiteboardKeyboard({
     selectedNodeId,
     onRemoveNode: handleRemoveNodeWithSettleReset,
-    onUndo: undoActiveProject,
-    onRedo: redoActiveProject,
+    onUndo: undoProject,
+    onRedo: redoProject,
   });
 
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(
@@ -569,19 +573,19 @@ export function Siteboard({
       if (viewportUpdateTimerRef.current) clearTimeout(viewportUpdateTimerRef.current);
       viewportUpdateTimerRef.current = setTimeout(() => {
         viewportUpdateTimerRef.current = null;
-        updateViewport(activeId, { zoom: viewport.zoom, panX: viewport.x, panY: viewport.y });
+        updateViewport({ zoom: viewport.zoom, panX: viewport.x, panY: viewport.y });
       }, ZOOM_END_DEBOUNCE_MS);
     },
-    [activeId, containerRef, updateViewport, zoomRef],
+    [containerRef, updateViewport, zoomRef],
   );
 
   const storeViewport = useMemo<FlowViewport>(
     () => ({
-      x: activeProject?.viewport.panX ?? 0,
-      y: activeProject?.viewport.panY ?? 0,
-      zoom: activeProject?.viewport.zoom ?? 1,
+      x: project?.viewport.panX ?? 0,
+      y: project?.viewport.panY ?? 0,
+      zoom: project?.viewport.zoom ?? 1,
     }),
-    [activeProject?.viewport.panX, activeProject?.viewport.panY, activeProject?.viewport.zoom],
+    [project?.viewport.panX, project?.viewport.panY, project?.viewport.zoom],
   );
 
   const syncViewportFromStore = useCallback(
@@ -759,12 +763,10 @@ export function Siteboard({
             onContextMenu: handleNodeContextMenu,
             onContentChange: handleStickyNoteContentChange,
             onAutoHeightChange: handleStickyNoteAutoHeightChange,
+            onColorCycle: handleStickyNoteColorCycle,
           },
-          displayWidth: contentWidth,
           onResize: handleStickyNoteResize,
           onResizeEnd: handleStickyNoteResizeEnd,
-          onColorCycle: handleStickyNoteColorCycle,
-          colorIndex: node.colorIndex ?? 0,
         };
         // top-level width/height を明示することで、flowNodes 再生成時に React Flow の
         // nodeHasDimensions チェックが失敗して visibility:hidden になるちらつきを防ぐ

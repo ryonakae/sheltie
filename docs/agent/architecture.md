@@ -20,8 +20,7 @@ src/
 
 ## フロントエンド責務
 
-- `screens/Home.tsx`: `.siteboard` 保存済みプロジェクト一覧。`lastOpenedAt` 降順で表示する
-- `screens/Project.tsx`: Siteboard 画面の統括。新規ノード追加後のセンタリングと選択状態を管理する
+- `screens/Project.tsx`: 1 document window の Siteboard 画面を統括する。新規ノード追加後のセンタリングと選択状態を管理する
 - `components/Common/ContextMenu.tsx`: createPortal で body 直下に fixed 配置するコンテキストメニュー
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
 - `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/右下 viewport controls をコンポーネント state と helper で管理する。flowNodes を `useMemo` で直接構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装し、`onNodesChange` で選択状態・計測寸法・ドラッグ中座標を同期する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
@@ -29,27 +28,28 @@ src/
 - `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン。押下で `100% + 全ノード中央寄せ`
 - `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI（props インターフェース export）
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（props インターフェース export）
-- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`WebPageNode` 本体内の上下 bar shell + 透明な上下 `NodeToolbar` + 上下 gutter dragHandle + 8 方向 `NodeResizeControl`）
-- `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + sticky header 上の `NodeToolbar`）
+- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`WebPageNode` 本体内の上下 chrome + node 内ツールバー + 上下 chrome の dragHandle + 8 方向 `NodeResizeControl`）
+- `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + sticky header 内の操作 UI）
 - `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`）
 - `components/ReactFlowNodes/nodeTypes.ts`: React Flow `nodeTypes` 定数（循環依存防止のため types.ts から分離）
 - `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
-- `store/tab-store.ts`: プロジェクト・node・ビューポート状態と、プロジェクト単位 node 履歴（Undo/Redo）を管理
+- `store/tab-store.ts`: 単一 document window の node・ビューポート状態と node 履歴（Undo/Redo）を管理
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
-- `lib/file-commands.ts`: File メニューの `open` / `save` / `save-as` を処理し、`.siteboard` の入出力とローカル store 連携を担当する
-- `lib/project-close.ts`: dirty 判定・保存/破棄確認・タブクローズ・アプリ終了時の close orchestration を担当する
+- `lib/file-commands.ts`: File メニューの `new` / `open` / `save` / `save-as` を処理し、`.siteboard` の入出力と window-local な store 連携を担当する
+- `lib/project-close.ts`: dirty 判定・保存/破棄確認・window close・アプリ終了時の close orchestration を担当する
+- `lib/project-display-name.ts`: `filePath` または `untitledIndex` から表示名を導出する
 - `main.tsx`: `edit-command` と `file-command` の listener を起動時に 1 回だけ登録する
 
 ## `.siteboard` とローカル状態
 
 - `.siteboard` は共有用ドキュメント
-  - `schemaVersion`, `title`, `nodes` のみ保存する
-- Zustand + Tauri Store はローカルワークスペースの復元用
-  - `nodes` に加えて `filePath`, `viewport`, `lastOpenedAt`, `lastSavedDocument` を保存する
-  - project state は Tauri Store の `projectStateV2` key に保存し、旧 key は参照しない
-- 起動時はローカル状態を復元し、`.siteboard` の自動再読込はしない
-- タブクローズ時とアプリ終了時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的なウィンドウ破棄だけ `close_ready` を使う
+  - `schemaVersion`, `nodes` のみ保存する
+  - `title` は保存しない
+- Rust 側の document manager は各 window の `filePath` と `untitledIndex` を管理する
+- renderer の Zustand store は現在の document の `nodes`, `viewport`, `lastSavedDocument`, `webviewRuntime` をメモリ上で保持する
+- 起動時は window context を読み、`filePath` があれば `.siteboard` を読み込み、無ければ空 document を初期化する
+- window close 時とアプリ終了時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的なウィンドウ破棄だけ `close_ready` を使う
 
 ## Siteboard と React Flow の協業
 
@@ -77,10 +77,11 @@ src/
 
 ## バックエンド責務
 
-- `commands/store.rs`: ローカル project state と `.siteboard` ファイルの読み書き
+- `commands/store.rs`: ローカル document state と `.siteboard` ファイルの読み書き
+- `commands/store.rs`: document window の生成・前面化・window context・`.siteboard` ファイルの読み書き
 - `commands/theme.rs`: テーマ設定、プラットフォーム情報
-- `commands/webview.rs`: webpage Webview 作成、位置更新、ナビゲーション、スクリーンショット
-- `src-tauri/src/lib.rs`: File / Edit メニュー構成、メニューイベントの `file-command` / `edit-command` 配信、Tauri プラグイン登録
+- `commands/webview.rs`: webpage Webview 作成、位置更新、ナビゲーション、スクリーンショット。child webview label は親 document window ごとに namespacing する
+- `src-tauri/src/lib.rs`: File / Edit メニュー構成、メニューイベントの `file-command` / `edit-command` 配信、Tauri プラグイン登録、document window の生成
 
 IPC 契約は `tauri-ipc.md` を参照。
 
@@ -108,6 +109,7 @@ Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/li
 
 | プラグイン | 用途 | 備考 |
 |---|---|---|
+| `tauri-plugin-single-instance` | 多重起動防止と既存アプリへの open 集約 | document app の入口を 1 つにまとめる |
 | `tauri-plugin-store` | プロジェクト状態の永続化 | |
 | `tauri-plugin-dialog` | Open / Save / message ダイアログ | File メニューの `.siteboard` 入出力に利用 |
 | `tauri-plugin-prevent-default` | メインウィンドウのデフォルトコンテキストメニュー無効化 | `Flags::CONTEXT_MENU` のみ指定。DevTools は維持。子 Webview（外部サイト）は対象外 |

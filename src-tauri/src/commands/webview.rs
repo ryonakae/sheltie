@@ -2,7 +2,7 @@ mod macos_viewport;
 mod scripts;
 mod snapshot;
 
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, Window};
 
 use self::scripts::{SCROLL_DETECTION_SCRIPT, SPA_URL_DETECTION_SCRIPT};
 
@@ -17,19 +17,20 @@ use self::macos_viewport::{
 /// hide 中は空白画像になる可能性がある。
 #[tauri::command]
 pub async fn capture_webview_screenshot(
-    app: AppHandle,
-    page_id: String,
+    window: Window,
+    label: String,
 ) -> Result<String, String> {
-    snapshot::capture_webview_base64(&app, &page_id).await
+    resolve_page_webview(&window.app_handle(), window.label(), &label)?;
+    snapshot::capture_webview_base64(&window.app_handle(), &label).await
 }
 
 /// ページ Webview のブラウザ履歴を1つ戻る。
 #[tauri::command]
-pub async fn go_back_page_webview(app: AppHandle, page_id: String) -> Result<(), String> {
-    let label = format!("page-{}", page_id);
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+pub async fn go_back_page_webview(
+    window: Window,
+    label: String,
+) -> Result<(), String> {
+    let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
     webview
         .eval("history.back()")
         .map_err(|e| format!("history.back() の実行に失敗: {e}"))
@@ -37,11 +38,11 @@ pub async fn go_back_page_webview(app: AppHandle, page_id: String) -> Result<(),
 
 /// ページ Webview のブラウザ履歴を1つ進める。
 #[tauri::command]
-pub async fn go_forward_page_webview(app: AppHandle, page_id: String) -> Result<(), String> {
-    let label = format!("page-{}", page_id);
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+pub async fn go_forward_page_webview(
+    window: Window,
+    label: String,
+) -> Result<(), String> {
+    let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
     webview
         .eval("history.forward()")
         .map_err(|e| format!("history.forward() の実行に失敗: {e}"))
@@ -56,24 +57,27 @@ pub struct NavigationState {
 /// ページ Webview の戻る/進み可否状態を取得する（macOS のみ正確）。
 #[tauri::command]
 pub async fn get_navigation_state_page_webview(
-    app: AppHandle,
-    page_id: String,
+    window: Window,
+    label: String,
 ) -> Result<NavigationState, String> {
-    get_navigation_state_impl(app, page_id).await
+    get_navigation_state_impl(
+        window.app_handle().clone(),
+        window.label().to_string(),
+        label,
+    )
+    .await
 }
 
 #[cfg(target_os = "macos")]
 async fn get_navigation_state_impl(
     app: AppHandle,
-    page_id: String,
+    window_label: String,
+    label: String,
 ) -> Result<NavigationState, String> {
     use std::sync::{Arc, Mutex};
     use tokio::sync::oneshot;
 
-    let label = format!("page-{}", page_id);
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    let webview = resolve_page_webview(&app, &window_label, &label)?;
 
     let (tx, rx) = oneshot::channel::<Result<NavigationState, String>>();
     let tx = Arc::new(Mutex::new(Some(tx)));
@@ -103,7 +107,8 @@ async fn get_navigation_state_impl(
 #[cfg(not(target_os = "macos"))]
 async fn get_navigation_state_impl(
     _app: AppHandle,
-    _page_id: String,
+    _window_label: String,
+    _label: String,
 ) -> Result<NavigationState, String> {
     Ok(NavigationState {
         can_go_back: false,
@@ -113,11 +118,12 @@ async fn get_navigation_state_impl(
 
 /// ページの Webview を指定 URL にナビゲートする（追加時 URL へのリセットに使用）。
 #[tauri::command]
-pub async fn reload_page_webview(app: AppHandle, page_id: String, url: String) -> Result<(), String> {
-    let label = format!("page-{}", page_id);
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+pub async fn reload_page_webview(
+    window: Window,
+    label: String,
+    url: String,
+) -> Result<(), String> {
+    let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
     let parsed_url = url
         .parse::<tauri::Url>()
         .map_err(|e| format!("URL のパースに失敗しました: {e}"))?;
@@ -139,7 +145,7 @@ pub async fn reload_page_webview(app: AppHandle, page_id: String, url: String) -
 /// 物理 frame サイズからの乖離を防ぐ（新旧 API の両方をサポート）。
 #[tauri::command]
 pub async fn create_page_webview(
-    app: AppHandle,
+    window: Window,
     page_id: String,
     url: String,
     x: f64,
@@ -148,22 +154,19 @@ pub async fn create_page_webview(
     height: f64,
     zoom: f64,
 ) -> Result<String, String> {
-    let label = format!("page-{}", page_id);
+    let app = window.app_handle();
+    let window_label = window.label().to_string();
+    let label = scoped_page_label(&window_label, &page_id);
 
     // 既存の同名 Webview があれば破棄（HMR / 異常系での再作成に対する防御策）
     if let Some(existing) = app.get_webview(&label) {
         let _ = existing.close();
     }
 
-    // add_child は Window（WebviewWindow ではなく）のメソッドのため get_window を使用
-    // unstable feature が必要
-    let window = app
-        .get_window("main")
-        .ok_or("main ウィンドウが見つかりません")?;
-
     let app_handle = app.clone();
     let pid = page_id.clone();
     let label_clone = label.clone();
+    let event_window_label = window_label.clone();
 
     let parsed_url = url
         .parse::<tauri::Url>()
@@ -177,8 +180,10 @@ pub async fn create_page_webview(
                 .on_navigation({
                     let ah = app_handle.clone();
                     let pid = pid.clone();
+                    let event_window_label = event_window_label.clone();
                     move |nav_url| {
-                        ah.emit(
+                        ah.emit_to(
+                            &event_window_label,
                             &format!("page-navigated-{pid}"),
                             serde_json::json!({ "url": nav_url.to_string() }),
                         )
@@ -190,23 +195,27 @@ pub async fn create_page_webview(
                 .on_document_title_changed({
                     let ah = app_handle.clone();
                     let pid = pid.clone();
+                    let event_window_label = event_window_label.clone();
                     move |_webview, title| {
                         // \x01: initialization_script からの SPA URL 変更通知
                         // \x02: initialization_script からのスクロール完了通知
                         if let Some(url) = title.strip_prefix('\u{0001}') {
-                            ah.emit(
+                            ah.emit_to(
+                                &event_window_label,
                                 &format!("page-navigated-{pid}"),
                                 serde_json::json!({ "url": url }),
                             )
                             .ok();
                         } else if title.starts_with('\u{0002}') {
-                            ah.emit(
+                            ah.emit_to(
+                                &event_window_label,
                                 &format!("page-scroll-ended-{pid}"),
                                 serde_json::json!({}),
                             )
                             .ok();
                         } else {
-                            ah.emit(
+                            ah.emit_to(
+                                &event_window_label,
                                 &format!("page-title-changed-{pid}"),
                                 serde_json::json!({ "title": title }),
                             )
@@ -249,15 +258,25 @@ pub async fn create_page_webview(
 /// frame の物理サイズとの乖離を防ぐ（新旧 API の両方をサポート）。
 #[tauri::command]
 pub async fn update_page_webview_bounds(
-    app: AppHandle,
-    page_id: String,
+    window: Window,
+    label: String,
     x: f64,
     y: f64,
     width: f64,
     height: f64,
     zoom: f64,
 ) -> Result<(), String> {
-    update_bounds_impl(&app, &page_id, x, y, width, height, zoom).await
+    update_bounds_impl(
+        &window.app_handle(),
+        window.label(),
+        &label,
+        x,
+        y,
+        width,
+        height,
+        zoom,
+    )
+    .await
 }
 
 /// ページ Webview の不透明度を設定する。
@@ -266,23 +285,27 @@ pub async fn update_page_webview_bounds(
 /// macOS では alpha 値を操作して表示状態を維持したままフェード復帰を可能にする。
 #[tauri::command]
 pub async fn set_page_webview_opacity(
-    app: AppHandle,
-    page_id: String,
+    window: Window,
+    label: String,
     opacity: f64,
 ) -> Result<(), String> {
-    set_opacity_impl(app, page_id, opacity.clamp(0.0, 1.0)).await
+    set_opacity_impl(
+        window.app_handle().clone(),
+        window.label().to_string(),
+        label,
+        opacity.clamp(0.0, 1.0),
+    )
+    .await
 }
 
 #[cfg(target_os = "macos")]
 async fn set_opacity_impl(
     app: AppHandle,
-    page_id: String,
+    window_label: String,
+    label: String,
     opacity: f64,
 ) -> Result<(), String> {
-    let label = format!("page-{}", page_id);
-    let wv = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    let wv = resolve_page_webview(&app, &window_label, &label)?;
 
     wv.with_webview(move |platform_wv| {
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
@@ -296,7 +319,8 @@ async fn set_opacity_impl(
 #[cfg(not(target_os = "macos"))]
 async fn set_opacity_impl(
     _app: AppHandle,
-    _page_id: String,
+    _window_label: String,
+    _label: String,
     _opacity: f64,
 ) -> Result<(), String> {
     Ok(())
@@ -305,19 +329,15 @@ async fn set_opacity_impl(
 #[cfg(target_os = "macos")]
 async fn update_bounds_impl(
     app: &AppHandle,
-    page_id: &str,
+    window_label: &str,
+    label: &str,
     x: f64,
     y: f64,
     width: f64,
     height: f64,
     zoom: f64,
 ) -> Result<(), String> {
-    use tauri::Manager;
-
-    let label = format!("page-{}", page_id);
-    let wv = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    let wv = resolve_page_webview(app, window_label, label)?;
 
     wv.set_position(LogicalPosition::new(x, y))
         .map_err(|e| format!("setPosition エラー: {e}"))?;
@@ -336,17 +356,15 @@ async fn update_bounds_impl(
 #[cfg(not(target_os = "macos"))]
 async fn update_bounds_impl(
     app: &AppHandle,
-    page_id: &str,
+    window_label: &str,
+    label: &str,
     x: f64,
     y: f64,
     width: f64,
     height: f64,
     _zoom: f64,
 ) -> Result<(), String> {
-    let label = format!("page-{}", page_id);
-    let wv = app
-        .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+    let wv = resolve_page_webview(app, window_label, label)?;
     wv.set_position(LogicalPosition::new(x, y))
         .map_err(|e| format!("setPosition エラー: {e}"))?;
     wv.set_size(LogicalSize::new(width, height))
@@ -357,7 +375,7 @@ async fn update_bounds_impl(
 /// 複数ページ Webview の frame + viewScale を一括更新する（操作中のリアルタイム同期用）。
 #[derive(serde::Deserialize)]
 pub struct BoundsEntry {
-    pub page_id: String,
+    pub label: String,
     pub x: f64,
     pub y: f64,
     pub width: f64,
@@ -367,14 +385,18 @@ pub struct BoundsEntry {
 
 #[tauri::command]
 pub async fn batch_update_page_webview_bounds(
-    app: AppHandle,
+    window: Window,
     entries: Vec<BoundsEntry>,
 ) -> Result<(), String> {
+    let app = window.app_handle();
+    let window_label = window.label().to_string();
+
     // エラーは個別に無視（一括更新中の孤児 Webview 対策）
     for e in entries {
         let _ = update_bounds_impl(
             &app,
-            &e.page_id,
+            &window_label,
+            &e.label,
             e.x,
             e.y,
             e.width,
@@ -392,19 +414,21 @@ pub async fn batch_update_page_webview_bounds(
 /// IPC メッセージ数を削減することで追従遅延を軽減する。
 #[derive(serde::Deserialize)]
 pub struct PositionEntry {
-    pub page_id: String,
+    pub label: String,
     pub x: f64,
     pub y: f64,
 }
 
 #[tauri::command]
 pub async fn batch_update_webview_positions(
-    app: AppHandle,
+    window: Window,
     entries: Vec<PositionEntry>,
 ) -> Result<(), String> {
+    let app = window.app_handle();
+    let window_label = window.label().to_string();
+
     for e in entries {
-        let label = format!("page-{}", e.page_id);
-        if let Some(wv) = app.get_webview(&label) {
+        if let Ok(wv) = resolve_page_webview(&app, &window_label, &e.label) {
             wv.set_position(LogicalPosition::new(e.x, e.y)).ok();
         }
     }
@@ -417,13 +441,15 @@ pub async fn batch_update_webview_positions(
 /// macOS のみサポート。WKWebView が表示中（native モード）の時に呼び出すこと。
 #[tauri::command]
 pub async fn save_webview_screenshot(
-    app: AppHandle,
+    window: Window,
+    label: String,
     page_id: String,
     project_id: String,
     hide_after_snapshot_request: Option<bool>,
 ) -> Result<String, String> {
     save_screenshot_impl(
-        app,
+        window,
+        label,
         page_id,
         project_id,
         hide_after_snapshot_request.unwrap_or(false),
@@ -433,19 +459,22 @@ pub async fn save_webview_screenshot(
 
 #[cfg(target_os = "macos")]
 async fn save_screenshot_impl(
-    app: AppHandle,
+    window: Window,
+    label: String,
     page_id: String,
     project_id: String,
     hide_after_snapshot_request: bool,
 ) -> Result<String, String> {
+    resolve_page_webview(&window.app_handle(), window.label(), &label)?;
     let png_bytes = snapshot::capture_webview_png_bytes_with_options(
-        &app,
-        &page_id,
+        &window.app_handle(),
+        &label,
         hide_after_snapshot_request,
     )
     .await?;
 
-    let data_dir = app
+    let data_dir = window
+        .app_handle()
         .path()
         .app_data_dir()
         .map_err(|e| format!("app_data_dir 取得エラー: {e}"))?;
@@ -461,7 +490,8 @@ async fn save_screenshot_impl(
 
 #[cfg(not(target_os = "macos"))]
 async fn save_screenshot_impl(
-    _app: AppHandle,
+    _window: Window,
+    _label: String,
     _page_id: String,
     _project_id: String,
     _hide_after_snapshot_request: bool,
@@ -513,4 +543,26 @@ pub async fn delete_screenshot(
             .map_err(|e| format!("ファイル削除エラー: {e}"))?;
     }
     Ok(())
+}
+
+fn scoped_page_label(window_label: &str, page_id: &str) -> String {
+    format!("page-{window_label}-{page_id}")
+}
+
+fn resolve_page_webview<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    current_window_label: &str,
+    label: &str,
+) -> Result<tauri::Webview<R>, String> {
+    let webview = app
+        .get_webview(label)
+        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+
+    if webview.window().label() != current_window_label {
+        return Err(format!(
+            "Webview '{label}' は現在の document window '{current_window_label}' に属していません"
+        ));
+    }
+
+    Ok(webview)
 }

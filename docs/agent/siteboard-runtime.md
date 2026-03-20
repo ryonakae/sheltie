@@ -135,6 +135,7 @@ return type;
 - 操作終了（`activeInteractionsRef.current.size === 0`）で `computeDisplayModes()` が最終判定・native 復帰を再開
 - `drag/resize` 中は相対的に少ない display mode 更新を行い、リサイズ終了後に最終的な表示を確定
 - コンテキストメニュー表示中のページは `native` への復帰を抑制（`contextMenuNodeIdRef` が設定されている場合）
+- 未保存確認ダイアログ表示中も、現在表示中 Siteboard の visible webpage node は `native` へ復帰させず `screenshot/hidden` を維持する
 
 ## コンテキストメニューと Webview 制御
 
@@ -153,6 +154,18 @@ return type;
 8. ページ削除ケース — `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
 
 付箋ノードは Webview を持たないため、コンテキストメニュー表示時に `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` の node type 判定で分岐）。
+
+## 未保存確認ダイアログと Webview 制御
+
+未保存確認ダイアログ（タブクローズ / アプリ終了）は `App` 直下の HTML overlay で描画するため、native Webview を背面化しないと dialog/backdrop が下に潜る。
+
+このため、dialog 表示前に active な Siteboard が coordinator 経由で表示ロックを受け取り、**閉じる対象 project ではなく「今見えている Siteboard」基準**で visible webpage node を `screenshot/hidden` へ切り替える。
+
+- 保存済み screenshot がある node は stale screenshot を即利用しつつ fresh capture をバックグラウンド更新する
+- 保存済み screenshot が無い node だけ fresh capture 完了を待ち、失敗時は `hidden` fallback を許容する
+- dialog 表示中は `computeDisplayModes()` が `nextMode === 'native'` を `screenshot/hidden` に差し替える
+- dialog close 後は通常の `computeDisplayModes()` に戻して native 復帰を再開する
+- アプリ終了で dirty project が連続して確認される場合は、coordinator が exit を 1 tick 遅延し、次の dialog open が直後に来たら native 復帰を打ち消す
 
 ## スクリーンショット永続化
 

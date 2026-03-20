@@ -37,7 +37,7 @@ interface CaptureScreenshotOptions {
   waitForPresentation?: boolean;
 }
 
-type InteractionPreparationType = InteractionType | 'context-menu';
+type InteractionPreparationType = InteractionType | 'context-menu' | 'unsaved-changes-dialog';
 
 function buildSeededScreenshotUrls(
   webPageNodes: WebPageNode[],
@@ -115,6 +115,7 @@ export function useSiteboardDisplayEngine({
   const nativeRevealTokenRef = useRef<Record<string, number>>({});
   const resizingNodeIdRef = useRef<string | null>(null);
   const contextMenuNodeIdRef = useRef<string | null>(null);
+  const unsavedChangesDialogOpenRef = useRef(false);
   const settlingNodeIdsRef = useRef<Set<string>>(new Set());
   const forceHiddenInteractionNodeIdsRef = useRef<Set<string>>(new Set());
   const nativeHiddenByInteractionCaptureRef = useRef<Set<string>>(new Set());
@@ -410,6 +411,9 @@ export function useSiteboardDisplayEngine({
         hasDisplayableScreenshot(page.id),
       );
 
+      if (unsavedChangesDialogOpenRef.current && nextMode === 'native') {
+        nextMode = hasDisplayableScreenshot(page.id) ? 'screenshot' : 'hidden';
+      }
       // コンテキストメニュー表示中のページは native に復帰させない
       if (contextMenuNodeIdRef.current === page.id && nextMode === 'native') {
         nextMode = hasDisplayableScreenshot(page.id) ? 'screenshot' : 'hidden';
@@ -772,7 +776,9 @@ export function useSiteboardDisplayEngine({
               const label = getWebviewLabel(nodeId);
               if (label) {
                 const shouldUseScreenshotNow =
-                  contextMenuNodeIdRef.current === nodeId || activeInteractionsRef.current.size > 0;
+                  unsavedChangesDialogOpenRef.current ||
+                  contextMenuNodeIdRef.current === nodeId ||
+                  activeInteractionsRef.current.size > 0;
 
                 if (shouldUseScreenshotNow) {
                   setNodeDisplayMode(nodeId, 'screenshot');
@@ -1017,6 +1023,32 @@ export function useSiteboardDisplayEngine({
     computeDisplayModes();
   }, [computeDisplayModes]);
 
+  const handleUnsavedChangesDialogOpen = useCallback(async () => {
+    if (unsavedChangesDialogOpenRef.current) return;
+    cancelInteractionCaptureRetry();
+    cancelAllNativeReveals();
+    await prepareInteractionStart('unsaved-changes-dialog');
+    unsavedChangesDialogOpenRef.current = true;
+    computeDisplayModes();
+
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }, [
+    cancelAllNativeReveals,
+    cancelInteractionCaptureRetry,
+    computeDisplayModes,
+    prepareInteractionStart,
+  ]);
+
+  const handleUnsavedChangesDialogClose = useCallback(() => {
+    if (!unsavedChangesDialogOpenRef.current) return;
+    unsavedChangesDialogOpenRef.current = false;
+    if (activeInteractionsRef.current.size === 0) {
+      computeDisplayModes();
+    }
+  }, [computeDisplayModes]);
+
   const holdNodeDuringPositionSettle = useCallback(
     (nodeId: string) => {
       settlingNodeIdsRef.current.add(nodeId);
@@ -1236,6 +1268,8 @@ export function useSiteboardDisplayEngine({
     handlePageResizeStart,
     prepareInteractionStart,
     handleScreenshotPresented,
+    handleUnsavedChangesDialogClose,
+    handleUnsavedChangesDialogOpen,
     holdNodeDuringPositionSettle,
     releaseNodeAfterPositionSettle,
     scheduleInteractionUpdate,

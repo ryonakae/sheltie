@@ -46,6 +46,7 @@ import {
   resolveFitViewport,
   type SiteboardViewportTarget,
 } from '@/lib/siteboard-viewport';
+import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
 import {
   selectActiveProject,
   selectActiveProjectWebviewRuntime,
@@ -193,6 +194,8 @@ export function Siteboard({
     handlePageResizeStart,
     prepareInteractionStart,
     handleScreenshotPresented,
+    handleUnsavedChangesDialogClose,
+    handleUnsavedChangesDialogOpen,
     holdNodeDuringPositionSettle,
     scheduleInteractionUpdate,
     scheduleZoomRestoreAfterReflow,
@@ -601,6 +604,15 @@ export function Siteboard({
   useEffect(() => {
     syncViewportFromStore();
   }, [syncViewportFromStore]);
+
+  useEffect(() => {
+    const unregister = registerUnsavedChangesDialogDisplayController({
+      enter: handleUnsavedChangesDialogOpen,
+      exit: handleUnsavedChangesDialogClose,
+    });
+
+    return unregister;
+  }, [handleUnsavedChangesDialogClose, handleUnsavedChangesDialogOpen]);
 
   // React Flow は pan/zoom を同じ onMove 系 callback で通知するため、event から操作種別を復元する。
   // 現構成ではホイールは pan、Cmd/Ctrl+ホイールとピンチは zoom、programmatic setViewport は zoom 扱いにする。

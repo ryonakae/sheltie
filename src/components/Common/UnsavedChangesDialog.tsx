@@ -2,6 +2,10 @@ import { AlertDialog } from '@heroui/react';
 import { useEffect, useRef, useState } from 'react';
 
 import { AppButton } from '@/components/Common/AppButton';
+import {
+  enterUnsavedChangesDialogDisplay,
+  exitUnsavedChangesDialogDisplay,
+} from '@/lib/unsaved-changes-dialog-display';
 
 export type UnsavedChangesDecision = 'save' | 'discard' | 'cancel';
 export type UnsavedChangesReason = 'tab-close' | 'app-close';
@@ -17,16 +21,29 @@ interface PendingUnsavedChangesDialogRequest extends UnsavedChangesDialogOptions
 
 let showUnsavedChangesDialog: ((request: PendingUnsavedChangesDialogRequest) => void) | null = null;
 
-export function promptUnsavedChangesDialog(
+export async function promptUnsavedChangesDialog(
   options: UnsavedChangesDialogOptions,
 ): Promise<UnsavedChangesDecision> {
+  if (!showUnsavedChangesDialog) {
+    return 'cancel';
+  }
+
+  await enterUnsavedChangesDialogDisplay();
+
   const presentDialog = showUnsavedChangesDialog;
   if (!presentDialog) {
-    return Promise.resolve('cancel');
+    exitUnsavedChangesDialogDisplay();
+    return 'cancel';
   }
 
   return new Promise((resolve) => {
-    presentDialog({ ...options, resolve });
+    presentDialog({
+      ...options,
+      resolve: (decision) => {
+        resolve(decision);
+        exitUnsavedChangesDialogDisplay();
+      },
+    });
   });
 }
 

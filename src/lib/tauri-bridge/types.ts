@@ -1,4 +1,4 @@
-export type FileCommand = 'new' | 'open' | 'save' | 'save-as';
+export type FileCommand = 'new-tab' | 'new-window' | 'open' | 'save' | 'save-as';
 
 export type WindowContext = {
   filePath: string | null;

@@ -36,7 +36,7 @@ src/
 - `store/tab-store.ts`: 単一 document window の node・ビューポート状態と node 履歴（Undo/Redo）を管理
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
-- `lib/file-commands.ts`: File メニューの `new` / `open` / `save` / `save-as` を処理し、`.siteboard` の入出力と window-local な store 連携を担当する
+- `lib/file-commands.ts`: File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` を処理し、`.siteboard` の入出力と window-local な store 連携を担当する
 - `lib/project-close.ts`: dirty 判定・保存/破棄確認・window close・アプリ終了時の close orchestration を担当する
 - `lib/project-display-name.ts`: `filePath` または `untitledIndex` から表示名を導出する
 - `main.tsx`: `edit-command` と `file-command` の listener を起動時に 1 回だけ登録する
@@ -81,7 +81,7 @@ src/
 - `commands/store.rs`: document window の生成・前面化・window context・`.siteboard` ファイルの読み書き
 - `commands/theme.rs`: テーマ設定、プラットフォーム情報
 - `commands/webview.rs`: webpage Webview 作成、位置更新、ナビゲーション、スクリーンショット。child webview label は親 document window ごとに namespacing する
-- `src-tauri/src/lib.rs`: File / Edit メニュー構成、メニューイベントの `file-command` / `edit-command` 配信、Tauri プラグイン登録、document window の生成
+- `src-tauri/src/lib.rs`: File / Edit メニュー構成、メニューイベントの `file-command` / `edit-command` 配信、Tauri プラグイン登録、macOS の native tab / standalone window 分岐を含む document window 生成
 
 IPC 契約は `tauri-ipc.md` を参照。
 

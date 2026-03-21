@@ -17,12 +17,13 @@
 
 ## Document App
 
-- 1 window = 1 document を前提にする。ホーム画面やプロジェクト一覧は置かない。
+- 1 document tab / window = 1 document を前提にする。ホーム画面やプロジェクト一覧は置かない。
 - 表示名はファイル basename を正本にし、未保存時だけ `名称未設定` 系の仮名を使う。
 - `project.title` のような表示名を永続状態の正本にしない。必要なら `filePath` から導出する。
 - `main` のような固定 window label を前提にしない。window-local な処理は現在の window から解決する。
-- macOS の document window は native tabs 前提で同じ `tabbingIdentifier` を使う。
-- `File > New/Open/Save/Save As` は document window のコマンドとして扱い、メニューやショートカットの実装を window-local に保つ。
+- macOS の document window は native tabs 前提で同じ `tabbingIdentifier` を使い、AppKit 標準の title / tab bar を隠さない。
+- `File > New Tab/New Window/Open/Save/Save As` は document window のコマンドとして扱い、メニューやショートカットの実装を window-local に保つ。
+- macOS の File ショートカットは `Cmd+T = New Tab`、`Cmd+N = New Window`、`Open` は別 document window を開く Finder 互換挙動にそろえる。
 - 表示名の変更は `Save As` で行う。rename 専用 UI や project title 編集を増やさない。
 
 ## React Flow（フェーズ 1 以降）
@@ -112,7 +113,7 @@
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `components/Common/ContextMenu` を使い createPortal で body 直下に描画する。
 - node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
-- File メニューの `new` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
+- File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
 - document window 関連のコマンドや IPC は window-local に閉じ、`main` 固定の参照を増やさない。
 - child webview の label は `page-{windowLabel}-{pageId}` のように親 document window を含めて一意化する。
 

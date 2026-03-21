@@ -2,19 +2,18 @@ mod commands;
 
 use commands::{
     store::{
-        close_ready, create_untitled_document_window, focus_document_window,
-        focused_document_window_label, handle_launch_args, load_project_file,
-        load_window_context, new_document_window, open_document_window,
-        save_project_file, DocumentManagerState,
+        close_ready, configure_macos_window_tabbing_policy, create_untitled_document_window,
+        focus_document_window, focused_document_window_label, handle_launch_args,
+        load_project_file, load_window_context, new_document_tab, new_document_window,
+        open_document_window, save_project_file, DocumentManagerState,
     },
     theme::{get_platform_info, load_theme, set_theme},
     webview::{
         batch_update_page_webview_bounds, batch_update_webview_positions,
         capture_webview_screenshot, create_page_webview, delete_screenshot,
-        get_existing_screenshot_paths, get_navigation_state_page_webview,
-        go_back_page_webview, go_forward_page_webview, reload_page_webview,
-        save_webview_screenshot, set_page_webview_opacity,
-        update_page_webview_bounds,
+        get_existing_screenshot_paths, get_navigation_state_page_webview, go_back_page_webview,
+        go_forward_page_webview, reload_page_webview, save_webview_screenshot,
+        set_page_webview_opacity, update_page_webview_bounds,
     },
 };
 
@@ -25,7 +24,8 @@ use tauri::{
 
 const EVENT_EDIT_COMMAND: &str = "edit-command";
 const EVENT_FILE_COMMAND: &str = "file-command";
-const MENU_ID_FILE_NEW: &str = "file.new";
+const MENU_ID_FILE_NEW_TAB: &str = "file.new-tab";
+const MENU_ID_FILE_NEW_WINDOW: &str = "file.new-window";
 const MENU_ID_FILE_OPEN: &str = "file.open";
 const MENU_ID_FILE_SAVE: &str = "file.save";
 const MENU_ID_FILE_SAVE_AS: &str = "file.save-as";
@@ -62,7 +62,7 @@ fn emit_file_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str
         return;
     }
 
-    if command == "new" {
+    if command == "new-tab" || command == "new-window" {
         if let Err(error) = create_untitled_document_window(app) {
             log::warn!("new window の生成に失敗しました: {error}");
         }
@@ -176,14 +176,13 @@ fn configure_file_menu<R: tauri::Runtime>(
         fallback
     };
 
-    remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_NEW)?;
+    remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_NEW_TAB)?;
+    remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_NEW_WINDOW)?;
+    remove_submenu_item_by_id(&file_submenu, "file.new")?;
     remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_OPEN)?;
     remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_SAVE)?;
     remove_submenu_item_by_id(&file_submenu, MENU_ID_FILE_SAVE_AS)?;
 
-    let new_item = MenuItemBuilder::with_id(MENU_ID_FILE_NEW, "New")
-        .accelerator("CmdOrCtrl+N")
-        .build(app)?;
     let open_item = MenuItemBuilder::with_id(MENU_ID_FILE_OPEN, "Open")
         .accelerator("CmdOrCtrl+O")
         .build(app)?;
@@ -194,10 +193,29 @@ fn configure_file_menu<R: tauri::Runtime>(
         .accelerator("CmdOrCtrl+Shift+S")
         .build(app)?;
 
-    file_submenu.insert(&new_item, 0)?;
-    file_submenu.insert(&open_item, 1)?;
-    file_submenu.insert(&save_item, 2)?;
-    file_submenu.insert(&save_as_item, 3)?;
+    if cfg!(target_os = "macos") {
+        let new_tab_item = MenuItemBuilder::with_id(MENU_ID_FILE_NEW_TAB, "New Tab")
+            .accelerator("CmdOrCtrl+T")
+            .build(app)?;
+        let new_window_item = MenuItemBuilder::with_id(MENU_ID_FILE_NEW_WINDOW, "New Window")
+            .accelerator("CmdOrCtrl+N")
+            .build(app)?;
+
+        file_submenu.insert(&new_tab_item, 0)?;
+        file_submenu.insert(&new_window_item, 1)?;
+        file_submenu.insert(&open_item, 2)?;
+        file_submenu.insert(&save_item, 3)?;
+        file_submenu.insert(&save_as_item, 4)?;
+    } else {
+        let new_item = MenuItemBuilder::with_id(MENU_ID_FILE_NEW_WINDOW, "New")
+            .accelerator("CmdOrCtrl+N")
+            .build(app)?;
+
+        file_submenu.insert(&new_item, 0)?;
+        file_submenu.insert(&open_item, 1)?;
+        file_submenu.insert(&save_item, 2)?;
+        file_submenu.insert(&save_as_item, 3)?;
+    }
 
     Ok(())
 }
@@ -298,41 +316,47 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            if let Err(error) = configure_macos_window_tabbing_policy(&app.handle()) {
+                log::error!("macOS native tab の初期化に失敗しました: {error}");
+            }
             let launch_args: Vec<String> = std::env::args().collect();
             if let Err(error) = handle_launch_args(&app.handle(), &launch_args, None) {
                 log::error!("初期 window の作成に失敗しました: {error}");
             }
-            app.on_menu_event(|app, event| {
-                match event.id().as_ref() {
-                    MENU_ID_FILE_NEW => emit_file_command(app, "new"),
-                    MENU_ID_FILE_OPEN => emit_file_command(app, "open"),
-                    MENU_ID_FILE_SAVE => emit_file_command(app, "save"),
-                    MENU_ID_FILE_SAVE_AS => emit_file_command(app, "save-as"),
-                    MENU_ID_EDIT_UNDO => emit_edit_command(app, "undo"),
-                    MENU_ID_EDIT_REDO => emit_edit_command(app, "redo"),
-                    MENU_ID_EDIT_DELETE => emit_edit_command(app, "delete"),
-                    MENU_ID_OPEN_DEVTOOLS => {
-                        #[cfg(debug_assertions)]
-                        if let Some(label) = focused_document_window_label(app) {
-                            if let Some(window) = app.get_webview_window(&label) {
-                                let _ = focus_document_window(app, &label);
-                                window.open_devtools();
-                            }
-                        } else if let Some(window) = app
-                            .webview_windows()
-                            .into_iter()
-                            .find_map(|(label, window)| label.starts_with("document-").then_some(window))
-                        {
+            app.on_menu_event(|app, event| match event.id().as_ref() {
+                MENU_ID_FILE_NEW_TAB => emit_file_command(app, "new-tab"),
+                MENU_ID_FILE_NEW_WINDOW => emit_file_command(app, "new-window"),
+                MENU_ID_FILE_OPEN => emit_file_command(app, "open"),
+                MENU_ID_FILE_SAVE => emit_file_command(app, "save"),
+                MENU_ID_FILE_SAVE_AS => emit_file_command(app, "save-as"),
+                MENU_ID_EDIT_UNDO => emit_edit_command(app, "undo"),
+                MENU_ID_EDIT_REDO => emit_edit_command(app, "redo"),
+                MENU_ID_EDIT_DELETE => emit_edit_command(app, "delete"),
+                MENU_ID_OPEN_DEVTOOLS =>
+                {
+                    #[cfg(debug_assertions)]
+                    if let Some(label) = focused_document_window_label(app) {
+                        if let Some(window) = app.get_webview_window(&label) {
+                            let _ = focus_document_window(app, &label);
                             window.open_devtools();
                         }
+                    } else if let Some(window) =
+                        app.webview_windows()
+                            .into_iter()
+                            .find_map(|(label, window)| {
+                                label.starts_with("document-").then_some(window)
+                            })
+                    {
+                        window.open_devtools();
                     }
-                    _ => {}
                 }
+                _ => {}
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             load_window_context,
+            new_document_tab,
             new_document_window,
             open_document_window,
             close_ready,

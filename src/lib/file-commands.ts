@@ -134,7 +134,12 @@ export function saveCurrentProject(options: { saveAs?: boolean } = {}): Promise<
 
 export async function runFileCommand(command: FileCommand): Promise<void> {
   await enqueueFileOperation(async () => {
-    if (command === 'new') {
+    if (command === 'new-tab') {
+      await api.newDocumentTab();
+      return;
+    }
+
+    if (command === 'new-window') {
       await api.newDocumentWindow();
       return;
     }

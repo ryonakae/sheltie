@@ -6,14 +6,30 @@ use std::{
 };
 
 use tauri::{
-    AppHandle, LogicalPosition, Manager, State, TitleBarStyle, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    AppHandle, Manager, Runtime, State, TitleBarStyle, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Window,
 };
+
+#[cfg(target_os = "macos")]
+use objc2::runtime::{AnyClass, AnyObject};
 
 const DEFAULT_WINDOW_WIDTH: f64 = 1200.0;
 const DEFAULT_WINDOW_HEIGHT: f64 = 800.0;
 const DOCUMENT_WINDOW_LABEL_PREFIX: &str = "document-";
 const DOCUMENT_WINDOW_TABBING_IDENTIFIER: &str = "siteboard-document";
+
+#[cfg(target_os = "macos")]
+const NS_WINDOW_TITLE_VISIBILITY_VISIBLE: isize = 0;
+#[cfg(target_os = "macos")]
+const NS_WINDOW_TABBING_MODE_PREFERRED: isize = 1;
+#[cfg(target_os = "macos")]
+const NS_WINDOW_ORDER_ABOVE: isize = 1;
+
+#[derive(Clone)]
+enum DocumentWindowDisposition {
+    Standalone,
+    TabInGroup { host_label: String },
+}
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -199,7 +215,9 @@ fn normalize_project_file_path(path: &str, cwd: Option<&Path>) -> Result<PathBuf
 
     if let Some(parent) = normalized.parent() {
         if let Some(file_name) = normalized.file_name().map(|name| name.to_os_string()) {
-            let resolved_parent = parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf());
+            let resolved_parent = parent
+                .canonicalize()
+                .unwrap_or_else(|_| parent.to_path_buf());
             normalized = resolved_parent.join(file_name);
         }
     }
@@ -216,16 +234,19 @@ fn normalize_existing_project_file_path(path: &str, cwd: Option<&Path>) -> Resul
 
 fn get_window_title(record: &WindowRecord) -> String {
     if let Some(path) = &record.file_path {
-        return path
-            .file_stem()
-            .or_else(|| path.file_name())
-            .and_then(OsStr::to_str)
-            .filter(|name| !name.is_empty())
-            .unwrap_or("名称未設定")
-            .to_string();
+        return get_file_display_name(path);
     }
 
     get_untitled_display_name(record.untitled_index)
+}
+
+fn get_file_display_name(path: &Path) -> String {
+    path.file_stem()
+        .or_else(|| path.file_name())
+        .and_then(OsStr::to_str)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("名称未設定")
+        .to_string()
 }
 
 fn get_untitled_display_name(index: usize) -> String {
@@ -240,17 +261,24 @@ fn build_document_window<R: tauri::Runtime>(
     app: &AppHandle<R>,
     label: &str,
     title: &str,
+    disposition: &DocumentWindowDisposition,
 ) -> Result<WebviewWindow<R>, String> {
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::default())
         .title(title)
         .inner_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
 
     #[cfg(target_os = "macos")]
-    let builder = builder
-        .title_bar_style(TitleBarStyle::Overlay)
-        .hidden_title(true)
-        .traffic_light_position(LogicalPosition::new(8.0, 20.0))
-        .tabbing_identifier(DOCUMENT_WINDOW_TABBING_IDENTIFIER);
+    let builder = {
+        let builder = if matches!(disposition, DocumentWindowDisposition::TabInGroup { .. }) {
+            builder.visible(false)
+        } else {
+            builder
+        };
+
+        builder
+            .title_bar_style(TitleBarStyle::Visible)
+            .tabbing_identifier(DOCUMENT_WINDOW_TABBING_IDENTIFIER)
+    };
 
     #[cfg(not(target_os = "macos"))]
     let builder = builder;
@@ -260,16 +288,190 @@ fn build_document_window<R: tauri::Runtime>(
         .map_err(|error| format!("document window の生成に失敗しました: {error}"))
 }
 
+#[cfg(target_os = "macos")]
+fn run_on_app_main_thread<R, T, F>(app: &AppHandle<R>, operation: F) -> Result<T, String>
+where
+    R: Runtime,
+    T: Send + 'static,
+    F: FnOnce(AppHandle<R>) -> Result<T, String> + Send + 'static,
+{
+    let app_handle = app.clone();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = operation(app_handle);
+        let _ = sender.send(result);
+    })
+    .map_err(|error| format!("main thread への切り替えに失敗しました: {error}"))?;
+
+    receiver
+        .recv()
+        .map_err(|_| "main thread の結果受信に失敗しました".to_string())?
+}
+
+#[cfg(target_os = "macos")]
+fn ns_window_class() -> Result<&'static AnyClass, String> {
+    AnyClass::get(c"NSWindow").ok_or("NSWindow クラスが見つかりません".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn get_ns_window_object<R: Runtime>(window: &WebviewWindow<R>) -> Result<*mut AnyObject, String> {
+    let raw = window
+        .ns_window()
+        .map_err(|error| format!("NSWindow の取得に失敗しました: {error}"))?;
+    let ns_window = raw.cast::<AnyObject>();
+    if ns_window.is_null() {
+        return Err("NSWindow が null です".to_string());
+    }
+    Ok(ns_window)
+}
+
+#[cfg(target_os = "macos")]
+fn configure_ns_document_window(ns_window: *mut AnyObject) {
+    unsafe {
+        let _: () = objc2::msg_send![
+            ns_window,
+            setTitleVisibility: NS_WINDOW_TITLE_VISIBILITY_VISIBLE
+        ];
+        let _: () = objc2::msg_send![ns_window, setTabbingMode: NS_WINDOW_TABBING_MODE_PREFERRED];
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn ensure_ns_window_tab_bar_visible(ns_window: *mut AnyObject) {
+    unsafe {
+        let tabbed_windows: *mut AnyObject = objc2::msg_send![ns_window, tabbedWindows];
+        if tabbed_windows.is_null() {
+            let nil_sender: *mut AnyObject = std::ptr::null_mut();
+            let _: () = objc2::msg_send![ns_window, toggleTabBar: nil_sender];
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn focus_ns_window(ns_window: *mut AnyObject) {
+    unsafe {
+        let nil_sender: *mut AnyObject = std::ptr::null_mut();
+        let _: () = objc2::msg_send![ns_window, makeKeyAndOrderFront: nil_sender];
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn configure_macos_window_tabbing_policy<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    run_on_app_main_thread(app, |_| {
+        let ns_window_class = ns_window_class()?;
+        unsafe {
+            let _: () = objc2::msg_send![ns_window_class, setAllowsAutomaticWindowTabbing: false];
+        }
+        Ok(())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn configure_macos_window_tabbing_policy<R: Runtime>(_: &AppHandle<R>) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn configure_macos_document_window<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    disposition: &DocumentWindowDisposition,
+) -> Result<(), String> {
+    let label = label.to_string();
+    let disposition = disposition.clone();
+
+    run_on_app_main_thread(app, move |app| {
+        let window = app
+            .get_webview_window(&label)
+            .ok_or_else(|| format!("ウィンドウ '{label}' が見つかりません"))?;
+        let ns_window = get_ns_window_object(&window)?;
+
+        configure_ns_document_window(ns_window);
+
+        match disposition {
+            DocumentWindowDisposition::Standalone => {
+                ensure_ns_window_tab_bar_visible(ns_window);
+            }
+            DocumentWindowDisposition::TabInGroup { host_label } => {
+                let host_window = app
+                    .get_webview_window(&host_label)
+                    .ok_or_else(|| format!("ホストウィンドウ '{host_label}' が見つかりません"))?;
+                let host_ns_window = get_ns_window_object(&host_window)?;
+
+                configure_ns_document_window(host_ns_window);
+
+                unsafe {
+                    let _: () = objc2::msg_send![
+                        host_ns_window,
+                        addTabbedWindow: ns_window,
+                        ordered: NS_WINDOW_ORDER_ABOVE
+                    ];
+                }
+
+                ensure_ns_window_tab_bar_visible(host_ns_window);
+                ensure_ns_window_tab_bar_visible(ns_window);
+                focus_ns_window(ns_window);
+            }
+        }
+
+        Ok(())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configure_macos_document_window<R: Runtime>(
+    _: &AppHandle<R>,
+    _: &str,
+    _: &DocumentWindowDisposition,
+) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn ensure_macos_document_window_tab_bar<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+) -> Result<(), String> {
+    let label = label.to_string();
+
+    run_on_app_main_thread(app, move |app| {
+        let window = app
+            .get_webview_window(&label)
+            .ok_or_else(|| format!("ウィンドウ '{label}' が見つかりません"))?;
+        let ns_window = get_ns_window_object(&window)?;
+
+        configure_ns_document_window(ns_window);
+        ensure_ns_window_tab_bar_visible(ns_window);
+        Ok(())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ensure_macos_document_window_tab_bar<R: Runtime>(
+    _: &AppHandle<R>,
+    _: &str,
+) -> Result<(), String> {
+    Ok(())
+}
+
 fn create_document_window_internal<R: tauri::Runtime>(
     app: &AppHandle<R>,
     file_path: Option<PathBuf>,
+    disposition: DocumentWindowDisposition,
 ) -> Result<String, String> {
     let manager = app.state::<DocumentManagerState>();
     let (label, record) = manager.reserve_window(file_path)?;
     let title = get_window_title(&record);
 
-    match build_document_window(app, &label, &title) {
+    match build_document_window(app, &label, &title, &disposition) {
         Ok(window) => {
+            if let Err(error) = configure_macos_document_window(app, &label, &disposition) {
+                let _ = window.destroy();
+                manager.rollback_window(&label);
+                return Err(error);
+            }
+
+            let _ = window.show();
             let _ = window.set_focus();
             Ok(label)
         }
@@ -290,6 +492,7 @@ fn focus_document_window_internal<R: tauri::Runtime>(
 
     let _ = window.unminimize();
     let _ = window.show();
+    ensure_macos_document_window_tab_bar(app, label)?;
     window
         .set_focus()
         .map_err(|error| format!("ウィンドウの前面化に失敗しました: {error}"))
@@ -304,7 +507,8 @@ fn open_or_focus_document_window_internal<R: tauri::Runtime>(
         return focus_document_window_internal(app, &label);
     }
 
-    create_document_window_internal(app, Some(path)).map(|_| ())
+    create_document_window_internal(app, Some(path), DocumentWindowDisposition::Standalone)
+        .map(|_| ())
 }
 
 fn launch_paths_from_args(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
@@ -359,15 +563,40 @@ pub fn focused_document_window_label<R: tauri::Runtime>(app: &AppHandle<R>) -> O
         return Some(label);
     }
 
-    app.webview_windows()
-        .into_iter()
-        .find_map(|(label, _)| label.starts_with(DOCUMENT_WINDOW_LABEL_PREFIX).then_some(label))
+    app.webview_windows().into_iter().find_map(|(label, _)| {
+        label
+            .starts_with(DOCUMENT_WINDOW_LABEL_PREFIX)
+            .then_some(label)
+    })
 }
 
 pub fn create_untitled_document_window<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), String> {
-    create_document_window_internal(app, None).map(|_| ())
+    create_document_window_internal(app, None, DocumentWindowDisposition::Standalone).map(|_| ())
+}
+
+pub fn create_untitled_document_tab<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    host_label: &str,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        create_document_window_internal(
+            app,
+            None,
+            DocumentWindowDisposition::TabInGroup {
+                host_label: host_label.to_string(),
+            },
+        )
+        .map(|_| ())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = host_label;
+        create_untitled_document_window(app)
+    }
 }
 
 pub fn focus_document_window<R: tauri::Runtime>(
@@ -416,6 +645,11 @@ pub async fn new_document_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn new_document_tab(window: Window) -> Result<(), String> {
+    create_untitled_document_tab(&window.app_handle(), window.label())
+}
+
+#[tauri::command]
 pub async fn open_document_window(app: AppHandle, path: String) -> Result<(), String> {
     open_or_focus_document_window(&app, &path)
 }
@@ -449,9 +683,8 @@ pub async fn save_project_file(
 
     if let Some(parent) = normalized_path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(|error| {
-                format!("保存先ディレクトリの作成に失敗しました: {error}")
-            })?;
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("保存先ディレクトリの作成に失敗しました: {error}"))?;
         }
     }
 
@@ -462,6 +695,9 @@ pub async fn save_project_file(
         .canonicalize()
         .unwrap_or_else(|_| normalized_path.clone());
     state.update_window_file_path(window.label(), canonical_path.clone())?;
+    window
+        .set_title(&get_file_display_name(&canonical_path))
+        .map_err(|error| format!("window title の更新に失敗しました: {error}"))?;
 
     Ok(canonical_path.to_string_lossy().to_string())
 }

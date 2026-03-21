@@ -8,7 +8,8 @@
 ### プロジェクト状態
 
 - `load_window_context` - 現在の document window に紐づく `filePath` / `untitledIndex` を読む
-- `new_document_window` - 新しい untitled document window を開く
+- `new_document_tab` - 現在の macOS document window の native tab group に新しい untitled document を追加する（非 macOS は standalone window にフォールバック）
+- `new_document_window` - 新しい untitled standalone document window を開く
 - `open_document_window(path)` - 対象 `.siteboard` 用の document window を開く。既に開いていればその window を前面化する
 - `close_ready` - 現在の document window を破棄する
 - `load_project_file(path)` - `.siteboard` ファイルを UTF-8 文字列として読む
@@ -42,7 +43,7 @@
 - `page-title-changed-{pageId}`: タイトル変更通知
 - `page-scroll-ended-{pageId}`: Webview 内スクロール完了通知
 - `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
-- `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new` / `open` / `save` / `save-as`）
+- `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
 
 ## JS ブリッジ API
 
@@ -50,7 +51,7 @@
 
 ### `api`
 
-- `loadWindowContext`, `newDocumentWindow`, `openDocumentWindow`, `closeReady`
+- `loadWindowContext`, `newDocumentTab`, `newDocumentWindow`, `openDocumentWindow`, `closeReady`
 - `loadProjectFile`, `saveProjectFile`
 - `loadTheme`, `saveTheme`, `getPlatformInfo`
 - `onEditCommand`
@@ -69,7 +70,8 @@
 
 - `Edit` メニューは `src/lib/edit-commands.ts` と `src/main.tsx` を経由して renderer に流す
 - `File` メニューは `src/lib/file-commands.ts` と `src/main.tsx` を経由して renderer に流す
-- `File > New` は新しい document window を作る
+- macOS の `File > New Tab` は現在 window の native tab group に untitled document を追加する
+- `File > New Window` は新しい standalone document window を作る
 - `File > Open` は既存 window を置き換えず、対象 `.siteboard` 用の document window を開く
 - `Save` は保存先 `filePath` 未設定時に `Save As` へフォールバックする
 - `save_project_file` は常に拡張子を `.siteboard` に正規化する

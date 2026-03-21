@@ -21,7 +21,7 @@
 - 表示名はファイル basename を正本にし、未保存時だけ `名称未設定` 系の仮名を使う。
 - `project.title` のような表示名を永続状態の正本にしない。必要なら `filePath` から導出する。
 - `main` のような固定 window label を前提にしない。window-local な処理は現在の window から解決する。
-- macOS の document window は native tabs 前提で同じ `tabbingIdentifier` を使い、AppKit 標準の title / tab bar を隠さない。
+- macOS の document window は native tab group ごとに固有の `tabbingIdentifier` を共有する。`New Window` は新しい standalone group を開き、`New Tab` は hidden child を起動後、renderer ready 後に host 限定の explicit attach で同じ group に追加する。1 タブ状態で tab bar を強制表示しない。
 - `File > New Tab/New Window/Open/Save/Save As` は document window のコマンドとして扱い、メニューやショートカットの実装を window-local に保つ。
 - macOS の File ショートカットは `Cmd+T = New Tab`、`Cmd+N = New Window`、`Open` は別 document window を開く Finder 互換挙動にそろえる。
 - 表示名の変更は `Save As` で行う。rename 専用 UI や project title 編集を増やさない。
@@ -114,6 +114,7 @@
 - コンテキストメニューは `components/Common/ContextMenu` を使い createPortal で body 直下に描画する。
 - node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
 - File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
+- **Edit / File コマンドのリスナー登録時は `api.onEditCommand()` / `api.onFileCommand()` を使う**（内部で `getCurrentWebviewWindow().listen()` を使用）。グローバル `listen()` を直接使うと、複数の document window が存在する場合に各ウィンドウで重複実行される
 - document window 関連のコマンドや IPC は window-local に閉じ、`main` 固定の参照を増やさない。
 - child webview の label は `page-{windowLabel}-{pageId}` のように親 document window を含めて一意化する。
 

@@ -6,6 +6,8 @@ import type { WindowContext } from '@/lib/tauri-bridge/types';
 export const api = {
   loadWindowContext: (): Promise<WindowContext> => invoke('load_window_context'),
 
+  attachPendingDocumentTab: (): Promise<void> => invoke('attach_pending_document_tab'),
+
   newDocumentTab: (): Promise<void> => invoke('new_document_tab'),
 
   newDocumentWindow: (): Promise<void> => invoke('new_document_window'),

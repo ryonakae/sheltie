@@ -5,6 +5,12 @@ import { useProjectStore } from '@/store/tab-store';
 
 let initialized = false;
 
+function schedulePendingTabAttach(): void {
+  void api.attachPendingDocumentTab().catch((error) => {
+    console.error('[tab-persistence] 新規タブの attach に失敗:', error);
+  });
+}
+
 export function setupProjectPersistence(): void {
   if (initialized) return;
   initialized = true;
@@ -28,10 +34,12 @@ export function setupProjectPersistence(): void {
         document,
       });
       useProjectStore.getState()._setLoaded();
+      schedulePendingTabAttach();
     })
     .catch(() => {
       useProjectStore.getState().initializeProject({ untitledIndex: 1 });
       useProjectStore.getState()._setLoaded();
+      schedulePendingTabAttach();
     });
 
   api.onSaveBeforeClose(async () => {

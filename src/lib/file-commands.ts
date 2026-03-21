@@ -79,6 +79,22 @@ async function runOpenProjectFromDialog(): Promise<void> {
   }
 }
 
+async function runNewDocumentTab(): Promise<void> {
+  try {
+    await api.newDocumentTab();
+  } catch (error) {
+    await showError(error instanceof Error ? error.message : '新しいタブを開けませんでした');
+  }
+}
+
+async function runNewDocumentWindow(): Promise<void> {
+  try {
+    await api.newDocumentWindow();
+  } catch (error) {
+    await showError(error instanceof Error ? error.message : '新しいウインドウを開けませんでした');
+  }
+}
+
 async function runSaveCurrentProject(
   options: { saveAs?: boolean } = {},
 ): Promise<SaveProjectResult> {
@@ -135,12 +151,12 @@ export function saveCurrentProject(options: { saveAs?: boolean } = {}): Promise<
 export async function runFileCommand(command: FileCommand): Promise<void> {
   await enqueueFileOperation(async () => {
     if (command === 'new-tab') {
-      await api.newDocumentTab();
+      await runNewDocumentTab();
       return;
     }
 
     if (command === 'new-window') {
-      await api.newDocumentWindow();
+      await runNewDocumentWindow();
       return;
     }
 

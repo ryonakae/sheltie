@@ -8,7 +8,8 @@
 ### プロジェクト状態
 
 - `load_window_context` - 現在の document window に紐づく `filePath` / `untitledIndex` を読む
-- `new_document_tab` - 現在の macOS document window の native tab group に新しい untitled document を追加する（非 macOS は standalone window にフォールバック）
+- `attach_pending_document_tab` - 現在 window が pending な macOS `New Tab` child なら、renderer 初期化完了後に host document window へ attach する
+- `new_document_tab` - 現在の macOS document window が解決できた時だけ、その native tab group と同じ `tabbingIdentifier` を継承した untitled document を host 限定の explicit attach で追加する。standalone window へはフォールバックしない
 - `new_document_window` - 新しい untitled standalone document window を開く
 - `open_document_window(path)` - 対象 `.siteboard` 用の document window を開く。既に開いていればその window を前面化する
 - `close_ready` - 現在の document window を破棄する
@@ -45,6 +46,16 @@
 - `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
 
+## イベントリスニングの実装ルール
+
+**IMPORTANT**: JS 側でイベントをリッスンする際は必ず `getCurrentWebviewWindow().listen()` を使う。`@tauri-apps/api/event` の グローバル `listen()` は使わない。
+
+**理由**: `listen()` がアプリケーションレベルのグローバルリスナーの場合、`emit_to(label, ...)` で特定ウィンドウに向けたイベントも全ウィンドウの JS コンテキストで受信してしまう。複数の document window / native tab が存在する場合、1回のイベント送信に対して全ウィンドウのハンドラが発火し、重複実行（例: 新規タブ作成が N 倍）が発生する。
+
+`getCurrentWebviewWindow().listen()` を使えば、自分宛のイベントのみ受信し、他のウィンドウの event は ignore される。
+
+参考: `src/lib/tauri-bridge/events.ts`
+
 ## JS ブリッジ API
 
 `src/lib/tauri-bridge.ts` は公開 facade で、内部実装は `src/lib/tauri-bridge/{project,theme,events,webview}.ts` に分割している。
@@ -52,6 +63,7 @@
 ### `api`
 
 - `loadWindowContext`, `newDocumentTab`, `newDocumentWindow`, `openDocumentWindow`, `closeReady`
+- `attachPendingDocumentTab`
 - `loadProjectFile`, `saveProjectFile`
 - `loadTheme`, `saveTheme`, `getPlatformInfo`
 - `onEditCommand`
@@ -71,7 +83,7 @@
 - `Edit` メニューは `src/lib/edit-commands.ts` と `src/main.tsx` を経由して renderer に流す
 - `File` メニューは `src/lib/file-commands.ts` と `src/main.tsx` を経由して renderer に流す
 - macOS の `File > New Tab` は現在 window の native tab group に untitled document を追加する
-- `File > New Window` は新しい standalone document window を作る
+- macOS の document window は native tab group ごとに `tabbingIdentifier` を共有する。`File > New Window` は新しい standalone document window / group を作り、既存 window の tab bar 状態は変更しない
 - `File > Open` は既存 window を置き換えず、対象 `.siteboard` 用の document window を開く
 - `Save` は保存先 `filePath` 未設定時に `Save As` へフォールバックする
 - `save_project_file` は常に拡張子を `.siteboard` に正規化する

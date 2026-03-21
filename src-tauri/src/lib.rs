@@ -2,10 +2,10 @@ mod commands;
 
 use commands::{
     store::{
-        close_ready, configure_macos_window_tabbing_policy, create_untitled_document_window,
-        focus_document_window, focused_document_window_label, handle_launch_args,
-        load_project_file, load_window_context, new_document_tab, new_document_window,
-        open_document_window, save_project_file, DocumentManagerState,
+        attach_pending_document_tab, close_ready, configure_macos_window_tabbing_policy,
+        create_untitled_document_window, focus_document_window, focused_document_window_label,
+        handle_launch_args, load_project_file, load_window_context, new_document_tab,
+        new_document_window, open_document_window, save_project_file, DocumentManagerState,
     },
     theme::{get_platform_info, load_theme, set_theme},
     webview::{
@@ -62,10 +62,18 @@ fn emit_file_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str
         return;
     }
 
-    if command == "new-tab" || command == "new-window" {
-        if let Err(error) = create_untitled_document_window(app) {
-            log::warn!("new window の生成に失敗しました: {error}");
+    match command {
+        "new-window" => {
+            if let Err(error) = create_untitled_document_window(app) {
+                log::warn!("new window の生成に失敗しました: {error}");
+            }
         }
+        "new-tab" => {
+            log::warn!(
+                "new tab を現在の document window へ配送できませんでした: current document window が解決できません"
+            );
+        }
+        _ => {}
     }
 }
 
@@ -356,6 +364,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             load_window_context,
+            attach_pending_document_tab,
             new_document_tab,
             new_document_window,
             open_document_window,

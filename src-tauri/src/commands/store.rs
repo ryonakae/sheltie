@@ -44,7 +44,6 @@ pub struct DocumentManagerState {
 #[derive(Default)]
 struct DocumentManager {
     next_window_index: usize,
-    next_untitled_index: usize,
     windows: HashMap<String, WindowRecord>,
     file_windows: HashMap<PathBuf, String>,
 }
@@ -102,10 +101,20 @@ impl DocumentManagerState {
                 .ok_or_else(|| format!("ホストウィンドウ '{host_label}' の状態が見つかりません"))?,
         };
         let untitled_index = if file_path.is_some() {
-            inner.next_untitled_index.max(1)
+            0
         } else {
-            inner.next_untitled_index += 1;
-            inner.next_untitled_index
+            // 使用中の untitled index を収集し、最小の未使用番号を割り当てる
+            let used: std::collections::BTreeSet<usize> = inner
+                .windows
+                .values()
+                .filter(|r| r.file_path.is_none())
+                .map(|r| r.untitled_index)
+                .collect();
+            let mut index = 1;
+            while used.contains(&index) {
+                index += 1;
+            }
+            index
         };
 
         let record = WindowRecord {

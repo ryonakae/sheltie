@@ -23,8 +23,10 @@ import type {
   StickyNoteFlowNodeData,
   WebPageFlowNodeData,
 } from '@/components/ReactFlowNodes/types';
+import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
 import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
+import { ThemeToggle } from '@/components/TabBar/ThemeToggle';
 import {
   DRAG_REPOSITION_GAP,
   LOW_ZOOM_HIDE_THRESHOLD,
@@ -930,6 +932,14 @@ export function Siteboard({
             bgColor={isDark ? '#18181b' : '#f9fafb'}
           />
           <FloatingToolbar onAddWebNode={onAddWebNode} onAddStickyNote={onAddStickyNote} />
+          <div className="pointer-events-none absolute top-4 right-4 z-20">
+            <div className="pointer-events-auto">
+              <ThemeToggle
+                buttonClassName={FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}
+                tooltipPlacement="left"
+              />
+            </div>
+          </div>
           <div className="pointer-events-none absolute right-4 bottom-4 z-20 flex items-center gap-2">
             <div className="pointer-events-auto">
               <AppButton
@@ -939,7 +949,7 @@ export function Siteboard({
                 onPress={handleFitAllNodes}
                 aria-label="全体を表示"
                 isDisabled={nodes.length === 0}
-                className="border border-border bg-surface shadow-md"
+                className={FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}
               >
                 <ArrowsExpand className="size-4" />
               </AppButton>

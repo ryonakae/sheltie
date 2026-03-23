@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 
 import { AppButton } from '@/components/Common/AppButton';
+import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
 
 interface ZoomIndicatorProps {
   zoom: number;
@@ -28,7 +29,7 @@ export function ZoomIndicator({ zoom, onResetViewport }: ZoomIndicatorProps) {
       tooltipMessage="100%で中央表示"
       onPress={onResetViewport}
       aria-label="100%で中央表示"
-      className="w-14 justify-center border border-border bg-surface px-3 tabular-nums shadow-md"
+      className={`w-14 justify-center px-3 tabular-nums ${FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}`}
     >
       <motion.span
         animate={settled ? { scale: [1.08, 1] } : undefined}

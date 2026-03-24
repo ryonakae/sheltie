@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import App from '@/App';
+import { setupAppExitCoordinator } from '@/lib/app-exit';
 import { runEditCommand } from '@/lib/edit-commands';
 import { runFileCommand } from '@/lib/file-commands';
 import { onEditCommand, onFileCommand } from '@/lib/tauri-bridge';
@@ -15,6 +16,8 @@ let isEditCommandListenerInitialized = false;
 let editCommandUnlistenPromise: Promise<() => void> | null = null;
 let isFileCommandListenerInitialized = false;
 let fileCommandUnlistenPromise: Promise<() => void> | null = null;
+let isAppExitCoordinatorInitialized = false;
+let appExitCoordinatorCleanupPromise: Promise<() => void> | null = null;
 type HotModule = { dispose: (callback: () => void) => void };
 
 function setupEditCommandListener(): void {
@@ -57,11 +60,30 @@ function setupFileCommandListener(): void {
   }
 }
 
+function setupAppExitCoordinatorListener(): void {
+  if (isAppExitCoordinatorInitialized) return;
+  isAppExitCoordinatorInitialized = true;
+
+  appExitCoordinatorCleanupPromise = setupAppExitCoordinator();
+
+  const hot = (import.meta as ImportMeta & { hot?: HotModule }).hot;
+  if (hot) {
+    hot.dispose(() => {
+      if (appExitCoordinatorCleanupPromise) {
+        void appExitCoordinatorCleanupPromise.then((cleanup) => cleanup());
+      }
+      appExitCoordinatorCleanupPromise = null;
+      isAppExitCoordinatorInitialized = false;
+    });
+  }
+}
+
 // React マウント前に永続化・テーマをセットアップ
 setupProjectPersistence();
 setupThemeListener();
 setupEditCommandListener();
 setupFileCommandListener();
+setupAppExitCoordinatorListener();
 // 非同期で初期テーマを適用（React マウントをブロックしない）
 void useThemeStore
   .getState()

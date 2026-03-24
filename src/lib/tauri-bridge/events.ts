@@ -9,3 +9,6 @@ export const onEditCommand = (callback: (command: EditCommand) => void) =>
 
 export const onFileCommand = (callback: (command: FileCommand) => void) =>
   getCurrentWebviewWindow().listen<FileCommand>('file-command', (event) => callback(event.payload));
+
+export const onAppExitRequested = (callback: () => void) =>
+  getCurrentWebviewWindow().listen('app-exit-requested', () => callback());

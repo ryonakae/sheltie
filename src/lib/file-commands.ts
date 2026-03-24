@@ -2,7 +2,7 @@ import { message, open, save } from '@tauri-apps/plugin-dialog';
 
 import { getProjectDisplayName } from '@/lib/project-display-name';
 import { createProjectDocument, serializeProjectDocument } from '@/lib/project-document';
-import { api, type FileCommand } from '@/lib/tauri-bridge';
+import { api, type FileCommand, type SaveProjectStatus } from '@/lib/tauri-bridge';
 import { useProjectStore } from '@/store/tab-store';
 import type { Project } from '@/types';
 
@@ -10,9 +10,8 @@ const SITEBOARD_EXTENSION = '.siteboard';
 let inFlightCommand: Promise<void> = Promise.resolve();
 
 export type SaveProjectResult =
-  | { status: 'saved'; filePath: string }
-  | { status: 'cancelled' }
-  | { status: 'error' };
+  | { status: Extract<SaveProjectStatus, 'saved'>; filePath: string }
+  | { status: Exclude<SaveProjectStatus, 'saved'> };
 
 function getProject(): Project | null {
   return useProjectStore.getState().project;

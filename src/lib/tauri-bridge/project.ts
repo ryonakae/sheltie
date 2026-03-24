@@ -26,5 +26,10 @@ export const api = {
     });
   },
 
+  completeAppExit: (windowLabels: string[]): Promise<void> =>
+    invoke('complete_app_exit', { windowLabels }),
+
+  abortAppExit: (): Promise<void> => invoke('abort_app_exit'),
+
   closeReady: (): Promise<void> => invoke('close_ready'),
 };

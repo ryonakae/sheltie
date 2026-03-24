@@ -9,13 +9,23 @@ import {
 
 export type UnsavedChangesDecision = 'save' | 'discard' | 'cancel';
 
-interface UnsavedChangesDialogOptions {
+type WindowCloseUnsavedChangesDialogOptions = {
+  kind: 'window-close';
   projectTitle: string;
-}
+};
 
-interface PendingUnsavedChangesDialogRequest extends UnsavedChangesDialogOptions {
+type AppExitUnsavedChangesDialogOptions = {
+  kind: 'app-exit';
+  projectTitles: string[];
+};
+
+export type UnsavedChangesDialogOptions =
+  | WindowCloseUnsavedChangesDialogOptions
+  | AppExitUnsavedChangesDialogOptions;
+
+type PendingUnsavedChangesDialogRequest = UnsavedChangesDialogOptions & {
   resolve: (decision: UnsavedChangesDecision) => void;
-}
+};
 
 let showUnsavedChangesDialog: ((request: PendingUnsavedChangesDialogRequest) => void) | null = null;
 
@@ -71,7 +81,13 @@ export function UnsavedChangesDialog() {
     setRequest(null);
   };
 
-  const bodyText = `「${request?.projectTitle ?? ''}」には未保存の変更があります。保存してからウィンドウを閉じますか？`;
+  const isAppExit = request?.kind === 'app-exit';
+  const projectTitles = isAppExit ? request.projectTitles : [];
+  const bodyText = isAppExit
+    ? `未保存の変更がある ${projectTitles.length} 件の document を保存してからアプリを終了しますか？`
+    : `「${request?.projectTitle ?? ''}」には未保存の変更があります。保存してからウィンドウを閉じますか？`;
+  const discardLabel = isAppExit ? '保存せず終了' : '保存せず閉じる';
+  const saveLabel = isAppExit ? '保存して終了' : '保存';
 
   return (
     <AlertDialog.Backdrop
@@ -91,6 +107,13 @@ export function UnsavedChangesDialog() {
           </AlertDialog.Header>
           <AlertDialog.Body>
             <p>{bodyText}</p>
+            {isAppExit && projectTitles.length > 0 ? (
+              <ul className="mt-3 max-h-40 list-disc overflow-y-auto pl-5 text-sm text-muted">
+                {projectTitles.map((title, index) => (
+                  <li key={`${title}-${index}`}>{title}</li>
+                ))}
+              </ul>
+            ) : null}
           </AlertDialog.Body>
           <AlertDialog.Footer>
             <AppButton
@@ -105,10 +128,10 @@ export function UnsavedChangesDialog() {
               variant="danger"
               onPress={() => resolveRequest('discard')}
             >
-              保存せず閉じる
+              {discardLabel}
             </AppButton>
             <AppButton isIconOnly={false} variant="primary" onPress={() => resolveRequest('save')}>
-              保存
+              {saveLabel}
             </AppButton>
           </AlertDialog.Footer>
         </AlertDialog.Dialog>

@@ -168,6 +168,15 @@ return type;
 - dialog close 後は通常の `computeDisplayModes()` に戻して native 復帰を再開する
 - アプリ終了で dirty project が連続して確認される場合は、coordinator が exit を 1 tick 遅延し、次の dialog open が直後に来たら native 復帰を打ち消す
 
+### `Cmd+Q` / `Quit` の集約確認
+
+- `Cmd+W` / window close は従来どおり window 単位の未保存確認を行う
+- `Cmd+Q` / メニュー `Quit` は macOS app menu の custom `app.quit` item から renderer に `app-exit-requested` を送る
+- focused document window が coordinator になり、全 document window の dirty 状態を収集して **確認ダイアログは 1 回だけ** 表示する
+- `保存` を選んだ場合は dirty document を順番に保存する。`Save As` が必要な document はその window を focus してダイアログを開く
+- 順次保存の途中で `Save As` をキャンセルするか保存失敗が起きた場合、Quit 全体を中止し、window は 1 枚も閉じない
+- `保存せず終了` を選んだ場合だけ、全 document window をまとめて destroy してアプリを終了する
+
 ## スクリーンショット永続化
 
 スクリーンショットは PNG ファイルとしてディスクに保存する（macOS のみ）。

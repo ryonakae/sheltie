@@ -1,5 +1,7 @@
 export type FileCommand = 'new-tab' | 'new-window' | 'open' | 'save' | 'save-as';
 
+export type SaveProjectStatus = 'saved' | 'cancelled' | 'error';
+
 export type WindowContext = {
   filePath: string | null;
   untitledIndex: number;
@@ -13,4 +15,30 @@ export type NavigationState = {
 export type PlatformInfo = {
   platform: string;
   trafficLightWidth: number;
+};
+
+export type AppExitStateRequest = {
+  coordinatorLabel: string;
+  requestId: string;
+};
+
+export type AppExitStateSnapshot = {
+  windowLabel: string;
+  projectTitle: string;
+  dirty: boolean;
+};
+
+export type AppExitStateResponse = AppExitStateSnapshot & {
+  requestId: string;
+};
+
+export type AppExitSaveRequest = {
+  coordinatorLabel: string;
+  requestId: string;
+};
+
+export type AppExitSaveResponse = {
+  requestId: string;
+  windowLabel: string;
+  status: SaveProjectStatus;
 };

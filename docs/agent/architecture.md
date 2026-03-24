@@ -37,9 +37,10 @@ src/
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
 - `lib/file-commands.ts`: File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` を処理し、`.siteboard` の入出力と window-local な store 連携を担当する
-- `lib/project-close.ts`: dirty 判定・保存/破棄確認・window close・アプリ終了時の close orchestration を担当する
+- `lib/project-close.ts`: dirty 判定・保存/破棄確認・現在 window の close orchestration を担当する
+- `lib/app-exit.ts`: macOS の custom `app.quit` から始まる集約 quit coordinator。各 document window の dirty 状態収集、集約ダイアログ、順次保存、最終 `complete_app_exit` を担当する
 - `lib/project-display-name.ts`: `filePath` または `untitledIndex` から表示名を導出する
-- `main.tsx`: `edit-command` と `file-command` の listener を起動時に 1 回だけ登録する
+- `main.tsx`: `edit-command` / `file-command` / `app-exit-requested` と app-exit coordinator listener を起動時に 1 回だけ登録する
 
 ## `.siteboard` とローカル状態
 
@@ -49,7 +50,8 @@ src/
 - Rust 側の document manager は各 window の `filePath` と `untitledIndex` を管理する
 - renderer の Zustand store は現在の document の `nodes`, `viewport`, `lastSavedDocument`, `webviewRuntime` をメモリ上で保持する
 - 起動時は window context を読み、`filePath` があれば `.siteboard` を読み込み、無ければ空 document を初期化する
-- window close 時とアプリ終了時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的なウィンドウ破棄だけ `close_ready` を使う
+- window close 時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的な window 破棄だけ `close_ready` を使う
+- `Cmd+Q` / app menu `Quit` は Rust の custom `app.quit` menu event から renderer coordinator を起動し、集約確認と順次保存の完了後に `complete_app_exit` でまとめて終了する
 
 ## Siteboard と React Flow の協業
 

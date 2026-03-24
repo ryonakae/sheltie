@@ -1,11 +1,14 @@
 mod commands;
 
+use std::sync::Mutex;
+
 use commands::{
     store::{
-        attach_pending_document_tab, close_ready, configure_macos_window_tabbing_policy,
-        create_untitled_document_window, focus_document_window, focused_document_window_label,
-        handle_launch_args, load_project_file, load_window_context, new_document_tab,
-        new_document_window, open_document_window, save_project_file, DocumentManagerState,
+        abort_app_exit, attach_pending_document_tab, close_ready, complete_app_exit,
+        configure_macos_window_tabbing_policy, create_untitled_document_window,
+        focus_document_window, focused_document_window_label, handle_launch_args,
+        load_project_file, load_window_context, new_document_tab, new_document_window,
+        open_document_window, save_project_file, DocumentManagerState,
     },
     theme::{get_platform_info, load_theme, set_theme},
     webview::{
@@ -19,11 +22,13 @@ use commands::{
 
 use tauri::{
     menu::{Menu, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder},
-    Emitter, Manager,
+    Emitter, Manager, RunEvent,
 };
 
 const EVENT_EDIT_COMMAND: &str = "edit-command";
 const EVENT_FILE_COMMAND: &str = "file-command";
+const EVENT_APP_EXIT_REQUESTED: &str = "app-exit-requested";
+const MENU_ID_APP_QUIT: &str = "app.quit";
 const MENU_ID_FILE_NEW_TAB: &str = "file.new-tab";
 const MENU_ID_FILE_NEW_WINDOW: &str = "file.new-window";
 const MENU_ID_FILE_OPEN: &str = "file.open";
@@ -33,6 +38,75 @@ const MENU_ID_EDIT_UNDO: &str = "edit.undo";
 const MENU_ID_EDIT_REDO: &str = "edit.redo";
 const MENU_ID_EDIT_DELETE: &str = "edit.delete";
 const MENU_ID_OPEN_DEVTOOLS: &str = "develop.open-devtools";
+
+#[derive(Default)]
+pub struct AppExitCoordinatorState {
+    inner: Mutex<AppExitCoordinatorFlags>,
+}
+
+#[derive(Default)]
+struct AppExitCoordinatorFlags {
+    pending_quit: bool,
+    allow_exit_once: bool,
+}
+
+impl AppExitCoordinatorState {
+    pub fn begin_pending_quit(&self) -> Result<bool, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+
+        if inner.pending_quit {
+            return Ok(false);
+        }
+
+        inner.pending_quit = true;
+        Ok(true)
+    }
+
+    pub fn consume_allow_exit(&self) -> Result<bool, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+
+        if !inner.allow_exit_once {
+            return Ok(false);
+        }
+
+        inner.allow_exit_once = false;
+        Ok(true)
+    }
+
+    pub fn has_pending_quit(&self) -> Result<bool, String> {
+        let inner = self
+            .inner
+            .lock()
+            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+        Ok(inner.pending_quit)
+    }
+
+    pub fn allow_next_exit(&self) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+        inner.pending_quit = false;
+        inner.allow_exit_once = true;
+        Ok(())
+    }
+
+    pub fn abort_pending_quit(&self) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+        inner.pending_quit = false;
+        inner.allow_exit_once = false;
+        Ok(())
+    }
+}
 
 fn emit_window_command<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -79,6 +153,26 @@ fn emit_file_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str
 
 fn normalize_menu_text(text: &str) -> String {
     text.replace('&', "").trim().to_ascii_lowercase()
+}
+
+fn find_app_submenu<R: tauri::Runtime>(menu: &Menu<R>) -> tauri::Result<Option<Submenu<R>>> {
+    for top_item in menu.items()? {
+        let Some(submenu) = top_item.as_submenu() else {
+            continue;
+        };
+
+        for item in submenu.items()? {
+            let Some(predefined) = item.as_predefined_menuitem() else {
+                continue;
+            };
+            let title = normalize_menu_text(&predefined.text()?);
+            if title.starts_with("quit") {
+                return Ok(Some(submenu.clone()));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 fn find_edit_submenu<R: tauri::Runtime>(menu: &Menu<R>) -> tauri::Result<Option<Submenu<R>>> {
@@ -164,6 +258,55 @@ fn remove_default_undo_redo<R: tauri::Runtime>(submenu: &Submenu<R>) -> tauri::R
     }
 
     Ok(())
+}
+
+fn remove_default_quit<R: tauri::Runtime>(submenu: &Submenu<R>) -> tauri::Result<()> {
+    for item in submenu.items()? {
+        let Some(predefined) = item.as_predefined_menuitem() else {
+            continue;
+        };
+        let title = normalize_menu_text(&predefined.text()?);
+        if title.starts_with("quit") {
+            submenu.remove(predefined)?;
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+fn configure_app_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    menu: &Menu<R>,
+) -> tauri::Result<()> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, menu);
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let Some(app_submenu) = find_app_submenu(menu)? else {
+            log::warn!("既定の App メニューが見つからなかったため Quit 差し替えをスキップします");
+            return Ok(());
+        };
+
+        remove_submenu_item_by_id(&app_submenu, MENU_ID_APP_QUIT)?;
+        remove_default_quit(&app_submenu)?;
+
+        let app_name = app
+            .config()
+            .product_name
+            .clone()
+            .unwrap_or_else(|| app.package_info().name.clone());
+        let quit_item = MenuItemBuilder::with_id(MENU_ID_APP_QUIT, format!("Quit {app_name}"))
+            .accelerator("CmdOrCtrl+Q")
+            .build(app)?;
+        app_submenu.append(&quit_item)?;
+
+        Ok(())
+    }
 }
 
 fn configure_file_menu<R: tauri::Runtime>(
@@ -279,12 +422,45 @@ fn configure_edit_menu<R: tauri::Runtime>(
     Ok(())
 }
 
+fn emit_app_exit_requested<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let exit_state = app.state::<AppExitCoordinatorState>();
+    match exit_state.begin_pending_quit() {
+        Ok(true) => {}
+        Ok(false) => return,
+        Err(error) => {
+            log::error!("app exit state の更新に失敗しました: {error}");
+            return;
+        }
+    }
+
+    if let Some(label) = focused_document_window_label(app) {
+        if let Err(error) = app.emit_to(&label, EVENT_APP_EXIT_REQUESTED, ()) {
+            log::warn!("app exit request の送信に失敗しました: label={label}, error={error}");
+            if let Err(reset_error) = exit_state.abort_pending_quit() {
+                log::error!("app exit state のリセットに失敗しました: {reset_error}");
+            }
+        }
+        return;
+    }
+
+    if let Err(error) = exit_state.allow_next_exit() {
+        log::error!("app exit state の更新に失敗しました: {error}");
+        if let Err(reset_error) = exit_state.abort_pending_quit() {
+            log::error!("app exit state のリセットに失敗しました: {reset_error}");
+        }
+        return;
+    }
+
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri_plugin_prevent_default::Flags;
 
     let builder = tauri::Builder::default()
         .manage(DocumentManagerState::default())
+        .manage(AppExitCoordinatorState::default())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if let Err(error) = handle_launch_args(app, &argv, Some(cwd.as_str())) {
                 log::error!("single-instance 起動要求の処理に失敗しました: {error}");
@@ -299,6 +475,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .menu(|app| {
             let menu = Menu::default(app)?;
+            configure_app_menu(app, &menu)?;
             configure_file_menu(app, &menu)?;
             configure_edit_menu(app, &menu)?;
 
@@ -315,7 +492,7 @@ pub fn run() {
             Ok(menu)
         });
 
-    builder
+    let app = builder
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -332,6 +509,7 @@ pub fn run() {
                 log::error!("初期 window の作成に失敗しました: {error}");
             }
             app.on_menu_event(|app, event| match event.id().as_ref() {
+                MENU_ID_APP_QUIT => emit_app_exit_requested(app),
                 MENU_ID_FILE_NEW_TAB => emit_file_command(app, "new-tab"),
                 MENU_ID_FILE_NEW_WINDOW => emit_file_command(app, "new-window"),
                 MENU_ID_FILE_OPEN => emit_file_command(app, "open"),
@@ -368,6 +546,8 @@ pub fn run() {
             new_document_tab,
             new_document_window,
             open_document_window,
+            complete_app_exit,
+            abort_app_exit,
             close_ready,
             load_project_file,
             save_project_file,
@@ -388,6 +568,28 @@ pub fn run() {
             get_existing_screenshot_paths,
             delete_screenshot,
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("Tauri アプリの起動中にエラーが発生しました");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let RunEvent::ExitRequested { api, .. } = event {
+            let exit_state = app_handle.state::<AppExitCoordinatorState>();
+            match exit_state.consume_allow_exit() {
+                Ok(true) => {}
+                Ok(false) => match exit_state.has_pending_quit() {
+                    Ok(true) => api.prevent_exit(),
+                    Ok(false) => {}
+                    Err(error) => {
+                        log::error!("ExitRequested の処理に失敗しました: {error}");
+                        api.prevent_exit();
+                    }
+                },
+                Err(error) => {
+                    log::error!("ExitRequested の処理に失敗しました: {error}");
+                    api.prevent_exit();
+                }
+            }
+        }
+    });
 }

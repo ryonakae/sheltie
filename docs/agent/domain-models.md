@@ -130,3 +130,14 @@
 - 同一 `filePath` の `.siteboard` を複数のローカル document に関連付けない
 - `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない
+
+## Lessons Learned
+
+### 44. untitled_index の動的割り当て（gap-filling）
+
+ウィンドウ/タブを閉じた後に新規ウィンドウを開く際、以前は単調増加カウンター `next_untitled_index` を使って「名称未設定3」「名称未設定4」... と付与していた。修正により、現在の `windows` HashMap から使用中の untitled_index を BTreeSet で管理し、1 から順に最小の未使用番号を割り当てるように変更。これにより「名称未設定2」を閉じた後に新規ウィンドウを開くと「名称未設定3」ではなく「名称未設定2」が再利用される。
+
+**実装:** `src-tauri/src/commands/store.rs` L103-118
+**変更:**
+- `DocumentManager` から `next_untitled_index: usize` フィールドを削除
+- `reserve_window()` 内で毎回 `used: BTreeSet<usize>` を構築し、最小の未使用インデックスを検索

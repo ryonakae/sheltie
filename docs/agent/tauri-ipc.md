@@ -12,6 +12,8 @@
 - `new_document_tab` - 現在の macOS document window が解決できた時だけ、その native tab group と同じ `tabbingIdentifier` を継承した untitled document を host 限定の explicit attach で追加する。standalone window へはフォールバックしない
 - `new_document_window` - 新しい untitled standalone document window を開く
 - `open_document_window(path)` - 対象 `.siteboard` 用の document window を開く。既に開いていればその window を前面化する
+- `complete_app_exit(windowLabels)` - 集約済み app quit を確定し、対象 document window をまとめて destroy した後にアプリ終了を再開する
+- `abort_app_exit` - 集約中の app quit を中止し、次の `Cmd+Q` / `Quit` を再度受け付ける
 - `close_ready` - 現在の document window を破棄する
 - `load_project_file(path)` - `.siteboard` ファイルを UTF-8 文字列として読む
 - `save_project_file(path, contents)` - `.siteboard` ファイルを書き込み、実際の保存パスを返す
@@ -43,8 +45,16 @@
 - `page-navigated-{pageId}`: URL 変更通知
 - `page-title-changed-{pageId}`: タイトル変更通知
 - `page-scroll-ended-{pageId}`: Webview 内スクロール完了通知
+- `app-exit-requested`: Rust の custom `app.quit` menu event が発火した時、focused document window に対して送る集約 quit 開始通知
 - `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
+
+## Renderer <-> Renderer（window-local app quit coordination）
+
+- `app-exit-state-request`: coordinator window が各 document window に dirty 判定を問い合わせる
+- `app-exit-state-response`: 各 document window が `{ windowLabel, projectTitle, dirty }` を返す
+- `app-exit-save-request`: coordinator window が特定 document window に保存実行を依頼する
+- `app-exit-save-response`: 保存結果 `{ windowLabel, status }` を返す。`status` は `saved` / `cancelled` / `error`
 
 ## イベントリスニングの実装ルール
 
@@ -63,9 +73,11 @@
 ### `api`
 
 - `loadWindowContext`, `newDocumentTab`, `newDocumentWindow`, `openDocumentWindow`, `closeReady`
+- `completeAppExit`, `abortAppExit`
 - `attachPendingDocumentTab`
 - `loadProjectFile`, `saveProjectFile`
 - `loadTheme`, `saveTheme`, `getPlatformInfo`
+- `onAppExitRequested`
 - `onEditCommand`
 - `onFileCommand`
 
@@ -88,6 +100,7 @@
 - `Save` は保存先 `filePath` 未設定時に `Save As` へフォールバックする
 - `save_project_file` は常に拡張子を `.siteboard` に正規化する
 - window-local な IPC では `main` のような固定 label を前提にしない
+- `Cmd+Q` / `Quit` は macOS app menu の既定 `Quit` を custom `app.quit` item に差し替え、その menu event から renderer 側 coordinator を起動する
 
 ## プラットフォーム差分
 
@@ -101,6 +114,7 @@
 - イベント名を変更したら listener 側（`WebPageNode` / runtime hooks / `main.tsx`）も同時更新する
 - `edit-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/edit-commands.ts` を同時更新する
 - `file-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/file-commands.ts` を同時更新する
+- `app-exit-requested` や `complete_app_exit` / `abort_app_exit` を変更したら、`src-tauri/src/lib.rs`・`src-tauri/src/commands/store.rs`・`src/lib/app-exit.ts`・`src/lib/tauri-bridge.ts`・`src/main.tsx` を同時更新する
 - document window を増やす/閉じる/前面化する処理を変えたら、`src-tauri/src/lib.rs`・`src/lib/file-commands.ts`・`src/lib/project-close.ts` を同時更新する
 ## Multiwebview command context
 

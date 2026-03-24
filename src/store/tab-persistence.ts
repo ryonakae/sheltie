@@ -1,4 +1,4 @@
-import { requestAppClose } from '@/lib/project-close';
+import { requestCurrentWindowClose } from '@/lib/project-close';
 import { parseProjectDocument } from '@/lib/project-document';
 import { api } from '@/lib/tauri-bridge';
 import { useProjectStore } from '@/store/tab-store';
@@ -43,6 +43,6 @@ export function setupProjectPersistence(): void {
     });
 
   api.onSaveBeforeClose(async () => {
-    await requestAppClose();
+    await requestCurrentWindowClose();
   });
 }

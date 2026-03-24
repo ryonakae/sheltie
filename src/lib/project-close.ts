@@ -32,11 +32,12 @@ function getProject(): Project | null {
 
 async function confirmUnsavedChanges(project: Project): Promise<UnsavedChangesDecision> {
   return promptUnsavedChangesDialog({
+    kind: 'window-close',
     projectTitle: getProjectDisplayName(project),
   });
 }
 
-export function requestAppClose(): Promise<void> {
+export function requestCurrentWindowClose(): Promise<void> {
   return runExclusiveCloseOperation(async () => {
     const project = getProject();
     if (!project) {
@@ -66,3 +67,5 @@ export function requestAppClose(): Promise<void> {
     await api.closeReady();
   });
 }
+
+export const requestAppClose = requestCurrentWindowClose;

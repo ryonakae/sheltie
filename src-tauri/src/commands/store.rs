@@ -5,6 +5,7 @@ use std::{
     sync::Mutex,
 };
 
+use crate::AppExitCoordinatorState;
 use tauri::{
     AppHandle, Manager, Runtime, State, TitleBarStyle, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, Window,
@@ -422,10 +423,7 @@ fn configure_macos_document_window<R: Runtime>(
 }
 
 #[cfg(not(target_os = "macos"))]
-fn configure_macos_document_window<R: Runtime>(
-    _: &AppHandle<R>,
-    _: &str,
-) -> Result<(), String> {
+fn configure_macos_document_window<R: Runtime>(_: &AppHandle<R>, _: &str) -> Result<(), String> {
     Ok(())
 }
 
@@ -631,8 +629,7 @@ pub fn create_untitled_document_tab<R: tauri::Runtime>(
     #[cfg(target_os = "macos")]
     {
         log::info!("[new-tab] create_untitled_document_tab start: host_label={host_label}");
-        create_document_tab_internal(app, host_label)
-        .map(|_| ())
+        create_document_tab_internal(app, host_label).map(|_| ())
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -648,7 +645,8 @@ pub async fn attach_pending_document_tab(
     state: State<'_, DocumentManagerState>,
 ) -> Result<(), String> {
     let child_label = window.label().to_string();
-    let Some((host_label, tabbing_identifier)) = state.take_pending_tab_attachment(&child_label)? else {
+    let Some((host_label, tabbing_identifier)) = state.take_pending_tab_attachment(&child_label)?
+    else {
         return Ok(());
     };
 
@@ -666,9 +664,9 @@ pub async fn attach_pending_document_tab(
             "[new-tab] main-thread entered: host_label={attach_host_label}, child_label={attach_child_label}, tabbing_identifier={attach_tabbing_identifier}"
         );
 
-        let host_window = app.get_webview_window(&attach_host_label).ok_or_else(|| {
-            format!("ホストウィンドウ '{attach_host_label}' が見つかりません")
-        })?;
+        let host_window = app
+            .get_webview_window(&attach_host_label)
+            .ok_or_else(|| format!("ホストウィンドウ '{attach_host_label}' が見つかりません"))?;
         let child_window = app
             .get_webview_window(&attach_child_label)
             .ok_or_else(|| format!("child ウィンドウ '{attach_child_label}' が見つかりません"))?;
@@ -772,7 +770,10 @@ pub async fn new_document_tab(window: Window) -> Result<(), String> {
     log::info!("[new-tab] command start: host_label={}", window.label());
     let result = create_untitled_document_tab(&window.app_handle(), window.label());
     if let Err(error) = &result {
-        log::error!("[new-tab] command error: host_label={}, error={error}", window.label());
+        log::error!(
+            "[new-tab] command error: host_label={}, error={error}",
+            window.label()
+        );
     } else {
         log::info!("[new-tab] command complete: host_label={}", window.label());
     }
@@ -782,6 +783,38 @@ pub async fn new_document_tab(window: Window) -> Result<(), String> {
 #[tauri::command]
 pub async fn open_document_window(app: AppHandle, path: String) -> Result<(), String> {
     open_or_focus_document_window(&app, &path)
+}
+
+#[tauri::command]
+pub async fn complete_app_exit(
+    app: AppHandle,
+    state: State<'_, DocumentManagerState>,
+    exit_state: State<'_, AppExitCoordinatorState>,
+    window_labels: Vec<String>,
+) -> Result<(), String> {
+    exit_state.allow_next_exit()?;
+
+    let mut labels = HashSet::new();
+    for label in window_labels {
+        if !labels.insert(label.clone()) {
+            continue;
+        }
+
+        state.unregister_window(&label);
+        if let Some(window) = app.get_webview_window(&label) {
+            window
+                .destroy()
+                .map_err(|error| format!("ウィンドウ破棄に失敗しました: {label}, {error}"))?;
+        }
+    }
+
+    app.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn abort_app_exit(exit_state: State<'_, AppExitCoordinatorState>) -> Result<(), String> {
+    exit_state.abort_pending_quit()
 }
 
 #[tauri::command]

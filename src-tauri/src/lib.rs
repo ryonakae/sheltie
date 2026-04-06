@@ -527,14 +527,14 @@ pub fn run() {
                             let _ = focus_document_window(app, &label);
                             window.open_devtools();
                         }
-                    } else if let Some(window) =
-                        app.webview_windows()
+                    } else if let Some(label) =
+                        app.windows()
                             .into_iter()
-                            .find_map(|(label, window)| {
-                                label.starts_with("document-").then_some(window)
-                            })
+                            .find_map(|(label, _)| label.starts_with("document-").then_some(label))
                     {
-                        window.open_devtools();
+                        if let Some(window) = app.get_webview_window(&label) {
+                            window.open_devtools();
+                        }
                     }
                 }
                 _ => {}

@@ -360,7 +360,7 @@ fn ns_window_class() -> Result<&'static AnyClass, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn get_ns_window_object<R: Runtime>(window: &WebviewWindow<R>) -> Result<*mut AnyObject, String> {
+fn get_ns_window_object<R: Runtime>(window: &Window<R>) -> Result<*mut AnyObject, String> {
     let raw = window
         .ns_window()
         .map_err(|error| format!("NSWindow の取得に失敗しました: {error}"))?;
@@ -414,7 +414,7 @@ fn configure_macos_document_window<R: Runtime>(
 
     run_on_app_main_thread(app, move |app| {
         let window = app
-            .get_webview_window(&label)
+            .get_window(&label)
             .ok_or_else(|| format!("ウィンドウ '{label}' が見つかりません"))?;
         let ns_window = get_ns_window_object(&window)?;
         configure_ns_document_window(ns_window);
@@ -485,7 +485,7 @@ fn focus_document_window_internal<R: tauri::Runtime>(
     label: &str,
 ) -> Result<(), String> {
     let window = app
-        .get_webview_window(label)
+        .get_window(label)
         .ok_or_else(|| format!("ウィンドウ '{label}' が見つかりません"))?;
 
     let _ = window.unminimize();
@@ -539,8 +539,11 @@ fn launch_paths_from_args(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
 }
 
 pub fn focused_document_window_label<R: tauri::Runtime>(app: &AppHandle<R>) -> Option<String> {
+    // webview_windows() ではなく windows() を使う。
+    // add_child() で子 Webview を追加すると webview_windows() が
+    // document window を返さなくなるため。
     let mut labels: Vec<String> = app
-        .webview_windows()
+        .windows()
         .into_iter()
         .filter_map(|(label, window)| {
             if !label.starts_with(DOCUMENT_WINDOW_LABEL_PREFIX) {
@@ -559,7 +562,7 @@ pub fn focused_document_window_label<R: tauri::Runtime>(app: &AppHandle<R>) -> O
         return Some(label);
     }
 
-    app.webview_windows().into_iter().find_map(|(label, _)| {
+    app.windows().into_iter().find_map(|(label, _)| {
         label
             .starts_with(DOCUMENT_WINDOW_LABEL_PREFIX)
             .then_some(label)
@@ -665,10 +668,10 @@ pub async fn attach_pending_document_tab(
         );
 
         let host_window = app
-            .get_webview_window(&attach_host_label)
+            .get_window(&attach_host_label)
             .ok_or_else(|| format!("ホストウィンドウ '{attach_host_label}' が見つかりません"))?;
         let child_window = app
-            .get_webview_window(&attach_child_label)
+            .get_window(&attach_child_label)
             .ok_or_else(|| format!("child ウィンドウ '{attach_child_label}' が見つかりません"))?;
         let host_ns_window = get_ns_window_object(&host_window)?;
         let child_ns_window = get_ns_window_object(&child_window)?;
@@ -711,7 +714,7 @@ pub async fn attach_pending_document_tab(
             Ok(())
         }
         Err(error) => {
-            if let Some(child_window) = app.get_webview_window(&child_label) {
+            if let Some(child_window) = app.get_window(&child_label) {
                 let _ = child_window.destroy();
             }
             state.rollback_window(&child_label);
@@ -801,7 +804,7 @@ pub async fn complete_app_exit(
         }
 
         state.unregister_window(&label);
-        if let Some(window) = app.get_webview_window(&label) {
+        if let Some(window) = app.get_window(&label) {
             window
                 .destroy()
                 .map_err(|error| format!("ウィンドウ破棄に失敗しました: {label}, {error}"))?;

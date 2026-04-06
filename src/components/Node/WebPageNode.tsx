@@ -121,9 +121,6 @@ export const WebPageNode = memo(function WebPageNode({
       return;
     }
 
-    frameEl.style.left = `${positionCorrectionToX}px`;
-    frameEl.style.top = `${positionCorrectionToY}px`;
-
     const offsetX = positionCorrectionFromX - positionCorrectionToX;
     const offsetY = positionCorrectionFromY - positionCorrectionToY;
     let frameId: number | null = null;

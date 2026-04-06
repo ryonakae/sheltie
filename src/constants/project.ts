@@ -1,7 +1,7 @@
 // ビューポート、ページ/付箋の既定値
 export const DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 };
-export const DEFAULT_PAGE_WIDTH = 375;
-export const DEFAULT_PAGE_HEIGHT = 812;
+export const DEFAULT_PAGE_WIDTH = 393;
+export const DEFAULT_PAGE_HEIGHT = 852;
 export const DEFAULT_STICKY_NOTE_WIDTH = 200;
 export const DEFAULT_STICKY_NOTE_HEIGHT = 200;
 
@@ -23,7 +23,7 @@ export const CANVAS_CENTER_ANIMATION_EASE = [0.215, 0.61, 0.355, 1] as const;
 
 // デバイスプリセット
 export const SIZE_PRESETS = [
-  { label: 'モバイル', width: 375, height: 812 },
+  { label: 'モバイル', width: 393, height: 852 },
   { label: 'タブレット', width: 768, height: 1024 },
   { label: 'PC', width: 1280, height: 800 },
 ] as const;

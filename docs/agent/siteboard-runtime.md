@@ -4,7 +4,9 @@
 対象実装は主に以下。
 
 - `src/components/Siteboard/Siteboard.tsx`
-- `src/hooks/siteboard/useSiteboardDisplayEngine.ts`
+- `src/hooks/siteboard/useSiteboardDisplayEngine.ts`（メインフック）
+  - `src/hooks/siteboard/display-engine/dom.ts`（DOM 操作ヘルパー）
+  - `src/hooks/siteboard/display-engine/mode.ts`（DisplayMode 計算ロジック）
 - `src/hooks/siteboard/useSiteboardNodeRuntime.ts`
 - `src/components/Node/WebPageNode.tsx`
 

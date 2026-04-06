@@ -37,8 +37,12 @@
 - `ProjectStore`（`tab-store.ts` 内部）
   - 単一 document window の `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `nodeHistory`, `webviewRuntime`
-  - node 更新 action: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`
-  - runtime action: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
+  - 初期化: `initializeProject`, `markProjectSaved`, `restoreProjectFromLastSaved`
+  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `removeNode`, `addStickyNoteNode`
+  - ノード更新: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`
+  - 順序/選択: `bringNodeToFront`, `pinWebNodeUrl`, `updateViewport`
+  - 履歴: `undoProject`, `redoProject`
+  - runtime: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
 - `ProjectNodeHistory`（`tab-store.ts` 内部）
   - `past`: 直前までの `BoardNode[]` スナップショット配列
   - `future`: Redo 用の `BoardNode[]` スナップショット配列
@@ -99,6 +103,7 @@
 - `DEFAULT_PAGE_HEIGHT = 812`
 - `WEB_PAGE_TOP_BAR_HEIGHT = 32`
 - `WEB_PAGE_BOTTOM_BAR_HEIGHT = 32`
+- `DEFAULT_STICKY_NOTE_WIDTH = 200`
 - `DEFAULT_STICKY_NOTE_HEIGHT = 200`
 - `STICKY_NOTE_HEADER_HEIGHT = 32`
 - `SIZE_PRESETS = [モバイル, タブレット, PC]`

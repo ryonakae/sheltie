@@ -115,6 +115,7 @@ Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/li
 | `tauri-plugin-store` | プロジェクト状態の永続化 | |
 | `tauri-plugin-dialog` | Open / Save / message ダイアログ | File メニューの `.siteboard` 入出力に利用 |
 | `tauri-plugin-prevent-default` | メインウィンドウのデフォルトコンテキストメニュー無効化 | `Flags::CONTEXT_MENU` のみ指定。DevTools は維持。子 Webview（外部サイト）は対象外 |
+| `tauri-plugin-log` | Rust ログを OS ログに転送 | `#[cfg(debug_assertions)]` でのみ登録（開発時のみ） |
 
 ## アセットプロトコル
 

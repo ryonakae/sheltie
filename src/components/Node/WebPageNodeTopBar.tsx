@@ -51,7 +51,6 @@ export function WebPageNodeTopBar({
       className="flex w-full min-w-0 items-center overflow-hidden bg-transparent"
       style={{
         height: zoomPx(32),
-        gap: zoomPx(2),
         paddingInline: zoomPx(8),
         fontSize: zoomPx(12),
         lineHeight: zoomPx(16),

@@ -24,6 +24,11 @@ function logWebviewWarning(
   console.warn(`[webviewApi] ${command} に失敗`, { ...context, error });
 }
 
+function logWebviewCommand(command: string, context: Record<string, unknown>): void {
+  if (!import.meta.env.DEV) return;
+  console.info(`[webviewApi] ${command}`, context);
+}
+
 async function invokeOrWarn(
   command: string,
   payload: Record<string, unknown>,
@@ -63,7 +68,7 @@ async function withWebviewHandleOrWarn(
 }
 
 export const webviewApi = {
-  create: (
+  create: async (
     pageId: string,
     url: string,
     x: number,
@@ -71,8 +76,8 @@ export const webviewApi = {
     width: number,
     height: number,
     zoom: number,
-  ): Promise<string> =>
-    invoke('create_page_webview', {
+  ): Promise<string> => {
+    const payload = {
       pageId,
       url,
       x,
@@ -80,17 +85,30 @@ export const webviewApi = {
       width,
       height,
       zoom,
-    }),
+    };
+    logWebviewCommand('create_page_webview', payload);
+    const label = await invoke<string>('create_page_webview', payload);
+    logWebviewCommand('create_page_webview:resolved', { pageId, label });
+    return label;
+  },
 
-  updateBounds: (
+  updateBounds: async (
     label: string,
     x: number,
     y: number,
     width: number,
     height: number,
     zoom: number,
-  ): Promise<void> =>
-    invokeOrWarn(
+  ): Promise<void> => {
+    logWebviewCommand('update_page_webview_bounds', {
+      label,
+      x,
+      y,
+      width,
+      height,
+      zoom,
+    });
+    await invokeOrWarn(
       'update_page_webview_bounds',
       {
         label,
@@ -101,7 +119,8 @@ export const webviewApi = {
         zoom,
       },
       { label },
-    ),
+    );
+  },
 
   hide: (label: string): Promise<void> =>
     withWebviewHandleOrWarn(label, 'hide', (webview) => webview.hide()),

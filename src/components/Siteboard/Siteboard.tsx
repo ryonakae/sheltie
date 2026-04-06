@@ -13,7 +13,7 @@ import {
   type Viewport as FlowViewport,
 } from '@xyflow/react';
 import { useReducedMotion } from 'motion/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { AppButton } from '@/components/Common/AppButton';
@@ -201,7 +201,6 @@ export function Siteboard({
   const {
     captureScreenshot,
     cancelZoomRestore,
-    computeDisplayModes,
     displayModes,
     handleContextMenuClose: handleContextMenuCloseDisplay,
     handleContextMenuOpen,
@@ -316,7 +315,6 @@ export function Siteboard({
     updateNodeSizeWithoutHistory,
     updateStickyNoteContent,
     cycleStickyNoteColor,
-    computeDisplayModes,
     captureScreenshot,
   });
 
@@ -610,6 +608,16 @@ export function Siteboard({
   useEffect(() => {
     syncViewportFromStore();
   }, [syncViewportFromStore]);
+
+  // --canvas-zoom を mount 直後（子 useEffect より前）に初期化する。
+  // syncViewportFromStore は useEffect のため子コンポーネントの useEffect より後に走り、
+  // Webview 作成時に --canvas-zoom が未設定（fallback 1）になって TopBar 高さが崩れる。
+  // useLayoutEffect は useEffect より先に実行されるため、Webview 作成前に正しい値が設定できる。
+  useLayoutEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.style.setProperty('--canvas-zoom', String(zoomRef.current));
+    }
+  }, []); // mount 時のみ実行（zoomRef は ref であり変更が依存要因にならないため空配列で問題なし）
 
   useEffect(() => {
     const unregister = registerUnsavedChangesDialogDisplayController({
@@ -926,8 +934,8 @@ export function Siteboard({
         >
           <Background
             variant={BackgroundVariant.Dots}
-            gap={20}
-            size={3}
+            gap={16}
+            size={2}
             color={isDark ? '#27272a' : '#d1d5db'}
             bgColor={isDark ? '#18181b' : '#f9fafb'}
           />

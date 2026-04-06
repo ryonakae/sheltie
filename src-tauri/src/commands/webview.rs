@@ -11,6 +11,105 @@ use self::macos_viewport::{
     configure_new_webview_viewport, set_webview_alpha, update_existing_webview_viewport,
 };
 
+#[cfg(target_os = "macos")]
+use objc2_foundation::NSRect;
+
+#[cfg(target_os = "macos")]
+fn format_ns_rect(rect: NSRect) -> String {
+    format!(
+        "{{x={:.2}, y={:.2}, w={:.2}, h={:.2}}}",
+        rect.origin.x, rect.origin.y, rect.size.width, rect.size.height
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn log_host_window_metrics(window: &Window, phase: &str) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+
+    let Ok(raw_ns_window) = window.ns_window() else {
+        log::info!("[webview-layout][rust] {phase}: ns_window unavailable");
+        return;
+    };
+    let Ok(raw_ns_view) = window.ns_view() else {
+        log::info!("[webview-layout][rust] {phase}: ns_view unavailable");
+        return;
+    };
+
+    let raw_ns_window = raw_ns_window as *mut objc2::runtime::AnyObject;
+    let raw_ns_view = raw_ns_view as *mut objc2::runtime::AnyObject;
+
+    unsafe {
+        let window_frame: NSRect = objc2::msg_send![raw_ns_window, frame];
+        let content_layout_rect: NSRect = objc2::msg_send![raw_ns_window, contentLayoutRect];
+        let content_view: *mut objc2::runtime::AnyObject = objc2::msg_send![raw_ns_window, contentView];
+        let content_view_frame: NSRect = objc2::msg_send![content_view, frame];
+        let host_view_frame: NSRect = objc2::msg_send![raw_ns_view, frame];
+        let host_view_bounds: NSRect = objc2::msg_send![raw_ns_view, bounds];
+
+        log::info!(
+            "[webview-layout][rust] {phase}: window_label={}, window_frame={}, content_layout_rect={}, content_view_frame={}, host_view_frame={}, host_view_bounds={}",
+            window.label(),
+            format_ns_rect(window_frame),
+            format_ns_rect(content_layout_rect),
+            format_ns_rect(content_view_frame),
+            format_ns_rect(host_view_frame),
+            format_ns_rect(host_view_bounds),
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn log_child_webview_metrics(
+    phase: &str,
+    label: &str,
+    raw_webview: *mut objc2::runtime::AnyObject,
+) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+
+    unsafe {
+        let webview_frame: NSRect = objc2::msg_send![raw_webview, frame];
+        let webview_bounds: NSRect = objc2::msg_send![raw_webview, bounds];
+        let superview: *mut objc2::runtime::AnyObject = objc2::msg_send![raw_webview, superview];
+        let superview_frame: NSRect = objc2::msg_send![superview, frame];
+        let superview_bounds: NSRect = objc2::msg_send![superview, bounds];
+        let is_flipped: bool = objc2::msg_send![superview, isFlipped];
+
+        log::info!(
+            "[webview-layout][rust] {phase}: label={label}, webview_frame={}, webview_bounds={}, superview_frame={}, superview_bounds={}, superview_is_flipped={}",
+            format_ns_rect(webview_frame),
+            format_ns_rect(webview_bounds),
+            format_ns_rect(superview_frame),
+            format_ns_rect(superview_bounds),
+            is_flipped,
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn child_webview_top_inset(window: &Window) -> Result<f64, String> {
+    let raw_ns_window = window
+        .ns_window()
+        .map_err(|e| format!("ns_window 取得エラー: {e}"))?
+        as *mut objc2::runtime::AnyObject;
+    let raw_ns_view = window
+        .ns_view()
+        .map_err(|e| format!("ns_view 取得エラー: {e}"))?
+        as *mut objc2::runtime::AnyObject;
+
+    unsafe {
+        let content_layout_rect: NSRect = objc2::msg_send![raw_ns_window, contentLayoutRect];
+        let host_view_frame: NSRect = objc2::msg_send![raw_ns_view, frame];
+        let top_inset =
+            (host_view_frame.size.height - (content_layout_rect.origin.y + content_layout_rect.size.height))
+                .max(0.0);
+        Ok(top_inset)
+    }
+}
+
 /// WKWebView のスクリーンショットをキャプチャし、base64 PNG Data URL として返す。
 ///
 /// 現在は macOS のみサポート。WKWebView が表示中（native モード）の時に呼び出すこと。
@@ -157,6 +256,28 @@ pub async fn create_page_webview(
     let app = window.app_handle();
     let window_label = window.label().to_string();
     let label = scoped_page_label(&window_label, &page_id);
+    #[cfg(target_os = "macos")]
+    let top_inset = child_webview_top_inset(&window)?;
+    #[cfg(not(target_os = "macos"))]
+    let top_inset = 0.0;
+    #[cfg(target_os = "macos")]
+    let adjusted_y = y + top_inset;
+    #[cfg(not(target_os = "macos"))]
+    let adjusted_y = y;
+
+    #[cfg(target_os = "macos")]
+    log_host_window_metrics(&window, "create_page_webview:host-before");
+
+    if cfg!(debug_assertions) {
+        log::info!(
+            "[webview-layout][rust] create_page_webview: window_label={window_label}, page_id={page_id}, label={label}, x={x:.2}, y={y:.2}, adjusted_y={adjusted_y:.2}, width={width:.2}, height={height:.2}, zoom={zoom:.4}{}",
+            if cfg!(target_os = "macos") {
+                format!(", top_inset={top_inset:.2}")
+            } else {
+                String::new()
+            }
+        );
+    }
 
     // 既存の同名 Webview があれば破棄（HMR / 異常系での再作成に対する防御策）
     if let Some(existing) = app.get_webview(&label) {
@@ -223,7 +344,7 @@ pub async fn create_page_webview(
                         }
                     }
                 }),
-            LogicalPosition::new(x, y),
+            LogicalPosition::new(x, adjusted_y),
             LogicalSize::new(width, height),
         )
         .map_err(|e| format!("Webview の作成に失敗しました: {e}"))?;
@@ -238,8 +359,10 @@ pub async fn create_page_webview(
     #[cfg(target_os = "macos")]
     {
         if let Some(wv) = app.get_webview(&label) {
+            let log_label = label.clone();
             wv.with_webview(move |platform_wv| {
                 let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
+                log_child_webview_metrics("create_page_webview:child-after-build", &log_label, raw);
                 configure_new_webview_viewport(raw, width, height, zoom);
             })
             .ok();
@@ -266,12 +389,41 @@ pub async fn update_page_webview_bounds(
     height: f64,
     zoom: f64,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let top_inset = child_webview_top_inset(&window)?;
+    #[cfg(not(target_os = "macos"))]
+    let top_inset = 0.0;
+    #[cfg(target_os = "macos")]
+    let adjusted_y = y + top_inset;
+    #[cfg(not(target_os = "macos"))]
+    let adjusted_y = y;
+
+    if cfg!(debug_assertions) {
+        log::info!(
+            "[webview-layout][rust] update_page_webview_bounds: window_label={}, label={}, x={:.2}, y={:.2}, adjusted_y={:.2}, width={:.2}, height={:.2}, zoom={:.4}{}",
+            window.label(),
+            label,
+            x,
+            y,
+            adjusted_y,
+            width,
+            height,
+            zoom,
+            if cfg!(target_os = "macos") {
+                format!(", top_inset={top_inset:.2}")
+            } else {
+                String::new()
+            }
+        );
+    }
+    #[cfg(target_os = "macos")]
+    log_host_window_metrics(&window, "update_page_webview_bounds:host-before");
     update_bounds_impl(
         &window.app_handle(),
         window.label(),
         &label,
         x,
-        y,
+        adjusted_y,
         width,
         height,
         zoom,
@@ -338,6 +490,18 @@ async fn update_bounds_impl(
     zoom: f64,
 ) -> Result<(), String> {
     let wv = resolve_page_webview(app, window_label, label)?;
+    let label_string = label.to_string();
+
+    if cfg!(debug_assertions) {
+        wv.with_webview({
+            let label = label_string.clone();
+            move |platform_wv| {
+                let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
+                log_child_webview_metrics("update_bounds_impl:child-before", &label, raw);
+            }
+        })
+        .ok();
+    }
 
     wv.set_position(LogicalPosition::new(x, y))
         .map_err(|e| format!("setPosition エラー: {e}"))?;
@@ -346,7 +510,9 @@ async fn update_bounds_impl(
 
     wv.with_webview(move |platform_wv| {
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
+        log_child_webview_metrics("update_bounds_impl:child-after-set-frame", &label_string, raw);
         update_existing_webview_viewport(raw, width, height, zoom);
+        log_child_webview_metrics("update_bounds_impl:child-after-viewport", &label_string, raw);
     })
     .map_err(|e| format!("with_webview エラー: {e}"))?;
 
@@ -390,6 +556,10 @@ pub async fn batch_update_page_webview_bounds(
 ) -> Result<(), String> {
     let app = window.app_handle();
     let window_label = window.label().to_string();
+    #[cfg(target_os = "macos")]
+    let top_inset = child_webview_top_inset(&window)?;
+    #[cfg(not(target_os = "macos"))]
+    let top_inset = 0.0;
 
     // エラーは個別に無視（一括更新中の孤児 Webview 対策）
     for e in entries {
@@ -398,7 +568,7 @@ pub async fn batch_update_page_webview_bounds(
             &window_label,
             &e.label,
             e.x,
-            e.y,
+            e.y + top_inset,
             e.width,
             e.height,
             e.zoom,
@@ -426,10 +596,14 @@ pub async fn batch_update_webview_positions(
 ) -> Result<(), String> {
     let app = window.app_handle();
     let window_label = window.label().to_string();
+    #[cfg(target_os = "macos")]
+    let top_inset = child_webview_top_inset(&window)?;
+    #[cfg(not(target_os = "macos"))]
+    let top_inset = 0.0;
 
     for e in entries {
         if let Ok(wv) = resolve_page_webview(&app, &window_label, &e.label) {
-            wv.set_position(LogicalPosition::new(e.x, e.y)).ok();
+            wv.set_position(LogicalPosition::new(e.x, e.y + top_inset)).ok();
         }
     }
     Ok(())

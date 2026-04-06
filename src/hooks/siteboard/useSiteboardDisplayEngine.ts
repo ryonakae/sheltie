@@ -39,6 +39,35 @@ interface CaptureScreenshotOptions {
 
 type InteractionPreparationType = InteractionType | 'context-menu' | 'unsaved-changes-dialog';
 
+function roundDebugValue(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+function serializeRect(rect: DOMRect | null) {
+  if (!rect) return null;
+  return {
+    left: roundDebugValue(rect.left),
+    top: roundDebugValue(rect.top),
+    width: roundDebugValue(rect.width),
+    height: roundDebugValue(rect.height),
+    right: roundDebugValue(rect.right),
+    bottom: roundDebugValue(rect.bottom),
+  };
+}
+
+function readCanvasZoomDebugValue(element: HTMLElement | null): string | null {
+  if (!element) return null;
+  const container = element.closest('[data-siteboard-container]') as HTMLElement | null;
+  if (!container) return null;
+  const computedValue = window.getComputedStyle(container).getPropertyValue('--canvas-zoom').trim();
+  return computedValue || container.style.getPropertyValue('--canvas-zoom') || null;
+}
+
+function logDisplayEngineDebug(message: string, details: Record<string, unknown>): void {
+  if (!import.meta.env.DEV) return;
+  console.info(`[webview-layout][display-engine] ${message}`, details);
+}
+
 function buildSeededScreenshotUrls(
   webPageNodes: WebPageNode[],
   cachedScreenshotUrlsByNodeId: Record<string, string>,
@@ -106,6 +135,7 @@ export function useSiteboardDisplayEngine({
   const captureScreenshotRef = useRef<
     ((nodeId: string, options?: CaptureScreenshotOptions) => Promise<boolean>) | null
   >(null);
+  const computeDisplayModesRef = useRef<(() => void) | null>(null);
   const interactionRafRef = useRef<number | null>(null);
   const containerRectRef = useRef<DOMRect | null>(null);
   const activeInteractionsRef = useRef<Set<InteractionType>>(new Set());
@@ -131,6 +161,11 @@ export function useSiteboardDisplayEngine({
   const knownNodeIdsRef = useRef<Set<string>>(new Set());
   const webPageIds = useMemo(() => webPageNodes.map((page) => page.id), [webPageNodes]);
   const webPageIdsKey = useMemo(() => webPageIds.join('|'), [webPageIds]);
+  const webviewLabelSyncKey = useMemo(
+    () =>
+      webPageNodes.map((page) => `${page.id}:${webviewLabelsByNodeId[page.id] ?? ''}`).join('|'),
+    [webPageNodes, webviewLabelsByNodeId],
+  );
 
   const getWebviewLabel = useCallback(
     (nodeId: string) => webviewLabelsByNodeId[nodeId],
@@ -439,6 +474,20 @@ export function useSiteboardDisplayEngine({
       }
 
       const currentAttr = wrapper.getAttribute('data-display-mode') ?? 'native';
+      if (nextMode === 'native' || currentAttr !== nextMode || !label) {
+        logDisplayEngineDebug('computeDisplayModes:decision', {
+          nodeId: page.id,
+          label: label ?? null,
+          currentAttr,
+          nextMode,
+          hasDisplayableScreenshot: hasDisplayableScreenshot(page.id),
+          zoom: roundDebugValue(zoomRef.current),
+          canvasZoom: readCanvasZoomDebugValue(placeholder),
+          placeholderRect: serializeRect(placeholderRect),
+          wrapperRect: serializeRect(wrapper.getBoundingClientRect()),
+          containerRect: serializeRect(containerRect),
+        });
+      }
       if (nextMode !== 'native' && pendingNativeRevealRef.current.has(page.id)) {
         cancelNativeReveal(page.id);
       }
@@ -1132,6 +1181,10 @@ export function useSiteboardDisplayEngine({
   }, [captureScreenshot]);
 
   useEffect(() => {
+    computeDisplayModesRef.current = computeDisplayModes;
+  }, [computeDisplayModes]);
+
+  useEffect(() => {
     screenshotUrlsRef.current = screenshotUrls;
   }, [screenshotUrls]);
 
@@ -1215,6 +1268,40 @@ export function useSiteboardDisplayEngine({
       }
     };
   }, [computeDisplayModes, containerRef]);
+
+  useEffect(() => {
+    logDisplayEngineDebug('label-sync:schedule', {
+      webviewLabelSyncKey,
+      labelsByNodeId: Object.fromEntries(
+        webPageNodes.map((page) => [page.id, webviewLabelsByNodeId[page.id] ?? null]),
+      ),
+      activeInteractions: Array.from(activeInteractionsRef.current),
+    });
+    let secondFrameId: number | null = null;
+    let firstFrameId: number | null = requestAnimationFrame(() => {
+      firstFrameId = null;
+      secondFrameId = requestAnimationFrame(() => {
+        secondFrameId = null;
+        if (activeInteractionsRef.current.size > 0) return;
+        logDisplayEngineDebug('label-sync:run', {
+          webviewLabelSyncKey,
+          labelsByNodeId: Object.fromEntries(
+            webPageNodes.map((page) => [page.id, webviewLabelsByNodeId[page.id] ?? null]),
+          ),
+        });
+        computeDisplayModesRef.current?.();
+      });
+    });
+
+    return () => {
+      if (firstFrameId !== null) {
+        cancelAnimationFrame(firstFrameId);
+      }
+      if (secondFrameId !== null) {
+        cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [webPageNodes, webviewLabelSyncKey, webviewLabelsByNodeId]);
 
   useEffect(() => {
     const handleBlur = () => {

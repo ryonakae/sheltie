@@ -21,7 +21,6 @@ interface UseSiteboardNodeRuntimeParams {
   updateNodeSizeWithoutHistory: (nodeId: string, width: number, height: number) => void;
   updateStickyNoteContent: (nodeId: string, content: string) => void;
   cycleStickyNoteColor: (nodeId: string) => void;
-  computeDisplayModes: () => void;
   captureScreenshot: (nodeId: string) => Promise<boolean>;
 }
 
@@ -49,7 +48,6 @@ export function useSiteboardNodeRuntime({
   updateNodeSizeWithoutHistory,
   updateStickyNoteContent,
   cycleStickyNoteColor,
-  computeDisplayModes,
   captureScreenshot,
 }: UseSiteboardNodeRuntimeParams) {
   const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
@@ -294,10 +292,9 @@ export function useSiteboardNodeRuntime({
     (nodeId: string, label: string) => {
       setWebNodeWebviewLabel(nodeId, label);
       ensureNavigationRuntime(nodeId);
-      requestAnimationFrame(() => computeDisplayModes());
       void refreshNavigationState(nodeId, label);
     },
-    [computeDisplayModes, ensureNavigationRuntime, refreshNavigationState, setWebNodeWebviewLabel],
+    [ensureNavigationRuntime, refreshNavigationState, setWebNodeWebviewLabel],
   );
 
   const handleWebviewDestroyed = useCallback(

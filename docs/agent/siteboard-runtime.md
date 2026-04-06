@@ -253,11 +253,15 @@ return type;
 - Webview API は例外時 no-op を許容する前提。
 - 空フレーム（`url === ''`）は Webview を作成しない。
 - Webview の create/destroy は URL 同期から切り離し、`node.url` 更新では再生成しない。
+- `Siteboard.tsx` は mount 直後の `useLayoutEffect` で `data-siteboard-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提の top/bottom chrome 高さを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする。
 - `webviewLabel` は `BoardNode` に持たず、`tab-store` の `webviewRuntime.labelsByNodeId` に保持する。「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。label が無いページは `native` に戻さず `screenshot` または `hidden` を使う。
 - 既存 Webview への後続操作は `pageId` から引き直さず、この `labelsByNodeId` の `label` を正本として使う。`updateBounds`、`setOpacity`、`reload`、`goBack/Forward`、`saveScreenshot` はすべて `label` ベースで呼ぶ。
+- label 登録後の native bounds 再同期は `useSiteboardNodeRuntime` から直接 `computeDisplayModes()` を呼ばず、`useSiteboardDisplayEngine` が `webviewLabelsByNodeId` の安定キー変化を検知して 2 フレーム後に実行する。これにより最新 render の closure で `placeholder` 矩形と label の両方を読み、`updateBounds()` まで確実に到達させる。
+- macOS の child WKWebView は host `contentView` 座標系で配置される一方、renderer の `getBoundingClientRect()` は `contentLayoutRect` 基準になる。そのため Rust `commands/webview.rs` では `contentLayoutRect` と host view 高さの差分を top inset として求め、`create_page_webview` / `update_page_webview_bounds` / `batch_update_webview_positions` の `y` に加算してから child Webview へ渡す。
 - `screenshotUrl` も `BoardNode` には持たず、`tab-store` の `webviewRuntime.screenshotUrlsByNodeId` に runtime cache として保持する。タブ再マウントや起動直後の open tab 復元では、この cache を `useSiteboardDisplayEngine` の初期 state seed に使う。
 - `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、その更新で `reload` を再発火させない。
 - 既存 Webview への URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview(label, url)` を呼ぶ。
+- Webview 初回配置で使う矩形の正本は引き続き `placeholder` であり、今回の注意点は「どの矩形を使うか」ではなく「`--canvas-zoom` と label 反映後の最新 DOM でいつ読むか」にある。
 
 ## スクロール完了通知チャネル
 

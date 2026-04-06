@@ -94,6 +94,11 @@ fn show_nsalert_sheet(
         let danger_color: *mut AnyObject = objc2::msg_send![color_class, systemRedColor];
         let _: () = objc2::msg_send![discard_btn, setBezelColor: danger_color];
 
+        // 「保存」ボタン（index 0）を初期フォーカスに設定
+        let save_btn: *mut AnyObject = objc2::msg_send![buttons, objectAtIndex: 0usize];
+        let alert_window: *mut AnyObject = objc2::msg_send![alert, window];
+        let _: () = objc2::msg_send![alert_window, setInitialFirstResponder: save_btn];
+
         // ユーザーがボタンを押した時に呼ばれる completion handler
         let block = RcBlock::new(move |response: isize| {
             let decision = match response {

@@ -48,7 +48,7 @@ export function WebPageNodeBottomBar({
         lineHeight: zoomPx(15),
       }}
     >
-      <div className="flex shrink-0 items-center" style={{ gap: zoomPx(2) }}>
+      <div className="flex shrink-0 items-center">
         {!hidePresetControls &&
           SIZE_PRESETS.map((preset) => {
             const isActive = width === preset.width && height === preset.height;

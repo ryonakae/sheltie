@@ -822,7 +822,10 @@ pub async fn abort_app_exit(exit_state: State<'_, AppExitCoordinatorState>) -> R
 
 #[tauri::command]
 pub async fn close_ready(
-    window: WebviewWindow,
+    // WebviewWindow ではなく Window を使う。
+    // add_child() で子 Webview を追加すると get_webview_window() が
+    // document window を返さなくなり、WebviewWindow の解決が失敗するため。
+    window: Window,
     state: State<'_, DocumentManagerState>,
 ) -> Result<(), String> {
     state.unregister_window(window.label());

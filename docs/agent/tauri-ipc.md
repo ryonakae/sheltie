@@ -122,6 +122,7 @@
 - document window を増やす/閉じる/前面化する処理を変えたら、`src-tauri/src/lib.rs`・`src/lib/file-commands.ts`・`src/lib/project-close.ts` を同時更新する
 ## Multiwebview command context
 
-- child webview から invoke される可能性がある command は `tauri::WebviewWindow` ではなく `tauri::Window` を受ける。
-- `Window` は command を発火した webview の hosting document window を返すため、top-level webview / child webview のどちらから呼ばれても同じ window label を解決できる。
-- child webview 対応 command で `WebviewWindow` を受けると `current webview is not a WebviewWindow` が発生するため使わない。
+- document window に child webview が存在しうる command は `tauri::WebviewWindow` ではなく `tauri::Window` を受ける。
+- `add_child()` で child webview を追加すると Tauri v2 の `get_webview_window()` / `webview_windows()` が document window を返さなくなる。`WebviewWindow` パラメータの解決はこの関数に依存するため、child webview が存在する状態で失敗し `current webview is not a WebviewWindow` が発生する。
+- `Window` は `get_window()` で解決されるため child webview の有無に関わらず document window を返す。
+- この制約は「child webview から invoke」に限らず、「child webview が存在する window から invoke」でも同様に適用される（例: `close_ready` は document window の JS から呼ぶが、WebPageNode がある状態では失敗する）。

@@ -110,7 +110,7 @@
 
 `src/constants/siteboard.ts`
 
-- ズーム: `MIN_ZOOM = 0.2`, `MAX_ZOOM = 1.5`
+- ズーム: `MIN_ZOOM = 0.25`, `MAX_ZOOM = 1.5`, `ZOOM_STEPS = [0.25, 0.5, 1.0, 1.5]`（キーボードショートカットのステップ値）
 - しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 25`
 - ドラッグ補正: `DRAG_REPOSITION_GAP = 20`
 

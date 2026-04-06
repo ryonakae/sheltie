@@ -28,6 +28,7 @@ use tauri::{
 
 const EVENT_EDIT_COMMAND: &str = "edit-command";
 const EVENT_FILE_COMMAND: &str = "file-command";
+const EVENT_VIEW_COMMAND: &str = "view-command";
 const EVENT_APP_EXIT_REQUESTED: &str = "app-exit-requested";
 const MENU_ID_APP_QUIT: &str = "app.quit";
 const MENU_ID_FILE_NEW_TAB: &str = "file.new-tab";
@@ -38,6 +39,10 @@ const MENU_ID_FILE_SAVE_AS: &str = "file.save-as";
 const MENU_ID_EDIT_UNDO: &str = "edit.undo";
 const MENU_ID_EDIT_REDO: &str = "edit.redo";
 const MENU_ID_EDIT_DELETE: &str = "edit.delete";
+const MENU_ID_VIEW_FIT: &str = "view.fit";
+const MENU_ID_VIEW_RESET_ZOOM: &str = "view.reset-zoom";
+const MENU_ID_VIEW_ZOOM_IN: &str = "view.zoom-in";
+const MENU_ID_VIEW_ZOOM_OUT: &str = "view.zoom-out";
 const MENU_ID_OPEN_DEVTOOLS: &str = "develop.open-devtools";
 
 #[derive(Default)]
@@ -130,6 +135,10 @@ fn emit_window_command<R: tauri::Runtime>(
 
 fn emit_edit_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
     let _ = emit_window_command(app, EVENT_EDIT_COMMAND, command);
+}
+
+fn emit_view_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
+    let _ = emit_window_command(app, EVENT_VIEW_COMMAND, command);
 }
 
 fn emit_file_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
@@ -423,6 +432,51 @@ fn configure_edit_menu<R: tauri::Runtime>(
     Ok(())
 }
 
+fn configure_view_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    menu: &Menu<R>,
+) -> tauri::Result<()> {
+    let view_submenu = if let Some(existing) = menu
+        .items()?
+        .into_iter()
+        .filter_map(|item| item.as_submenu().cloned())
+        .find(|s| normalize_menu_text(&s.text().unwrap_or_default()) == "view")
+    {
+        existing
+    } else {
+        let fallback = SubmenuBuilder::with_id(app, "view", "View").build()?;
+        menu.append(&fallback)?;
+        fallback
+    };
+
+    // 再初期化・将来の再適用でも重複しないよう既存の custom item を先に削除
+    remove_submenu_item_by_id(&view_submenu, MENU_ID_VIEW_FIT)?;
+    remove_submenu_item_by_id(&view_submenu, MENU_ID_VIEW_RESET_ZOOM)?;
+    remove_submenu_item_by_id(&view_submenu, MENU_ID_VIEW_ZOOM_IN)?;
+    remove_submenu_item_by_id(&view_submenu, MENU_ID_VIEW_ZOOM_OUT)?;
+
+    let fit_item = MenuItemBuilder::with_id(MENU_ID_VIEW_FIT, "全体を表示")
+        .accelerator("Shift+1")
+        .build(app)?;
+    let reset_zoom_item = MenuItemBuilder::with_id(MENU_ID_VIEW_RESET_ZOOM, "100%で中央表示")
+        .accelerator("CmdOrCtrl+0")
+        .build(app)?;
+    let zoom_in_item = MenuItemBuilder::with_id(MENU_ID_VIEW_ZOOM_IN, "拡大")
+        .accelerator("CmdOrCtrl+Shift+=")
+        .build(app)?;
+    let zoom_out_item = MenuItemBuilder::with_id(MENU_ID_VIEW_ZOOM_OUT, "縮小")
+        .accelerator("CmdOrCtrl+Minus")
+        .build(app)?;
+
+    view_submenu.append(&fit_item)?;
+    view_submenu.append(&reset_zoom_item)?;
+    view_submenu.append(&PredefinedMenuItem::separator(app)?)?;
+    view_submenu.append(&zoom_in_item)?;
+    view_submenu.append(&zoom_out_item)?;
+
+    Ok(())
+}
+
 fn emit_app_exit_requested<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let exit_state = app.state::<AppExitCoordinatorState>();
     match exit_state.begin_pending_quit() {
@@ -479,6 +533,7 @@ pub fn run() {
             configure_app_menu(app, &menu)?;
             configure_file_menu(app, &menu)?;
             configure_edit_menu(app, &menu)?;
+            configure_view_menu(app, &menu)?;
 
             #[cfg(debug_assertions)]
             {
@@ -519,6 +574,10 @@ pub fn run() {
                 MENU_ID_EDIT_UNDO => emit_edit_command(app, "undo"),
                 MENU_ID_EDIT_REDO => emit_edit_command(app, "redo"),
                 MENU_ID_EDIT_DELETE => emit_edit_command(app, "delete"),
+                MENU_ID_VIEW_FIT => emit_view_command(app, "fit-view"),
+                MENU_ID_VIEW_RESET_ZOOM => emit_view_command(app, "reset-zoom"),
+                MENU_ID_VIEW_ZOOM_IN => emit_view_command(app, "zoom-in"),
+                MENU_ID_VIEW_ZOOM_OUT => emit_view_command(app, "zoom-out"),
                 MENU_ID_OPEN_DEVTOOLS =>
                 {
                     #[cfg(debug_assertions)]

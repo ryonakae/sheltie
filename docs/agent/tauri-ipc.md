@@ -52,6 +52,7 @@
 - `app-exit-requested`: Rust の custom `app.quit` menu event が発火した時、focused document window に対して送る集約 quit 開始通知
 - `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
+- `view-command`: メニューバー `View` 操作のビューコマンド通知（payload は `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out`）
 
 ## Renderer <-> Renderer（window-local app quit coordination）
 
@@ -84,6 +85,7 @@
 - `onAppExitRequested`
 - `onEditCommand`
 - `onFileCommand`
+- `onViewCommand`
 
 ### `webviewApi`
 
@@ -98,6 +100,7 @@
 
 - `Edit` メニューは `src/lib/edit-commands.ts` と `src/main.tsx` を経由して renderer に流す
 - `File` メニューは `src/lib/file-commands.ts` と `src/main.tsx` を経由して renderer に流す
+- `View` メニューは `src/lib/view-commands.ts` と `src/main.tsx` を経由して renderer に流す。`fit-view`（Shift+1）はテキスト編集中に editable フォーカスをチェックしてスキップする
 - macOS の `File > New Tab` は現在 window の native tab group に untitled document を追加する
 - macOS の document window は native tab group ごとに `tabbingIdentifier` を共有する。`File > New Window` は新しい standalone document window / group を作り、既存 window の tab bar 状態は変更しない
 - `File > Open` は既存 window を置き換えず、対象 `.siteboard` 用の document window を開く
@@ -118,6 +121,7 @@
 - イベント名を変更したら listener 側（`WebPageNode` / runtime hooks / `main.tsx`）も同時更新する
 - `edit-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/edit-commands.ts` を同時更新する
 - `file-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/file-commands.ts` を同時更新する
+- `view-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/view-commands.ts` を同時更新する
 - `app-exit-requested` や `complete_app_exit` / `abort_app_exit` を変更したら、`src-tauri/src/lib.rs`・`src-tauri/src/commands/store.rs`・`src/lib/app-exit.ts`・`src/lib/tauri-bridge.ts`・`src/main.tsx` を同時更新する
 - document window を増やす/閉じる/前面化する処理を変えたら、`src-tauri/src/lib.rs`・`src/lib/file-commands.ts`・`src/lib/project-close.ts` を同時更新する
 ## Multiwebview command context

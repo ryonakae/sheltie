@@ -37,6 +37,7 @@ import {
   STICKY_NOTE_MIN_WIDTH,
   ZOOM_END_DEBOUNCE_MS,
   ZOOM_RESET_TARGET,
+  ZOOM_STEPS,
 } from '@/constants';
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
@@ -49,6 +50,7 @@ import {
   type SiteboardViewportTarget,
 } from '@/lib/siteboard-viewport';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
+import { registerViewCommandHandlers } from '@/lib/view-commands';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
 import { isStickyNoteNode, isWebPageNode } from '@/types';
@@ -735,6 +737,49 @@ export function Siteboard({
     handleCenterViewportAtDefaultZoom();
   }, [handleCenterViewportAtDefaultZoom]);
 
+  const handleZoomIn = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+
+    const viewport = flowViewportRef.current;
+    if (!viewport) return;
+
+    const { x, y, zoom } = viewport;
+    const nextZoom =
+      ZOOM_STEPS.find((step) => step > zoom + 0.001) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    if (Math.abs(nextZoom - zoom) < 0.001) return;
+
+    // ビューポート中心のワールド座標を固定してズーム
+    const worldX = (rect.width / 2 - x) / zoom;
+    const worldY = (rect.height / 2 - y) / zoom;
+    applyViewportTarget({
+      x: rect.width / 2 - worldX * nextZoom,
+      y: rect.height / 2 - worldY * nextZoom,
+      zoom: nextZoom,
+    });
+  }, [applyViewportTarget]);
+
+  const handleZoomOut = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+
+    const viewport = flowViewportRef.current;
+    if (!viewport) return;
+
+    const { x, y, zoom } = viewport;
+    const prevZoom = [...ZOOM_STEPS].reverse().find((step) => step < zoom - 0.001) ?? ZOOM_STEPS[0];
+    if (Math.abs(prevZoom - zoom) < 0.001) return;
+
+    // ビューポート中心のワールド座標を固定してズーム
+    const worldX = (rect.width / 2 - x) / zoom;
+    const worldY = (rect.height / 2 - y) / zoom;
+    applyViewportTarget({
+      x: rect.width / 2 - worldX * prevZoom,
+      y: rect.height / 2 - worldY * prevZoom,
+      zoom: prevZoom,
+    });
+  }, [applyViewportTarget]);
+
   // ビューポートの debounce タイマーと rAF のクリーンアップ
   useEffect(() => {
     return () => {
@@ -743,6 +788,15 @@ export function Siteboard({
       if (uiZoomRafRef.current !== null) cancelAnimationFrame(uiZoomRafRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    return registerViewCommandHandlers({
+      fitView: handleFitAllNodes,
+      resetZoom: handleResetViewport,
+      zoomIn: handleZoomIn,
+      zoomOut: handleZoomOut,
+    });
+  }, [handleFitAllNodes, handleResetViewport, handleZoomIn, handleZoomOut]);
 
   // React Flow の flowNodes 配列を構築する
   // displayModes/screenshotUrls/navStates/resizingSize の変化に追従するため useMemo 依存に含める

@@ -7,7 +7,7 @@ export const DRAG_THRESHOLD = 3;
 export const DRAG_REPOSITION_GAP = 20;
 
 // ズーム制御の境界とアニメーション
-export const MIN_ZOOM = 0.2;
+export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 1.5;
 export const LOW_ZOOM_HIDE_THRESHOLD = 0.3;
 export const ZOOM_SENSITIVITY = 0.001;
@@ -16,6 +16,8 @@ export const ZOOM_RESET_DURATION_SEC = 0.24;
 export const ZOOM_ANIMATION_EASE = [0.215, 0.61, 0.355, 1] as const;
 export const ZOOM_END_DEBOUNCE_MS = 250;
 export const WHEEL_PAN_END_DEBOUNCE_MS = 150;
+// キーボードショートカットで使うズームのステップ値
+export const ZOOM_STEPS = [0.25, 0.5, 1.0, 1.5] as const;
 
 // スクショ切替の判定しきい値
 export const HYSTERESIS_PX = 4;

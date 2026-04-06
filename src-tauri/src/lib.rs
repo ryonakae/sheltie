@@ -3,6 +3,7 @@ mod commands;
 use std::sync::Mutex;
 
 use commands::{
+    dialog::show_unsaved_changes_dialog,
     store::{
         abort_app_exit, attach_pending_document_tab, close_ready, complete_app_exit,
         configure_macos_window_tabbing_policy, create_untitled_document_window,
@@ -567,6 +568,7 @@ pub fn run() {
             save_webview_screenshot,
             get_existing_screenshot_paths,
             delete_screenshot,
+            show_unsaved_changes_dialog,
         ])
         .build(tauri::generate_context!())
         .expect("Tauri アプリの起動中にエラーが発生しました");

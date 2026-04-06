@@ -2,7 +2,6 @@ import { Toast } from '@heroui/react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect } from 'react';
 
-import { UnsavedChangesDialog } from '@/components/Common/UnsavedChangesDialog';
 import { getProjectDisplayName } from '@/lib/project-display-name';
 import { ProjectScreen } from '@/screens/Project';
 import { useProjectStore } from '@/store/tab-store';
@@ -28,7 +27,6 @@ export default function App() {
   return (
     <div className="flex h-full select-none">
       <ProjectScreen key={project?.id ?? 'project'} />
-      <UnsavedChangesDialog />
       <Toast.Provider placement="bottom" />
     </div>
   );

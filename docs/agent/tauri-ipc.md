@@ -18,6 +18,10 @@
 - `load_project_file(path)` - `.siteboard` ファイルを UTF-8 文字列として読む
 - `save_project_file(path, contents)` - `.siteboard` ファイルを書き込み、実際の保存パスを返す
 
+### ダイアログ
+
+- `show_unsaved_changes_dialog(params)` - macOS NSAlert をシートスタイル（`beginSheetModalForWindow:completionHandler:`）で表示する（macOS のみ、非 macOS は即 `"cancel"` を返す）。シートはウィンドウ上部からスライドダウンし、背景にオーバーレイが表示される。戻り値は `"save"` / `"discard"` / `"cancel"`。`params.kind` が `"window-close"` の場合は `projectTitle` を使い、`"app-exit"` の場合は `projectTitles[]` を使う。実装: `src-tauri/src/commands/dialog.rs`
+
 ### テーマ
 
 - `load_theme`

@@ -38,6 +38,7 @@ export interface WebPageNodeProps {
   onScreenshotPresented: (nodeId: string, url: string) => void;
   onScrollEnded: (nodeId: string) => void;
   onUrlSubmit: (nodeId: string, url: string) => void;
+  isEditingUrl: boolean;
   positionCorrectionAnimationToken: number | null;
   positionCorrectionFromX: number | null;
   positionCorrectionFromY: number | null;
@@ -73,6 +74,7 @@ export const WebPageNode = memo(function WebPageNode({
   onScreenshotPresented,
   onScrollEnded,
   onUrlSubmit,
+  isEditingUrl,
   positionCorrectionAnimationToken,
   positionCorrectionFromX,
   positionCorrectionFromY,
@@ -218,7 +220,7 @@ export const WebPageNode = memo(function WebPageNode({
         data-webview-placeholder
         className="relative w-full flex-1 rounded-none bg-background"
       >
-        {isNodeEmpty(node) ? (
+        {isNodeEmpty(node) || isEditingUrl ? (
           <WebPageNodeUrlForm onSubmit={(url) => onUrlSubmit(node.id, url)} />
         ) : (
           screenshotUrl && (

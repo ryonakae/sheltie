@@ -43,6 +43,7 @@ interface ProjectActions {
     zoom?: number,
   ) => BoardNode | null;
   setWebNodeUrl: (nodeId: string, url: string) => void;
+  changeWebNodeUrl: (nodeId: string, url: string) => void;
   removeNode: (nodeId: string) => void;
   updateNodePosition: (nodeId: string, x: number, y: number) => void;
   updateNodeSize: (nodeId: string, width: number, height: number) => void;
@@ -135,6 +136,7 @@ function findNonOverlappingPosition(
   width: number,
   height: number,
   zoom: number,
+  options?: { keepY?: boolean },
 ) {
   const existingRects = nodes.map((node) => getNodeFrameRect(node, zoom));
   const candidateFrameHeight = getNodeFrameHeight({ type, height }, zoom);
@@ -147,6 +149,24 @@ function findNonOverlappingPosition(
     const yCandidates = step === 0 ? [0] : [step * PAGE_GAP, -step * PAGE_GAP];
     for (const yOffset of yCandidates) {
       const candidateY = y + yOffset;
+      if (options?.keepY) {
+        const sameRowNodes = existingRects.filter((node) =>
+          isVerticalOverlapping(candidateY, candidateFrameHeight, node),
+        );
+        let candidateX = x;
+        while (true) {
+          const overlapNodes = sameRowNodes.filter((node) =>
+            isHorizontalOverlapping(candidateX, width, node),
+          );
+          if (overlapNodes.length === 0) {
+            return { x: candidateX, y: candidateY };
+          }
+
+          const rightmost = Math.max(...overlapNodes.map((node) => node.x + node.width));
+          candidateX = rightmost + PAGE_GAP;
+        }
+      }
+
       const sameRowNodes = existingRects.filter((node) =>
         isVerticalOverlapping(candidateY, candidateFrameHeight, node),
       );
@@ -276,6 +296,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           newNodeBase.width,
           newNodeBase.height,
           zoom,
+          { keepY: true },
         );
         const newNode = {
           ...newNodeBase,
@@ -308,6 +329,37 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           }
         : null,
     })),
+
+  changeWebNodeUrl: (nodeId, url) =>
+    set((state) => {
+      if (!state.project) return state;
+
+      let title = url;
+      try {
+        title = new URL(url).hostname;
+      } catch {
+        // URL パース失敗時はそのまま使用
+      }
+
+      return {
+        ...replaceProjectNodes(state, (nodes) => {
+          return nodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            return { ...node, url, addedUrl: url, title };
+          });
+        }),
+        webviewRuntime: {
+          labelsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
+          ),
+          screenshotUrlsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
+              ([id]) => id !== nodeId,
+            ),
+          ),
+        },
+      };
+    }),
 
   removeNode: (nodeId) =>
     set((state) => ({

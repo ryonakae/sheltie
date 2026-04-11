@@ -115,6 +115,7 @@
 - node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
 - File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
 - View メニューの `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out` 処理は `lib/view-commands.ts` に集約する。ハンドラの登録は `Siteboard.tsx` 内の `registerViewCommandHandlers` で行う。
+- `Cmd+=` は macOS が `Cmd+Shift+=` として解釈するためネイティブメニューショートカットでは拾えない。`useSiteboardKeyboard` 内で `e.key === '='` を検出して `runViewCommand('zoom-in')` を直接呼ぶことで補完する。
 - **Edit / File / View コマンドのリスナー登録時は `api.onEditCommand()` / `api.onFileCommand()` / `api.onViewCommand()` を使う**（内部で `getCurrentWebviewWindow().listen()` を使用）。グローバル `listen()` を直接使うと、複数の document window が存在する場合に各ウィンドウで重複実行される
 - document window 関連のコマンドや IPC は window-local に閉じ、`main` 固定の参照を増やさない。
 - child webview の label は `page-{windowLabel}-{pageId}` のように親 document window を含めて一意化する。

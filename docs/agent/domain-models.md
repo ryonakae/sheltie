@@ -38,7 +38,7 @@
   - 単一 document window の `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `nodeHistory`, `webviewRuntime`
   - 初期化: `initializeProject`, `markProjectSaved`, `restoreProjectFromLastSaved`
-  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `removeNode`, `addStickyNoteNode`
+  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `addStickyNoteNode`
   - ノード更新: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`
   - 順序/選択: `bringNodeToFront`, `pinWebNodeUrl`, `updateViewport`
   - 履歴: `undoProject`, `redoProject`

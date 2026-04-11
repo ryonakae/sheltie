@@ -53,7 +53,7 @@ import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-cha
 import { registerViewCommandHandlers } from '@/lib/view-commands';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
-import { isStickyNoteNode, isWebPageNode } from '@/types';
+import { isNodeEmpty, isStickyNoteNode, isWebPageNode } from '@/types';
 import type { WebPageNode } from '@/types';
 
 interface SiteboardProps {
@@ -112,6 +112,7 @@ export function Siteboard({
     setWebNodeWebviewLabel,
     clearWebNodeWebviewLabel,
     setWebNodeUrl,
+    changeWebNodeUrl,
     pinWebNodeUrl,
     updateStickyNoteContent,
     cycleStickyNoteColor,
@@ -129,6 +130,7 @@ export function Siteboard({
       removeNode: s.removeNode,
       setProjectScreenshotUrl: s.setProjectScreenshotUrl,
       setWebNodeUrl: s.setWebNodeUrl,
+      changeWebNodeUrl: s.changeWebNodeUrl,
       setWebNodeWebviewLabel: s.setWebNodeWebviewLabel,
       undoProject: s.undoProject,
       updateNodePosition: s.updateNodePosition,
@@ -509,6 +511,7 @@ export function Siteboard({
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(
     null,
   );
+  const [editingUrlNodeId, setEditingUrlNodeId] = useState<string | null>(null);
 
   const handleNodeContextMenu = useCallback(
     (e: React.MouseEvent, nodeId: string) => {
@@ -536,12 +539,25 @@ export function Siteboard({
 
   const handleContextMenuAction = useCallback(
     (actionId: string) => {
-      if (actionId === 'remove' && contextMenu) {
+      if (!contextMenu) return;
+      if (actionId === 'change-url') {
+        setEditingUrlNodeId(contextMenu.nodeId);
+        setContextMenu(null);
+        handleContextMenuCloseDisplay();
+      } else if (actionId === 'remove') {
         handleContextMenuCloseDisplay();
         handleRemoveNodeWithSettleReset(contextMenu.nodeId);
       }
     },
     [contextMenu, handleContextMenuCloseDisplay, handleRemoveNodeWithSettleReset],
+  );
+
+  const handleChangeUrlSubmit = useCallback(
+    (nodeId: string, url: string) => {
+      changeWebNodeUrl(nodeId, url);
+      setEditingUrlNodeId(null);
+    },
+    [changeWebNodeUrl],
   );
 
   // ペイン（空白エリア）クリックで選択解除
@@ -882,7 +898,8 @@ export function Siteboard({
           onWebviewLoaded: handleWebviewLoaded,
           onScreenshotPresented: handleScreenshotPresented,
           onScrollEnded: handleScrollEnded,
-          onUrlSubmit: handleUrlSubmit,
+          onUrlSubmit: editingUrlNodeId === node.id ? handleChangeUrlSubmit : handleUrlSubmit,
+          isEditingUrl: editingUrlNodeId === node.id,
           positionCorrectionAnimationToken: positionCorrectionAnimations[node.id]?.token ?? null,
           positionCorrectionFromX: positionCorrectionAnimations[node.id]?.fromX ?? null,
           positionCorrectionFromY: positionCorrectionAnimations[node.id]?.fromY ?? null,
@@ -947,6 +964,8 @@ export function Siteboard({
     handleScreenshotPresented,
     handleScrollEnded,
     handleUrlSubmit,
+    handleChangeUrlSubmit,
+    editingUrlNodeId,
     handlePositionCorrectionAnimationComplete,
   ]);
 
@@ -1022,15 +1041,25 @@ export function Siteboard({
           </div>
         </ReactFlow>
 
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            items={[{ id: 'remove', label: 'ノードを削除', variant: 'danger' }]}
-            onAction={handleContextMenuAction}
-            onClose={handleContextMenuClose}
-          />
-        )}
+        {contextMenu &&
+          (() => {
+            const targetNode = nodes.find((n) => n.id === contextMenu.nodeId);
+            const items = [
+              ...(targetNode && isWebPageNode(targetNode) && !isNodeEmpty(targetNode)
+                ? [{ id: 'change-url', label: 'サイトのURLを変更' }]
+                : []),
+              { id: 'remove', label: 'ノードを削除', variant: 'danger' as const },
+            ];
+            return (
+              <ContextMenu
+                x={contextMenu.x}
+                y={contextMenu.y}
+                items={items}
+                onAction={handleContextMenuAction}
+                onClose={handleContextMenuClose}
+              />
+            );
+          })()}
       </div>
     </ReactFlowProvider>
   );

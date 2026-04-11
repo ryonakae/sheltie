@@ -9,7 +9,7 @@ export const DRAG_REPOSITION_GAP = 20;
 // ズーム制御の境界とアニメーション
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 1.5;
-export const LOW_ZOOM_HIDE_THRESHOLD = 0.3;
+export const LOW_ZOOM_HIDE_THRESHOLD = 0.4;
 export const ZOOM_SENSITIVITY = 0.001;
 export const ZOOM_RESET_TARGET = 1;
 export const ZOOM_RESET_DURATION_SEC = 0.24;

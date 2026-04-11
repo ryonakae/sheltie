@@ -23,13 +23,17 @@ export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
   };
 
   return (
-    <div className="flex size-full items-center justify-center">
+    <div
+      className="flex size-full items-center justify-center"
+      style={{ paddingLeft: zoomPx(24), paddingRight: zoomPx(24) }}
+    >
       <form
         onSubmit={handleSubmit}
         className="flex flex-col items-center"
         style={{
           gap: zoomPx(12),
-          width: zoomPx(280),
+          width: '100%',
+          maxWidth: zoomPx(280),
         }}
       >
         <Globe

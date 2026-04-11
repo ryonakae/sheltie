@@ -142,19 +142,17 @@ return type;
 
 ## コンテキストメニューと Webview 制御
 
-ネイティブ Webview は OS レベルで常に最前面に描画されるため、HTML の `createPortal` で body に fixed 配置したコンテキストメニューが Webview の下に隠れる。
-
-これを回避するため、右クリック時に対象 webpage ノードを screenshot/hidden モードに切り替え、メニュー表示中はそれを維持する。
+コンテキストメニューは `@tauri-apps/api/menu` の `Menu.new()` + `popup()` で macOS ネイティブメニューとして表示する。ネイティブメニューは OS レイヤーで描画されるため Webview との z-index 競合は起きないが、スクリーンショット差し替えは「メニュー表示中に Webview が操作可能になる」のを防ぐために維持する。
 
 **フロー**:
 1. `handleContextMenuOpen(pageId)` — async 関数。まず `cancelNativeReveal` で復帰タイマーを止める。
 2. 保存済みスクショがある場合は、その stale screenshot を即利用しつつ fresh capture をバックグラウンドで要求する。
 3. 保存済みスクショがない場合だけ `ensureScreenshotReady()` で「PNG 保存 + React 反映 + DOM 描画完了」まで待つ。
 4. 準備完了後に `contextMenuPageIdRef` をセットし、`newMode = 'screenshot'`（capture 不能時のみ `hidden`）へ更新してから Webview を hide する。
-5. `Siteboard.tsx` の `handleNodeContextMenu` — webpage ノードは `handleContextMenuOpen(pageId)` の Promise を `.then()` で待ち、さらに `requestAnimationFrame` を挟んでから `setContextMenu` を呼ぶ。これでメニューが「スクショ背面化」より先に表示されない。
+5. `Siteboard.tsx` の `handleNodeContextMenu` — webpage ノードは `await handleContextMenuOpen(pageId)` を待ってからメニュー項目を構築し `menu.popup()` を呼ぶ。`popup()` はメニューが閉じるまで await でブロックされる。
 6. `computeDisplayModes()` の override ロジック — `contextMenuPageIdRef` がセットされているページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え。
-7. `handleContextMenuClose()` — ref をクリアし `computeDisplayModes()` で表示を復帰。
-8. ページ削除ケース — `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
+7. `popup()` が resolve したら `handleContextMenuCloseDisplay()` で ref をクリアし表示を復帰。
+8. ページ削除ケース — 各メニューアクションの `action` コールバック内で `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
 
 付箋ノードは Webview を持たないため、コンテキストメニュー表示時に `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` の node type 判定で分岐）。
 

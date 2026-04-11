@@ -1,4 +1,5 @@
 import ArrowsExpand from '@gravity-ui/icons/ArrowsExpand';
+import { Menu, MenuItem, PredefinedMenuItem } from '@tauri-apps/api/menu';
 import {
   Background,
   BackgroundVariant,
@@ -17,7 +18,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useShallow } from 'zustand/react/shallow';
 
 import { AppButton } from '@/components/Common/AppButton';
-import { ContextMenu } from '@/components/Common/ContextMenu';
 import { nodeTypes } from '@/components/ReactFlowNodes/nodeTypes';
 import type {
   StickyNoteFlowNodeData,
@@ -508,9 +508,6 @@ export function Siteboard({
     onRedo: redoProject,
   });
 
-  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(
-    null,
-  );
   const [editingUrlNodeId, setEditingUrlNodeId] = useState<string | null>(null);
 
   const handleNodeContextMenu = useCallback(
@@ -519,37 +516,51 @@ export function Siteboard({
       onSelectNode(nodeId);
 
       const node = nodes.find((candidate) => candidate.id === nodeId);
-      if (node && !isStickyNoteNode(node)) {
-        void handleContextMenuOpen(nodeId).then(() => {
-          requestAnimationFrame(() => {
-            setContextMenu({ nodeId, x: e.clientX, y: e.clientY });
-          });
-        });
-      } else {
-        setContextMenu({ nodeId, x: e.clientX, y: e.clientY });
-      }
-    },
-    [handleContextMenuOpen, onSelectNode, nodes],
-  );
+      const showMenu = async () => {
+        if (node && !isStickyNoteNode(node)) {
+          await handleContextMenuOpen(nodeId);
+        }
 
-  const handleContextMenuClose = useCallback(() => {
-    setContextMenu(null);
-    handleContextMenuCloseDisplay();
-  }, [handleContextMenuCloseDisplay]);
+        const menuItems: (MenuItem | PredefinedMenuItem)[] = [];
 
-  const handleContextMenuAction = useCallback(
-    (actionId: string) => {
-      if (!contextMenu) return;
-      if (actionId === 'change-url') {
-        setEditingUrlNodeId(contextMenu.nodeId);
-        setContextMenu(null);
+        if (node && isWebPageNode(node) && !isNodeEmpty(node)) {
+          menuItems.push(
+            await MenuItem.new({
+              text: 'サイトのURLを変更',
+              action: () => {
+                setEditingUrlNodeId(nodeId);
+                handleContextMenuCloseDisplay();
+              },
+            }),
+          );
+          menuItems.push(await PredefinedMenuItem.new({ item: 'Separator' }));
+        }
+
+        menuItems.push(
+          await MenuItem.new({
+            text: 'ノードを削除',
+            accelerator: 'Backspace',
+            action: () => {
+              handleContextMenuCloseDisplay();
+              handleRemoveNodeWithSettleReset(nodeId);
+            },
+          }),
+        );
+
+        const menu = await Menu.new({ items: menuItems });
+        await menu.popup();
         handleContextMenuCloseDisplay();
-      } else if (actionId === 'remove') {
-        handleContextMenuCloseDisplay();
-        handleRemoveNodeWithSettleReset(contextMenu.nodeId);
-      }
+      };
+
+      void showMenu();
     },
-    [contextMenu, handleContextMenuCloseDisplay, handleRemoveNodeWithSettleReset],
+    [
+      handleContextMenuOpen,
+      handleContextMenuCloseDisplay,
+      handleRemoveNodeWithSettleReset,
+      onSelectNode,
+      nodes,
+    ],
   );
 
   const handleChangeUrlSubmit = useCallback(
@@ -563,7 +574,6 @@ export function Siteboard({
   // ペイン（空白エリア）クリックで選択解除
   const handlePaneClick = useCallback(
     (_event: React.MouseEvent) => {
-      setContextMenu(null);
       onClearSelection();
     },
     [onClearSelection],
@@ -1040,26 +1050,6 @@ export function Siteboard({
             </div>
           </div>
         </ReactFlow>
-
-        {contextMenu &&
-          (() => {
-            const targetNode = nodes.find((n) => n.id === contextMenu.nodeId);
-            const items = [
-              ...(targetNode && isWebPageNode(targetNode) && !isNodeEmpty(targetNode)
-                ? [{ id: 'change-url', label: 'サイトのURLを変更' }]
-                : []),
-              { id: 'remove', label: 'ノードを削除', variant: 'danger' as const },
-            ];
-            return (
-              <ContextMenu
-                x={contextMenu.x}
-                y={contextMenu.y}
-                items={items}
-                onAction={handleContextMenuAction}
-                onClose={handleContextMenuClose}
-              />
-            );
-          })()}
       </div>
     </ReactFlowProvider>
   );

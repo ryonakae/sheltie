@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import { registerEditCommandHandlers, runEditCommand } from '@/lib/edit-commands';
+import { runViewCommand } from '@/lib/view-commands';
 
 interface UseSiteboardKeyboardParams {
   selectedNodeId: string | null;
@@ -10,10 +11,11 @@ interface UseSiteboardKeyboardParams {
 }
 
 /**
- * Siteboard の編集ショートカットを処理する。
+ * Siteboard の編集・ビューショートカットを処理する。
  * - Delete / Backspace: 選択中ノード削除
  * - Cmd/Ctrl + Z: Undo
  * - Cmd/Ctrl + Shift + Z: Redo
+ * - Cmd/Ctrl + =: 拡大（Cmd+Shift+= のネイティブメニュー経路を補完）
  */
 export function useSiteboardKeyboard({
   selectedNodeId,
@@ -49,6 +51,13 @@ export function useSiteboardKeyboard({
         if (handled) {
           e.preventDefault();
         }
+        return;
+      }
+
+      // Cmd+= は Cmd+Shift+= のネイティブメニュー経路では拾えないため JS で補完
+      if (isModifierPressed && !e.altKey && !e.shiftKey && e.key === '=') {
+        runViewCommand('zoom-in');
+        e.preventDefault();
         return;
       }
 

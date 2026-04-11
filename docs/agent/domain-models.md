@@ -89,18 +89,8 @@
 - `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps; onResize; onResizeEnd }`
 - `TextFlowNodeData = { nodeProps: TextNodeProps & { onStyleChange }; onResize; onResizeEnd }`
 - `BoardNode[]` から React Flow `Node[]` を作る正本は `Siteboard.tsx` の `flowNodes` `useMemo`
-- Flow ノードの `position` には常に store 上の `{x, y}` を入れる
-- ノード内部コンポーネントには `{ x: 0, y: 0 }` を渡し、実位置は親 `.react-flow__node` の transform に委譲する
-- `width` / `height` は `Node.style` ではなく top-level prop に入れる
-- `selected` と `measured` を明示して controlled mode の選択状態と初期化状態を安定させる
 
-### React Flow インタラクション制御
-
-- **viewport**: `panOnDrag={[1]}` + `panOnScroll={true}` + `zoomOnScroll={true}` + `zoomOnPinch={true}`。修飾なしホイールは pan、`CmdOrCtrl + ホイール` とピンチは zoom として扱う
-- **viewport 同期**: `handleViewportChange` で store へ debounce 保存し、store 側の viewport 変更は `setViewport()` で React Flow に反映する
-- **ドラッグ**: React Flow ネイティブ。WebPage は `WebPageNode` 本体内の上下 chrome shell に付けた `dragHandle: '.node-drag-handle'` だけでドラッグし、付箋はノード本体をドラッグ可能にする
-- **リサイズ（StickyNote）**: React Flow `NodeResizeControl` は四隅ハンドルだけに絞り、選択枠の線は別オーバーレイで描く。手動変更は横幅のみ許可し、高さは本文から自動計測して `updateNodeSizeWithoutHistory` で反映する
-- **リサイズ（WebPage）**: React Flow `NodeResizeControl` を 8 個明示配置し、line 4 本は不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準で描く。見えている上下バー面と操作 UI は `WebPageNode` 本体側に含める。`onResize` では中間の `x/y/width/height` を state に保持し、`onResizeEnd` では `updateNodeBounds` で最終の `x/y/width/height` を 1 回で store に確定する。Undo/Redo 履歴も 1 エントリにまとめる
+実装規約（position / width / height の渡し方、インタラクション制御）は `coding-rules.md` の「React Flow」セクションを参照。
 
 ## 主要定数
 
@@ -148,13 +138,3 @@
 - `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない
 
-## Lessons Learned
-
-### 44. untitled_index の動的割り当て（gap-filling）
-
-ウィンドウ/タブを閉じた後に新規ウィンドウを開く際、以前は単調増加カウンター `next_untitled_index` を使って「名称未設定3」「名称未設定4」... と付与していた。修正により、現在の `windows` HashMap から使用中の untitled_index を BTreeSet で管理し、1 から順に最小の未使用番号を割り当てるように変更。これにより「名称未設定2」を閉じた後に新規ウィンドウを開くと「名称未設定3」ではなく「名称未設定2」が再利用される。
-
-**実装:** `src-tauri/src/commands/store.rs` L103-118
-**変更:**
-- `DocumentManager` から `next_untitled_index: usize` フィールドを削除
-- `reserve_window()` 内で毎回 `used: BTreeSet<usize>` を構築し、最小の未使用インデックスを検索

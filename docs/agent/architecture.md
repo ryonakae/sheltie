@@ -66,10 +66,10 @@ src/
 
 ### ノード位置管理
 
-- React Flow ノード（`<Node>`）の `position` は常に node の `{x, y}` を反映
-- ノードコンポーネント（`StickyNoteNode`, `WebPageNode`）から `position: absolute` と `left/top` スタイルを削除（React Flow が `.react-flow__node` の CSS transform で管理するため不要）
-- ノード位置の実際の変更は React Flow の `onNodesChange` と各操作コールバック（ドラッグ終了・リサイズ終了）で Zustand に書き込み
-- React Flow の `onNodesChange` は `dimensions`・`select`・`position(dragging=true)` を処理し、controlled mode の整合を保つ
+- React Flow が `.react-flow__node` の CSS transform でノード位置を管理し、Zustand はノード内容を管理する
+- 位置の確定は React Flow の `onNodesChange` と各操作コールバック（ドラッグ終了・リサイズ終了）で Zustand に書き込む
+
+実装規約の詳細は `coding-rules.md` の「React Flow」セクションを参照。
 
 ### 責務分離
 

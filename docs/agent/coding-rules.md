@@ -153,22 +153,24 @@
 - top/bottom 中央は interactive にせず、左右辺と四隅だけに `ew-resize` を与える。カーソル管理は `NodeResizeControl` の class と `src/index.css` で統一する。
 - **選択時のフォーカス表示は React Flow のリサイズ UI のみに依存**: React Flow 移行前の独自 `outline` スタイル（`isActive` で CSS outline を制御）は削除する。独自 outline を重ねると二重表示になる。
 
-## アニメーション
+## 既知の罠（Pitfalls）
+
+### アニメーション
 
 - `AnimatePresence mode="wait"` + `key={value}` パターンは高頻度更新（ズームレベル・カウンター等）に使わない。exit アニメーション（120ms）完了待ちにより中間値がすべてスキップされ表示がフリーズする。
 - リアルタイム表示が必要な値は単一の `motion.*` 要素で直接レンダリングし、操作完了後（例: 200ms のデバウンス）にアニメーションを発火するパターンを使う。
 
-## useEffect と setState
+### useEffect と setState
 
 - `useEffect` 本体内での同期 `setState` は `react-hooks/set-state-in-effect` ESLint エラーになる。リセット処理はクリーンアップ関数（`return () => { setState(false) }`）に移動する。
 
-## React 18 自動バッチングと requestAnimationFrame
+### React 18 自動バッチングと requestAnimationFrame
 
 - React 18 は Promise の `.then()` 内の `setState` を自動バッチングし、同一レンダーサイクルに合流させる。
 - 「DOM 状態 A の React レンダー → ブラウザ描画 → DOM 状態 B の React レンダー」という順序が必要な場合は、A の `setState` の後に `requestAnimationFrame` を挟んでから B の `setState` を呼ぶ。
 - 具体例: コンテキストメニュー表示フローで `setDisplayModes`（スクリーンショット差し替え）完了後に `requestAnimationFrame(() => setContextMenu(...))` でメニューを表示（`siteboard-runtime.md` 参照）。
 
-## rAF スロットリングで高頻度 setState を抑制
+### rAF スロットリングで高頻度 setState を抑制
 
 - `onViewportChange` など毎フレーム呼ばれるイベントハンドラー内で `setState` を直呼び出しすると、React が毎フレーム再レンダリングする。
 - 高頻度更新のうち「フレームごとに1回の更新で十分」な場合は、`useRef<number | null>` で rAF ID を保持し、既に進行中なら呼び出しをスキップする。
@@ -177,7 +179,7 @@
   - 具体例: `Siteboard.tsx` の `uiZoomRafRef`（パン/ズーム中の `setUiZoom` スロットリング）
 - ref パターンで 1-2 フレーム遅延が許容される用途（インジケーター更新等）に適用。即座の反映が必須な場合（ドラッグ追従等）は state 直更新が必要。
 
-## React Flow ノードには top-level `width`/`height` を必ず指定する
+### React Flow ノードには top-level `width`/`height` を必ず指定する
 
 - React Flow は `adoptUserNodes` 内で `userNode === internalNode?.internals.userNode` の参照等価チェックを行う。
 - `flowNodes` useMemo が再計算されると全ノードが新参照になりチェックが失敗し、新しい internal node が作成される。

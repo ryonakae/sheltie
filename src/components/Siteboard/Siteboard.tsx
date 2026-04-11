@@ -21,6 +21,7 @@ import { AppButton } from '@/components/Common/AppButton';
 import { nodeTypes } from '@/components/ReactFlowNodes/nodeTypes';
 import type {
   StickyNoteFlowNodeData,
+  TextFlowNodeData,
   WebPageFlowNodeData,
 } from '@/components/ReactFlowNodes/types';
 import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
@@ -53,8 +54,8 @@ import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-cha
 import { registerViewCommandHandlers } from '@/lib/view-commands';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
-import { isNodeEmpty, isStickyNoteNode, isWebPageNode } from '@/types';
-import type { WebPageNode } from '@/types';
+import { isNodeEmpty, isStickyNoteNode, isTextNode, isWebPageNode } from '@/types';
+import type { TextNode, WebPageNode } from '@/types';
 
 interface SiteboardProps {
   selectedNodeId: string | null;
@@ -64,6 +65,7 @@ interface SiteboardProps {
   onCenteredNodeHandled?: () => void;
   onAddWebNode: () => void;
   onAddStickyNote: () => void;
+  onAddTextNode: () => void;
 }
 
 interface PositionCorrectionAnimation {
@@ -94,6 +96,7 @@ export function Siteboard({
   onCenteredNodeHandled,
   onAddWebNode,
   onAddStickyNote,
+  onAddTextNode,
 }: SiteboardProps) {
   const project = useProjectStore(selectProject);
   const projectWebviewRuntime = useProjectStore(selectProjectWebviewRuntime);
@@ -116,6 +119,9 @@ export function Siteboard({
     pinWebNodeUrl,
     updateStickyNoteContent,
     cycleStickyNoteColor,
+    updateTextNodeContent,
+    updateTextNodeStyle,
+    updateTextNodeWidthMode,
     hydrateProjectScreenshotUrls,
     setProjectScreenshotUrl,
     clearProjectScreenshotUrl,
@@ -123,6 +129,9 @@ export function Siteboard({
     useShallow((s) => ({
       clearProjectScreenshotUrl: s.clearProjectScreenshotUrl,
       cycleStickyNoteColor: s.cycleStickyNoteColor,
+      updateTextNodeContent: s.updateTextNodeContent,
+      updateTextNodeStyle: s.updateTextNodeStyle,
+      updateTextNodeWidthMode: s.updateTextNodeWidthMode,
       clearWebNodeWebviewLabel: s.clearWebNodeWebviewLabel,
       hydrateProjectScreenshotUrls: s.hydrateProjectScreenshotUrls,
       redoProject: s.redoProject,
@@ -474,6 +483,32 @@ export function Siteboard({
     [updateNodeSize],
   );
 
+  // テキストノードのリサイズ中間状態
+  const [textResizing, setTextResizing] = useState<{
+    nodeId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  const handleTextNodeResize = useCallback(
+    (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
+      setTextResizing({ nodeId, ...params });
+      // ドラッグでリサイズした時点で fixed モードに切り替え
+      updateTextNodeWidthMode(nodeId, 'fixed');
+    },
+    [updateTextNodeWidthMode],
+  );
+
+  const handleTextNodeResizeEnd = useCallback(
+    (nodeId: string, width: number, height: number) => {
+      updateNodeSize(nodeId, width, height);
+      setTextResizing(null);
+    },
+    [updateNodeSize],
+  );
+
   useEffect(() => {
     const liveNodeIds = new Set(webPageNodes.map((node) => node.id));
     const staleAnimationNodeIds = Object.keys(positionCorrectionAnimationsRef.current).filter(
@@ -509,6 +544,46 @@ export function Siteboard({
   });
 
   const [editingUrlNodeId, setEditingUrlNodeId] = useState<string | null>(null);
+  const [editingTextNodeId, setEditingTextNodeId] = useState<string | null>(null);
+
+  const handleTextNodeStartEditing = useCallback((nodeId: string) => {
+    setEditingTextNodeId(nodeId);
+  }, []);
+
+  const handleTextNodeStopEditing = useCallback(
+    (nodeId: string, tiptapContent: object) => {
+      updateTextNodeContent(nodeId, tiptapContent);
+      setEditingTextNodeId(null);
+    },
+    [updateTextNodeContent],
+  );
+
+  const handleTextNodeAutoHeightChange = useCallback(
+    (nodeId: string, height: number) => {
+      updateNodeSizeWithoutHistory(
+        nodeId,
+        useProjectStore.getState().project?.nodes.find((n) => n.id === nodeId)?.width ?? 200,
+        height,
+      );
+    },
+    [updateNodeSizeWithoutHistory],
+  );
+
+  const handleTextNodeStyleChange = useCallback(
+    (
+      nodeId: string,
+      style: {
+        fontSizePreset?: import('@/types').TextNodeFontSizePreset;
+        fontWeight?: 'normal' | 'bold';
+        italic?: boolean;
+        strikethrough?: boolean;
+        textColorIndex?: number;
+      },
+    ) => {
+      updateTextNodeStyle(nodeId, style);
+    },
+    [updateTextNodeStyle],
+  );
 
   const handleNodeContextMenu = useCallback(
     (e: React.MouseEvent, nodeId: string) => {
@@ -517,7 +592,7 @@ export function Siteboard({
 
       const node = nodes.find((candidate) => candidate.id === nodeId);
       const showMenu = async () => {
-        if (node && !isStickyNoteNode(node)) {
+        if (node && !isStickyNoteNode(node) && !isTextNode(node)) {
           await handleContextMenuOpen(nodeId);
         }
 
@@ -873,6 +948,38 @@ export function Siteboard({
         };
       }
 
+      if (isTextNode(node)) {
+        const isResizing = textResizing?.nodeId === node.id;
+        const textPosition = isResizing ? { x: textResizing.x, y: textResizing.y } : position;
+        const contentWidth = isResizing ? textResizing.width : node.width;
+        const contentHeight = isResizing ? textResizing.height : node.height;
+        const nodeData: TextFlowNodeData = {
+          nodeProps: {
+            node: { ...node, x: 0, y: 0, width: contentWidth, height: contentHeight } as TextNode,
+            isActive: node.id === selectedNodeId,
+            isEditing: editingTextNodeId === node.id,
+            onActivate: onSelectNode,
+            onContextMenu: handleNodeContextMenu,
+            onStartEditing: handleTextNodeStartEditing,
+            onStopEditing: handleTextNodeStopEditing,
+            onAutoHeightChange: handleTextNodeAutoHeightChange,
+            onStyleChange: handleTextNodeStyleChange,
+          },
+          onResize: handleTextNodeResize,
+          onResizeEnd: handleTextNodeResizeEnd,
+        };
+        return {
+          id: node.id,
+          type: 'textFlowNode',
+          position: textPosition,
+          width: contentWidth,
+          height: contentHeight,
+          selected: node.id === selectedNodeId,
+          measured: rfMeasured[node.id],
+          data: nodeData as unknown as Record<string, unknown>,
+        };
+      }
+
       const isResizing = webPageResizing?.nodeId === node.id;
       const webPagePosition = isResizing
         ? { x: webPageResizing.x, y: webPageResizing.y }
@@ -944,6 +1051,7 @@ export function Siteboard({
     selectedNodeId,
     hideCompactControls,
     stickyResizing,
+    textResizing,
     webPageResizing,
     uiZoom,
     displayModes,
@@ -957,6 +1065,13 @@ export function Siteboard({
     handleStickyNoteContentChange,
     handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,
+    editingTextNodeId,
+    handleTextNodeStartEditing,
+    handleTextNodeStopEditing,
+    handleTextNodeAutoHeightChange,
+    handleTextNodeStyleChange,
+    handleTextNodeResize,
+    handleTextNodeResizeEnd,
     getZoom,
     handleGoBack,
     handleGoForward,
@@ -1022,7 +1137,11 @@ export function Siteboard({
             color={isDark ? '#27272a' : '#d1d5db'}
             bgColor={isDark ? '#18181b' : '#f9fafb'}
           />
-          <FloatingToolbar onAddWebNode={onAddWebNode} onAddStickyNote={onAddStickyNote} />
+          <FloatingToolbar
+            onAddWebNode={onAddWebNode}
+            onAddStickyNote={onAddStickyNote}
+            onAddTextNode={onAddTextNode}
+          />
           <div className="pointer-events-none absolute top-4 right-4 z-20">
             <div className="pointer-events-auto">
               <ThemeToggle

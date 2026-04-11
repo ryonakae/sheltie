@@ -26,6 +26,22 @@ export const NATIVE_SAFE_MARGIN_BOTTOM_PX = 75;
 export const PRE_DISPLAY_MARGIN_PX = 50;
 export const WEBVIEW_REVEAL_DELAY_MS = 100;
 
+// テキストノードの最小幅
+export const TEXT_NODE_MIN_WIDTH = 40;
+
+// テキストノードのフォントサイズプリセット (S / M / L / XL)
+export const TEXT_NODE_FONT_SIZE_PRESETS = [12, 16, 24, 36] as const;
+
+// テキストノードの文字色プリセット（黒・白・グレー・赤・青・緑）
+export const TEXT_NODE_COLORS = [
+  { label: '黒', value: '#000000' },
+  { label: '白', value: '#ffffff' },
+  { label: 'グレー', value: '#6b7280' },
+  { label: '赤', value: '#ef4444' },
+  { label: '青', value: '#3b82f6' },
+  { label: '緑', value: '#22c55e' },
+] as const;
+
 // 付箋色
 export const STICKY_NOTE_COLORS = [
   {

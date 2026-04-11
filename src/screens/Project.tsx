@@ -7,6 +7,8 @@ import {
   DEFAULT_PAGE_WIDTH,
   DEFAULT_STICKY_NOTE_HEIGHT,
   DEFAULT_STICKY_NOTE_WIDTH,
+  DEFAULT_TEXT_NODE_HEIGHT,
+  DEFAULT_TEXT_NODE_WIDTH,
   CANVAS_CENTER_ANIMATION_DURATION_SEC,
   CANVAS_CENTER_ANIMATION_EASE,
   MIN_ZOOM,
@@ -46,6 +48,7 @@ export function ProjectScreen() {
   const project = useProjectStore(selectProject);
   const addWebNode = useProjectStore((s) => s.addWebNode);
   const addStickyNoteNode = useProjectStore((s) => s.addStickyNoteNode);
+  const addTextNode = useProjectStore((s) => s.addTextNode);
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = project?.viewport;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -210,6 +213,32 @@ export function ProjectScreen() {
     }
   }, [addStickyNoteNode, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
 
+  /** FloatingToolbar のテキストボタンから呼ばれる: テキストノードをキャンバス中央に追加してセンタリング */
+  const handleAddTextNode = useCallback(() => {
+    const centerPos = getViewportCenterPos(
+      viewport?.zoom ?? 1,
+      viewport?.panX ?? 0,
+      viewport?.panY ?? 0,
+      DEFAULT_TEXT_NODE_WIDTH,
+      getNodeFrameHeight({ type: 'text', height: DEFAULT_TEXT_NODE_HEIGHT }, viewport?.zoom ?? 1),
+    );
+    const created = addTextNode(
+      centerPos
+        ? {
+            x: centerPos.x,
+            y: centerPos.y,
+            width: DEFAULT_TEXT_NODE_WIDTH,
+            height: DEFAULT_TEXT_NODE_HEIGHT,
+          }
+        : undefined,
+      viewport?.zoom ?? 1,
+    );
+    if (created) {
+      handleSelectNode(created.id);
+      centerOnNewNode(created, () => handleCenteredNode(created.id));
+    }
+  }, [addTextNode, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
+
   useEffect(() => {
     if (!selectedNodeId) return;
     const exists = project?.nodes.some((node) => node.id === selectedNodeId) ?? false;
@@ -229,6 +258,7 @@ export function ProjectScreen() {
         onCenteredNodeHandled={handleCenteredNodeHandled}
         onAddWebNode={handleAddWebNode}
         onAddStickyNote={handleAddStickyNote}
+        onAddTextNode={handleAddTextNode}
       />
     </div>
   );

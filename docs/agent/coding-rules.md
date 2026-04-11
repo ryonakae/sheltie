@@ -68,6 +68,17 @@
   - `onResizeEnd` でストア更新と `webPageResizing` クリア、DisplayEngine 復帰
   - **ラッパー div と内部コンポーネント両方に `size-full` が必須**: ラッパーだけでなく内部の flex コンテナにも `size-full`（= `w-full h-full`）を付けること。`w-full` のみでは高さが intrinsic になり、`flex-1` で伸縮する子要素（placeholder など）が高さ 0 に潰れる
 
+### テキストノード
+
+- **透明背景**: テキストノードは chrome なし（`getNodeChromeScreenHeight` が 0 を返す）。選択時は薄い `ring` で境界を示す
+- **ダブルクリックで編集モード**: シングルクリックで選択+ドラッグ可能、ダブルクリックで Tiptap エディタが `editable` になりテキスト入力可能。編集中は `nodrag` で移動を抑制
+- **編集モード終了**: Escape キーまたはノード外クリック（blur）で終了。終了時に Tiptap JSON を store に保存し、Undo/Redo 用のスナップショットが積まれる
+- **NodeToolbar**: React Flow の `<NodeToolbar>` を使用して書式設定 UI を表示（選択時のみ）。ツールバー内のインタラクティブ要素には `nodrag` クラスを付与
+- **幅モード**: 初期は `'auto'`（テキスト量に追従）。`NodeResizeControl` でドラッグすると `'fixed'` に切り替わり、リサイズハンドルが表示される
+- **高さ自動調整**: `contentRef.scrollHeight` を監視し、`updateNodeSizeWithoutHistory` で反映（Undo/Redo 履歴を積まない）
+- **Tiptap 設定**: StarterKit から不要な Extension（blockquote, list, code 等）を除外。Placeholder Extension で空エディタにプレースホルダーを表示
+- **Undo/Redo 2層構造**: 編集モード中は Tiptap 内部の History が Cmd+Z を処理。編集モード終了時に store にスナップショットが積まれ、ノードレベルの Undo/Redo と統合
+
 ### ビューポート管理
 
 - **React Flow ネイティブ委譲**: `panOnDrag={[1]}`（ミドルドラッグでパン）、`panOnScroll={true}`（修飾なしホイールでパン）、`zoomOnScroll={true}`（`CmdOrCtrl + ホイール` でズーム）、`zoomOnPinch={true}`（ピンチズーム）

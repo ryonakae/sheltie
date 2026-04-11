@@ -5,6 +5,8 @@ import {
   DEFAULT_PAGE_WIDTH,
   DEFAULT_STICKY_NOTE_HEIGHT,
   DEFAULT_STICKY_NOTE_WIDTH,
+  DEFAULT_TEXT_NODE_HEIGHT,
+  DEFAULT_TEXT_NODE_WIDTH,
   DEFAULT_VIEWPORT,
   MAX_VERTICAL_SEARCH_STEPS,
   MAX_ZOOM,
@@ -19,6 +21,7 @@ import type {
   ProjectState,
   ProjectWebviewRuntime,
   SiteboardDocumentV2,
+  TextNodeFontSizePreset,
   Viewport,
 } from '@/types';
 
@@ -59,6 +62,22 @@ interface ProjectActions {
   ) => BoardNode | null;
   updateStickyNoteContent: (nodeId: string, content: string) => void;
   cycleStickyNoteColor: (nodeId: string) => void;
+  addTextNode: (
+    options?: { x: number; y: number; width: number; height: number },
+    zoom?: number,
+  ) => BoardNode | null;
+  updateTextNodeContent: (nodeId: string, tiptapContent: object) => void;
+  updateTextNodeStyle: (
+    nodeId: string,
+    style: {
+      fontSizePreset?: TextNodeFontSizePreset;
+      fontWeight?: 'normal' | 'bold';
+      italic?: boolean;
+      strikethrough?: boolean;
+      textColorIndex?: number;
+    },
+  ) => void;
+  updateTextNodeWidthMode: (nodeId: string, widthMode: 'auto' | 'fixed') => void;
   pinWebNodeUrl: (nodeId: string) => void;
   setWebNodeWebviewLabel: (nodeId: string, label: string) => void;
   clearWebNodeWebviewLabel: (nodeId: string) => void;
@@ -556,6 +575,86 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           if (node.id !== nodeId) return node;
           changed = true;
           return { ...node, colorIndex: ((node.colorIndex ?? 0) + 1) % 4 };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  addTextNode: (options, zoom = 1) => {
+    let createdNode: BoardNode | null = null;
+
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        const nextNode: BoardNode = {
+          id: createNodeId(),
+          type: 'text',
+          url: '',
+          title: 'Text',
+          tiptapContent: undefined,
+          fontSizePreset: 1,
+          fontWeight: 'normal',
+          italic: false,
+          strikethrough: false,
+          textColorIndex: 0,
+          widthMode: 'auto',
+          x: 0,
+          y: 0,
+          width: options?.width ?? DEFAULT_TEXT_NODE_WIDTH,
+          height: options?.height ?? DEFAULT_TEXT_NODE_HEIGHT,
+        };
+        const positioned = findNonOverlappingPosition(
+          nodes,
+          nextNode.type,
+          options?.x ?? 0,
+          options?.y ?? 0,
+          nextNode.width,
+          nextNode.height,
+          zoom,
+        );
+        const newNode = { ...nextNode, x: positioned.x, y: positioned.y };
+        createdNode = newNode;
+        return [...nodes, newNode];
+      }),
+    );
+
+    return createdNode;
+  },
+
+  updateTextNodeContent: (nodeId, tiptapContent) =>
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          changed = true;
+          return { ...node, tiptapContent };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  updateTextNodeStyle: (nodeId, style) =>
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          changed = true;
+          return { ...node, ...style };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  updateTextNodeWidthMode: (nodeId, widthMode) =>
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          if (node.widthMode === widthMode) return node;
+          changed = true;
+          return { ...node, widthMode };
         });
         return changed ? nextNodes : null;
       }),

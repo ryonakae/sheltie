@@ -5,17 +5,22 @@
 ## 型
 
 - `DisplayMode = 'native' | 'screenshot' | 'hidden'`
-- `BoardNodeType = 'webpage' | 'stickynote'`
+- `BoardNodeType = 'webpage' | 'stickynote' | 'text'`
 - `BoardNode`
   - 基本: `id`, `title`, `url`, `x`, `y`, `width`, `height`
   - `height` は content / Webview 本体の高さ。ノード外枠全体の高さではない
-  - 任意: `type`, `addedUrl`, `content`, `colorIndex`
+  - 任意: `type`, `addedUrl`, `content`, `colorIndex`, `tiptapContent`, `fontSizePreset`, `fontWeight`, `italic`, `strikethrough`, `textColorIndex`, `widthMode`
 - `WebPageNode`
   - `BoardNode` を拡張した webpage 専用補助型
   - `type` は `'webpage' | undefined`
 - `StickyNoteNode`
   - `BoardNode` を拡張した付箋専用補助型
   - `type` は `'stickynote'`
+- `TextNode`
+  - `BoardNode` を拡張したテキストノード専用補助型
+  - `type` は `'text'`
+  - `tiptapContent?: object`（Tiptap JSON ドキュメント）、`fontSizePreset?: TextNodeFontSizePreset`（0=S, 1=M, 2=L, 3=XL）、`fontWeight`、`italic`、`strikethrough`、`textColorIndex`、`widthMode`（`'auto' | 'fixed'`）
+- `TextNodeFontSizePreset = 0 | 1 | 2 | 3`
 - `ProjectWebviewRuntime`
   - document ごとの runtime-only state
   - `labelsByNodeId: Record<string, string>`
@@ -25,6 +30,7 @@
   - `.siteboard` に保存される node の union 型
   - `webpage` は `id`, `type`, `title`, `url`, `addedUrl?`, `x`, `y`, `width`, `height`
   - `stickynote` は `id`, `type`, `title`, `content`, `colorIndex`, `x`, `y`, `width`, `height`
+  - `text` は `id`, `type`, `title`, `tiptapContent?`, `fontSizePreset`, `fontWeight`, `italic`, `strikethrough`, `textColorIndex`, `widthMode`, `x`, `y`, `width`, `height`
 - `SiteboardDocumentV2`
   - `schemaVersion: 2`
   - `nodes`
@@ -38,8 +44,8 @@
   - 単一 document window の `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `nodeHistory`, `webviewRuntime`
   - 初期化: `initializeProject`, `markProjectSaved`, `restoreProjectFromLastSaved`
-  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `addStickyNoteNode`
-  - ノード更新: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`
+  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `addStickyNoteNode`, `addTextNode`
+  - ノード更新: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
   - 順序/選択: `bringNodeToFront`, `pinWebNodeUrl`, `updateViewport`
   - 履歴: `undoProject`, `redoProject`
   - runtime: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
@@ -71,7 +77,8 @@
 
 - `isNodeEmpty(node)`: `node.url === ''` で空フレーム判定
 - `isStickyNoteNode(node)`: `node.type === 'stickynote'` の型ガード
-- `isWebPageNode(node)`: webpage 判定の型ガード（`type` 未定義も webpage 扱い）
+- `isTextNode(node)`: `node.type === 'text'` の型ガード
+- `isWebPageNode(node)`: webpage 判定の型ガード（`type` 未定義も webpage 扱い。`stickynote` と `text` を除外）
 - `isNodeMoved(node)`: `addedUrl` と現在 `url` の差分判定
 
 ## React Flow ノード構成
@@ -80,6 +87,7 @@
 
 - `WebPageFlowNodeData = { nodeProps: WebPageNodeProps; layoutZoom; onResizeStart; onResize; onResizeEnd; getZoom }`
 - `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps; onResize; onResizeEnd }`
+- `TextFlowNodeData = { nodeProps: TextNodeProps & { onStyleChange }; onResize; onResizeEnd }`
 - `BoardNode[]` から React Flow `Node[]` を作る正本は `Siteboard.tsx` の `flowNodes` `useMemo`
 - Flow ノードの `position` には常に store 上の `{x, y}` を入れる
 - ノード内部コンポーネントには `{ x: 0, y: 0 }` を渡し、実位置は親 `.react-flow__node` の transform に委譲する
@@ -105,6 +113,8 @@
 - `WEB_PAGE_BOTTOM_BAR_HEIGHT = 32`
 - `DEFAULT_STICKY_NOTE_WIDTH = 200`
 - `DEFAULT_STICKY_NOTE_HEIGHT = 200`
+- `DEFAULT_TEXT_NODE_WIDTH = 200`
+- `DEFAULT_TEXT_NODE_HEIGHT = 32`
 - `STICKY_NOTE_HEADER_HEIGHT = 32`
 - `SIZE_PRESETS = [モバイル, タブレット, PC]`
 
@@ -113,6 +123,7 @@
 - ズーム: `MIN_ZOOM = 0.25`, `MAX_ZOOM = 1.5`, `ZOOM_STEPS = [0.25, 0.5, 1.0, 1.5]`（キーボードショートカットのステップ値）
 - しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 25`
 - ドラッグ補正: `DRAG_REPOSITION_GAP = 20`
+- テキストノード: `TEXT_NODE_MIN_WIDTH = 40`, `TEXT_NODE_FONT_SIZE_PRESETS = [12, 16, 24, 36]`, `TEXT_NODE_COLORS`（黒・白・グレー・赤・青・緑の6色）
 
 `src/store/tab-store.ts`
 
@@ -124,6 +135,7 @@
 - `webviewRuntime.labelsByNodeId[nodeId]` は「現在接続済みのネイティブ Webview がある」間だけ設定する。再マウント開始時に `clearWebNodeWebviewLabel` で外し、再生成完了後に `setWebNodeWebviewLabel` で付け直す。
 - `webviewRuntime.screenshotUrlsByNodeId[nodeId]` は最後に表示可能だった screenshot の asset URL を保持し、同一セッション内の再マウントと起動直後の open tab preload で使い回す。node 削除時にだけ破棄する。
 - 付箋ノードは `type: 'stickynote'` と `content` / `colorIndex` を利用する
+- テキストノードは `type: 'text'` と `tiptapContent` / `fontSizePreset` / `fontWeight` / `italic` / `strikethrough` / `textColorIndex` / `widthMode` を利用する
 - 空フレーム（`url === ''`）は Webview 未作成状態を許容する
 - `nodeHistory` はランタイム専用で永続化しない
 - `webviewRuntime` はランタイム専用で永続化しない

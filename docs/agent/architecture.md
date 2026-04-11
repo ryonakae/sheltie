@@ -23,13 +23,16 @@ src/
 - `screens/Project.tsx`: 1 document window の Siteboard 画面を統括する。新規ノード追加後のセンタリングと選択状態を管理する
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
 - `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/右下 viewport controls をコンポーネント state と helper で管理する。flowNodes を `useMemo` で直接構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装し、`onNodesChange` で選択状態・計測寸法・ドラッグ中座標を同期する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
-- `components/Siteboard/FloatingToolbar.tsx`: Web ページ/付箋追加ボタン群
+- `components/Siteboard/FloatingToolbar.tsx`: Web ページ/付箋/テキスト追加ボタン群
 - `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン。押下で `100% + 全ノード中央寄せ`
 - `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI（props インターフェース export）
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（props インターフェース export）
+- `components/Node/TextNode.tsx`: テキストノード専用 UI。Tiptap エディタ内蔵、編集/選択モード切り替え、透明背景
 - `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`WebPageNode` 本体内の上下 chrome + node 内ツールバー + 上下 chrome の dragHandle + 8 方向 `NodeResizeControl`）
 - `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + sticky header 内の操作 UI）
-- `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`）
+- `components/ReactFlowNodes/TextFlowNode.tsx`: React Flow 用 TextNode ラッパー（`nopan`、x/y=0 固定、`NodeToolbar` で書式設定 UI、`NodeResizeControl` で幅リサイズ）
+- `components/ReactFlowNodes/TextNodeToolbar.tsx`: テキストノードの書式設定ツールバー（フォントサイズ/Bold/Italic/取り消し線/色）
+- `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`, `TextFlowNodeData`）
 - `components/ReactFlowNodes/nodeTypes.ts`: React Flow `nodeTypes` 定数（循環依存防止のため types.ts から分離）
 - `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
 - `store/tab-store.ts`: 単一 document window の node・ビューポート状態と node 履歴（Undo/Redo）を管理
@@ -103,6 +106,7 @@ Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/li
 | HeroUI v3 | UI コンポーネントライブラリ |
 | Zustand | 状態管理（プロジェクト・ノード・テーマ） |
 | @xyflow/react v12 | React Flow（フェーズ 1 以降で採用。ビューポート管理 pan/zoom を担当） |
+| Tiptap (@tiptap/react) | テキストノードのリッチテキストエディタ（ProseMirror ベース） |
 | Framer Motion | アニメーション |
 | Tauri v2 JS API | ネイティブ統合（IPC・Webview 管理） |
 

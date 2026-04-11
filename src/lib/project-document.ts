@@ -1,10 +1,12 @@
 import {
   isStickyNoteNode,
+  isTextNode,
   type BoardNode,
   type Project,
   type SiteboardDocument,
   type SiteboardDocumentNode,
   type SiteboardDocumentV2,
+  type TextNodeFontSizePreset,
 } from '@/types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -75,6 +77,43 @@ function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
     };
   }
 
+  if (type === 'text') {
+    const tiptapContent = rawNode.tiptapContent as object | undefined;
+    const fontSizePreset = parseNumber(
+      rawNode.fontSizePreset ?? 1,
+      `nodes[${index}].fontSizePreset`,
+    );
+    const fontWeight = parseString(rawNode.fontWeight ?? 'normal', `nodes[${index}].fontWeight`) as
+      | 'normal'
+      | 'bold';
+    const italic = rawNode.italic === true;
+    const strikethrough = rawNode.strikethrough === true;
+    const textColorIndex = parseNumber(
+      rawNode.textColorIndex ?? 0,
+      `nodes[${index}].textColorIndex`,
+    );
+    const widthMode = parseString(rawNode.widthMode ?? 'auto', `nodes[${index}].widthMode`) as
+      | 'auto'
+      | 'fixed';
+
+    return {
+      id,
+      type: 'text',
+      title,
+      tiptapContent,
+      fontSizePreset,
+      fontWeight,
+      italic,
+      strikethrough,
+      textColorIndex,
+      widthMode,
+      x,
+      y,
+      width,
+      height,
+    };
+  }
+
   throw new Error(`nodes[${index}].type が未対応です: ${type}`);
 }
 
@@ -127,6 +166,25 @@ export function boardNodeToDocumentNode(node: BoardNode): SiteboardDocumentNode 
     };
   }
 
+  if (isTextNode(node)) {
+    return {
+      id: node.id,
+      type: 'text',
+      title: node.title,
+      tiptapContent: node.tiptapContent,
+      fontSizePreset: node.fontSizePreset ?? 1,
+      fontWeight: node.fontWeight ?? 'normal',
+      italic: node.italic ?? false,
+      strikethrough: node.strikethrough ?? false,
+      textColorIndex: node.textColorIndex ?? 0,
+      widthMode: node.widthMode ?? 'auto',
+      x: node.x,
+      y: node.y,
+      width: node.width,
+      height: node.height,
+    };
+  }
+
   return {
     id: node.id,
     type: 'webpage',
@@ -149,6 +207,26 @@ export function documentNodeToBoardNode(node: SiteboardDocumentNode): BoardNode 
       url: '',
       content: node.content,
       colorIndex: node.colorIndex,
+      x: node.x,
+      y: node.y,
+      width: node.width,
+      height: node.height,
+    };
+  }
+
+  if (node.type === 'text') {
+    return {
+      id: node.id,
+      type: 'text',
+      title: node.title,
+      url: '',
+      tiptapContent: node.tiptapContent,
+      fontSizePreset: node.fontSizePreset as TextNodeFontSizePreset,
+      fontWeight: node.fontWeight,
+      italic: node.italic,
+      strikethrough: node.strikethrough,
+      textColorIndex: node.textColorIndex,
+      widthMode: node.widthMode,
       x: node.x,
       y: node.y,
       width: node.width,

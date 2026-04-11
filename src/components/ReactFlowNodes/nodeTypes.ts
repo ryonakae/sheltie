@@ -1,4 +1,5 @@
 import { StickyNoteFlowNode } from './StickyNoteFlowNode';
+import { TextFlowNode } from './TextFlowNode';
 import { WebPageFlowNode } from './WebPageFlowNode';
 
 import type { NodeTypes } from '@xyflow/react';
@@ -11,4 +12,5 @@ import type { NodeTypes } from '@xyflow/react';
 export const nodeTypes: NodeTypes = {
   webPageFlowNode: WebPageFlowNode,
   stickyNoteFlowNode: StickyNoteFlowNode,
+  textFlowNode: TextFlowNode,
 };

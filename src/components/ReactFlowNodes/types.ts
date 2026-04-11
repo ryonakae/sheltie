@@ -1,5 +1,7 @@
 import type { StickyNoteNodeProps } from '@/components/Node/StickyNoteNode';
+import type { TextNodeProps } from '@/components/Node/TextNode';
 import type { WebPageNodeProps } from '@/components/Node/WebPageNode';
+import type { TextNodeFontSizePreset } from '@/types';
 
 /** WebPageFlowNode の data 型 */
 export type WebPageFlowNodeData = {
@@ -31,5 +33,28 @@ export type StickyNoteFlowNodeData = {
     params: { x: number; y: number; width: number; height: number },
   ) => void;
   /** リサイズ完了時のコールバック（React Flow NodeResizeControl から呼ばれる） */
+  onResizeEnd: (nodeId: string, width: number, height: number) => void;
+};
+
+/** TextFlowNode の data 型 */
+export type TextFlowNodeData = {
+  nodeProps: TextNodeProps & {
+    onStyleChange: (
+      nodeId: string,
+      style: {
+        fontSizePreset?: TextNodeFontSizePreset;
+        fontWeight?: 'normal' | 'bold';
+        italic?: boolean;
+        strikethrough?: boolean;
+        textColorIndex?: number;
+      },
+    ) => void;
+  };
+  /** 横幅リサイズ中の毎フレームコールバック */
+  onResize: (
+    nodeId: string,
+    params: { x: number; y: number; width: number; height: number },
+  ) => void;
+  /** リサイズ完了時のコールバック */
   onResizeEnd: (nodeId: string, width: number, height: number) => void;
 };

@@ -1,5 +1,6 @@
 import { Globe } from '@gravity-ui/icons';
 import Sticker from '@gravity-ui/icons/Sticker';
+import TextAlignLeft from '@gravity-ui/icons/TextAlignLeft';
 import { Surface } from '@heroui/react';
 
 import { AppButton } from '@/components/Common/AppButton';
@@ -11,9 +12,14 @@ import {
 interface FloatingToolbarProps {
   onAddWebNode: () => void;
   onAddStickyNote: () => void;
+  onAddTextNode: () => void;
 }
 
-export function FloatingToolbar({ onAddWebNode, onAddStickyNote }: FloatingToolbarProps) {
+export function FloatingToolbar({
+  onAddWebNode,
+  onAddStickyNote,
+  onAddTextNode,
+}: FloatingToolbarProps) {
   return (
     /* ツールバー全体の配置レイヤー: pointer-events-none で Siteboard の操作を妨げない */
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-40 flex justify-center">
@@ -39,6 +45,15 @@ export function FloatingToolbar({ onAddWebNode, onAddStickyNote }: FloatingToolb
             className={FLOATING_CONTROL_BUTTON_CLASSNAME}
           >
             <Sticker className="size-5" />
+          </AppButton>
+          <AppButton
+            size="lg"
+            tooltipMessage="テキストを追加"
+            onPress={onAddTextNode}
+            aria-label="テキストを追加"
+            className={FLOATING_CONTROL_BUTTON_CLASSNAME}
+          >
+            <TextAlignLeft className="size-5" />
           </AppButton>
         </Surface>
       </div>

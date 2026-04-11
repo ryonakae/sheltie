@@ -1,9 +1,11 @@
-// ビューポート、ページ/付箋の既定値
+// ビューポート、ページ/付箋/テキストの既定値
 export const DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 };
 export const DEFAULT_PAGE_WIDTH = 393;
 export const DEFAULT_PAGE_HEIGHT = 852;
 export const DEFAULT_STICKY_NOTE_WIDTH = 200;
 export const DEFAULT_STICKY_NOTE_HEIGHT = 200;
+export const DEFAULT_TEXT_NODE_WIDTH = 200;
+export const DEFAULT_TEXT_NODE_HEIGHT = 32;
 
 // ページ自動配置に関する既定値
 export const PAGE_GAP = 100;

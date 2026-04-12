@@ -1,5 +1,7 @@
 import {
+  Handle,
   NodeResizeControl,
+  Position,
   ResizeControlVariant,
   type NodeProps,
   type ResizeDragEvent,
@@ -93,9 +95,25 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
     },
   ];
 
+  const handleStyle = {
+    width: 'calc(10px / var(--canvas-zoom, 1))',
+    height: 'calc(10px / var(--canvas-zoom, 1))',
+    backgroundColor: '#3b82f6',
+    border: 'calc(2px / var(--canvas-zoom, 1)) solid #fff',
+    borderRadius: '50%',
+    opacity: selected ? 1 : 0,
+    transition: 'opacity 0.15s',
+    pointerEvents: (selected ? 'auto' : 'none') as React.CSSProperties['pointerEvents'],
+  } satisfies React.CSSProperties;
+
   return (
     <div className="nopan relative size-full">
       <WebPageNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
+
+      <Handle type="source" position={Position.Top} id="top" style={handleStyle} />
+      <Handle type="source" position={Position.Right} id="right" style={handleStyle} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={handleStyle} />
+      <Handle type="source" position={Position.Left} id="left" style={handleStyle} />
 
       {selected && <SelectionFrameOverlay />}
       {selected && (

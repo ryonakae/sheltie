@@ -1,9 +1,11 @@
 import {
   isStickyNoteNode,
   isTextNode,
+  type BoardEdge,
   type BoardNode,
   type Project,
   type SiteboardDocument,
+  type SiteboardDocumentEdge,
   type SiteboardDocumentNode,
   type SiteboardDocumentV2,
   type TextNodeFontSizePreset,
@@ -117,6 +119,26 @@ function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
   throw new Error(`nodes[${index}].type が未対応です: ${type}`);
 }
 
+function parseEdge(rawEdge: unknown, index: number): SiteboardDocumentEdge {
+  if (!isRecord(rawEdge)) {
+    throw new Error(`edges[${index}] はオブジェクトである必要があります`);
+  }
+
+  return {
+    id: parseString(rawEdge.id, `edges[${index}].id`),
+    source: parseString(rawEdge.source, `edges[${index}].source`),
+    sourceHandle:
+      rawEdge.sourceHandle === null || rawEdge.sourceHandle === undefined
+        ? null
+        : parseString(rawEdge.sourceHandle, `edges[${index}].sourceHandle`),
+    target: parseString(rawEdge.target, `edges[${index}].target`),
+    targetHandle:
+      rawEdge.targetHandle === null || rawEdge.targetHandle === undefined
+        ? null
+        : parseString(rawEdge.targetHandle, `edges[${index}].targetHandle`),
+  };
+}
+
 function parseProjectDocumentValue(value: unknown): SiteboardDocumentV2 {
   if (!isRecord(value)) {
     throw new Error('ルートはオブジェクトである必要があります');
@@ -133,6 +155,7 @@ function parseProjectDocumentValue(value: unknown): SiteboardDocumentV2 {
     return {
       schemaVersion: 2,
       nodes: rawNodes.map((node, index) => parseNode(node, index)),
+      edges: [],
     };
   }
 
@@ -145,9 +168,15 @@ function parseProjectDocumentValue(value: unknown): SiteboardDocumentV2 {
     throw new Error('nodes は配列である必要があります');
   }
 
+  const rawEdges = value.edges;
+  const edges = Array.isArray(rawEdges)
+    ? rawEdges.map((edge, index) => parseEdge(edge, index))
+    : [];
+
   return {
     schemaVersion: 2,
     nodes: rawNodes.map((node, index) => parseNode(node, index)),
+    edges,
   };
 }
 
@@ -195,6 +224,26 @@ export function boardNodeToDocumentNode(node: BoardNode): SiteboardDocumentNode 
     y: node.y,
     width: node.width,
     height: node.height,
+  };
+}
+
+export function boardEdgeToDocumentEdge(edge: BoardEdge): SiteboardDocumentEdge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    sourceHandle: edge.sourceHandle,
+    target: edge.target,
+    targetHandle: edge.targetHandle,
+  };
+}
+
+export function documentEdgeToBoardEdge(edge: SiteboardDocumentEdge): BoardEdge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    sourceHandle: edge.sourceHandle,
+    target: edge.target,
+    targetHandle: edge.targetHandle,
   };
 }
 
@@ -247,10 +296,13 @@ export function documentNodeToBoardNode(node: SiteboardDocumentNode): BoardNode 
   };
 }
 
-export function createProjectDocument(project: Pick<Project, 'nodes'>): SiteboardDocumentV2 {
+export function createProjectDocument(
+  project: Pick<Project, 'nodes' | 'edges'>,
+): SiteboardDocumentV2 {
   return {
     schemaVersion: 2,
     nodes: project.nodes.map(boardNodeToDocumentNode),
+    edges: project.edges.map(boardEdgeToDocumentEdge),
   };
 }
 
@@ -272,7 +324,7 @@ export function parseProjectDocument(contents: string): SiteboardDocumentV2 {
 
 export function sanitizeProjectDocument(
   rawDocument: unknown,
-  fallbackProject: Pick<Project, 'nodes'>,
+  fallbackProject: Pick<Project, 'nodes' | 'edges'>,
 ): SiteboardDocumentV2 {
   if (rawDocument === undefined) {
     return createProjectDocument(fallbackProject);
@@ -285,7 +337,9 @@ export function sanitizeProjectDocument(
   }
 }
 
-export function isProjectDirty(project: Pick<Project, 'nodes' | 'lastSavedDocument'>): boolean {
+export function isProjectDirty(
+  project: Pick<Project, 'nodes' | 'edges' | 'lastSavedDocument'>,
+): boolean {
   return (
     serializeProjectDocument(createProjectDocument(project)) !==
     serializeProjectDocument(project.lastSavedDocument)

@@ -72,9 +72,27 @@ export interface SiteboardDocumentV1 {
   nodes: SiteboardDocumentNode[];
 }
 
+/** ボード上のエッジ（ノード間接続） */
+export interface BoardEdge {
+  id: string;
+  source: string;
+  sourceHandle: string | null;
+  target: string;
+  targetHandle: string | null;
+}
+
+export interface SiteboardDocumentEdge {
+  id: string;
+  source: string;
+  sourceHandle: string | null;
+  target: string;
+  targetHandle: string | null;
+}
+
 export interface SiteboardDocumentV2 {
   schemaVersion: 2;
   nodes: SiteboardDocumentNode[];
+  edges?: SiteboardDocumentEdge[];
 }
 
 export type SiteboardDocument = SiteboardDocumentV1 | SiteboardDocumentV2;
@@ -136,6 +154,7 @@ export interface Project {
   filePath?: string;
   untitledIndex: number;
   nodes: BoardNode[];
+  edges: BoardEdge[];
   viewport: Viewport;
   lastSavedDocument: SiteboardDocumentV2;
 }

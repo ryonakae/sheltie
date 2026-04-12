@@ -28,14 +28,14 @@ src/
 - `components/Node/WebPageNode*.tsx`: webpage ノード専用 UI（props インターフェース export）
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（props インターフェース export）
 - `components/Node/TextNode.tsx`: テキストノード専用 UI。Tiptap エディタ内蔵、編集/選択モード切り替え、透明背景
-- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`WebPageNode` 本体内の上下 chrome + node 内ツールバー + 上下 chrome の dragHandle + 8 方向 `NodeResizeControl`）
+- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`WebPageNode` 本体内の上下 chrome + node 内ツールバー + 上下 chrome の dragHandle + 8 方向 `NodeResizeControl` + 上下左右 `Handle`（selected 時のみ表示、エッジ接続用））
 - `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + sticky header 内の操作 UI）
 - `components/ReactFlowNodes/TextFlowNode.tsx`: React Flow 用 TextNode ラッパー（`nopan`、x/y=0 固定、`NodeToolbar` で書式設定 UI、`NodeResizeControl` で幅リサイズ）
 - `components/ReactFlowNodes/TextNodeToolbar.tsx`: テキストノードの書式設定ツールバー（フォントサイズ/Bold/Italic/取り消し線/色）
 - `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`, `TextFlowNodeData`）
 - `components/ReactFlowNodes/nodeTypes.ts`: React Flow `nodeTypes` 定数（循環依存防止のため types.ts から分離）
 - `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
-- `store/tab-store.ts`: 単一 document window の node・ビューポート状態と node 履歴（Undo/Redo）を管理
+- `store/tab-store.ts`: 単一 document window の node・edge・ビューポート状態と統合履歴（Undo/Redo）を管理
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
 - `lib/file-commands.ts`: File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` を処理し、`.siteboard` の入出力と window-local な store 連携を担当する
@@ -47,7 +47,7 @@ src/
 ## `.siteboard` とローカル状態
 
 - `.siteboard` は共有用ドキュメント
-  - `schemaVersion`, `nodes` のみ保存する
+  - `schemaVersion`, `nodes`, `edges` を保存する（`edges` は後方互換で省略可能）
   - `title` は保存しない
 - Rust 側の document manager は各 window の `filePath` と `untitledIndex` を管理する
 - renderer の Zustand store は現在の document の `nodes`, `viewport`, `lastSavedDocument`, `webviewRuntime` をメモリ上で保持する

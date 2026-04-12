@@ -13,9 +13,14 @@ import {
   MIN_ZOOM,
   PAGE_GAP,
 } from '@/constants';
-import { documentNodeToBoardNode, sanitizeProjectDocument } from '@/lib/project-document';
+import {
+  documentEdgeToBoardEdge,
+  documentNodeToBoardNode,
+  sanitizeProjectDocument,
+} from '@/lib/project-document';
 import { getNodeFrameHeight, getNodeFrameRect } from '@/lib/siteboard-node-frame';
 import type {
+  BoardEdge,
   BoardNode,
   Project,
   ProjectState,
@@ -25,11 +30,16 @@ import type {
   Viewport,
 } from '@/types';
 
-const NODE_HISTORY_LIMIT = 100;
+const HISTORY_LIMIT = 100;
 
-interface ProjectNodeHistory {
-  past: BoardNode[][];
-  future: BoardNode[][];
+interface ProjectSnapshot {
+  nodes: BoardNode[];
+  edges: BoardEdge[];
+}
+
+interface ProjectHistory {
+  past: ProjectSnapshot[];
+  future: ProjectSnapshot[];
 }
 
 interface ProjectActions {
@@ -78,6 +88,8 @@ interface ProjectActions {
     },
   ) => void;
   updateTextNodeWidthMode: (nodeId: string, widthMode: 'auto' | 'fixed') => void;
+  addEdge: (edge: BoardEdge) => void;
+  removeEdges: (edgeIds: string[]) => void;
   pinWebNodeUrl: (nodeId: string) => void;
   setWebNodeWebviewLabel: (nodeId: string, label: string) => void;
   clearWebNodeWebviewLabel: (nodeId: string) => void;
@@ -91,7 +103,7 @@ interface ProjectActions {
 
 interface ProjectStore extends ProjectState, ProjectActions {
   isLoaded: boolean;
-  nodeHistory: ProjectNodeHistory;
+  history: ProjectHistory;
   webviewRuntime: ProjectWebviewRuntime;
 }
 
@@ -106,6 +118,14 @@ function cloneNodes(nodes: BoardNode[]): BoardNode[] {
   return nodes.map((node) => ({ ...node }));
 }
 
+function cloneEdges(edges: BoardEdge[]): BoardEdge[] {
+  return edges.map((edge) => ({ ...edge }));
+}
+
+function cloneSnapshot(snapshot: { nodes: BoardNode[]; edges: BoardEdge[] }): ProjectSnapshot {
+  return { nodes: cloneNodes(snapshot.nodes), edges: cloneEdges(snapshot.edges) };
+}
+
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
@@ -116,14 +136,16 @@ function createProject(params: {
   document?: SiteboardDocumentV2;
 }): Project {
   const nodes = params.document?.nodes.map(documentNodeToBoardNode) ?? [];
+  const edges = params.document?.edges?.map(documentEdgeToBoardEdge) ?? [];
 
   return {
     id: crypto.randomUUID(),
     filePath: params.filePath,
     untitledIndex: params.untitledIndex,
     nodes,
+    edges,
     viewport: DEFAULT_VIEWPORT,
-    lastSavedDocument: sanitizeProjectDocument(params.document, { nodes }),
+    lastSavedDocument: sanitizeProjectDocument(params.document, { nodes, edges }),
   };
 }
 
@@ -213,10 +235,13 @@ function findNonOverlappingPosition(
   return { x, y: fallbackY };
 }
 
-function pushNodeHistory(history: ProjectNodeHistory, nodes: BoardNode[]): ProjectNodeHistory {
-  const nextPast = [...history.past, cloneNodes(nodes)];
-  if (nextPast.length > NODE_HISTORY_LIMIT) {
-    nextPast.splice(0, nextPast.length - NODE_HISTORY_LIMIT);
+function pushHistory(
+  history: ProjectHistory,
+  snapshot: { nodes: BoardNode[]; edges: BoardEdge[] },
+): ProjectHistory {
+  const nextPast = [...history.past, cloneSnapshot(snapshot)];
+  if (nextPast.length > HISTORY_LIMIT) {
+    nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
   }
   return {
     past: nextPast,
@@ -228,7 +253,7 @@ function replaceProjectNodes(
   state: ProjectStore,
   updater: (nodes: BoardNode[]) => BoardNode[] | null,
   historyMode: 'record' | 'skip' = 'record',
-): ProjectStore | Pick<ProjectStore, 'project' | 'nodeHistory'> {
+): ProjectStore | Pick<ProjectStore, 'project' | 'history'> {
   if (!state.project) return state;
 
   const nextNodes = updater(state.project.nodes);
@@ -236,25 +261,46 @@ function replaceProjectNodes(
 
   const nextProject = { ...state.project, nodes: nextNodes };
   if (historyMode === 'skip') {
-    return { project: nextProject, nodeHistory: state.nodeHistory };
+    return { project: nextProject, history: state.history };
   }
 
   return {
     project: nextProject,
-    nodeHistory: pushNodeHistory(state.nodeHistory, state.project.nodes),
+    history: pushHistory(state.history, {
+      nodes: state.project.nodes,
+      edges: state.project.edges,
+    }),
+  };
+}
+
+function replaceProjectEdges(
+  state: ProjectStore,
+  updater: (edges: BoardEdge[]) => BoardEdge[] | null,
+): ProjectStore | Pick<ProjectStore, 'project' | 'history'> {
+  if (!state.project) return state;
+
+  const nextEdges = updater(state.project.edges);
+  if (!nextEdges) return state;
+
+  return {
+    project: { ...state.project, edges: nextEdges },
+    history: pushHistory(state.history, {
+      nodes: state.project.nodes,
+      edges: state.project.edges,
+    }),
   };
 }
 
 export const useProjectStore = create<ProjectStore>()((set) => ({
   project: null,
   isLoaded: false,
-  nodeHistory: { past: [], future: [] },
+  history: { past: [], future: [] },
   webviewRuntime: createEmptyProjectWebviewRuntime(),
 
   initializeProject: (params) =>
     set({
       project: createProject(params),
-      nodeHistory: { past: [], future: [] },
+      history: { past: [], future: [] },
       webviewRuntime: createEmptyProjectWebviewRuntime(),
     }),
 
@@ -276,8 +322,9 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         project: {
           ...state.project,
           nodes: state.project.lastSavedDocument.nodes.map(documentNodeToBoardNode),
+          edges: state.project.lastSavedDocument.edges?.map(documentEdgeToBoardEdge) ?? [],
         },
-        nodeHistory: { past: [], future: [] },
+        history: { past: [], future: [] },
         webviewRuntime: createEmptyProjectWebviewRuntime(),
       };
     }),
@@ -381,22 +428,34 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     }),
 
   removeNode: (nodeId) =>
-    set((state) => ({
-      ...replaceProjectNodes(state, (nodes) => {
-        if (!nodes.some((node) => node.id === nodeId)) return null;
-        return nodes.filter((node) => node.id !== nodeId);
-      }),
-      webviewRuntime: {
-        labelsByNodeId: Object.fromEntries(
-          Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
-        ),
-        screenshotUrlsByNodeId: Object.fromEntries(
-          Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-            ([id]) => id !== nodeId,
+    set((state) => {
+      if (!state.project) return state;
+      const hasNode = state.project.nodes.some((node) => node.id === nodeId);
+      if (!hasNode) return state;
+
+      const nextNodes = state.project.nodes.filter((node) => node.id !== nodeId);
+      const nextEdges = state.project.edges.filter(
+        (edge) => edge.source !== nodeId && edge.target !== nodeId,
+      );
+
+      return {
+        project: { ...state.project, nodes: nextNodes, edges: nextEdges },
+        history: pushHistory(state.history, {
+          nodes: state.project.nodes,
+          edges: state.project.edges,
+        }),
+        webviewRuntime: {
+          labelsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
           ),
-        ),
-      },
-    })),
+          screenshotUrlsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
+              ([id]) => id !== nodeId,
+            ),
+          ),
+        },
+      };
+    }),
 
   updateNodePosition: (nodeId, x, y) =>
     set((state) =>
@@ -674,6 +733,30 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     ),
 
+  addEdge: (edge) =>
+    set((state) =>
+      replaceProjectEdges(state, (edges) => {
+        const exists = edges.some(
+          (e) =>
+            e.source === edge.source &&
+            e.sourceHandle === edge.sourceHandle &&
+            e.target === edge.target &&
+            e.targetHandle === edge.targetHandle,
+        );
+        if (exists) return null;
+        return [...edges, edge];
+      }),
+    ),
+
+  removeEdges: (edgeIds) =>
+    set((state) =>
+      replaceProjectEdges(state, (edges) => {
+        const idSet = new Set(edgeIds);
+        const nextEdges = edges.filter((e) => !idSet.has(e.id));
+        return nextEdges.length === edges.length ? null : nextEdges;
+      }),
+    ),
+
   setWebNodeWebviewLabel: (nodeId, label) =>
     set((state) => ({
       webviewRuntime:
@@ -734,33 +817,47 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   undoProject: () =>
     set((state) => {
-      if (!state.project || state.nodeHistory.past.length === 0) return state;
+      if (!state.project || state.history.past.length === 0) return state;
 
-      const previousNodes = state.nodeHistory.past[state.nodeHistory.past.length - 1];
+      const previous = state.history.past[state.history.past.length - 1];
       return {
-        project: { ...state.project, nodes: cloneNodes(previousNodes) },
-        nodeHistory: {
-          past: state.nodeHistory.past.slice(0, -1),
-          future: [...state.nodeHistory.future, cloneNodes(state.project.nodes)],
+        project: {
+          ...state.project,
+          nodes: cloneNodes(previous.nodes),
+          edges: cloneEdges(previous.edges),
+        },
+        history: {
+          past: state.history.past.slice(0, -1),
+          future: [
+            ...state.history.future,
+            cloneSnapshot({ nodes: state.project.nodes, edges: state.project.edges }),
+          ],
         },
       };
     }),
 
   redoProject: () =>
     set((state) => {
-      if (!state.project || state.nodeHistory.future.length === 0) return state;
+      if (!state.project || state.history.future.length === 0) return state;
 
-      const nextNodes = state.nodeHistory.future[state.nodeHistory.future.length - 1];
-      const nextPast = [...state.nodeHistory.past, cloneNodes(state.project.nodes)];
-      if (nextPast.length > NODE_HISTORY_LIMIT) {
-        nextPast.splice(0, nextPast.length - NODE_HISTORY_LIMIT);
+      const next = state.history.future[state.history.future.length - 1];
+      const nextPast = [
+        ...state.history.past,
+        cloneSnapshot({ nodes: state.project.nodes, edges: state.project.edges }),
+      ];
+      if (nextPast.length > HISTORY_LIMIT) {
+        nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
       }
 
       return {
-        project: { ...state.project, nodes: cloneNodes(nextNodes) },
-        nodeHistory: {
+        project: {
+          ...state.project,
+          nodes: cloneNodes(next.nodes),
+          edges: cloneEdges(next.edges),
+        },
+        history: {
           past: nextPast,
-          future: state.nodeHistory.future.slice(0, -1),
+          future: state.history.future.slice(0, -1),
         },
       };
     }),

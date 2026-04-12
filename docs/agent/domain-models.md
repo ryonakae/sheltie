@@ -20,6 +20,11 @@
   - `BoardNode` を拡張したテキストノード専用補助型
   - `type` は `'text'`
   - `tiptapContent?: object`（Tiptap JSON ドキュメント）、`fontSizePreset?: TextNodeFontSizePreset`（0=S, 1=M, 2=L, 3=XL）、`fontWeight`、`italic`、`strikethrough`、`textColorIndex`、`widthMode`（`'auto' | 'fixed'`）
+- `BoardEdge`
+  - `id`, `source`, `sourceHandle`, `target`, `targetHandle`
+  - WebPageNode 同士の接続を表現する。他のノード種別は接続対象外
+- `SiteboardDocumentEdge`
+  - `.siteboard` に保存されるエッジ形式。`BoardEdge` と同じフィールド
 - `TextNodeFontSizePreset = 0 | 1 | 2 | 3`
 - `ProjectWebviewRuntime`
   - document ごとの runtime-only state
@@ -33,30 +38,32 @@
   - `text` は `id`, `type`, `title`, `tiptapContent?`, `fontSizePreset`, `fontWeight`, `italic`, `strikethrough`, `textColorIndex`, `widthMode`, `x`, `y`, `width`, `height`
 - `SiteboardDocumentV2`
   - `schemaVersion: 2`
-  - `nodes`
+  - `nodes`, `edges?`（後方互換: `edges` が無い場合は空配列として扱う）
 - `Project`
   - 1 document window 分のローカル状態
-  - `id`, `nodes`, `viewport`, `filePath?`, `untitledIndex`, `lastSavedDocument`
+  - `id`, `nodes`, `edges`, `viewport`, `filePath?`, `untitledIndex`, `lastSavedDocument`
 - `ProjectState`
   - document window ごとの単一 state
   - `project: Project | null`
 - `ProjectStore`（`tab-store.ts` 内部）
   - 単一 document window の `ProjectState` + actions + ランタイム状態
-  - ランタイム状態: `isLoaded`, `nodeHistory`, `webviewRuntime`
+  - ランタイム状態: `isLoaded`, `history`, `webviewRuntime`
   - 初期化: `initializeProject`, `markProjectSaved`, `restoreProjectFromLastSaved`
   - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `addStickyNoteNode`, `addTextNode`
   - ノード更新: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
+  - エッジ: `addEdge`, `removeEdges`（`removeNode` 時に関連エッジも自動削除）
   - 順序/選択: `bringNodeToFront`, `pinWebNodeUrl`, `updateViewport`
   - 履歴: `undoProject`, `redoProject`
   - runtime: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
-- `ProjectNodeHistory`（`tab-store.ts` 内部）
-  - `past`: 直前までの `BoardNode[]` スナップショット配列
-  - `future`: Redo 用の `BoardNode[]` スナップショット配列
+- `ProjectHistory`（`tab-store.ts` 内部）
+  - `past`: 直前までの `ProjectSnapshot` 配列（`{ nodes: BoardNode[]; edges: BoardEdge[] }`）
+  - `future`: Redo 用の `ProjectSnapshot` 配列
+  - ノードとエッジを統合スナップショットとして管理し、Undo/Redo で両方が同時に復元される
 
 ## `.siteboard` とローカル状態の境界
 
 - `.siteboard` は共有用ドキュメント形式
-- 保存する: `schemaVersion`, `nodes`
+- 保存する: `schemaVersion`, `nodes`, `edges`
   - `title` は保存しない
   - `schemaVersion: 1` は読み込み互換用に受けるが、書き出しは `schemaVersion: 2` に統一する
   - 保存名は `.siteboard` の外側、つまりファイル名で表現する
@@ -68,10 +75,10 @@
 
 ## 未保存変更の判定
 
-- 未保存判定は current document の `.siteboard` 相当内容（`nodes`）と `lastSavedDocument` の差分で行う
+- 未保存判定は current document の `.siteboard` 相当内容（`nodes`, `edges`）と `lastSavedDocument` の差分で行う
 - `viewport`, `filePath`, `untitledIndex` の差分は未保存確認の対象に含めない
 - 新規未保存 document は作成時点の空 document を `lastSavedDocument` として持つ
-- `restoreProjectFromLastSaved` は `nodes` を `lastSavedDocument` に戻し、対応する `nodeHistory` も破棄する
+- `restoreProjectFromLastSaved` は `nodes` と `edges` を `lastSavedDocument` に戻し、対応する `history` も破棄する
 
 ## ヘルパー
 
@@ -117,7 +124,7 @@
 
 `src/store/tab-store.ts`
 
-- `NODE_HISTORY_LIMIT = 100`（document ごとの node 履歴保持上限）
+- `HISTORY_LIMIT = 100`（document ごとの統合履歴保持上限）
 
 ## 不変条件
 
@@ -127,10 +134,10 @@
 - 付箋ノードは `type: 'stickynote'` と `content` / `colorIndex` を利用する
 - テキストノードは `type: 'text'` と `tiptapContent` / `fontSizePreset` / `fontWeight` / `italic` / `strikethrough` / `textColorIndex` / `widthMode` を利用する
 - 空フレーム（`url === ''`）は Webview 未作成状態を許容する
-- `nodeHistory` はランタイム専用で永続化しない
+- `history` はランタイム専用で永続化しない
 - `webviewRuntime` はランタイム専用で永続化しない
 - Undo/Redo は現在の document window にのみ適用する
-- node 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
+- node / edge 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
 - ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
 - 重なり補正・新規ノード自動配置・センタリング fallback は、content 高ではなくノード外枠を基準にする。chrome は `zoomPx` で画面 px が固定されるため、world 座標での外枠高さは current zoom に依存する
 - WebPage / StickyNote のツールバー文字・ボタン・アイコンは node 内描画だが、`zoomPx()` と `scaleWithCanvasZoom` で画面上の大きさを固定する

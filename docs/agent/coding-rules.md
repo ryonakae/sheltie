@@ -92,6 +92,16 @@
 - Flow ノードの top-level `width`, `height` に寸法をセットする
 - Flow ノードの `data` に `nodeProps` 構造体を格納し、ラッパー内で子コンポーネント（`StickyNoteNode`/`WebPageNode`）にスプレッド。位置（`x`, `y`）は `{x: 0, y: 0}` に正規化してコンポーネント側で無視させる
 
+### エッジ接続
+
+- **Handle は WebPageFlowNode のみ**に配置。StickyNote / TextNode には Handle を追加しない
+- 4 方向（top, right, bottom, left）に `type="source"` の Handle を常時レンダリングし、`selected` 時のみ `opacity: 1` で表示する（非選択時は `opacity: 0` + `pointerEvents: none`）
+- `connectionMode="loose"` で source 同士の接続を許可し、ドラッグ起点が source、ドロップ先が target として方向が決まる
+- `isValidConnection` で自己接続（`source === target`）を禁止する
+- エッジタイプは `default`（bezier）、終端に `MarkerType.ArrowClosed` の矢印を表示
+- エッジの削除は選択 + `Backspace` / `Delete` キー（`onEdgesChange` で `remove` タイプを処理）
+- エッジの永続化は `Project.edges` / `SiteboardDocumentV2.edges` に保存。Undo/Redo はノードと統合スナップショットで管理
+
 ## Siteboard/Webview 変更時の必読
 
 - 表示モード遷移・スクリーンショット切替・操作中の制約は `siteboard-runtime.md` を正本とする。

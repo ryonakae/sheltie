@@ -3,6 +3,11 @@ import { Menu, MenuItem, PredefinedMenuItem } from '@tauri-apps/api/menu';
 import {
   Background,
   BackgroundVariant,
+  type Connection,
+  ConnectionMode,
+  type Edge,
+  type EdgeChange,
+  MarkerType,
   type Node,
   type NodeChange,
   type NodeDimensionChange,
@@ -125,8 +130,12 @@ export function Siteboard({
     hydrateProjectScreenshotUrls,
     setProjectScreenshotUrl,
     clearProjectScreenshotUrl,
+    addEdge: addEdgeToStore,
+    removeEdges,
   } = useProjectStore(
     useShallow((s) => ({
+      addEdge: s.addEdge,
+      removeEdges: s.removeEdges,
       clearProjectScreenshotUrl: s.clearProjectScreenshotUrl,
       cycleStickyNoteColor: s.cycleStickyNoteColor,
       updateTextNodeContent: s.updateTextNodeContent,
@@ -153,6 +162,7 @@ export function Siteboard({
   );
 
   const nodes = useMemo(() => project?.nodes ?? [], [project?.nodes]);
+  const edges = useMemo(() => project?.edges ?? [], [project?.edges]);
   const webPageNodes = useMemo(() => nodes.filter(isWebPageNode), [nodes]);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -412,6 +422,58 @@ export function Siteboard({
       updateNodePosition(node.id, resolvedPosition.x, resolvedPosition.y);
     },
     [handleInteractionChange, holdNodeDuringPositionSettle, nodes, updateNodePosition, zoomRef],
+  );
+
+  // エッジ接続: ドラッグで繋いだときにストアへ追加
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      addEdgeToStore({
+        id: `e-${connection.source}-${connection.sourceHandle ?? 'null'}-${connection.target}-${connection.targetHandle ?? 'null'}`,
+        source: connection.source,
+        sourceHandle: connection.sourceHandle,
+        target: connection.target,
+        targetHandle: connection.targetHandle,
+      });
+    },
+    [addEdgeToStore],
+  );
+
+  // エッジ変更: 選択+削除キーでの削除を処理
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      const removeIds = changes.filter((c) => c.type === 'remove').map((c) => c.id);
+      if (removeIds.length > 0) {
+        removeEdges(removeIds);
+      }
+    },
+    [removeEdges],
+  );
+
+  // 自己接続を禁止
+  const isValidConnection = useCallback((connection: Edge | Connection) => {
+    return connection.source !== connection.target;
+  }, []);
+
+  // エッジのデフォルト設定: bezier + 終端矢印
+  const defaultEdgeOptions = useMemo(
+    () => ({
+      type: 'default' as const,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
+    }),
+    [],
+  );
+
+  // React Flow の flowEdges 配列を構築する
+  const flowEdges = useMemo(
+    (): Edge[] =>
+      edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        sourceHandle: edge.sourceHandle,
+        target: edge.target,
+        targetHandle: edge.targetHandle,
+      })),
+    [edges],
   );
 
   // ノード変更を処理: ドラッグ中の位置追跡 + dimension 測定結果の保持（ノード初期化に必要）
@@ -1099,9 +1161,15 @@ export function Siteboard({
       <div ref={containerRef} data-siteboard-container className="relative flex-1 overflow-hidden">
         <ReactFlow
           nodes={flowNodes}
-          edges={[]}
+          edges={flowEdges}
           nodeTypes={nodeTypes}
           onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
+          onConnect={handleConnect}
+          connectionMode={ConnectionMode.Loose}
+          isValidConnection={isValidConnection}
+          defaultEdgeOptions={defaultEdgeOptions}
+          deleteKeyCode={['Backspace', 'Delete']}
           onViewportChange={handleViewportChange}
           onMoveStart={handleMoveStart}
           onMove={handleMove}
@@ -1125,8 +1193,6 @@ export function Siteboard({
           maxZoom={MAX_ZOOM}
           // Webview 対策: 仮想化を無効化してすべてのノードをレンダリングする
           onlyRenderVisibleElements={false}
-          nodesConnectable={false}
-          edgesFocusable={false}
           proOptions={{ hideAttribution: true }}
           className="size-full"
         >

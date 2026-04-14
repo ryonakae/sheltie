@@ -52,7 +52,7 @@
   - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `addStickyNoteNode`, `addTextNode`
   - ノード更新: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
   - エッジ: `addEdge`, `removeEdges`（`removeNode` 時に関連エッジも自動削除）
-  - 順序/選択: `bringNodeToFront`, `pinWebNodeUrl`, `updateViewport`
+  - 順序/選択: `bringNodeToFront`, `sendNodeToBack`, `bringNodeForward`, `sendNodeBackward`, `pinWebNodeUrl`, `updateViewport`
   - 履歴: `undoProject`, `redoProject`
   - runtime: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
 - `ProjectHistory`（`tab-store.ts` 内部）

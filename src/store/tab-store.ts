@@ -29,6 +29,7 @@ import type {
   TextNodeFontSizePreset,
   Viewport,
 } from '@/types';
+import { isWebPageNode } from '@/types';
 
 const HISTORY_LIMIT = 100;
 
@@ -66,6 +67,9 @@ interface ProjectActions {
   updateNodeTitle: (nodeId: string, title: string) => void;
   updateViewport: (viewport: Partial<Viewport>) => void;
   bringNodeToFront: (nodeId: string) => void;
+  sendNodeToBack: (nodeId: string) => void;
+  bringNodeForward: (nodeId: string) => void;
+  sendNodeBackward: (nodeId: string) => void;
   addStickyNoteNode: (
     options?: { x: number; y: number; width: number; height: number },
     zoom?: number,
@@ -566,12 +570,86 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         ? {
             ...state.project,
             nodes: (() => {
-              const node = state.project?.nodes.find((candidate) => candidate.id === nodeId);
-              if (!node) return state.project.nodes;
-              if (state.project.nodes[state.project.nodes.length - 1]?.id === nodeId) {
-                return state.project.nodes;
+              const { nodes } = state.project;
+              const node = nodes.find((n) => n.id === nodeId);
+              if (!node) return nodes;
+              if (nodes[nodes.length - 1]?.id === nodeId) return nodes;
+              return [...nodes.filter((n) => n.id !== nodeId), node];
+            })(),
+          }
+        : null,
+    })),
+
+  sendNodeToBack: (nodeId) =>
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: (() => {
+              const { nodes } = state.project;
+              const node = nodes.find((n) => n.id === nodeId);
+              if (!node) return nodes;
+              if (nodes[0]?.id === nodeId) return nodes;
+              return [node, ...nodes.filter((n) => n.id !== nodeId)];
+            })(),
+          }
+        : null,
+    })),
+
+  bringNodeForward: (nodeId) =>
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: (() => {
+              const { nodes } = state.project;
+              const idx = nodes.findIndex((n) => n.id === nodeId);
+              if (idx === -1 || idx === nodes.length - 1) return nodes;
+              const node = nodes[idx];
+              if (isWebPageNode(node)) return nodes;
+              // WebPageNode をスキップして次の付箋/テキストを探す
+              let swapIdx = -1;
+              for (let i = idx + 1; i < nodes.length; i++) {
+                if (!isWebPageNode(nodes[i])) {
+                  swapIdx = i;
+                  break;
+                }
               }
-              return [...state.project.nodes.filter((candidate) => candidate.id !== nodeId), node];
+              if (swapIdx === -1) return nodes;
+              const result = [...nodes];
+              // 対象ノードを取り出し、スワップ先の直後に挿入
+              result.splice(idx, 1);
+              result.splice(swapIdx, 0, node);
+              return result;
+            })(),
+          }
+        : null,
+    })),
+
+  sendNodeBackward: (nodeId) =>
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: (() => {
+              const { nodes } = state.project;
+              const idx = nodes.findIndex((n) => n.id === nodeId);
+              if (idx <= 0) return nodes;
+              const node = nodes[idx];
+              if (isWebPageNode(node)) return nodes;
+              // WebPageNode をスキップして前の付箋/テキストを探す
+              let swapIdx = -1;
+              for (let i = idx - 1; i >= 0; i--) {
+                if (!isWebPageNode(nodes[i])) {
+                  swapIdx = i;
+                  break;
+                }
+              }
+              if (swapIdx === -1) return nodes;
+              const result = [...nodes];
+              result.splice(idx, 1);
+              result.splice(swapIdx, 0, node);
+              return result;
             })(),
           }
         : null,

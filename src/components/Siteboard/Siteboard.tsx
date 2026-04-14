@@ -132,6 +132,10 @@ export function Siteboard({
     clearProjectScreenshotUrl,
     addEdge: addEdgeToStore,
     removeEdges,
+    bringNodeToFront,
+    sendNodeToBack,
+    bringNodeForward,
+    sendNodeBackward,
   } = useProjectStore(
     useShallow((s) => ({
       addEdge: s.addEdge,
@@ -158,6 +162,10 @@ export function Siteboard({
       updateStickyNoteContent: s.updateStickyNoteContent,
       updateViewport: s.updateViewport,
       updateWebNodeUrl: s.updateWebNodeUrl,
+      bringNodeToFront: s.bringNodeToFront,
+      sendNodeToBack: s.sendNodeToBack,
+      bringNodeForward: s.bringNodeForward,
+      sendNodeBackward: s.sendNodeBackward,
     })),
   );
 
@@ -603,6 +611,10 @@ export function Siteboard({
     onRemoveNode: handleRemoveNodeWithSettleReset,
     onUndo: undoProject,
     onRedo: redoProject,
+    onBringNodeToFront: bringNodeToFront,
+    onSendNodeToBack: sendNodeToBack,
+    onBringNodeForward: bringNodeForward,
+    onSendNodeBackward: sendNodeBackward,
   });
 
   const [editingUrlNodeId, setEditingUrlNodeId] = useState<string | null>(null);
@@ -673,6 +685,58 @@ export function Siteboard({
           menuItems.push(await PredefinedMenuItem.new({ item: 'Separator' }));
         }
 
+        // 付箋・テキストノードの重なり順メニュー
+        if (node && !isWebPageNode(node)) {
+          const isAtFront = nodes[nodes.length - 1]?.id === nodeId;
+          const isAtBack = nodes[0]?.id === nodeId;
+
+          menuItems.push(
+            await MenuItem.new({
+              text: '最前面へ',
+              accelerator: 'CmdOrCtrl+Alt+]',
+              enabled: !isAtFront,
+              action: () => {
+                handleContextMenuCloseDisplay();
+                bringNodeToFront(nodeId);
+              },
+            }),
+          );
+          menuItems.push(
+            await MenuItem.new({
+              text: '1つ前面へ',
+              accelerator: 'CmdOrCtrl+]',
+              enabled: !isAtFront,
+              action: () => {
+                handleContextMenuCloseDisplay();
+                bringNodeForward(nodeId);
+              },
+            }),
+          );
+          menuItems.push(
+            await MenuItem.new({
+              text: '1つ背面へ',
+              accelerator: 'CmdOrCtrl+[',
+              enabled: !isAtBack,
+              action: () => {
+                handleContextMenuCloseDisplay();
+                sendNodeBackward(nodeId);
+              },
+            }),
+          );
+          menuItems.push(
+            await MenuItem.new({
+              text: '最背面へ',
+              accelerator: 'CmdOrCtrl+Alt+[',
+              enabled: !isAtBack,
+              action: () => {
+                handleContextMenuCloseDisplay();
+                sendNodeToBack(nodeId);
+              },
+            }),
+          );
+          menuItems.push(await PredefinedMenuItem.new({ item: 'Separator' }));
+        }
+
         menuItems.push(
           await MenuItem.new({
             text: 'ノードを削除',
@@ -697,6 +761,10 @@ export function Siteboard({
       handleRemoveNodeWithSettleReset,
       onSelectNode,
       nodes,
+      bringNodeToFront,
+      sendNodeToBack,
+      bringNodeForward,
+      sendNodeBackward,
     ],
   );
 

@@ -75,7 +75,7 @@ src/
 
 - `useSiteboardDisplayEngine`: `DisplayMode` 判定、Webview 表示/非表示、スクリーンショット管理
 - `useSiteboardNodeRuntime`: webpage ノード単位のナビゲーション状態・タイトル同期・スクリーンショット契機を管理
-- `useSiteboardKeyboard`: Delete/Backspace・Undo/Redo のショートカットを処理し、共通編集コマンドへ委譲
+- `useSiteboardKeyboard`: Delete/Backspace・Undo/Redo・ノード重なり順変更のショートカットを処理し、共通編集コマンドへ委譲
 
 詳細仕様は `siteboard-runtime.md` を参照。
 

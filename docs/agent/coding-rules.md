@@ -130,6 +130,9 @@
   1. Delete / Backspace キー（`useSiteboardKeyboard` で処理。テキスト入力フォーカス中はスキップ）
   2. メニューバー `Edit -> Delete`（Tauri メニューイベントを `edit-command` として受信）
   3. ノードの右クリック → コンテキストメニュー「ノードを削除」
+- ノードの重なり順変更は付箋・テキストノードのみ対象（WebPageNode は重なれないため除外）。配列順で管理し、WebPageNode をスキップして付箋/テキスト同士の順序を操作する。操作経路:
+  1. コンテキストメニュー「最前面へ / 1つ前面へ / 1つ背面へ / 最背面へ」（配列の端にいる場合は disabled）
+  2. キーボードショートカット `Cmd+Alt+]` / `Cmd+]` / `Cmd+[` / `Cmd+Alt+[`（Figma 準拠）
 - Undo/Redo は `CmdOrCtrl+Z` / `CmdOrCtrl+Shift+Z` とメニューバー `Edit -> Undo / Redo` を同じ `edit-command` 経路で処理する。
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `@tauri-apps/api/menu` の `Menu.new()` + `popup()` で macOS ネイティブメニューとして表示する。

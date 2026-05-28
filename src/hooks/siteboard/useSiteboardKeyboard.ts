@@ -4,9 +4,10 @@ import { hasEditableFocus, registerEditCommandHandlers, runEditCommand } from '@
 import { runViewCommand } from '@/lib/view-commands';
 
 interface UseSiteboardKeyboardParams {
-  selectedNodeId: string | null;
+  selectedNodeIds: string[];
   selectedEdgeIds: Set<string>;
   onRemoveNode: (nodeId: string) => void;
+  onRemoveNodes: (nodeIds: string[]) => void;
   onRemoveEdges: (edgeIds: string[]) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -28,9 +29,10 @@ interface UseSiteboardKeyboardParams {
  * - Cmd/Ctrl + Alt + [: 最背面へ
  */
 export function useSiteboardKeyboard({
-  selectedNodeId,
+  selectedNodeIds,
   selectedEdgeIds,
   onRemoveNode,
+  onRemoveNodes,
   onRemoveEdges,
   onUndo,
   onRedo,
@@ -39,13 +41,20 @@ export function useSiteboardKeyboard({
   onBringNodeForward,
   onSendNodeBackward,
 }: UseSiteboardKeyboardParams) {
+  // 重なり順ショートカットは単独選択時のみ有効
+  const soloSelectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] : null;
+
   useEffect(() => {
     return registerEditCommandHandlers({
       delete: () => {
         // ノード削除時に connected edges を store.removeNode が cascade 削除するため、
         // ノードとエッジの両方が選択中ならノード削除を優先する（履歴を 1 ステップにまとめる）
-        if (selectedNodeId) {
-          onRemoveNode(selectedNodeId);
+        if (selectedNodeIds.length > 1) {
+          onRemoveNodes(selectedNodeIds);
+          return true;
+        }
+        if (selectedNodeIds.length === 1) {
+          onRemoveNode(selectedNodeIds[0]);
           return true;
         }
         if (selectedEdgeIds.size > 0) {
@@ -63,7 +72,15 @@ export function useSiteboardKeyboard({
         return true;
       },
     });
-  }, [onRedo, onRemoveEdges, onRemoveNode, onUndo, selectedEdgeIds, selectedNodeId]);
+  }, [
+    onRedo,
+    onRemoveEdges,
+    onRemoveNode,
+    onRemoveNodes,
+    onUndo,
+    selectedEdgeIds,
+    selectedNodeIds,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -85,21 +102,21 @@ export function useSiteboardKeyboard({
         return;
       }
 
-      // Cmd+]/[ / Cmd+Alt+]/[: ノードの重なり順変更
-      if (isModifierPressed && selectedNodeId && (e.key === ']' || e.key === '[')) {
+      // Cmd+]/[ / Cmd+Alt+]/[: ノードの重なり順変更（単独選択時のみ）
+      if (isModifierPressed && soloSelectedNodeId && (e.key === ']' || e.key === '[')) {
         if (hasEditableFocus()) return;
         e.preventDefault();
         if (e.altKey) {
           if (e.key === ']') {
-            onBringNodeToFront(selectedNodeId);
+            onBringNodeToFront(soloSelectedNodeId);
           } else {
-            onSendNodeToBack(selectedNodeId);
+            onSendNodeToBack(soloSelectedNodeId);
           }
         } else {
           if (e.key === ']') {
-            onBringNodeForward(selectedNodeId);
+            onBringNodeForward(soloSelectedNodeId);
           } else {
-            onSendNodeBackward(selectedNodeId);
+            onSendNodeBackward(soloSelectedNodeId);
           }
         }
         return;
@@ -120,7 +137,7 @@ export function useSiteboardKeyboard({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [
-    selectedNodeId,
+    soloSelectedNodeId,
     onBringNodeToFront,
     onSendNodeToBack,
     onBringNodeForward,

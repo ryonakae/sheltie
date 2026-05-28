@@ -9,7 +9,7 @@ import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
 export interface StickyNoteNodeProps {
   node: StickyNoteNodeModel;
   isActive: boolean;
-  onActivate: (nodeId: string) => void;
+  onActivate: (nodeId: string, addToSelection: boolean) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
   onContentChange: (nodeId: string, content: string) => void;
   onAutoHeightChange: (nodeId: string, height: number) => void;
@@ -154,7 +154,10 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   }, [commitContent, editingContent]);
 
   // page.id は UUID で不変のため、親の関数参照が安定していればこれらも安定する
-  const handleActivate = useCallback(() => onActivate(node.id), [node.id, onActivate]);
+  const handleActivate = useCallback(
+    (e: React.MouseEvent) => onActivate(node.id, e.shiftKey),
+    [node.id, onActivate],
+  );
 
   const noteClassName = twMerge(
     'flex flex-col overflow-hidden shadow-lg',

@@ -59,7 +59,9 @@ interface ProjectActions {
   setWebNodeUrl: (nodeId: string, url: string) => void;
   changeWebNodeUrl: (nodeId: string, url: string) => void;
   removeNode: (nodeId: string) => void;
+  removeNodes: (nodeIds: string[]) => void;
   updateNodePosition: (nodeId: string, x: number, y: number) => void;
+  updateNodePositions: (updates: Array<{ nodeId: string; x: number; y: number }>) => void;
   updateNodeSize: (nodeId: string, width: number, height: number) => void;
   updateNodeBounds: (nodeId: string, x: number, y: number, width: number, height: number) => void;
   updateNodeSizeWithoutHistory: (nodeId: string, width: number, height: number) => void;
@@ -462,6 +464,40 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       };
     }),
 
+  removeNodes: (nodeIds) =>
+    set((state) => {
+      if (!state.project) return state;
+      if (nodeIds.length === 0) return state;
+      const removeSet = new Set(nodeIds);
+      const nextNodes = state.project.nodes.filter((node) => !removeSet.has(node.id));
+      if (nextNodes.length === state.project.nodes.length) return state;
+
+      const nextEdges = state.project.edges.filter(
+        (edge) => !removeSet.has(edge.source) && !removeSet.has(edge.target),
+      );
+
+      return {
+        project: { ...state.project, nodes: nextNodes, edges: nextEdges },
+        // 複数ノード削除を 1 つの履歴エントリにまとめる
+        history: pushHistory(state.history, {
+          nodes: state.project.nodes,
+          edges: state.project.edges,
+        }),
+        webviewRuntime: {
+          labelsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.labelsByNodeId).filter(
+              ([id]) => !removeSet.has(id),
+            ),
+          ),
+          screenshotUrlsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
+              ([id]) => !removeSet.has(id),
+            ),
+          ),
+        },
+      };
+    }),
+
   updateNodePosition: (nodeId, x, y) =>
     set((state) =>
       replaceProjectNodes(state, (nodes) => {
@@ -471,6 +507,24 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           if (node.x === x && node.y === y) return node;
           changed = true;
           return { ...node, x, y };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  updateNodePositions: (updates) =>
+    set((state) =>
+      // 複数ノードの位置を 1 つの履歴エントリにまとめて反映する
+      replaceProjectNodes(state, (nodes) => {
+        if (updates.length === 0) return null;
+        const updateMap = new Map(updates.map((u) => [u.nodeId, u]));
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          const update = updateMap.get(node.id);
+          if (!update) return node;
+          if (node.x === update.x && node.y === update.y) return node;
+          changed = true;
+          return { ...node, x: update.x, y: update.y };
         });
         return changed ? nextNodes : null;
       }),

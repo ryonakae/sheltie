@@ -79,7 +79,8 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
       <StickyNoteNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
       {selected && <SelectionFrameOverlay />}
       {/* 左右辺と四隅は FigJam 風の見た目に寄せつつ、実際の操作は左右幅リサイズだけに制限する */}
-      {selected && (
+      {/* 複数選択中（isActive=false）はリサイズハンドルを出さない */}
+      {nodeProps.isActive && (
         <>
           {resizeLineConfigs.map(({ key, position, className }) => (
             <NodeResizeControl

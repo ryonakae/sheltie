@@ -51,17 +51,13 @@ export function ProjectScreen() {
   const addTextNode = useProjectStore((s) => s.addTextNode);
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = project?.viewport;
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [centeredNodeId, setCenteredNodeId] = useState<string | null>(null);
   const centeringAnimationRef = useRef<Array<{ stop: () => void }>>([]);
   const prefersReducedMotion = useReducedMotion();
 
-  const handleSelectNode = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId);
-  }, []);
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedNodeId(null);
+  const setSelection = useCallback((idsOrUpdater: string[] | ((prev: string[]) => string[])) => {
+    setSelectedNodeIds(idsOrUpdater);
   }, []);
 
   const handleCenteredNode = useCallback((nodeId: string) => {
@@ -179,10 +175,10 @@ export function ProjectScreen() {
       viewport?.zoom ?? 1,
     );
     if (created) {
-      handleSelectNode(created.id);
+      setSelection([created.id]);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [addWebNode, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
+  }, [addWebNode, viewport, centerOnNewNode, setSelection, handleCenteredNode]);
 
   /** FloatingToolbar の付箋ボタンから呼ばれる: 付箋をキャンバス中央に追加してセンタリング */
   const handleAddStickyNote = useCallback(() => {
@@ -208,10 +204,10 @@ export function ProjectScreen() {
       viewport?.zoom ?? 1,
     );
     if (created) {
-      handleSelectNode(created.id);
+      setSelection([created.id]);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [addStickyNoteNode, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
+  }, [addStickyNoteNode, viewport, centerOnNewNode, setSelection, handleCenteredNode]);
 
   /** FloatingToolbar のテキストボタンから呼ばれる: テキストノードをキャンバス中央に追加してセンタリング */
   const handleAddTextNode = useCallback(() => {
@@ -234,26 +230,26 @@ export function ProjectScreen() {
       viewport?.zoom ?? 1,
     );
     if (created) {
-      handleSelectNode(created.id);
+      setSelection([created.id]);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
-  }, [addTextNode, viewport, centerOnNewNode, handleSelectNode, handleCenteredNode]);
+  }, [addTextNode, viewport, centerOnNewNode, setSelection, handleCenteredNode]);
 
   useEffect(() => {
-    if (!selectedNodeId) return;
-    const exists = project?.nodes.some((node) => node.id === selectedNodeId) ?? false;
-    if (!exists) {
+    if (selectedNodeIds.length === 0) return;
+    const liveIds = new Set(project?.nodes.map((node) => node.id) ?? []);
+    const filtered = selectedNodeIds.filter((id) => liveIds.has(id));
+    if (filtered.length !== selectedNodeIds.length) {
       // effect 内での直接 setState を避けるため非同期で実行
-      queueMicrotask(() => setSelectedNodeId(null));
+      queueMicrotask(() => setSelectedNodeIds(filtered));
     }
-  }, [selectedNodeId, project?.nodes]);
+  }, [selectedNodeIds, project?.nodes]);
 
   return (
     <div className="relative flex flex-1 overflow-hidden">
       <Siteboard
-        selectedNodeId={selectedNodeId}
-        onSelectNode={handleSelectNode}
-        onClearSelection={handleClearSelection}
+        selectedNodeIds={selectedNodeIds}
+        setSelection={setSelection}
         centeredNodeId={centeredNodeId}
         onCenteredNodeHandled={handleCenteredNodeHandled}
         onAddWebNode={handleAddWebNode}

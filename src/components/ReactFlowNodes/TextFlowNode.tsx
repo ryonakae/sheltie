@@ -55,7 +55,7 @@ export const TextFlowNode = memo(function TextFlowNode({ id, data, selected }: N
 
       <TextNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
 
-      {selected && nodeProps.node.widthMode === 'fixed' && (
+      {nodeProps.isActive && nodeProps.node.widthMode === 'fixed' && (
         <>
           {resizeLineConfigs.map(({ key, position }) => (
             <NodeResizeControl

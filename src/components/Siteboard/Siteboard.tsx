@@ -66,9 +66,8 @@ import { isNodeEmpty, isStickyNoteNode, isTextNode, isWebPageNode } from '@/type
 import type { TextNode, WebPageNode } from '@/types';
 
 interface SiteboardProps {
-  selectedNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
-  onClearSelection: () => void;
+  selectedNodeIds: string[];
+  setSelection: (idsOrUpdater: string[] | ((prev: string[]) => string[])) => void;
   centeredNodeId?: string | null;
   onCenteredNodeHandled?: () => void;
   onAddWebNode: () => void;
@@ -97,15 +96,17 @@ function isSameViewport(a: FlowViewport | null, b: FlowViewport): boolean {
 }
 
 export function Siteboard({
-  selectedNodeId,
-  onSelectNode,
-  onClearSelection,
+  selectedNodeIds,
+  setSelection,
   centeredNodeId = null,
   onCenteredNodeHandled,
   onAddWebNode,
   onAddStickyNote,
   onAddTextNode,
 }: SiteboardProps) {
+  // 単独選択時のみ「active」(リサイズハンドルや URL 編集など、単一ノード前提の UI を有効化する判定)
+  const activeNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] : null;
+  const selectedNodeIdSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
   const project = useProjectStore(selectProject);
   const projectWebviewRuntime = useProjectStore(selectProjectWebviewRuntime);
   const isDark = useThemeStore((s) => s.isDark);
@@ -115,11 +116,13 @@ export function Siteboard({
     redoProject,
     updateViewport,
     updateNodePosition,
+    updateNodePositions,
     updateNodeSize,
     updateNodeSizeWithoutHistory,
     updateWebNodeUrl,
     updateNodeTitle,
     removeNode,
+    removeNodes,
     setWebNodeWebviewLabel,
     clearWebNodeWebviewLabel,
     setWebNodeUrl,
@@ -155,12 +158,14 @@ export function Siteboard({
       redoProject: s.redoProject,
       pinWebNodeUrl: s.pinWebNodeUrl,
       removeNode: s.removeNode,
+      removeNodes: s.removeNodes,
       setProjectScreenshotUrl: s.setProjectScreenshotUrl,
       setWebNodeUrl: s.setWebNodeUrl,
       changeWebNodeUrl: s.changeWebNodeUrl,
       setWebNodeWebviewLabel: s.setWebNodeWebviewLabel,
       undoProject: s.undoProject,
       updateNodePosition: s.updateNodePosition,
+      updateNodePositions: s.updateNodePositions,
       updateNodeSize: s.updateNodeSize,
       updateNodeSizeWithoutHistory: s.updateNodeSizeWithoutHistory,
       updateNodeTitle: s.updateNodeTitle,
@@ -327,6 +332,7 @@ export function Siteboard({
     handlePinWebNodeUrl,
     handleReloadWebNode,
     handleRemoveNode,
+    handleRemoveNodes,
     handleResizePreset,
     handleStickyNoteAutoHeightChange,
     handleStickyNoteColorCycle,
@@ -341,11 +347,15 @@ export function Siteboard({
   } = useSiteboardNodeRuntime({
     nodes,
     webviewLabelsByNodeId: projectWebviewRuntime.labelsByNodeId,
-    selectedNodeId,
-    onClearSelection,
+    selectedNodeIds,
+    onDeselectNode: useCallback(
+      (nodeId: string) => setSelection((prev) => prev.filter((id) => id !== nodeId)),
+      [setSelection],
+    ),
     updateWebNodeUrl,
     updateNodeTitle,
     removeNode,
+    removeNodes,
     setWebNodeWebviewLabel,
     clearWebNodeWebviewLabel,
     setWebNodeUrl,
@@ -392,16 +402,36 @@ export function Siteboard({
   );
 
   // React Flow ネイティブドラッグ終了: 位置補正後にストアへ反映
+  // 第3引数 draggedNodes は、複数選択時に同時に動かしたノード全てを含む
   const handleNodeDragStop = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+    (_event: React.MouseEvent, node: Node, draggedNodes: Node[]) => {
       handleInteractionChange(false, 'drag');
 
-      // ドラッグ中の一時位置をクリア
+      // ドラッグ中の一時位置をクリア（複数選択時は全ノード分）
       setDraggingNodePositions((prev) => {
-        if (!(node.id in prev)) return prev;
-        const { [node.id]: _, ...rest } = prev;
-        return rest;
+        const next = { ...prev };
+        let changed = false;
+        for (const dragged of draggedNodes) {
+          if (dragged.id in next) {
+            delete next[dragged.id];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
       });
+
+      // 複数ノードを同時に動かしている場合、位置補正アニメーションは複雑になるため省略し、
+      // 1 つの履歴エントリに集約してコミットする
+      if (draggedNodes.length > 1) {
+        updateNodePositions(
+          draggedNodes.map((dragged) => ({
+            nodeId: dragged.id,
+            x: dragged.position.x,
+            y: dragged.position.y,
+          })),
+        );
+        return;
+      }
 
       const movingNode = nodes.find((candidate) => candidate.id === node.id);
       if (!movingNode) return;
@@ -437,7 +467,14 @@ export function Siteboard({
 
       updateNodePosition(node.id, resolvedPosition.x, resolvedPosition.y);
     },
-    [handleInteractionChange, holdNodeDuringPositionSettle, nodes, updateNodePosition, zoomRef],
+    [
+      handleInteractionChange,
+      holdNodeDuringPositionSettle,
+      nodes,
+      updateNodePosition,
+      updateNodePositions,
+      zoomRef,
+    ],
   );
 
   // エッジ接続: ドラッグで繋いだときにストアへ追加
@@ -525,14 +562,26 @@ export function Siteboard({
 
       // select 変更を処理（React Flow 内部の選択状態と外部 state を同期。
       // これを無視すると内部状態が矛盾し、選択解除やリサイズ UI が正常動作しない）
+      // 複数選択を扱うため、changes をまとめてセットに反映する
       const selectChanges = changes.filter((c): c is NodeSelectionChange => c.type === 'select');
       if (selectChanges.length > 0) {
-        const newlySelected = selectChanges.find((c) => c.selected);
-        if (newlySelected) {
-          onSelectNode(newlySelected.id);
-        } else {
-          onClearSelection();
-        }
+        setSelection((prev) => {
+          const next = new Set(prev);
+          for (const change of selectChanges) {
+            if (change.selected) next.add(change.id);
+            else next.delete(change.id);
+          }
+          // 順序保持のため、prev の順序を維持しつつ新規追加分を末尾に追加
+          const result: string[] = [];
+          for (const id of prev) {
+            if (next.has(id)) {
+              result.push(id);
+              next.delete(id);
+            }
+          }
+          for (const id of next) result.push(id);
+          return result;
+        });
       }
 
       // ドラッグ中の position を一時ステートに反映（ストアは dragStop 時のみ更新）
@@ -548,7 +597,7 @@ export function Siteboard({
         return next;
       });
     },
-    [onSelectNode, onClearSelection],
+    [setSelection],
   );
 
   const handleRemoveNodeWithSettleReset = useCallback(
@@ -557,6 +606,16 @@ export function Siteboard({
       handleRemoveNode(nodeId);
     },
     [clearPositionCorrectionAnimation, handleRemoveNode],
+  );
+
+  const handleRemoveNodesWithSettleReset = useCallback(
+    (nodeIds: string[]) => {
+      for (const nodeId of nodeIds) {
+        clearPositionCorrectionAnimation(nodeId);
+      }
+      handleRemoveNodes(nodeIds);
+    },
+    [clearPositionCorrectionAnimation, handleRemoveNodes],
   );
 
   const handleStickyNoteResize = useCallback(
@@ -628,9 +687,10 @@ export function Siteboard({
   }, [releaseNodeAfterPositionSettle, webPageNodes]);
 
   useSiteboardKeyboard({
-    selectedNodeId,
+    selectedNodeIds,
     selectedEdgeIds,
     onRemoveNode: handleRemoveNodeWithSettleReset,
+    onRemoveNodes: handleRemoveNodesWithSettleReset,
     onRemoveEdges: removeEdges,
     onUndo: undoProject,
     onRedo: redoProject,
@@ -721,7 +781,8 @@ export function Siteboard({
   const handleNodeContextMenu = useCallback(
     (e: React.MouseEvent, nodeId: string) => {
       e.preventDefault();
-      onSelectNode(nodeId);
+      // 複数選択中の右クリック対象が選択メンバーなら選択を保持し、そうでなければ単独選択に切り替える
+      setSelection((prev) => (prev.includes(nodeId) ? prev : [nodeId]));
 
       const node = nodes.find((candidate) => candidate.id === nodeId);
       const showMenu = async () => {
@@ -818,7 +879,7 @@ export function Siteboard({
       handleContextMenuOpen,
       handleContextMenuCloseDisplay,
       handleRemoveNodeWithSettleReset,
-      onSelectNode,
+      setSelection,
       nodes,
       bringNodeToFront,
       sendNodeToBack,
@@ -835,12 +896,28 @@ export function Siteboard({
     [changeWebNodeUrl],
   );
 
-  // ペイン（空白エリア）クリックで選択解除
+  // ペイン（空白エリア）クリックで選択解除（Shift 押下時は複数選択操作の途中とみなして維持）
   const handlePaneClick = useCallback(
-    (_event: React.MouseEvent) => {
-      onClearSelection();
+    (event: React.MouseEvent) => {
+      if (event.shiftKey) return;
+      setSelection([]);
     },
-    [onClearSelection],
+    [setSelection],
+  );
+
+  // ノード mousedown 時の選択更新（Shift 押下で追加、それ以外は単独選択へ切替）
+  // 既に複数選択メンバーをクリックした場合は選択を維持し、その後の drag で全選択を一括移動できるようにする
+  const handleNodeActivate = useCallback(
+    (nodeId: string, addToSelection: boolean) => {
+      setSelection((prev) => {
+        if (addToSelection) {
+          return prev.includes(nodeId) ? prev : [...prev, nodeId];
+        }
+        if (prev.length > 1 && prev.includes(nodeId)) return prev;
+        return [nodeId];
+      });
+    },
+    [setSelection],
   );
 
   // React Flow のビューポート変更ハンドラー
@@ -1112,8 +1189,8 @@ export function Siteboard({
         const nodeData: StickyNoteFlowNodeData = {
           nodeProps: {
             node: { ...node, x: 0, y: 0, width: contentWidth, height: contentHeight },
-            isActive: node.id === selectedNodeId,
-            onActivate: onSelectNode,
+            isActive: node.id === activeNodeId,
+            onActivate: handleNodeActivate,
             onContextMenu: handleNodeContextMenu,
             onContentChange: handleStickyNoteContentChange,
             onAutoHeightChange: handleStickyNoteAutoHeightChange,
@@ -1131,7 +1208,7 @@ export function Siteboard({
           position: stickyPosition,
           width: contentWidth,
           height: nodeHeight,
-          selected: node.id === selectedNodeId,
+          selected: selectedNodeIdSet.has(node.id),
           measured: rfMeasured[node.id],
           data: nodeData as unknown as Record<string, unknown>,
         };
@@ -1145,9 +1222,9 @@ export function Siteboard({
         const nodeData: TextFlowNodeData = {
           nodeProps: {
             node: { ...node, x: 0, y: 0, width: contentWidth, height: contentHeight } as TextNode,
-            isActive: node.id === selectedNodeId,
+            isActive: node.id === activeNodeId,
             isEditing: editingTextNodeId === node.id,
-            onActivate: onSelectNode,
+            onActivate: handleNodeActivate,
             onContextMenu: handleNodeContextMenu,
             onStartEditing: handleTextNodeStartEditing,
             onStopEditing: handleTextNodeStopEditing,
@@ -1163,7 +1240,7 @@ export function Siteboard({
           position: textPosition,
           width: contentWidth,
           height: contentHeight,
-          selected: node.id === selectedNodeId,
+          selected: selectedNodeIdSet.has(node.id),
           measured: rfMeasured[node.id],
           data: nodeData as unknown as Record<string, unknown>,
         };
@@ -1179,7 +1256,7 @@ export function Siteboard({
         nodeProps: {
           // isStickyNoteNode の早期 return 後に WebPageNode と確定しているが spread で型が広がるため cast
           node: { ...node, x: 0, y: 0 } as WebPageNode,
-          isActive: node.id === selectedNodeId,
+          isActive: node.id === activeNodeId,
           title: node.title,
           displayWidth: contentWidth,
           displayHeight: contentHeight,
@@ -1192,7 +1269,7 @@ export function Siteboard({
           getZoom,
           onGoBack: handleGoBack,
           onGoForward: handleGoForward,
-          onActivate: onSelectNode,
+          onActivate: handleNodeActivate,
           onReload: handleReloadWebNode,
           onPinUrl: handlePinWebNodeUrl,
           onContextMenu: handleNodeContextMenu,
@@ -1228,7 +1305,7 @@ export function Siteboard({
         width: contentWidth,
         height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, uiZoom),
         dragHandle: '.node-drag-handle',
-        selected: node.id === selectedNodeId,
+        selected: selectedNodeIdSet.has(node.id),
         measured: rfMeasured[node.id],
         data: nodeData as unknown as Record<string, unknown>,
       };
@@ -1237,7 +1314,8 @@ export function Siteboard({
     nodes,
     draggingNodePositions,
     rfMeasured,
-    selectedNodeId,
+    activeNodeId,
+    selectedNodeIdSet,
     hideCompactControls,
     stickyResizing,
     textResizing,
@@ -1247,7 +1325,7 @@ export function Siteboard({
     screenshotUrls,
     navStates,
     positionCorrectionAnimations,
-    onSelectNode,
+    handleNodeActivate,
     handleNodeContextMenu,
     handleStickyNoteResize,
     handleStickyNoteResizeEnd,
@@ -1324,6 +1402,8 @@ export function Siteboard({
           selectionOnDrag={true}
           // Figma 同様、選択範囲がノードに少しでも重なれば選択対象に含める
           selectionMode={SelectionMode.Partial}
+          // Figma 同様、Shift で複数選択を切り替える（macOS の Meta デフォルトを上書き）
+          multiSelectionKeyCode="Shift"
           nodeDragThreshold={3}
           zoomOnScroll={true}
           zoomOnPinch={true}

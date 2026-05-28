@@ -38,7 +38,8 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
   // inProgress だけ取得し、ホバー判定は自前で持つ。
   const connectionInProgress = useConnection((conn) => conn.inProgress);
   const [isPointerOver, setIsPointerOver] = useState(false);
-  const showHandles = selected || (connectionInProgress && isPointerOver);
+  // 複数選択中は接続ハンドル・リサイズハンドルを出さない（単独選択時のみ表示）
+  const showHandles = nodeProps.isActive || (connectionInProgress && isPointerOver);
 
   const handlePointerEnter = useCallback(() => setIsPointerOver(true), []);
   const handlePointerLeave = useCallback(() => setIsPointerOver(false), []);
@@ -220,7 +221,7 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
       </Handle>
 
       {selected && <SelectionFrameOverlay />}
-      {selected && (
+      {nodeProps.isActive && (
         <>
           {resizeLineConfigs.map(({ key, position, resizeDirection, className }) => (
             <NodeResizeControl

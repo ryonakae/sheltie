@@ -8,11 +8,12 @@ import type { BoardNode } from '@/types';
 interface UseSiteboardNodeRuntimeParams {
   nodes: BoardNode[];
   webviewLabelsByNodeId: Record<string, string>;
-  selectedNodeId: string | null;
-  onClearSelection: () => void;
+  selectedNodeIds: string[];
+  onDeselectNode: (nodeId: string) => void;
   updateWebNodeUrl: (nodeId: string, url: string, title: string) => void;
   updateNodeTitle: (nodeId: string, title: string) => void;
   removeNode: (nodeId: string) => void;
+  removeNodes: (nodeIds: string[]) => void;
   setWebNodeWebviewLabel: (nodeId: string, label: string) => void;
   clearWebNodeWebviewLabel: (nodeId: string) => void;
   setWebNodeUrl: (nodeId: string, url: string) => void;
@@ -35,11 +36,12 @@ interface NavigationRuntimeEntry {
 export function useSiteboardNodeRuntime({
   nodes,
   webviewLabelsByNodeId,
-  selectedNodeId,
-  onClearSelection,
+  selectedNodeIds,
+  onDeselectNode,
   updateWebNodeUrl,
   updateNodeTitle,
   removeNode,
+  removeNodes,
   setWebNodeWebviewLabel,
   clearWebNodeWebviewLabel,
   setWebNodeUrl,
@@ -323,14 +325,30 @@ export function useSiteboardNodeRuntime({
 
   const handleRemoveNode = useCallback(
     (nodeId: string) => {
-      if (selectedNodeId === nodeId) {
-        onClearSelection();
+      if (selectedNodeIds.includes(nodeId)) {
+        onDeselectNode(nodeId);
       }
       removeNavigationState(nodeId);
       clearNodeRuntime(nodeId);
       removeNode(nodeId);
     },
-    [clearNodeRuntime, onClearSelection, removeNavigationState, removeNode, selectedNodeId],
+    [clearNodeRuntime, onDeselectNode, removeNavigationState, removeNode, selectedNodeIds],
+  );
+
+  // 複数ノード削除（Undo 履歴を 1 ステップにまとめる）
+  const handleRemoveNodes = useCallback(
+    (nodeIds: string[]) => {
+      if (nodeIds.length === 0) return;
+      for (const nodeId of nodeIds) {
+        if (selectedNodeIds.includes(nodeId)) {
+          onDeselectNode(nodeId);
+        }
+        removeNavigationState(nodeId);
+        clearNodeRuntime(nodeId);
+      }
+      removeNodes(nodeIds);
+    },
+    [clearNodeRuntime, onDeselectNode, removeNavigationState, removeNodes, selectedNodeIds],
   );
 
   const handleReloadWebNode = useCallback(
@@ -412,6 +430,7 @@ export function useSiteboardNodeRuntime({
     handlePinWebNodeUrl,
     handleReloadWebNode,
     handleRemoveNode,
+    handleRemoveNodes,
     handleResizePreset,
     handleScrollEnded,
     handleStickyNoteAutoHeightChange,

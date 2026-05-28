@@ -25,7 +25,7 @@ export interface WebPageNodeProps {
   getZoom: () => number;
   onGoBack: (nodeId: string) => void;
   onGoForward: (nodeId: string) => void;
-  onActivate: (nodeId: string) => void;
+  onActivate: (nodeId: string, addToSelection: boolean) => void;
   onReload: (nodeId: string) => void;
   onPinUrl: (nodeId: string) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
@@ -104,7 +104,10 @@ export const WebPageNode = memo(function WebPageNode({
     onScrollEnded,
   });
 
-  const handleActivate = useCallback(() => onActivate(node.id), [node.id, onActivate]);
+  const handleActivate = useCallback(
+    (e: React.MouseEvent) => onActivate(node.id, e.shiftKey),
+    [node.id, onActivate],
+  );
   useLayoutEffect(() => {
     const frameEl = frameRef.current;
     if (!frameEl) return;

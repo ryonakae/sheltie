@@ -60,8 +60,9 @@
   - Framer Motion `layout` prop は使用しない（React Flow 位置管理との競合）
   - ノード内部コンテンツが fixed width/height を持つと width リサイズ後の折り返しと自動高さが破綻するため、`flex` で内部を伸縮可能にする
 - **React Flow controlled mode 必須設定**:
-  - `flowNodes` 構築時に `selected: node.id === selectedNodeId` を必ず明示的に設定（無いと選択連動のリサイズ UI が表示されない）
+  - `flowNodes` 構築時に `selected: selectedNodeIdSet.has(node.id)` を必ず明示的に設定（無いと選択連動の枠表示や複数選択ドラッグが動かない）。リサイズハンドルなど単独選択時のみ表示したい UI は、`selected` ではなく `isActive`（`selectedNodeIds.length === 1` の場合のみ true）でゲートする
   - `onNodesChange` の `dimensions` 変更を追跡して `rfMeasured` state に保存し、`flowNodes` の `measured` プロパティに付与（未初期化状態の防止）
+  - `onNodesChange` の `select` 変更は複数同時に届くため、Set でまとめて反映してから配列に戻す。React Flow の Shift+クリック / ドラッグ範囲選択も全てこの経路で多選択になる
 - **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizeControl` を 8 個明示配置する。可視の選択枠は共通 `SelectionFrameOverlay` で描き、line 4 本は上下左右リサイズ用の不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準に置く。見えている上下バー面とタイトル/操作 UI はどちらも `WebPageNode` 本体内に描く。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
   - リサイズ開始時に `onResizeStart` で `prepareInteractionStart('resize', nodeId)` を fire-and-forget で実行し、Webview スクリーンショット準備とスクリーンショット表示を非同期で開始
   - `onResize` で毎フレームの寸法を `webPageResizing` state に保持し、`flowNodes` useMemo で優先適用（スナップバック防止）
@@ -133,8 +134,15 @@
 
 ## タイトルバー制御
 
+- document window は `TitleBarStyle::Visible` を使う（標準の macOS タイトルバー）。
 - Tauri v2 では `data-tauri-drag-region` を利用する。
 - ドラッグ可能領域は要素ごとに明示する（暗黙継承を前提にしない）。
+
+## テーマ切り替え
+
+- ウィンドウ内にテーマボタンは置かない。テーマ切り替えはアプリメニュー `Siteboard > Settings > Theme` の Light / Dark / System から行う（macOS のみ。`lib.rs` の `insert_settings_submenu`）。
+- 各項目は `CheckMenuItem` で、現在モードにチェックを付ける。クリック時は `update_theme_check_state` で他項目のチェックを外し、`theme-command` イベントを focused window へ emit する。
+- フロント側は `setupThemeListener` で `theme-command` を受信し、`useThemeStore.setMode` を呼ぶ（`src/store/theme-store.ts`）。
 
 ## ノード操作 UI
 

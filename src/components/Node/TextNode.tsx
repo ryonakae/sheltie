@@ -11,7 +11,7 @@ export interface TextNodeProps {
   node: TextNodeModel;
   isActive: boolean;
   isEditing: boolean;
-  onActivate: (nodeId: string) => void;
+  onActivate: (nodeId: string, addToSelection: boolean) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
   onStartEditing: (nodeId: string) => void;
   onStopEditing: (nodeId: string, tiptapContent: object) => void;
@@ -146,7 +146,7 @@ export const TextNode = memo(function TextNode({
     <div
       className={twMerge('relative size-full', isEditing ? 'nodrag cursor-text' : 'cursor-default')}
       data-node-id={node.id}
-      onMouseDown={() => onActivate(node.id)}
+      onMouseDown={(e) => onActivate(node.id, e.shiftKey)}
       onDoubleClick={handleDoubleClick}
       onContextMenu={(e) => onContextMenu(e, node.id)}
       onKeyDown={handleKeyDown}

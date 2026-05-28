@@ -49,8 +49,9 @@
   - 単一 document window の `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `history`, `webviewRuntime`
   - 初期化: `initializeProject`, `markProjectSaved`, `restoreProjectFromLastSaved`
-  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `addStickyNoteNode`, `addTextNode`
-  - ノード更新: `updateNodePosition`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
+  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `removeNodes`, `addStickyNoteNode`, `addTextNode`
+  - ノード更新: `updateNodePosition`, `updateNodePositions`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
+  - 複数操作の集約: `removeNodes` / `updateNodePositions` は複数ノードの削除・位置更新を 1 つの履歴エントリにまとめる。複数選択の一括削除・一括ドラッグ移動はこの経路を通し、Cmd+Z 1 回で全ての変更を巻き戻せるようにする
   - エッジ: `addEdge`, `removeEdges`, `reverseEdge`（`removeNode` 時に関連エッジも自動削除。`reverseEdge` は同方向の重複が既にあれば no-op）
   - 順序/選択: `bringNodeToFront`, `sendNodeToBack`, `bringNodeForward`, `sendNodeBackward`, `pinWebNodeUrl`, `updateViewport`
   - 履歴: `undoProject`, `redoProject`

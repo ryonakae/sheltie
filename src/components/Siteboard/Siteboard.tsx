@@ -1413,6 +1413,7 @@ export function Siteboard({
           // Webview 対策: 仮想化を無効化してすべてのノードをレンダリングする
           onlyRenderVisibleElements={false}
           proOptions={{ hideAttribution: true }}
+          colorMode={isDark ? 'dark' : 'light'}
           className="size-full"
         >
           <Background

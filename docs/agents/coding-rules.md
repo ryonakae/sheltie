@@ -95,10 +95,13 @@
 ### エッジ接続
 
 - **Handle は WebPageFlowNode のみ**に配置。StickyNote / TextNode には Handle を追加しない
-- 4 方向（top, right, bottom, left）に `type="source"` の Handle を常時レンダリングし、`selected` 時のみ `opacity: 1` で表示する（非選択時は `opacity: 0` + `pointerEvents: none`）
-- `connectionMode="loose"` で source 同士の接続を許可し、ドラッグ起点が source、ドロップ先が target として方向が決まる
-- `isValidConnection` で自己接続（`source === target`）を禁止する
-- エッジタイプは `default`（bezier）、終端に `MarkerType.ArrowClosed` の矢印を表示
+- Handle 自身は透明な 16px のヒット領域。視覚的な丸は Handle の子として「外側の辺の中点」に絶対配置する。React Flow の端点計算（非 center モード）は handle の外側の辺を使うため、ここに丸の中心を揃えることで「線の始点 = 丸の中心」が一致する
+- 4 方向（top, right, bottom, left）に `type="source"` の Handle を常時レンダリング。`pointerEvents` は無効化しない（接続ドラッグの target 検出に必要）
+- 丸（子要素）の表示条件: `selected` または「接続ドラッグ中かつこのノードに pointer がある」。前者は React Flow の `selected` prop、後者は `useConnection` の `inProgress` + 自前の `onPointerEnter/Leave` で判定する。`useConnection` の `toNode` は handle 近接時しか更新されないため、ノード本体ホバー検出には使えない
+- `connectionMode="loose"` で source 同士の接続を許可、`isValidConnection` で自己接続を禁止
+- エッジは `components/ReactFlowEdges/ArrowEdge.tsx` のカスタムエッジ。ベジェ path（`BaseEdge`）+ 始点ドット + 終端矢じり（SVG）を自前で描画。色は `selected` で `var(--accent)` / `var(--border)` を出し分け（HeroUI v3 テーマ追従）
+- ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。完成エッジと同じ見た目で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `8/zoom` シフトして ArrowEdge の端点（handle 外側の辺）と一致させる。矢印形状定数は `arrowGeometry.ts` で共有
+- エッジの選択状態は controlled mode のため Siteboard 側で自前同期する（`selectedEdgeIds` Set を `onEdgesChange` の `select` 変更で更新し、`flowEdges` に `selected` を反映）。これを行わないと選択時のスタイル変化が出ない
 - エッジの削除は選択 + `Backspace` / `Delete` キー（`onEdgesChange` で `remove` タイプを処理）
 - エッジの永続化は `Project.edges` / `SiteboardDocumentV2.edges` に保存。Undo/Redo はノードと統合スナップショットで管理
 
@@ -118,6 +121,13 @@
 
 - スタイルは Tailwind CSS v4 を利用する。
 - クラス順序は ESLint/Prettier の整形結果に従う。
+
+### マウスカーソル
+
+- 既定はすべて `default`。ボタン・リンク・ノード・パン・接続ドラッグなどでも `pointer` / `grab` / `crosshair` を出さない。`src/index.css` で HeroUI の `--cursor-interactive` と React Flow の各 cursor を `default` に上書きしている。
+- 例外は 2 つ:
+  - **リサイズハンドル**: React Flow の `.react-flow__resize-control.handle` 系の既定 cursor（`ew/ns/nwse/nesw-resize`）をそのまま維持する。
+  - **テキスト編集中**: StickyNote / TextNode は編集時にコンテナへ `cursor-text` クラスを付与する。新しい編集 UI を追加する場合も同じ方針で明示的に `cursor: text` を付ける。
 
 ## タイトルバー制御
 

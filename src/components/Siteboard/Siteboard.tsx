@@ -7,7 +7,7 @@ import {
   ConnectionMode,
   type Edge,
   type EdgeChange,
-  MarkerType,
+  type EdgeSelectionChange,
   type Node,
   type NodeChange,
   type NodeDimensionChange,
@@ -23,6 +23,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useShallow } from 'zustand/react/shallow';
 
 import { AppButton } from '@/components/Common/AppButton';
+import { ArrowConnectionLine } from '@/components/ReactFlowEdges/ArrowConnectionLine';
+import { EDGE_STROKE_WIDTH } from '@/components/ReactFlowEdges/arrowGeometry';
+import { edgeTypes } from '@/components/ReactFlowEdges/edgeTypes';
 import { nodeTypes } from '@/components/ReactFlowNodes/nodeTypes';
 import type {
   StickyNoteFlowNodeData,
@@ -185,6 +188,9 @@ export function Siteboard({
   const [rfMeasured, setRfMeasured] = useState<Record<string, { width: number; height: number }>>(
     {},
   );
+  // 選択中のエッジ ID。controlled mode では flowEdges.selected を自前で同期しないと
+  // React Flow の選択スタイル（CSS class や custom edge への selected prop）が反映されない
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(() => new Set());
   // 付箋リサイズ中の中間サイズ（controlled mode でのリアルタイム追従用）
   const [stickyResizing, setStickyResizing] = useState<{
     nodeId: string;
@@ -446,12 +452,24 @@ export function Siteboard({
     [addEdgeToStore],
   );
 
-  // エッジ変更: 選択+削除キーでの削除を処理
+  // エッジ変更: 削除キーでの削除と、選択状態のローカル同期を処理
+  // （controlled mode では select 変更を反映しないと React Flow の selected 表示が動かない）
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       const removeIds = changes.filter((c) => c.type === 'remove').map((c) => c.id);
       if (removeIds.length > 0) {
         removeEdges(removeIds);
+      }
+      const selectChanges = changes.filter((c): c is EdgeSelectionChange => c.type === 'select');
+      if (selectChanges.length > 0) {
+        setSelectedEdgeIds((prev) => {
+          const next = new Set(prev);
+          for (const change of selectChanges) {
+            if (change.selected) next.add(change.id);
+            else next.delete(change.id);
+          }
+          return next;
+        });
       }
     },
     [removeEdges],
@@ -462,11 +480,11 @@ export function Siteboard({
     return connection.source !== connection.target;
   }, []);
 
-  // エッジのデフォルト設定: bezier + 終端矢印
+  // エッジのデフォルト設定: ArrowEdge（edgeTypes.default）が矢じりを自前で描くため markerEnd は持たない
   const defaultEdgeOptions = useMemo(
     () => ({
       type: 'default' as const,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
+      style: { strokeWidth: EDGE_STROKE_WIDTH },
     }),
     [],
   );
@@ -480,8 +498,9 @@ export function Siteboard({
         sourceHandle: edge.sourceHandle,
         target: edge.target,
         targetHandle: edge.targetHandle,
+        selected: selectedEdgeIds.has(edge.id),
       })),
-    [edges],
+    [edges, selectedEdgeIds],
   );
 
   // ノード変更を処理: ドラッグ中の位置追跡 + dimension 測定結果の保持（ノード初期化に必要）
@@ -1231,6 +1250,8 @@ export function Siteboard({
           nodes={flowNodes}
           edges={flowEdges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          connectionLineComponent={ArrowConnectionLine}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={handleConnect}

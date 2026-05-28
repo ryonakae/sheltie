@@ -34,7 +34,7 @@ export const ArrowEdge = memo(function ArrowEdge({
   });
 
   // HeroUI v3 のテーマ変数を直接参照することで light/dark モードに自動追従する
-  const color = selected ? 'var(--accent)' : 'var(--border)';
+  const color = selected ? 'var(--accent)' : 'var(--color-separator-tertiary)';
   const rotation = ROTATION_BY_POSITION[targetPosition];
 
   return (

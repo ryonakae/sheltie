@@ -1,6 +1,0 @@
-# yaml-language-server: $schema=http://json-schema.org/draft-07/schema#
-# Gemini Code Assist on GitHub の設定
-
-code_review:
-  pull_request_opened:
-    summary: false

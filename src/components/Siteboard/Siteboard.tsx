@@ -16,6 +16,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   type ReactFlowInstance,
+  SelectionMode,
   type Viewport as FlowViewport,
 } from '@xyflow/react';
 import { useReducedMotion } from 'motion/react';
@@ -35,7 +36,6 @@ import type {
 import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
 import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
-import { ThemeToggle } from '@/components/TabBar/ThemeToggle';
 import {
   DRAG_REPOSITION_GAP,
   LOW_ZOOM_HIDE_THRESHOLD,
@@ -1322,6 +1322,8 @@ export function Siteboard({
           panOnDrag={[1]}
           panOnScroll={true}
           selectionOnDrag={true}
+          // Figma 同様、選択範囲がノードに少しでも重なれば選択対象に含める
+          selectionMode={SelectionMode.Partial}
           nodeDragThreshold={3}
           zoomOnScroll={true}
           zoomOnPinch={true}
@@ -1345,14 +1347,6 @@ export function Siteboard({
             onAddStickyNote={onAddStickyNote}
             onAddTextNode={onAddTextNode}
           />
-          <div className="pointer-events-none absolute top-4 right-4 z-20">
-            <div className="pointer-events-auto">
-              <ThemeToggle
-                buttonClassName={FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}
-                tooltipPlacement="left"
-              />
-            </div>
-          </div>
           <div className="pointer-events-none absolute right-4 bottom-4 z-20 flex items-center gap-2">
             <div className="pointer-events-auto">
               <AppButton

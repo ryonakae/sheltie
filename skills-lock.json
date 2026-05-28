@@ -14,6 +14,12 @@
       "skillPath": "skills/heroui-react/SKILL.md",
       "computedHash": "c9e1bb41fbc3cee782faae08bd465ae05cd685a6ed7cc3392464fdf29b3ab467"
     },
+    "react-flow": {
+      "source": "framara/react-flow-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "f3da56cd9a3eeeb6befbbe306f8152847ac7bd60e44de2743592e1ce071ebcc5"
+    },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",

@@ -15,27 +15,60 @@ function getWebviewHandle(label: string): Webview {
   return new Webview(getCurrentWindow(), label, { skip: true });
 }
 
-async function invokeOrNoop(command: string, payload: Record<string, unknown>): Promise<void> {
+function logWebviewWarning(
+  command: string,
+  context: Record<string, unknown>,
+  error: unknown,
+): void {
+  if (!import.meta.env.DEV) return;
+  console.warn(`[webviewApi] ${command} に失敗`, { ...context, error });
+}
+
+function logWebviewCommand(command: string, context: Record<string, unknown>): void {
+  if (!import.meta.env.DEV) return;
+  console.info(`[webviewApi] ${command}`, context);
+}
+
+async function invokeOrWarn(
+  command: string,
+  payload: Record<string, unknown>,
+  context: Record<string, unknown>,
+): Promise<void> {
   try {
     await invoke(command, payload);
-  } catch {
-    // Webview 未作成・既破棄時は no-op
+  } catch (error) {
+    logWebviewWarning(command, context, error);
   }
 }
 
-async function withWebviewHandleOrNoop(
+async function invokeWithFallback<T>(
+  command: string,
+  payload: Record<string, unknown>,
+  fallback: T,
+  context: Record<string, unknown>,
+): Promise<T> {
+  try {
+    return await invoke<T>(command, payload);
+  } catch (error) {
+    logWebviewWarning(command, context, error);
+    return fallback;
+  }
+}
+
+async function withWebviewHandleOrWarn(
   label: string,
+  command: string,
   action: (webview: Webview) => Promise<void>,
 ): Promise<void> {
   try {
     await action(getWebviewHandle(label));
-  } catch {
-    // Webview 未作成・既破棄時は no-op
+  } catch (error) {
+    logWebviewWarning(command, { label }, error);
   }
 }
 
 export const webviewApi = {
-  create: (
+  create: async (
     pageId: string,
     url: string,
     x: number,
@@ -43,8 +76,8 @@ export const webviewApi = {
     width: number,
     height: number,
     zoom: number,
-  ): Promise<string> =>
-    invoke('create_page_webview', {
+  ): Promise<string> => {
+    const payload = {
       pageId,
       url,
       x,
@@ -52,36 +85,54 @@ export const webviewApi = {
       width,
       height,
       zoom,
-    }),
+    };
+    logWebviewCommand('create_page_webview', payload);
+    const label = await invoke<string>('create_page_webview', payload);
+    logWebviewCommand('create_page_webview:resolved', { pageId, label });
+    return label;
+  },
 
-  updateBounds: (
-    pageId: string,
+  updateBounds: async (
+    label: string,
     x: number,
     y: number,
     width: number,
     height: number,
     zoom: number,
-  ): Promise<void> =>
-    invokeOrNoop('update_page_webview_bounds', {
-      pageId,
+  ): Promise<void> => {
+    logWebviewCommand('update_page_webview_bounds', {
+      label,
       x,
       y,
       width,
       height,
       zoom,
-    }),
+    });
+    await invokeOrWarn(
+      'update_page_webview_bounds',
+      {
+        label,
+        x,
+        y,
+        width,
+        height,
+        zoom,
+      },
+      { label },
+    );
+  },
 
   hide: (label: string): Promise<void> =>
-    withWebviewHandleOrNoop(label, (webview) => webview.hide()),
+    withWebviewHandleOrWarn(label, 'hide', (webview) => webview.hide()),
 
   show: (label: string): Promise<void> =>
-    withWebviewHandleOrNoop(label, (webview) => webview.show()),
+    withWebviewHandleOrWarn(label, 'show', (webview) => webview.show()),
 
-  setOpacity: (pageId: string, opacity: number): Promise<void> =>
-    invokeOrNoop('set_page_webview_opacity', { pageId, opacity }),
+  setOpacity: (label: string, opacity: number): Promise<void> =>
+    invokeOrWarn('set_page_webview_opacity', { label, opacity }, { label }),
 
   destroy: (label: string): Promise<void> =>
-    withWebviewHandleOrNoop(label, (webview) => webview.close()),
+    withWebviewHandleOrWarn(label, 'destroy', (webview) => webview.close()),
 
   async hideAll(labels: string[]): Promise<void> {
     await Promise.all(labels.map((label) => this.hide(label)));
@@ -89,7 +140,7 @@ export const webviewApi = {
 
   async updateAllBounds(
     entries: {
-      pageId: string;
+      label: string;
       x: number;
       y: number;
       w: number;
@@ -98,32 +149,39 @@ export const webviewApi = {
     }[],
   ): Promise<void> {
     if (entries.length === 0) return;
-    await invokeOrNoop('batch_update_page_webview_bounds', {
-      entries: entries.map(({ pageId, x, y, w, h, zoom }) => ({
-        pageId,
-        x,
-        y,
-        width: w,
-        height: h,
-        zoom,
-      })),
-    });
+    await invokeOrWarn(
+      'batch_update_page_webview_bounds',
+      {
+        entries: entries.map(({ label, x, y, w, h, zoom }) => ({
+          label,
+          x,
+          y,
+          width: w,
+          height: h,
+          zoom,
+        })),
+      },
+      { labels: entries.map(({ label }) => label) },
+    );
   },
 
   async updateAllPositions(
     entries: {
-      pageId: string;
+      label: string;
       x: number;
       y: number;
     }[],
   ): Promise<void> {
     if (entries.length === 0) return;
-    await invokeOrNoop('batch_update_webview_positions', { entries });
+    await invokeOrWarn(
+      'batch_update_webview_positions',
+      { entries },
+      { labels: entries.map(({ label }) => label) },
+    );
   },
 
   async showAllWithBounds(
     entries: {
-      pageId: string;
       label: string;
       x: number;
       y: number;
@@ -133,60 +191,69 @@ export const webviewApi = {
     }[],
   ): Promise<void> {
     await Promise.all(
-      entries.map(async ({ pageId, label, x, y, w, h, zoom }) => {
-        await this.updateBounds(pageId, x, y, w, h, zoom);
+      entries.map(async ({ label, x, y, w, h, zoom }) => {
+        await this.updateBounds(label, x, y, w, h, zoom);
         await this.show(label);
       }),
     );
   },
 
-  goBack: (pageId: string): Promise<void> => invokeOrNoop('go_back_page_webview', { pageId }),
+  goBack: (label: string): Promise<void> =>
+    invokeOrWarn('go_back_page_webview', { label }, { label }),
 
-  goForward: (pageId: string): Promise<void> => invokeOrNoop('go_forward_page_webview', { pageId }),
+  goForward: (label: string): Promise<void> =>
+    invokeOrWarn('go_forward_page_webview', { label }, { label }),
 
-  async getNavigationState(pageId: string): Promise<NavigationState> {
-    try {
-      return await invoke<NavigationState>('get_navigation_state_page_webview', { pageId });
-    } catch {
-      return { can_go_back: false, can_go_forward: false };
-    }
-  },
+  getNavigationState: (label: string): Promise<NavigationState> =>
+    invokeWithFallback<NavigationState>(
+      'get_navigation_state_page_webview',
+      { label },
+      { can_go_back: false, can_go_forward: false },
+      { label },
+    ),
 
-  reload: (pageId: string, url: string): Promise<void> =>
-    invokeOrNoop('reload_page_webview', { pageId, url }),
+  reload: (label: string, url: string): Promise<void> =>
+    invokeOrWarn('reload_page_webview', { label, url }, { label }),
 
-  async captureScreenshot(pageId: string): Promise<string | null> {
-    try {
-      return await invoke<string>('capture_webview_screenshot', { pageId });
-    } catch {
-      return null;
-    }
-  },
+  captureScreenshot: (label: string): Promise<string | null> =>
+    invokeWithFallback<string | null>('capture_webview_screenshot', { label }, null, { label }),
 
-  async saveScreenshot(pageId: string, projectId: string): Promise<string | null> {
-    try {
-      return await invoke<string>('save_webview_screenshot', { pageId, projectId });
-    } catch {
-      return null;
-    }
+  async saveScreenshot(
+    label: string,
+    pageId: string,
+    projectId: string,
+    options?: { hideAfterSnapshotRequest?: boolean },
+  ): Promise<string | null> {
+    return invokeWithFallback<string | null>(
+      'save_webview_screenshot',
+      {
+        label,
+        pageId,
+        projectId,
+        hideAfterSnapshotRequest: options?.hideAfterSnapshotRequest,
+      },
+      null,
+      { label, pageId, projectId },
+    );
   },
 
   async getExistingScreenshotPaths(
     projectId: string,
     pageIds: string[],
   ): Promise<Array<[string, string]>> {
-    try {
-      return await invoke<Array<[string, string]>>('get_existing_screenshot_paths', {
+    return invokeWithFallback<Array<[string, string]>>(
+      'get_existing_screenshot_paths',
+      {
         projectId,
         pageIds,
-      });
-    } catch {
-      return [];
-    }
+      },
+      [],
+      { projectId, pageIds },
+    );
   },
 
   deleteScreenshot: (pageId: string, projectId: string): Promise<void> =>
-    invokeOrNoop('delete_screenshot', { pageId, projectId }),
+    invokeOrWarn('delete_screenshot', { pageId, projectId }, { pageId, projectId }),
 
   onPageNavigated: (pageId: string, callback: (payload: { url: string }) => void) =>
     listen<{ url: string }>(`page-navigated-${pageId}`, (event) => callback(event.payload)),

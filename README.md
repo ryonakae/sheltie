@@ -93,7 +93,7 @@ shared/
 Tauri v2 のセキュリティベストプラクティスを適用：
 - すべての IPC は Rust コマンド経由でサンドボックス化
 - `src-tauri/capabilities/default.json` で権限を細密制御
-- WebView は `titleBarStyle: Overlay` で OS 制御領域を尊重
+- macOS の document window は native tabs を使い、OS 標準の title / tab bar を表示する
 
 ## 開発ガイド
 

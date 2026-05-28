@@ -1,12 +1,18 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-import type { ProjectState } from '@/types';
+import type { WindowContext } from '@/lib/tauri-bridge/types';
 
 export const api = {
-  loadProjectState: (): Promise<ProjectState> => invoke('load_project_state'),
+  loadWindowContext: (): Promise<WindowContext> => invoke('load_window_context'),
 
-  saveProjectState: (state: ProjectState): Promise<void> => invoke('save_project_state', { state }),
+  attachPendingDocumentTab: (): Promise<void> => invoke('attach_pending_document_tab'),
+
+  newDocumentTab: (): Promise<void> => invoke('new_document_tab'),
+
+  newDocumentWindow: (): Promise<void> => invoke('new_document_window'),
+
+  openDocumentWindow: (path: string): Promise<void> => invoke('open_document_window', { path }),
 
   loadProjectFile: (path: string): Promise<string> => invoke('load_project_file', { path }),
 
@@ -20,5 +26,10 @@ export const api = {
     });
   },
 
-  closeReady: (state: ProjectState): Promise<void> => invoke('close_ready', { state }),
+  completeAppExit: (windowLabels: string[]): Promise<void> =>
+    invoke('complete_app_exit', { windowLabels }),
+
+  abortAppExit: (): Promise<void> => invoke('abort_app_exit'),
+
+  closeReady: (): Promise<void> => invoke('close_ready'),
 };

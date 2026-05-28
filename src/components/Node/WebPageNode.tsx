@@ -1,17 +1,16 @@
 import { useReducedMotion } from 'motion/react';
 import { memo, useCallback, useLayoutEffect, useRef } from 'react';
 
-import { NodeResizeHandle } from '@/components/Node/NodeResizeHandle';
 import { WebPageNodeBottomBar } from '@/components/Node/WebPageNodeBottomBar';
 import { WebPageNodeTopBar } from '@/components/Node/WebPageNodeTopBar';
 import { WebPageNodeUrlForm } from '@/components/Node/WebPageNodeUrlForm';
-import type { NodeResizeDirection } from '@/hooks/siteboard/types';
+import { WEB_PAGE_BOTTOM_BAR_HEIGHT, WEB_PAGE_TOP_BAR_HEIGHT } from '@/constants';
 import { useWebPageWebviewLifecycle } from '@/hooks/siteboard/useWebPageWebviewLifecycle';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { isNodeEmpty, isNodeMoved } from '@/types';
 import type { DisplayMode, WebPageNode as WebPageNodeModel } from '@/types';
 
-interface WebPageNodeProps {
+export interface WebPageNodeProps {
   node: WebPageNodeModel;
   isActive: boolean;
   title: string;
@@ -30,8 +29,6 @@ interface WebPageNodeProps {
   onReload: (nodeId: string) => void;
   onPinUrl: (nodeId: string) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
-  onDragStart: (e: React.MouseEvent, nodeId: string) => void;
-  onResizeStart: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
   onResizePreset: (nodeId: string, width: number, height: number) => void;
   onNavigated: (nodeId: string, url: string, title: string) => void;
   onTitleUpdated: (nodeId: string, title: string) => void;
@@ -41,6 +38,7 @@ interface WebPageNodeProps {
   onScreenshotPresented: (nodeId: string, url: string) => void;
   onScrollEnded: (nodeId: string) => void;
   onUrlSubmit: (nodeId: string, url: string) => void;
+  isEditingUrl: boolean;
   positionCorrectionAnimationToken: number | null;
   positionCorrectionFromX: number | null;
   positionCorrectionFromY: number | null;
@@ -51,7 +49,6 @@ interface WebPageNodeProps {
 
 export const WebPageNode = memo(function WebPageNode({
   node,
-  isActive,
   title,
   displayWidth,
   displayHeight,
@@ -68,8 +65,6 @@ export const WebPageNode = memo(function WebPageNode({
   onReload,
   onPinUrl,
   onContextMenu,
-  onDragStart,
-  onResizeStart,
   onResizePreset,
   onNavigated,
   onTitleUpdated,
@@ -79,6 +74,7 @@ export const WebPageNode = memo(function WebPageNode({
   onScreenshotPresented,
   onScrollEnded,
   onUrlSubmit,
+  isEditingUrl,
   positionCorrectionAnimationToken,
   positionCorrectionFromX,
   positionCorrectionFromY,
@@ -109,32 +105,6 @@ export const WebPageNode = memo(function WebPageNode({
   });
 
   const handleActivate = useCallback(() => onActivate(node.id), [node.id, onActivate]);
-  const handleGoBackBound = useCallback(() => onGoBack(node.id), [node.id, onGoBack]);
-  const handleGoForwardBound = useCallback(() => onGoForward(node.id), [node.id, onGoForward]);
-  const handleReloadBound = useCallback(() => onReload(node.id), [node.id, onReload]);
-  const handlePinUrlBound = useCallback(() => onPinUrl(node.id), [node.id, onPinUrl]);
-  const handleDragStartBound = useCallback(
-    (e: React.MouseEvent) => onDragStart(e, node.id),
-    [node.id, onDragStart],
-  );
-  const handleResizePresetBound = useCallback(
-    (width: number, height: number) => onResizePreset(node.id, width, height),
-    [node.id, onResizePreset],
-  );
-  const handleTitleBarMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      handleDragStartBound(e);
-    },
-    [handleDragStartBound],
-  );
-  const handleResizeStart = useCallback(
-    (e: React.MouseEvent, direction: NodeResizeDirection) => {
-      handleActivate();
-      onResizeStart(e, node.id, direction);
-    },
-    [handleActivate, node.id, onResizeStart],
-  );
-
   useLayoutEffect(() => {
     const frameEl = frameRef.current;
     if (!frameEl) return;
@@ -152,9 +122,6 @@ export const WebPageNode = memo(function WebPageNode({
     ) {
       return;
     }
-
-    frameEl.style.left = `${positionCorrectionToX}px`;
-    frameEl.style.top = `${positionCorrectionToY}px`;
 
     const offsetX = positionCorrectionFromX - positionCorrectionToX;
     const offsetY = positionCorrectionFromY - positionCorrectionToY;
@@ -217,45 +184,43 @@ export const WebPageNode = memo(function WebPageNode({
   return (
     <div
       ref={frameRef}
-      className="absolute flex flex-col shadow-lg outline-offset-0"
+      className="relative flex size-full flex-col overflow-hidden shadow-lg outline-offset-0"
       style={{
-        left: node.x,
-        top: node.y,
-        width: node.width,
         borderRadius: zoomPx(16),
-        outline: isActive
-          ? `${zoomPx(2)} solid var(--color-focus)`
-          : `${zoomPx(1)} solid var(--color-border)`,
+        outline: `${zoomPx(1)} solid var(--color-border)`,
       }}
       data-node-id={node.id}
       data-display-mode={displayMode}
       onMouseDown={handleActivate}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
-      <WebPageNodeTopBar
-        title={title}
-        url={node.url}
-        isMoved={isNodeMoved(node)}
-        canGoBack={isNodeEmpty(node) ? false : canGoBack}
-        canGoForward={isNodeEmpty(node) ? false : canGoForward}
-        onGoBack={isNodeEmpty(node) ? undefined : handleGoBackBound}
-        onGoForward={isNodeEmpty(node) ? undefined : handleGoForwardBound}
-        onReload={isNodeEmpty(node) ? undefined : handleReloadBound}
-        onPinUrl={isNodeMoved(node) ? handlePinUrlBound : undefined}
-        hideNavigationControls={hideTopNavControls}
-        onMouseDown={handleTitleBarMouseDown}
-      />
+      <div
+        className="node-drag-handle shrink-0 overflow-hidden bg-default"
+        style={{
+          height: zoomPx(WEB_PAGE_TOP_BAR_HEIGHT),
+          borderBottom: `${zoomPx(1)} solid var(--color-border)`,
+        }}
+      >
+        <WebPageNodeTopBar
+          title={title}
+          url={node.url}
+          isMoved={isNodeMoved(node)}
+          canGoBack={isNodeEmpty(node) ? false : canGoBack}
+          canGoForward={isNodeEmpty(node) ? false : canGoForward}
+          onGoBack={isNodeEmpty(node) ? undefined : () => onGoBack(node.id)}
+          onGoForward={isNodeEmpty(node) ? undefined : () => onGoForward(node.id)}
+          onReload={isNodeEmpty(node) ? undefined : () => onReload(node.id)}
+          onPinUrl={isNodeMoved(node) ? () => onPinUrl(node.id) : undefined}
+          hideNavigationControls={hideTopNavControls}
+        />
+      </div>
 
       <div
         ref={placeholderRef}
         data-webview-placeholder
-        className="relative rounded-none bg-background"
-        style={{
-          width: node.width,
-          height: node.height,
-        }}
+        className="relative w-full flex-1 rounded-none bg-background"
       >
-        {isNodeEmpty(node) ? (
+        {isNodeEmpty(node) || isEditingUrl ? (
           <WebPageNodeUrlForm onSubmit={(url) => onUrlSubmit(node.id, url)} />
         ) : (
           screenshotUrl && (
@@ -271,16 +236,20 @@ export const WebPageNode = memo(function WebPageNode({
         )}
       </div>
 
-      <WebPageNodeBottomBar
-        width={displayWidth}
-        height={displayHeight}
-        hidePresetControls={hideBottomPresetControls}
-        onResizePreset={handleResizePresetBound}
-      />
-
-      {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as NodeResizeDirection[]).map((direction) => (
-        <NodeResizeHandle key={direction} direction={direction} onMouseDown={handleResizeStart} />
-      ))}
+      <div
+        className="node-drag-handle shrink-0 overflow-hidden bg-default"
+        style={{
+          height: zoomPx(WEB_PAGE_BOTTOM_BAR_HEIGHT),
+          borderTop: `${zoomPx(1)} solid var(--color-border)`,
+        }}
+      >
+        <WebPageNodeBottomBar
+          width={displayWidth}
+          height={displayHeight}
+          hidePresetControls={hideBottomPresetControls}
+          onResizePreset={(width, height) => onResizePreset(node.id, width, height)}
+        />
+      </div>
     </div>
   );
 });

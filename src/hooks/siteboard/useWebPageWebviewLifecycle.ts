@@ -19,6 +19,35 @@ function scheduleWebviewDestroy(nodeId: string, label: string): Promise<void> {
   return destroyPromise;
 }
 
+function roundDebugValue(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+function serializeRect(rect: DOMRect | null) {
+  if (!rect) return null;
+  return {
+    left: roundDebugValue(rect.left),
+    top: roundDebugValue(rect.top),
+    width: roundDebugValue(rect.width),
+    height: roundDebugValue(rect.height),
+    right: roundDebugValue(rect.right),
+    bottom: roundDebugValue(rect.bottom),
+  };
+}
+
+function readCanvasZoomDebugValue(element: HTMLElement | null): string | null {
+  if (!element) return null;
+  const container = element.closest('[data-siteboard-container]') as HTMLElement | null;
+  if (!container) return null;
+  const computedValue = window.getComputedStyle(container).getPropertyValue('--canvas-zoom').trim();
+  return computedValue || container.style.getPropertyValue('--canvas-zoom') || null;
+}
+
+function logWebviewLifecycleDebug(message: string, details: Record<string, unknown>): void {
+  if (!import.meta.env.DEV) return;
+  console.info(`[webview-layout][lifecycle] ${message}`, details);
+}
+
 interface UseWebPageWebviewLifecycleParams {
   nodeId: string;
   url: string;
@@ -59,7 +88,7 @@ export function useWebPageWebviewLifecycle({
 
   useEffect(() => {
     requestedUrlRef.current = url;
-  }, [url]);
+  }, [nodeId, url]);
 
   useEffect(() => {
     const placeholder = placeholderRef.current;
@@ -86,6 +115,18 @@ export function useWebPageWebviewLifecycle({
         }
 
         const rect = placeholder.getBoundingClientRect();
+        logWebviewLifecycleDebug('create:start', {
+          nodeId,
+          url: initialUrl,
+          zoom: roundDebugValue(getZoom()),
+          canvasZoom: readCanvasZoomDebugValue(placeholder),
+          placeholderRect: serializeRect(rect),
+          wrapperRect: serializeRect(
+            (
+              placeholder.closest('[data-node-id]') as HTMLElement | null
+            )?.getBoundingClientRect() ?? null,
+          ),
+        });
         const label = await webviewApi.create(
           nodeId,
           initialUrl,
@@ -109,10 +150,27 @@ export function useWebPageWebviewLifecycle({
         runtimeUrlRef.current = initialUrl;
         isCreatingRef.current = false;
         isFirstTitleRef.current = true;
+        logWebviewLifecycleDebug('create:success', {
+          nodeId,
+          label,
+          url: initialUrl,
+        });
 
         const currentRect = placeholder.getBoundingClientRect();
-        void webviewApi.updateBounds(
+        logWebviewLifecycleDebug('create:initial-updateBounds', {
           nodeId,
+          label,
+          zoom: roundDebugValue(getZoom()),
+          canvasZoom: readCanvasZoomDebugValue(placeholder),
+          placeholderRect: serializeRect(currentRect),
+          wrapperRect: serializeRect(
+            (
+              placeholder.closest('[data-node-id]') as HTMLElement | null
+            )?.getBoundingClientRect() ?? null,
+          ),
+        });
+        void webviewApi.updateBounds(
+          label,
           currentRect.left,
           currentRect.top,
           currentRect.width,
@@ -141,6 +199,10 @@ export function useWebPageWebviewLifecycle({
 
       const label = webviewLabelRef.current;
       if (label) {
+        logWebviewLifecycleDebug('destroy:schedule', {
+          nodeId,
+          label,
+        });
         void scheduleWebviewDestroy(nodeId, label);
       }
       webviewLabelRef.current = null;
@@ -174,11 +236,17 @@ export function useWebPageWebviewLifecycle({
   }, [nodeId, onNavigated, onScrollEnded, onTitleUpdated, onWebviewLoaded]);
 
   useEffect(() => {
-    if (!url || !webviewLabelRef.current) return;
+    const label = webviewLabelRef.current;
+    if (!url || !label) return;
     if (runtimeUrlRef.current === url) return;
 
     runtimeUrlRef.current = url;
-    void webviewApi.reload(nodeId, url);
+    logWebviewLifecycleDebug('reload', {
+      nodeId,
+      label,
+      url,
+    });
+    void webviewApi.reload(label, url);
   }, [nodeId, url]);
 
   useEffect(() => {

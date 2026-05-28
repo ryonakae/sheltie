@@ -1,11 +1,8 @@
 import { message, open, save } from '@tauri-apps/plugin-dialog';
 
-import {
-  createProjectDocument,
-  parseProjectDocument,
-  serializeProjectDocument,
-} from '@/lib/project-document';
-import { api, type FileCommand } from '@/lib/tauri-bridge';
+import { getProjectDisplayName } from '@/lib/project-display-name';
+import { createProjectDocument, serializeProjectDocument } from '@/lib/project-document';
+import { api, type FileCommand, type SaveProjectStatus } from '@/lib/tauri-bridge';
 import { useProjectStore } from '@/store/tab-store';
 import type { Project } from '@/types';
 
@@ -13,17 +10,11 @@ const SITEBOARD_EXTENSION = '.siteboard';
 let inFlightCommand: Promise<void> = Promise.resolve();
 
 export type SaveProjectResult =
-  | { status: 'saved'; filePath: string }
-  | { status: 'cancelled' }
-  | { status: 'error' };
+  | { status: Extract<SaveProjectStatus, 'saved'>; filePath: string }
+  | { status: Exclude<SaveProjectStatus, 'saved'> };
 
-function getProjectById(projectId: string): Project | undefined {
-  return useProjectStore.getState().projects.find((project) => project.id === projectId);
-}
-
-function getActiveProject(): Project | undefined {
-  const { activeId } = useProjectStore.getState();
-  return getProjectById(activeId);
+function getProject(): Project | null {
+  return useProjectStore.getState().project;
 }
 
 function normalizeSiteboardPath(path: string): string {
@@ -45,16 +36,7 @@ function sanitizeFileName(name: string): string {
     .join('')
     .replace(/\s+/g, ' ')
     .trim();
-  return cleaned || 'untitled';
-}
-
-function findProjectByFilePath(filePath: string): Project | undefined {
-  const normalizedPath = normalizeSiteboardPath(filePath);
-  return useProjectStore
-    .getState()
-    .projects.find(
-      (project) => project.filePath && normalizeSiteboardPath(project.filePath) === normalizedPath,
-    );
+  return cleaned || '名称未設定';
 }
 
 function enqueueFileOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -89,26 +71,33 @@ async function runOpenProjectFromDialog(): Promise<void> {
 
   if (!selected || Array.isArray(selected)) return;
 
-  const existingProject = findProjectByFilePath(selected);
-  if (existingProject) {
-    useProjectStore.getState().openProject(existingProject.id);
-    return;
-  }
-
   try {
-    const contents = await api.loadProjectFile(selected);
-    const document = parseProjectDocument(contents);
-    useProjectStore.getState().importProjectFromFile(document, normalizeSiteboardPath(selected));
+    await api.openDocumentWindow(normalizeSiteboardPath(selected));
   } catch (error) {
     await showError(error instanceof Error ? error.message : 'ファイルを開けませんでした');
   }
 }
 
-async function runSaveProjectById(
-  projectId: string,
+async function runNewDocumentTab(): Promise<void> {
+  try {
+    await api.newDocumentTab();
+  } catch (error) {
+    await showError(error instanceof Error ? error.message : '新しいタブを開けませんでした');
+  }
+}
+
+async function runNewDocumentWindow(): Promise<void> {
+  try {
+    await api.newDocumentWindow();
+  } catch (error) {
+    await showError(error instanceof Error ? error.message : '新しいウインドウを開けませんでした');
+  }
+}
+
+async function runSaveCurrentProject(
   options: { saveAs?: boolean } = {},
 ): Promise<SaveProjectResult> {
-  const project = getProjectById(projectId);
+  const project = getProject();
   if (!project) {
     return { status: 'error' };
   }
@@ -117,7 +106,8 @@ async function runSaveProjectById(
   if (options.saveAs || !targetPath) {
     const selectedPath = await save({
       title: options.saveAs ? 'Save Siteboard Project As' : 'Save Siteboard Project',
-      defaultPath: targetPath ?? `${sanitizeFileName(project.title)}${SITEBOARD_EXTENSION}`,
+      defaultPath:
+        targetPath ?? `${sanitizeFileName(getProjectDisplayName(project))}${SITEBOARD_EXTENSION}`,
       filters: [{ name: 'Siteboard Project', extensions: ['siteboard'] }],
     });
 
@@ -129,21 +119,7 @@ async function runSaveProjectById(
   }
 
   const normalizedTargetPath = normalizeSiteboardPath(targetPath);
-  const conflictingProject = useProjectStore
-    .getState()
-    .projects.find(
-      (candidate) =>
-        candidate.id !== project.id &&
-        candidate.filePath &&
-        normalizeSiteboardPath(candidate.filePath) === normalizedTargetPath,
-    );
-
-  if (conflictingProject) {
-    await showError('別のプロジェクトが同じ .siteboard ファイルを使用中です');
-    return { status: 'error' };
-  }
-
-  const latestProject = getProjectById(projectId);
+  const latestProject = getProject();
   if (!latestProject) {
     return { status: 'error' };
   }
@@ -155,7 +131,7 @@ async function runSaveProjectById(
       normalizedTargetPath,
       serializeProjectDocument(document),
     );
-    useProjectStore.getState().markProjectSaved(projectId, savedPath, document);
+    useProjectStore.getState().markProjectSaved(savedPath, document);
     return { status: 'saved', filePath: savedPath };
   } catch (error) {
     await showError(error instanceof Error ? error.message : 'ファイル保存に失敗しました');
@@ -167,26 +143,33 @@ export function openProjectFromDialog(): Promise<void> {
   return enqueueFileOperation(runOpenProjectFromDialog);
 }
 
-export function saveProjectById(
-  projectId: string,
-  options: { saveAs?: boolean } = {},
-): Promise<SaveProjectResult> {
-  return enqueueFileOperation(() => runSaveProjectById(projectId, options));
+export function saveCurrentProject(options: { saveAs?: boolean } = {}): Promise<SaveProjectResult> {
+  return enqueueFileOperation(() => runSaveCurrentProject(options));
 }
 
 export async function runFileCommand(command: FileCommand): Promise<void> {
   await enqueueFileOperation(async () => {
+    if (command === 'new-tab') {
+      await runNewDocumentTab();
+      return;
+    }
+
+    if (command === 'new-window') {
+      await runNewDocumentWindow();
+      return;
+    }
+
     if (command === 'open') {
       await runOpenProjectFromDialog();
       return;
     }
 
-    const activeProject = getActiveProject();
-    if (!activeProject) {
+    const project = getProject();
+    if (!project) {
       await showInfo('保存対象のプロジェクトがありません');
       return;
     }
 
-    await runSaveProjectById(activeProject.id, { saveAs: command === 'save-as' });
+    await runSaveCurrentProject({ saveAs: command === 'save-as' });
   });
 }

@@ -2,8 +2,8 @@
 
 ## プロジェクト概要
 
-Siteboard は Tauri v2 + React + TypeScript + Tailwind CSS v4 で構築されたデスクトップアプリケーションです。
-Rust バックエンドと Vite React フロントエンドで構成されています。
+Siteboard は Web ページを並べてボード上で俯瞰・比較できるデスクトップアプリケーションです。
+Tauri v2 + React + TypeScript + Tailwind CSS v4 で構築されています。
 
 ## このファイルの役割
 
@@ -17,12 +17,7 @@ Rust バックエンドと Vite React フロントエンドで構成されてい
 - UI コンポーネントは HeroUI v3 を優先し、不足時のみ独自実装する。
 - ライブラリ/API の仕様確認は Context7 を使う。
 - import は `@/` エイリアスを使用し、`../` 相対パスは使わない。
-- Siteboard の表示モード・Webview 制御を変更する場合は `docs/agent/siteboard-runtime.md` を必ず更新する。
-- IPC コマンドを追加・変更する場合は `docs/agent/tauri-ipc.md` を必ず更新する。
-- `store/tab-store.ts` の履歴管理（Undo/Redo・`nodeHistories`）を変更する場合は `docs/agent/domain-models.md` を必ず更新する。
-- Edit メニュー/ショートカット連携（`src-tauri/src/lib.rs` / `src/main.tsx` / `src/lib/edit-commands.ts`）を変更する場合は `docs/agent/coding-rules.md` と `docs/agent/tauri-ipc.md` を必ず更新する。
-- File メニュー連携（`src-tauri/src/lib.rs` / `src/main.tsx` / `src/lib/file-commands.ts`）を変更する場合は `docs/agent/coding-rules.md` と `docs/agent/tauri-ipc.md` を必ず更新する。
-- Tauri プラグイン（`Cargo.toml` + `src-tauri/src/lib.rs`）を追加・変更する場合は `docs/agent/architecture.md` の「登録済み Tauri プラグイン」を更新する。
+- 変更対象に応じて `docs/agent` の関連ドキュメントを同じコミットで更新する（詳細は `docs/agent/workflow.md` の「ドキュメント更新ルール」参照）。
 - 実装完了時は `npm run lint` `npm run format` `npm run typecheck` を実行する。
 - テストフレームワークは未導入のため、最低限の動作確認手順を PR 説明に残す。
 - 変わりやすい一時情報は書かず、恒久ルールだけを残す。
@@ -48,10 +43,7 @@ npm run typecheck    # TypeScript 型チェック
 - `docs/agent/domain-models.md`: 主要型・定数・不変条件
 - `docs/agent/tauri-ipc.md`: Tauri IPC コマンドとイベント契約
 - `docs/agent/siteboard-runtime.md`: Siteboard の表示モードと Webview ランタイム仕様
-
-## Claude Code on the Web
-
-- `gh` 実行時は `GITHUB_TOKEN` 環境変数を利用できます。
+- `docs/agent/wkwebview-internals.md`: WKWebView プラットフォーム固有のワークアラウンド
 
 ## 更新ポリシー
 

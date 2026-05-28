@@ -4,7 +4,6 @@ import ChevronRight from '@gravity-ui/icons/ChevronRight';
 import Pin from '@gravity-ui/icons/Pin';
 
 import { AppButton } from '@/components/Common/AppButton';
-import { WEB_PAGE_TOP_BAR_HEIGHT } from '@/constants';
 import { zoomPx } from '@/lib/canvas-zoom';
 
 export interface WebPageNodeTopBarProps {
@@ -18,7 +17,6 @@ export interface WebPageNodeTopBarProps {
   onReload?: () => void;
   onPinUrl?: () => void;
   hideNavigationControls: boolean;
-  onMouseDown: (e: React.MouseEvent) => void;
 }
 
 function formatDisplayUrl(url: string) {
@@ -39,29 +37,36 @@ export function WebPageNodeTopBar({
   onReload,
   onPinUrl,
   hideNavigationControls,
-  onMouseDown,
 }: WebPageNodeTopBarProps) {
-  const topBarStyle = {
-    height: zoomPx(WEB_PAGE_TOP_BAR_HEIGHT),
-    paddingInline: zoomPx(8),
-    fontSize: zoomPx(12),
-    lineHeight: zoomPx(16),
-    borderRadius: `${zoomPx(16)} ${zoomPx(16)} 0 0`,
-  };
   const iconStyle = {
     width: zoomPx(14),
     height: zoomPx(14),
   };
+  const toolbarButtonStyle = {
+    padding: 0,
+  } as const;
 
   return (
     <div
-      className="flex shrink-0 cursor-grab items-center overflow-hidden bg-default active:cursor-grabbing"
-      style={topBarStyle}
-      onMouseDown={onMouseDown}
+      className="flex w-full min-w-0 items-center overflow-hidden bg-transparent"
+      style={{
+        height: zoomPx(32),
+        paddingInline: zoomPx(8),
+        fontSize: zoomPx(12),
+        lineHeight: zoomPx(16),
+      }}
     >
-      <span className="min-w-0 flex-1 truncate text-foreground" title={url}>
+      <span
+        className="min-w-0 flex-1 truncate text-foreground"
+        style={{ paddingInline: zoomPx(4) }}
+        title={url}
+      >
         {title || formatDisplayUrl(url)}
-        {isMoved && <span className="ml-1 text-muted">(Moved)</span>}
+        {isMoved && (
+          <span className="text-muted" style={{ marginInlineStart: zoomPx(4) }}>
+            (Moved)
+          </span>
+        )}
       </span>
 
       {!hideNavigationControls && (
@@ -69,7 +74,8 @@ export function WebPageNodeTopBar({
           <AppButton
             size="xs"
             scaleWithCanvasZoom
-            className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="nodrag shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            style={toolbarButtonStyle}
             isDisabled={!onGoBack || !canGoBack}
             onMouseDown={(e) => e.stopPropagation()}
             onPress={onGoBack}
@@ -81,7 +87,8 @@ export function WebPageNodeTopBar({
           <AppButton
             size="xs"
             scaleWithCanvasZoom
-            className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="nodrag shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            style={toolbarButtonStyle}
             isDisabled={!onGoForward || !canGoForward}
             onMouseDown={(e) => e.stopPropagation()}
             onPress={onGoForward}
@@ -93,7 +100,8 @@ export function WebPageNodeTopBar({
           <AppButton
             size="xs"
             scaleWithCanvasZoom
-            className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="nodrag shrink-0 text-muted hover:bg-default-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            style={toolbarButtonStyle}
             isDisabled={!onReload}
             onMouseDown={(e) => e.stopPropagation()}
             onPress={onReload}
@@ -108,7 +116,8 @@ export function WebPageNodeTopBar({
         <AppButton
           size="xs"
           scaleWithCanvasZoom
-          className="shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
+          className="nodrag shrink-0 text-muted hover:bg-default-hover hover:text-foreground"
+          style={toolbarButtonStyle}
           tooltipMessage="表示中のページをデフォルトに固定"
           onMouseDown={(e) => e.stopPropagation()}
           onPress={onPinUrl}

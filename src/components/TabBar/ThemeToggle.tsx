@@ -1,9 +1,9 @@
 import Display from '@gravity-ui/icons/Display';
 import Moon from '@gravity-ui/icons/Moon';
 import Sun from '@gravity-ui/icons/Sun';
-import { Dropdown, Label, Separator, type Selection } from '@heroui/react';
+import { Dropdown, Label, Separator, toast, type Selection } from '@heroui/react';
 
-import { AppButton } from '@/components/Common/AppButton';
+import { AppButton, type AppButtonProps } from '@/components/Common/AppButton';
 import { useThemeStore } from '@/store/theme-store';
 import type { ThemeMode } from '@/types';
 
@@ -19,7 +19,12 @@ function getThemeMode(selection: Selection): ThemeMode | null {
   return null;
 }
 
-export function ThemeToggle() {
+interface ThemeToggleProps {
+  buttonClassName?: string;
+  tooltipPlacement?: AppButtonProps['tooltipPlacement'];
+}
+
+export function ThemeToggle({ buttonClassName, tooltipPlacement = 'top' }: ThemeToggleProps = {}) {
   const mode = useThemeStore((state) => state.mode);
   const isDark = useThemeStore((state) => state.isDark);
   const setMode = useThemeStore((state) => state.setMode);
@@ -28,7 +33,12 @@ export function ThemeToggle() {
 
   return (
     <Dropdown>
-      <AppButton aria-label="テーマを変更">
+      <AppButton
+        aria-label="テーマを変更"
+        tooltipMessage="テーマを変更"
+        tooltipPlacement={tooltipPlacement}
+        className={buttonClassName}
+      >
         <CurrentIcon className="size-4" />
       </AppButton>
       <Dropdown.Popover>
@@ -41,7 +51,10 @@ export function ThemeToggle() {
             const nextMode = getThemeMode(selection);
 
             if (nextMode) {
-              void setMode(nextMode);
+              void setMode(nextMode).catch((error: unknown) => {
+                console.error('[ThemeToggle] テーマ変更に失敗:', error);
+                toast.danger('テーマの変更に失敗しました');
+              });
             }
           }}
         >

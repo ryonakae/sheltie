@@ -2,11 +2,12 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capability",
-  "windows": ["main", "page-*"],
+  "windows": ["document-*", "page-*"],
   "permissions": [
     "core:default",
     "core:window:default",
     "core:window:allow-close",
+    "core:window:allow-set-title",
     "core:window:allow-start-dragging",
     "core:webview:default",
     "core:webview:allow-create-webview",

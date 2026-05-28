@@ -101,16 +101,13 @@ unsafe fn set_css_viewport_unit_sizes(
             },
         );
         if supports_inset {
-            run_objc_void_guarded(
-                "setMinimumViewportInset:maximumViewportInset:",
-                || unsafe {
-                    let _: () = objc2::msg_send![
-                        raw,
-                        setMinimumViewportInset: inset,
-                        maximumViewportInset: inset
-                    ];
-                },
-            );
+            run_objc_void_guarded("setMinimumViewportInset:maximumViewportInset:", || unsafe {
+                let _: () = objc2::msg_send![
+                    raw,
+                    setMinimumViewportInset: inset,
+                    maximumViewportInset: inset
+                ];
+            });
         }
     }
 }
@@ -126,17 +123,20 @@ pub fn configure_new_webview_viewport(
     let (css_viewport_width, css_viewport_height) =
         compute_css_viewport_size_for_units(width, height, safe_zoom);
 
-    run_objc_void_guarded("_setLayoutMode + _setViewScale + viewport insets", || unsafe {
-        let _: () = objc2::msg_send![raw, _setLayoutMode: 2i64];
-        let _: () = objc2::msg_send![raw, _setViewScale: safe_zoom];
-        set_css_viewport_unit_sizes(
-            raw,
-            width,
-            height,
-            css_viewport_width,
-            css_viewport_height,
-        );
-    });
+    run_objc_void_guarded(
+        "_setLayoutMode + _setViewScale + viewport insets",
+        || unsafe {
+            let _: () = objc2::msg_send![raw, _setLayoutMode: 2i64];
+            let _: () = objc2::msg_send![raw, _setViewScale: safe_zoom];
+            set_css_viewport_unit_sizes(
+                raw,
+                width,
+                height,
+                css_viewport_width,
+                css_viewport_height,
+            );
+        },
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -152,21 +152,12 @@ pub fn update_existing_webview_viewport(
 
     run_objc_void_guarded("_setViewScale + viewport insets", || unsafe {
         let _: () = objc2::msg_send![raw, _setViewScale: safe_zoom];
-        set_css_viewport_unit_sizes(
-            raw,
-            width,
-            height,
-            css_viewport_width,
-            css_viewport_height,
-        );
+        set_css_viewport_unit_sizes(raw, width, height, css_viewport_width, css_viewport_height);
     });
 }
 
 #[cfg(target_os = "macos")]
-pub fn set_webview_alpha(
-    raw: *mut objc2::runtime::AnyObject,
-    opacity: f64,
-) {
+pub fn set_webview_alpha(raw: *mut objc2::runtime::AnyObject, opacity: f64) {
     run_objc_void_guarded("setAlphaValue:", || unsafe {
         let _: () = objc2::msg_send![raw, setAlphaValue: opacity];
     });

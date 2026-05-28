@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, Theme};
+use tauri::{AppHandle, Theme, Window};
 use tauri_plugin_store::StoreExt;
 
 const STORE_PATH: &str = "siteboard.json";
@@ -21,6 +21,7 @@ pub async fn load_theme(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub async fn set_theme(
     app: AppHandle,
+    window: Window,
     mode: String,
 ) -> Result<bool, String> {
     let store = app
@@ -29,11 +30,6 @@ pub async fn set_theme(
 
     store.set(THEME_KEY, serde_json::Value::String(mode.clone()));
     store.save().map_err(|e| format!("保存に失敗しました: {e}"))?;
-
-    // ウィンドウにテーマを適用してシステムのダークモード状態を返す
-    let window = app
-        .get_webview_window("main")
-        .ok_or("main ウィンドウが見つかりません")?;
 
     let is_dark = match mode.as_str() {
         "dark" => {
@@ -83,4 +79,3 @@ pub async fn get_platform_info() -> (String, f64) {
 
     (platform, traffic_light_width)
 }
-

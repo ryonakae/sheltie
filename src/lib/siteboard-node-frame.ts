@@ -21,6 +21,9 @@ function resolveLayoutZoom(zoom: number): number {
 }
 
 export function getNodeChromeScreenHeight(node: Pick<BoardNode, 'type'>): number {
+  if (node.type === 'text') {
+    return 0;
+  }
   if (node.type === 'stickynote') {
     return STICKY_NOTE_HEADER_HEIGHT;
   }

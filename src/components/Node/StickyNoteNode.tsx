@@ -1,22 +1,16 @@
-import { motion } from 'motion/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 import { AppButton } from '@/components/Common/AppButton';
-import { NodeResizeHandle } from '@/components/Node/NodeResizeHandle';
 import { STICKY_NOTE_COLORS, STICKY_NOTE_HEADER_HEIGHT, STICKY_NOTE_MIN_HEIGHT } from '@/constants';
-import type { NodeResizeDirection } from '@/hooks/siteboard/types';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
 
-interface StickyNoteNodeProps {
+export interface StickyNoteNodeProps {
   node: StickyNoteNodeModel;
   isActive: boolean;
-  hideColorCycleButton: boolean;
   onActivate: (nodeId: string) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
-  onDragStart: (e: React.MouseEvent, nodeId: string) => void;
-  onResizeStart: (e: React.MouseEvent, nodeId: string, direction: NodeResizeDirection) => void;
   onContentChange: (nodeId: string, content: string) => void;
   onAutoHeightChange: (nodeId: string, height: number) => void;
   onColorCycle: (nodeId: string) => void;
@@ -25,11 +19,8 @@ interface StickyNoteNodeProps {
 export const StickyNoteNode = memo(function StickyNoteNode({
   node,
   isActive,
-  hideColorCycleButton,
   onActivate,
   onContextMenu,
-  onDragStart,
-  onResizeStart,
   onContentChange,
   onAutoHeightChange,
   onColorCycle,
@@ -38,9 +29,15 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   // 編集中テキスト。ストア反映は 500ms デバウンス + blur 時 flush で行う。
   const [editingContent, setEditingContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const contentMeasureRef = useRef<HTMLDivElement>(null);
+  const contentMeasureRef = useRef<HTMLTextAreaElement>(null);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCommittedContentRef = useRef(node.content ?? '');
+  const contentClickStateRef = useRef({
+    wasActive: false,
+    startX: 0,
+    startY: 0,
+    moved: false,
+  });
 
   const colorIndex = node.colorIndex ?? 0;
   const color = STICKY_NOTE_COLORS[colorIndex];
@@ -48,14 +45,13 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   const noteContent = isEditing ? editingContent : (node.content ?? '');
 
   useEffect(() => {
-    if (!isEditing) return;
     const measureEl = contentMeasureRef.current;
     if (!measureEl) return;
-    const contentHeight = Math.ceil(measureEl.getBoundingClientRect().height);
+    const contentHeight = Math.ceil(measureEl.scrollHeight);
     const nextHeight = Math.max(STICKY_NOTE_MIN_HEIGHT, contentHeight);
-    if (nextHeight <= node.height) return;
+    if (nextHeight === node.height) return;
     onAutoHeightChange(node.id, nextHeight);
-  }, [editingContent, isEditing, node.height, node.id, node.width, onAutoHeightChange]);
+  }, [node.height, node.id, node.width, noteContent, onAutoHeightChange]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -102,7 +98,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
     [],
   );
 
-  const handleDoubleClick = useCallback(() => {
+  const beginEditing = useCallback(() => {
     const nextContent = node.content ?? '';
     // 編集開始時にストアの現在値で初期化
     setEditingContent(nextContent);
@@ -114,6 +110,35 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       textareaRef.current?.select();
     });
   }, [node.content]);
+
+  const handleContentMouseDownCapture = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      contentClickStateRef.current = {
+        wasActive: isActive,
+        startX: event.clientX,
+        startY: event.clientY,
+        moved: false,
+      };
+    },
+    [isActive],
+  );
+
+  const handleContentMouseMoveCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if ((event.buttons & 1) === 0) return;
+    const { startX, startY, moved } = contentClickStateRef.current;
+    if (moved) return;
+    const deltaX = Math.abs(event.clientX - startX);
+    const deltaY = Math.abs(event.clientY - startY);
+    if (deltaX >= 3 || deltaY >= 3) {
+      contentClickStateRef.current.moved = true;
+    }
+  }, []);
+
+  const handleContentClick = useCallback(() => {
+    const { wasActive, moved } = contentClickStateRef.current;
+    if (!wasActive || moved || isEditing) return;
+    beginEditing();
+  }, [beginEditing, isEditing]);
 
   const handleTextareaDoubleClick = useCallback(() => {
     textareaRef.current?.select();
@@ -131,118 +156,99 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   // page.id は UUID で不変のため、親の関数参照が安定していればこれらも安定する
   const handleActivate = useCallback(() => onActivate(node.id), [node.id, onActivate]);
 
-  const handleResizeStart = useCallback(
-    (e: React.MouseEvent, direction: NodeResizeDirection) => {
-      handleActivate();
-      onResizeStart(e, node.id, direction);
-    },
-    [handleActivate, node.id, onResizeStart],
-  );
-
   const noteClassName = twMerge(
-    'absolute flex flex-col shadow-lg',
+    'flex flex-col overflow-hidden shadow-lg',
     'border-solid outline-offset-0',
-    color.bgClass,
     isActive ? '' : 'border',
     color.borderClass,
-  );
-  const noteHeaderClassName = twMerge(
-    'flex shrink-0 cursor-grab items-center active:cursor-grabbing',
-    color.borderClass,
-  );
-  const noteColorButtonClassName = twMerge(
-    'flex shrink-0 cursor-pointer items-center justify-center',
-    'border',
-    nextColor.borderClass,
-    nextColor.bgClass,
-    nextColor.textClass,
-    'hover:opacity-80',
+    isEditing ? 'cursor-text' : '',
   );
   const noteBodyColorClassName = node.content ? 'text-[#333]' : 'text-[#aaa]';
   return (
-    <motion.div
-      layout="position"
-      className={noteClassName}
+    <div
+      className={twMerge('size-full', noteClassName)}
       style={{
-        left: node.x,
-        top: node.y,
-        width: node.width,
         borderRadius: zoomPx(16),
-        outline: isActive ? `${zoomPx(2)} solid var(--color-focus)` : 'none',
         borderWidth: zoomPx(1),
       }}
       data-node-id={node.id}
       onMouseDown={handleActivate}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
-      {/* タイトルバー（ドラッグハンドル） */}
       <div
-        className={noteHeaderClassName}
-        style={{
-          height: zoomPx(STICKY_NOTE_HEADER_HEIGHT),
-          paddingInlineStart: zoomPx(8),
-          paddingInlineEnd: zoomPx(4),
-          borderBottomWidth: zoomPx(1),
-          borderBottomStyle: 'solid',
-          gap: zoomPx(2),
-        }}
-        onMouseDown={(e) => {
-          // テキスト選択・ボタン操作以外でドラッグ開始
-          onDragStart(e, node.id);
-        }}
+        className={twMerge('shrink-0', color.bgClass)}
+        style={{ height: zoomPx(STICKY_NOTE_HEADER_HEIGHT) }}
       >
-        <span
-          className="min-w-0 flex-1 truncate font-medium text-[#555]"
-          style={{ fontSize: zoomPx(11) }}
+        <div
+          className="flex size-full min-w-0 items-center"
+          style={{
+            gap: zoomPx(4),
+            paddingInline: zoomPx(8),
+            fontSize: zoomPx(12),
+            lineHeight: zoomPx(16),
+            boxShadow: `inset 0 ${zoomPx(-1)} 0 ${color.dividerColor}`,
+          }}
         >
-          Sticky Note
-        </span>
-
-        {/* 色切り替えボタン（次の色をプレビュー表示） */}
-        {!hideColorCycleButton && (
+          <span
+            className="min-w-0 flex-1 truncate text-foreground"
+            style={{ paddingInline: zoomPx(4) }}
+            title="Sticky Note"
+          >
+            Sticky Note
+          </span>
           <AppButton
             size="xs"
             scaleWithCanvasZoom
-            className={noteColorButtonClassName}
+            className="nodrag shrink-0 overflow-hidden rounded-full text-muted"
             style={{
-              width: zoomPx(18),
-              minWidth: zoomPx(18),
-              height: zoomPx(18),
-              minHeight: zoomPx(18),
+              padding: 0,
+              visibility: isActive ? 'visible' : 'hidden',
+              pointerEvents: isActive ? 'auto' : 'none',
             }}
+            aria-hidden={!isActive}
             onMouseDown={(e) => e.stopPropagation()}
             onPress={() => onColorCycle(node.id)}
             aria-label="色を切り替え"
           >
-            <span />
+            <span
+              className={twMerge(
+                'block size-full rounded-full border-2',
+                nextColor.borderClass,
+                nextColor.bgClass,
+              )}
+              style={{ borderWidth: zoomPx(2) }}
+            />
           </AppButton>
-        )}
+        </div>
       </div>
 
-      {/* テキスト表示/編集エリア（usePageResize 互換のため data-webview-placeholder 属性を付与） */}
+      {/* テキスト表示/編集エリア */}
       <div
         data-webview-placeholder
-        className="relative box-border min-h-0 overflow-hidden"
-        style={{
-          width: node.width,
-          height: node.height,
-        }}
-        onDoubleClick={handleDoubleClick}
+        className={twMerge(
+          'relative box-border min-h-0 w-full flex-1 overflow-hidden',
+          color.bgClass,
+        )}
+        onMouseDownCapture={handleContentMouseDownCapture}
+        onMouseMoveCapture={handleContentMouseMoveCapture}
+        onClick={handleContentClick}
       >
-        <div
+        <textarea
           ref={contentMeasureRef}
           data-sticky-note-content-measure
           aria-hidden
-          className="pointer-events-none absolute top-0 left-0 box-border p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap opacity-0"
-          style={{ width: node.width }}
-        >
-          {noteContent || ' '}
-        </div>
+          readOnly
+          tabIndex={-1}
+          value={noteContent}
+          className="pointer-events-none absolute top-0 left-0 m-0 box-border block min-h-0 resize-none overflow-hidden border-0 bg-transparent p-2 text-[18px] leading-normal text-transparent focus:outline-none"
+          style={{ width: '100%', height: 0, fontFamily: 'inherit' }}
+        />
 
         {isEditing ? (
           <textarea
             ref={textareaRef}
-            className="m-0 box-border block size-full min-h-0 resize-none overflow-auto border-0 bg-transparent p-2 text-[18px] leading-normal text-[#333] focus:outline-none"
+            className="nodrag m-0 box-border block size-full min-h-0 resize-none overflow-auto border-0 bg-transparent p-2 text-[18px] leading-normal text-[#333] focus:outline-none"
+            style={{ fontFamily: 'inherit' }}
             value={editingContent}
             onChange={(e) => setEditingContent(e.target.value)}
             onBlur={handleBlur}
@@ -252,19 +258,14 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         ) : (
           <div
             className={twMerge(
-              'size-full cursor-text p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap',
+              'size-full p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap',
               noteBodyColorClassName,
             )}
           >
-            {node.content || 'ダブルクリックで編集'}
+            {node.content || 'Type anything'}
           </div>
         )}
       </div>
-
-      {/* リサイズハンドル（8方向） */}
-      {(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as NodeResizeDirection[]).map((dir) => (
-        <NodeResizeHandle key={dir} direction={dir} onMouseDown={handleResizeStart} />
-      ))}
-    </motion.div>
+    </div>
   );
 });

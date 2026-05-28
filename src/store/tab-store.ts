@@ -5,38 +5,111 @@ import {
   DEFAULT_PAGE_WIDTH,
   DEFAULT_STICKY_NOTE_HEIGHT,
   DEFAULT_STICKY_NOTE_WIDTH,
+  DEFAULT_TEXT_NODE_HEIGHT,
+  DEFAULT_TEXT_NODE_WIDTH,
   DEFAULT_VIEWPORT,
-  HOME_ID,
-  MAX_ZOOM,
   MAX_VERTICAL_SEARCH_STEPS,
+  MAX_ZOOM,
   MIN_ZOOM,
   PAGE_GAP,
-  SIDEBAR_DEFAULT_WIDTH,
 } from '@/constants';
 import {
-  createProjectDocument,
+  documentEdgeToBoardEdge,
   documentNodeToBoardNode,
   sanitizeProjectDocument,
 } from '@/lib/project-document';
 import { getNodeFrameHeight, getNodeFrameRect } from '@/lib/siteboard-node-frame';
-import {
-  type BoardNode,
-  type Project,
-  type ProjectState,
-  type ProjectWebviewRuntime,
-  type SiteboardDocumentV1,
-  type Viewport,
+import type {
+  BoardEdge,
+  BoardNode,
+  Project,
+  ProjectState,
+  ProjectWebviewRuntime,
+  SiteboardDocumentV2,
+  TextNodeFontSizePreset,
+  Viewport,
 } from '@/types';
+import { isWebPageNode } from '@/types';
 
-const NODE_HISTORY_LIMIT = 100;
+const HISTORY_LIMIT = 100;
 
-interface ProjectNodeHistory {
-  past: BoardNode[][];
-  future: BoardNode[][];
+interface ProjectSnapshot {
+  nodes: BoardNode[];
+  edges: BoardEdge[];
 }
 
-type ProjectNodeHistories = Record<string, ProjectNodeHistory>;
-type ProjectWebviewRuntimes = Record<string, ProjectWebviewRuntime>;
+interface ProjectHistory {
+  past: ProjectSnapshot[];
+  future: ProjectSnapshot[];
+}
+
+interface ProjectActions {
+  initializeProject: (params: {
+    filePath?: string;
+    untitledIndex: number;
+    document?: SiteboardDocumentV2;
+  }) => void;
+  markProjectSaved: (filePath: string, document: SiteboardDocumentV2) => void;
+  restoreProjectFromLastSaved: () => void;
+  addWebNode: (
+    url?: string,
+    options?: { x: number; y: number; width: number; height: number },
+    zoom?: number,
+  ) => BoardNode | null;
+  setWebNodeUrl: (nodeId: string, url: string) => void;
+  changeWebNodeUrl: (nodeId: string, url: string) => void;
+  removeNode: (nodeId: string) => void;
+  updateNodePosition: (nodeId: string, x: number, y: number) => void;
+  updateNodeSize: (nodeId: string, width: number, height: number) => void;
+  updateNodeBounds: (nodeId: string, x: number, y: number, width: number, height: number) => void;
+  updateNodeSizeWithoutHistory: (nodeId: string, width: number, height: number) => void;
+  updateWebNodeUrl: (nodeId: string, url: string, title: string) => void;
+  updateNodeTitle: (nodeId: string, title: string) => void;
+  updateViewport: (viewport: Partial<Viewport>) => void;
+  bringNodeToFront: (nodeId: string) => void;
+  sendNodeToBack: (nodeId: string) => void;
+  bringNodeForward: (nodeId: string) => void;
+  sendNodeBackward: (nodeId: string) => void;
+  addStickyNoteNode: (
+    options?: { x: number; y: number; width: number; height: number },
+    zoom?: number,
+  ) => BoardNode | null;
+  updateStickyNoteContent: (nodeId: string, content: string) => void;
+  cycleStickyNoteColor: (nodeId: string) => void;
+  addTextNode: (
+    options?: { x: number; y: number; width: number; height: number },
+    zoom?: number,
+  ) => BoardNode | null;
+  updateTextNodeContent: (nodeId: string, tiptapContent: object) => void;
+  updateTextNodeStyle: (
+    nodeId: string,
+    style: {
+      fontSizePreset?: TextNodeFontSizePreset;
+      fontWeight?: 'normal' | 'bold';
+      italic?: boolean;
+      strikethrough?: boolean;
+      textColorIndex?: number;
+    },
+  ) => void;
+  updateTextNodeWidthMode: (nodeId: string, widthMode: 'auto' | 'fixed') => void;
+  addEdge: (edge: BoardEdge) => void;
+  removeEdges: (edgeIds: string[]) => void;
+  pinWebNodeUrl: (nodeId: string) => void;
+  setWebNodeWebviewLabel: (nodeId: string, label: string) => void;
+  clearWebNodeWebviewLabel: (nodeId: string) => void;
+  hydrateProjectScreenshotUrls: (screenshotUrlsByNodeId: Record<string, string>) => void;
+  setProjectScreenshotUrl: (nodeId: string, url: string) => void;
+  clearProjectScreenshotUrl: (nodeId: string) => void;
+  undoProject: () => void;
+  redoProject: () => void;
+  _setLoaded: () => void;
+}
+
+interface ProjectStore extends ProjectState, ProjectActions {
+  isLoaded: boolean;
+  history: ProjectHistory;
+  webviewRuntime: ProjectWebviewRuntime;
+}
 
 function createEmptyProjectWebviewRuntime(): ProjectWebviewRuntime {
   return {
@@ -45,33 +118,38 @@ function createEmptyProjectWebviewRuntime(): ProjectWebviewRuntime {
   };
 }
 
-function clampZoom(zoom: number): number {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
-}
-
-function sanitizeViewport(viewport?: Partial<Viewport>): Viewport {
-  return {
-    zoom: clampZoom(typeof viewport?.zoom === 'number' ? viewport.zoom : DEFAULT_VIEWPORT.zoom),
-    panX: typeof viewport?.panX === 'number' ? viewport.panX : DEFAULT_VIEWPORT.panX,
-    panY: typeof viewport?.panY === 'number' ? viewport.panY : DEFAULT_VIEWPORT.panY,
-  };
-}
-
 function cloneNodes(nodes: BoardNode[]): BoardNode[] {
   return nodes.map((node) => ({ ...node }));
 }
 
-function createProject(count: number): Project {
-  const title = `プロジェクト ${count}`;
-  const nodes: BoardNode[] = [];
+function cloneEdges(edges: BoardEdge[]): BoardEdge[] {
+  return edges.map((edge) => ({ ...edge }));
+}
+
+function cloneSnapshot(snapshot: { nodes: BoardNode[]; edges: BoardEdge[] }): ProjectSnapshot {
+  return { nodes: cloneNodes(snapshot.nodes), edges: cloneEdges(snapshot.edges) };
+}
+
+function clampZoom(zoom: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+}
+
+function createProject(params: {
+  filePath?: string;
+  untitledIndex: number;
+  document?: SiteboardDocumentV2;
+}): Project {
+  const nodes = params.document?.nodes.map(documentNodeToBoardNode) ?? [];
+  const edges = params.document?.edges?.map(documentEdgeToBoardEdge) ?? [];
+
   return {
     id: crypto.randomUUID(),
-    title,
-    sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
-    lastOpenedAt: Date.now(),
+    filePath: params.filePath,
+    untitledIndex: params.untitledIndex,
     nodes,
+    edges,
     viewport: DEFAULT_VIEWPORT,
-    lastSavedDocument: createProjectDocument({ title, nodes }),
+    lastSavedDocument: sanitizeProjectDocument(params.document, { nodes, edges }),
   };
 }
 
@@ -103,6 +181,7 @@ function findNonOverlappingPosition(
   width: number,
   height: number,
   zoom: number,
+  options?: { keepY?: boolean },
 ) {
   const existingRects = nodes.map((node) => getNodeFrameRect(node, zoom));
   const candidateFrameHeight = getNodeFrameHeight({ type, height }, zoom);
@@ -115,6 +194,24 @@ function findNonOverlappingPosition(
     const yCandidates = step === 0 ? [0] : [step * PAGE_GAP, -step * PAGE_GAP];
     for (const yOffset of yCandidates) {
       const candidateY = y + yOffset;
+      if (options?.keepY) {
+        const sameRowNodes = existingRects.filter((node) =>
+          isVerticalOverlapping(candidateY, candidateFrameHeight, node),
+        );
+        let candidateX = x;
+        while (true) {
+          const overlapNodes = sameRowNodes.filter((node) =>
+            isHorizontalOverlapping(candidateX, width, node),
+          );
+          if (overlapNodes.length === 0) {
+            return { x: candidateX, y: candidateY };
+          }
+
+          const rightmost = Math.max(...overlapNodes.map((node) => node.x + node.width));
+          candidateX = rightmost + PAGE_GAP;
+        }
+      }
+
       const sameRowNodes = existingRects.filter((node) =>
         isVerticalOverlapping(candidateY, candidateFrameHeight, node),
       );
@@ -142,371 +239,105 @@ function findNonOverlappingPosition(
   return { x, y: fallbackY };
 }
 
-/**
- * closeProject/deleteProject でアクティブなプロジェクトが除去された時のフォールバック先を求める。
- * 左隣 → 右隣 → HOME_ID の優先順。
- */
-function resolveNextActiveId(removedIndex: number, remainingIds: string[]): string {
-  const leftNeighbor = remainingIds[removedIndex - 1];
-  const rightNeighbor = remainingIds[removedIndex];
-  return leftNeighbor ?? rightNeighbor ?? HOME_ID;
-}
-
-function getProjectHistory(histories: ProjectNodeHistories, projectId: string): ProjectNodeHistory {
-  return histories[projectId] ?? { past: [], future: [] };
-}
-
-function pushProjectHistory(
-  histories: ProjectNodeHistories,
-  projectId: string,
-  nodes: BoardNode[],
-): ProjectNodeHistories {
-  const history = getProjectHistory(histories, projectId);
-  const nextPast = [...history.past, cloneNodes(nodes)];
-  if (nextPast.length > NODE_HISTORY_LIMIT) {
-    nextPast.splice(0, nextPast.length - NODE_HISTORY_LIMIT);
+function pushHistory(
+  history: ProjectHistory,
+  snapshot: { nodes: BoardNode[]; edges: BoardEdge[] },
+): ProjectHistory {
+  const nextPast = [...history.past, cloneSnapshot(snapshot)];
+  if (nextPast.length > HISTORY_LIMIT) {
+    nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
   }
   return {
-    ...histories,
-    [projectId]: {
-      past: nextPast,
-      future: [],
-    },
+    past: nextPast,
+    future: [],
   };
-}
-
-function touchProjects(projects: Project[], id: string, timestamp = Date.now()): Project[] {
-  return projects.map((project) =>
-    project.id === id ? { ...project, lastOpenedAt: timestamp } : project,
-  );
-}
-
-function getProjectWebviewRuntime(
-  runtimes: ProjectWebviewRuntimes,
-  projectId: string,
-): ProjectWebviewRuntime {
-  return runtimes[projectId] ?? createEmptyProjectWebviewRuntime();
-}
-
-function isProjectWebviewRuntimeEmpty(runtime: ProjectWebviewRuntime): boolean {
-  return (
-    Object.keys(runtime.labelsByNodeId).length === 0 &&
-    Object.keys(runtime.screenshotUrlsByNodeId).length === 0
-  );
-}
-
-function updateProjectWebviewRuntime(
-  runtimes: ProjectWebviewRuntimes,
-  projectId: string,
-  updater: (runtime: ProjectWebviewRuntime) => ProjectWebviewRuntime | null,
-): ProjectWebviewRuntimes {
-  const current = getProjectWebviewRuntime(runtimes, projectId);
-  const next = updater(current);
-  if (!next) {
-    if (!(projectId in runtimes)) return runtimes;
-    const { [projectId]: _removed, ...rest } = runtimes;
-    return rest;
-  }
-  if (next === current) return runtimes;
-  return { ...runtimes, [projectId]: next };
-}
-
-function sanitizeNode(rawNode: Partial<BoardNode>): BoardNode {
-  const type =
-    rawNode.type === 'stickynote'
-      ? 'stickynote'
-      : rawNode.type === 'webpage'
-        ? 'webpage'
-        : undefined;
-  const isSticky = type === 'stickynote';
-  return {
-    id: typeof rawNode.id === 'string' && rawNode.id ? rawNode.id : createNodeId(),
-    type,
-    title:
-      typeof rawNode.title === 'string' && rawNode.title
-        ? rawNode.title
-        : isSticky
-          ? 'Sticky Note'
-          : '新規ページ',
-    url: typeof rawNode.url === 'string' ? rawNode.url : '',
-    addedUrl: typeof rawNode.addedUrl === 'string' ? rawNode.addedUrl : undefined,
-    content: typeof rawNode.content === 'string' ? rawNode.content : isSticky ? '' : undefined,
-    colorIndex:
-      typeof rawNode.colorIndex === 'number' ? rawNode.colorIndex : isSticky ? 0 : undefined,
-    x: typeof rawNode.x === 'number' ? rawNode.x : 0,
-    y: typeof rawNode.y === 'number' ? rawNode.y : 0,
-    width: typeof rawNode.width === 'number' ? rawNode.width : DEFAULT_PAGE_WIDTH,
-    height: typeof rawNode.height === 'number' ? rawNode.height : DEFAULT_PAGE_HEIGHT,
-  };
-}
-
-function sanitizeProject(rawProject: Partial<Project>, fallbackOrder: number): Project {
-  const rawNodes = Array.isArray(rawProject?.nodes) ? rawProject.nodes : [];
-  const title =
-    typeof rawProject?.title === 'string' && rawProject.title
-      ? rawProject.title
-      : `プロジェクト ${fallbackOrder + 1}`;
-  const nodes = rawNodes.map((node) => sanitizeNode(node));
-
-  return {
-    id: typeof rawProject?.id === 'string' && rawProject.id ? rawProject.id : crypto.randomUUID(),
-    title,
-    filePath:
-      typeof rawProject?.filePath === 'string' && rawProject.filePath
-        ? rawProject.filePath
-        : undefined,
-    sidebarWidth:
-      typeof rawProject?.sidebarWidth === 'number'
-        ? rawProject.sidebarWidth
-        : SIDEBAR_DEFAULT_WIDTH,
-    lastOpenedAt:
-      typeof rawProject?.lastOpenedAt === 'number'
-        ? rawProject.lastOpenedAt
-        : Date.now() - fallbackOrder,
-    nodes,
-    viewport: sanitizeViewport(rawProject?.viewport),
-    lastSavedDocument: sanitizeProjectDocument(rawProject?.lastSavedDocument, { title, nodes }),
-  };
-}
-
-interface ProjectActions {
-  createProject: () => void;
-  openProject: (id: string) => void;
-  closeProject: (id: string) => void;
-  deleteProject: (id: string) => void;
-  renameProject: (id: string, title: string) => void;
-  setActive: (id: string) => void;
-  reorderOpenProjects: (openIds: string[]) => void;
-  updateSidebarWidth: (id: string, width: number) => void;
-  importProjectFromFile: (document: SiteboardDocumentV1, filePath: string) => string;
-  markProjectSaved: (projectId: string, filePath: string, document: SiteboardDocumentV1) => void;
-  restoreProjectFromLastSaved: (projectId: string) => void;
-  touchProjectLastOpened: (projectId: string) => void;
-  addWebNode: (
-    projectId: string,
-    url?: string,
-    options?: { x: number; y: number; width: number; height: number },
-    zoom?: number,
-  ) => BoardNode | null;
-  setWebNodeUrl: (projectId: string, nodeId: string, url: string) => void;
-  removeNode: (projectId: string, nodeId: string) => void;
-  updateNodePosition: (projectId: string, nodeId: string, x: number, y: number) => void;
-  updateNodeSize: (projectId: string, nodeId: string, width: number, height: number) => void;
-  updateNodeSizeWithoutHistory: (
-    projectId: string,
-    nodeId: string,
-    width: number,
-    height: number,
-  ) => void;
-  updateWebNodeUrl: (projectId: string, nodeId: string, url: string, title: string) => void;
-  updateNodeTitle: (projectId: string, nodeId: string, title: string) => void;
-  updateViewport: (projectId: string, viewport: Partial<Viewport>) => void;
-  bringNodeToFront: (projectId: string, nodeId: string) => void;
-  addStickyNoteNode: (
-    projectId: string,
-    options?: { x: number; y: number; width: number; height: number },
-    zoom?: number,
-  ) => BoardNode | null;
-  updateStickyNoteContent: (projectId: string, nodeId: string, content: string) => void;
-  cycleStickyNoteColor: (projectId: string, nodeId: string) => void;
-  pinWebNodeUrl: (projectId: string, nodeId: string) => void;
-  setWebNodeWebviewLabel: (projectId: string, nodeId: string, label: string) => void;
-  clearWebNodeWebviewLabel: (projectId: string, nodeId: string) => void;
-  hydrateProjectScreenshotUrls: (
-    projectId: string,
-    screenshotUrlsByNodeId: Record<string, string>,
-  ) => void;
-  setProjectScreenshotUrl: (projectId: string, nodeId: string, url: string) => void;
-  clearProjectScreenshotUrl: (projectId: string, nodeId: string) => void;
-  undoActiveProject: () => void;
-  redoActiveProject: () => void;
-  _restoreState: (state: ProjectState) => void;
-  _setLoaded: () => void;
-}
-
-interface ProjectStore extends ProjectState, ProjectActions {
-  isLoaded: boolean;
-  nodeHistories: ProjectNodeHistories;
-  webviewRuntime: ProjectWebviewRuntimes;
 }
 
 function replaceProjectNodes(
   state: ProjectStore,
-  projectId: string,
   updater: (nodes: BoardNode[]) => BoardNode[] | null,
   historyMode: 'record' | 'skip' = 'record',
-): ProjectStore | Pick<ProjectStore, 'projects' | 'nodeHistories'> {
-  const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-  if (projectIndex === -1) return state;
+): ProjectStore | Pick<ProjectStore, 'project' | 'history'> {
+  if (!state.project) return state;
 
-  const project = state.projects[projectIndex];
-  const nextNodes = updater(project.nodes);
+  const nextNodes = updater(state.project.nodes);
   if (!nextNodes) return state;
 
-  const nextProjects = [...state.projects];
-  nextProjects[projectIndex] = { ...project, nodes: nextNodes };
-
+  const nextProject = { ...state.project, nodes: nextNodes };
   if (historyMode === 'skip') {
-    return { projects: nextProjects, nodeHistories: state.nodeHistories };
+    return { project: nextProject, history: state.history };
   }
 
   return {
-    projects: nextProjects,
-    nodeHistories: pushProjectHistory(state.nodeHistories, projectId, project.nodes),
+    project: nextProject,
+    history: pushHistory(state.history, {
+      nodes: state.project.nodes,
+      edges: state.project.edges,
+    }),
+  };
+}
+
+function replaceProjectEdges(
+  state: ProjectStore,
+  updater: (edges: BoardEdge[]) => BoardEdge[] | null,
+): ProjectStore | Pick<ProjectStore, 'project' | 'history'> {
+  if (!state.project) return state;
+
+  const nextEdges = updater(state.project.edges);
+  if (!nextEdges) return state;
+
+  return {
+    project: { ...state.project, edges: nextEdges },
+    history: pushHistory(state.history, {
+      nodes: state.project.nodes,
+      edges: state.project.edges,
+    }),
   };
 }
 
 export const useProjectStore = create<ProjectStore>()((set) => ({
-  projects: [],
-  openIds: [],
-  activeId: HOME_ID,
+  project: null,
   isLoaded: false,
-  nodeHistories: {},
-  webviewRuntime: {},
+  history: { past: [], future: [] },
+  webviewRuntime: createEmptyProjectWebviewRuntime(),
 
-  createProject: () =>
+  initializeProject: (params) =>
+    set({
+      project: createProject(params),
+      history: { past: [], future: [] },
+      webviewRuntime: createEmptyProjectWebviewRuntime(),
+    }),
+
+  markProjectSaved: (filePath, document) =>
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            filePath,
+            lastSavedDocument: document,
+          }
+        : null,
+    })),
+
+  restoreProjectFromLastSaved: () =>
     set((state) => {
-      const now = Date.now();
-      const newProject = { ...createProject(state.projects.length + 1), lastOpenedAt: now };
+      if (!state.project) return state;
       return {
-        projects: [...state.projects, newProject],
-        openIds: [...state.openIds, newProject.id],
-        activeId: newProject.id,
+        project: {
+          ...state.project,
+          nodes: state.project.lastSavedDocument.nodes.map(documentNodeToBoardNode),
+          edges: state.project.lastSavedDocument.edges?.map(documentEdgeToBoardEdge) ?? [],
+        },
+        history: { past: [], future: [] },
+        webviewRuntime: createEmptyProjectWebviewRuntime(),
       };
     }),
 
-  openProject: (id) =>
-    set((state) => {
-      const now = Date.now();
-      const nextProjects = touchProjects(state.projects, id, now);
-      if (state.openIds.includes(id)) {
-        return { projects: nextProjects, activeId: id };
-      }
-      return { projects: nextProjects, openIds: [...state.openIds, id], activeId: id };
-    }),
-
-  closeProject: (id) =>
-    set((state) => {
-      const idx = state.openIds.indexOf(id);
-      if (idx === -1) return state;
-      const remaining = state.openIds.filter((projectId) => projectId !== id);
-      const newActiveId =
-        state.activeId === id ? resolveNextActiveId(idx, remaining) : state.activeId;
-      return { openIds: remaining, activeId: newActiveId };
-    }),
-
-  deleteProject: (id) =>
-    set((state) => {
-      const openIdx = state.openIds.indexOf(id);
-      const remainingOpenIds = state.openIds.filter((projectId) => projectId !== id);
-      let newActiveId = state.activeId;
-      if (state.activeId === id) {
-        newActiveId = resolveNextActiveId(openIdx, remainingOpenIds);
-      }
-      const { [id]: _removedHistory, ...remainingHistories } = state.nodeHistories;
-      const { [id]: _removedRuntime, ...remainingRuntime } = state.webviewRuntime;
-      return {
-        projects: state.projects.filter((project) => project.id !== id),
-        openIds: remainingOpenIds,
-        activeId: newActiveId,
-        nodeHistories: remainingHistories,
-        webviewRuntime: remainingRuntime,
-      };
-    }),
-
-  renameProject: (id, title) =>
-    set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === id ? { ...project, title } : project,
-      ),
-    })),
-
-  setActive: (id) =>
-    set((state) => {
-      if (id === HOME_ID) {
-        return { activeId: HOME_ID };
-      }
-      return { activeId: id, projects: touchProjects(state.projects, id) };
-    }),
-
-  reorderOpenProjects: (openIds) => set({ openIds }),
-
-  updateSidebarWidth: (id, width) =>
-    set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === id ? { ...project, sidebarWidth: width } : project,
-      ),
-    })),
-
-  importProjectFromFile: (document, filePath) => {
-    const now = Date.now();
-    const nodes = document.nodes.map(documentNodeToBoardNode);
-    const importedProject: Project = {
-      id: crypto.randomUUID(),
-      title: document.title,
-      filePath,
-      sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
-      lastOpenedAt: now,
-      nodes,
-      viewport: DEFAULT_VIEWPORT,
-      lastSavedDocument: createProjectDocument({ title: document.title, nodes }),
-    };
-
-    set((state) => ({
-      projects: [...state.projects, importedProject],
-      openIds: [...state.openIds, importedProject.id],
-      activeId: importedProject.id,
-    }));
-
-    return importedProject.id;
-  },
-
-  markProjectSaved: (projectId, filePath, document) =>
-    set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId
-          ? {
-              ...project,
-              filePath,
-              lastSavedDocument: document,
-            }
-          : project,
-      ),
-    })),
-
-  restoreProjectFromLastSaved: (projectId) =>
-    set((state) => {
-      const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-      if (projectIndex === -1) return state;
-
-      const project = state.projects[projectIndex];
-      const restoredNodes = project.lastSavedDocument.nodes.map(documentNodeToBoardNode);
-      const nextProjects = [...state.projects];
-      nextProjects[projectIndex] = {
-        ...project,
-        title: project.lastSavedDocument.title,
-        nodes: restoredNodes,
-      };
-      const { [projectId]: _removedHistory, ...remainingHistories } = state.nodeHistories;
-      const { [projectId]: _removedRuntime, ...remainingRuntime } = state.webviewRuntime;
-
-      return {
-        projects: nextProjects,
-        nodeHistories: remainingHistories,
-        webviewRuntime: remainingRuntime,
-      };
-    }),
-
-  touchProjectLastOpened: (projectId) =>
-    set((state) => ({
-      projects: touchProjects(state.projects, projectId),
-    })),
-
-  addWebNode: (projectId, url = '', options, zoom = 1) => {
+  addWebNode: (url = '', options, zoom = 1) => {
     let createdNode: BoardNode | null = null;
 
     set((state) =>
-      replaceProjectNodes(state, projectId, (nodes) => {
+      replaceProjectNodes(state, (nodes) => {
         let title = '新規ページ';
         if (url) {
           try {
@@ -515,6 +346,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
             title = url;
           }
         }
+
         const newNodeBase: BoardNode = {
           id: createNodeId(),
           type: 'webpage',
@@ -534,6 +366,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           newNodeBase.width,
           newNodeBase.height,
           zoom,
+          { keepY: true },
         );
         const newNode = {
           ...newNodeBase,
@@ -548,53 +381,89 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     return createdNode;
   },
 
-  setWebNodeUrl: (projectId, nodeId, url) =>
+  setWebNodeUrl: (nodeId, url) =>
     set((state) => ({
-      projects: state.projects.map((project) => {
-        if (project.id !== projectId) return project;
-        return {
-          ...project,
-          nodes: project.nodes.map((node) => {
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: state.project.nodes.map((node) => {
+              if (node.id !== nodeId) return node;
+              let title = url;
+              try {
+                title = new URL(url).hostname;
+              } catch {
+                // URL パース失敗時はそのまま使用
+              }
+              return { ...node, url, addedUrl: url, title };
+            }),
+          }
+        : null,
+    })),
+
+  changeWebNodeUrl: (nodeId, url) =>
+    set((state) => {
+      if (!state.project) return state;
+
+      let title = url;
+      try {
+        title = new URL(url).hostname;
+      } catch {
+        // URL パース失敗時はそのまま使用
+      }
+
+      return {
+        ...replaceProjectNodes(state, (nodes) => {
+          return nodes.map((node) => {
             if (node.id !== nodeId) return node;
-            let title = url;
-            try {
-              title = new URL(url).hostname;
-            } catch {
-              // パース失敗時はそのまま使用
-            }
             return { ...node, url, addedUrl: url, title };
-          }),
-        };
-      }),
-    })),
+          });
+        }),
+        webviewRuntime: {
+          labelsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
+          ),
+          screenshotUrlsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
+              ([id]) => id !== nodeId,
+            ),
+          ),
+        },
+      };
+    }),
 
-  removeNode: (projectId, nodeId) =>
-    set((state) => ({
-      ...replaceProjectNodes(state, projectId, (nodes) => {
-        if (!nodes.some((node) => node.id === nodeId)) return null;
-        return nodes.filter((node) => node.id !== nodeId);
-      }),
-      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
-        if (!(nodeId in runtime.labelsByNodeId) && !(nodeId in runtime.screenshotUrlsByNodeId)) {
-          return runtime;
-        }
-        const { [nodeId]: _removedLabel, ...remainingLabels } = runtime.labelsByNodeId;
-        const { [nodeId]: _removedScreenshot, ...remainingScreenshotUrls } =
-          runtime.screenshotUrlsByNodeId;
-        const nextRuntime = {
-          labelsByNodeId: remainingLabels,
-          screenshotUrlsByNodeId: remainingScreenshotUrls,
-        };
-        if (isProjectWebviewRuntimeEmpty(nextRuntime)) {
-          return null;
-        }
-        return nextRuntime;
-      }),
-    })),
+  removeNode: (nodeId) =>
+    set((state) => {
+      if (!state.project) return state;
+      const hasNode = state.project.nodes.some((node) => node.id === nodeId);
+      if (!hasNode) return state;
 
-  updateNodePosition: (projectId, nodeId, x, y) =>
+      const nextNodes = state.project.nodes.filter((node) => node.id !== nodeId);
+      const nextEdges = state.project.edges.filter(
+        (edge) => edge.source !== nodeId && edge.target !== nodeId,
+      );
+
+      return {
+        project: { ...state.project, nodes: nextNodes, edges: nextEdges },
+        history: pushHistory(state.history, {
+          nodes: state.project.nodes,
+          edges: state.project.edges,
+        }),
+        webviewRuntime: {
+          labelsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
+          ),
+          screenshotUrlsByNodeId: Object.fromEntries(
+            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
+              ([id]) => id !== nodeId,
+            ),
+          ),
+        },
+      };
+    }),
+
+  updateNodePosition: (nodeId, x, y) =>
     set((state) =>
-      replaceProjectNodes(state, projectId, (nodes) => {
+      replaceProjectNodes(state, (nodes) => {
         let changed = false;
         const nextNodes = nodes.map((node) => {
           if (node.id !== nodeId) return node;
@@ -606,9 +475,9 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     ),
 
-  updateNodeSize: (projectId, nodeId, width, height) =>
+  updateNodeSize: (nodeId, width, height) =>
     set((state) =>
-      replaceProjectNodes(state, projectId, (nodes) => {
+      replaceProjectNodes(state, (nodes) => {
         let changed = false;
         const nextNodes = nodes.map((node) => {
           if (node.id !== nodeId) return node;
@@ -620,11 +489,26 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     ),
 
-  updateNodeSizeWithoutHistory: (projectId, nodeId, width, height) =>
+  updateNodeBounds: (nodeId, x, y, width, height) =>
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          if (node.x === x && node.y === y && node.width === width && node.height === height) {
+            return node;
+          }
+          changed = true;
+          return { ...node, x, y, width, height };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  updateNodeSizeWithoutHistory: (nodeId, width, height) =>
     set((state) =>
       replaceProjectNodes(
         state,
-        projectId,
         (nodes) => {
           let changed = false;
           const nextNodes = nodes.map((node) => {
@@ -639,66 +523,143 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       ),
     ),
 
-  updateWebNodeUrl: (projectId, nodeId, url, title) =>
+  updateWebNodeUrl: (nodeId, url, title) =>
     set((state) => ({
-      projects: state.projects.map((project) => {
-        if (project.id !== projectId) return project;
-        return {
-          ...project,
-          nodes: project.nodes.map((node) => {
-            if (node.id !== nodeId) return node;
-            if (node.url === url && (node.title === title || !title)) return node;
-            return { ...node, url, title: title || node.title };
-          }),
-        };
-      }),
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: state.project.nodes.map((node) => {
+              if (node.id !== nodeId) return node;
+              if (node.url === url && (node.title === title || !title)) return node;
+              return { ...node, url, title: title || node.title };
+            }),
+          }
+        : null,
     })),
 
-  updateNodeTitle: (projectId, nodeId, title) =>
+  updateNodeTitle: (nodeId, title) =>
     set((state) => ({
-      projects: state.projects.map((project) => {
-        if (project.id !== projectId) return project;
-        return {
-          ...project,
-          nodes: project.nodes.map((node) => {
-            if (node.id !== nodeId || node.title === title) return node;
-            return { ...node, title };
-          }),
-        };
-      }),
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: state.project.nodes.map((node) => {
+              if (node.id !== nodeId || node.title === title) return node;
+              return { ...node, title };
+            }),
+          }
+        : null,
     })),
 
-  updateViewport: (projectId, viewport) =>
+  updateViewport: (viewport) =>
     set((state) => ({
-      projects: state.projects.map((project) => {
-        if (project.id !== projectId) return project;
-        const nextViewport =
-          typeof viewport.zoom === 'number'
-            ? { ...viewport, zoom: clampZoom(viewport.zoom) }
-            : viewport;
-        return { ...project, viewport: { ...project.viewport, ...nextViewport } };
-      }),
+      project: state.project
+        ? {
+            ...state.project,
+            viewport: {
+              ...state.project.viewport,
+              ...viewport,
+              ...(typeof viewport.zoom === 'number' ? { zoom: clampZoom(viewport.zoom) } : {}),
+            },
+          }
+        : null,
     })),
 
-  bringNodeToFront: (projectId, nodeId) =>
+  bringNodeToFront: (nodeId) =>
     set((state) => ({
-      projects: state.projects.map((project) => {
-        if (project.id !== projectId) return project;
-        const node = project.nodes.find((candidate) => candidate.id === nodeId);
-        if (!node) return project;
-        if (project.nodes[project.nodes.length - 1]?.id === nodeId) return project;
-        return {
-          ...project,
-          nodes: [...project.nodes.filter((candidate) => candidate.id !== nodeId), node],
-        };
-      }),
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: (() => {
+              const { nodes } = state.project;
+              const node = nodes.find((n) => n.id === nodeId);
+              if (!node) return nodes;
+              if (nodes[nodes.length - 1]?.id === nodeId) return nodes;
+              return [...nodes.filter((n) => n.id !== nodeId), node];
+            })(),
+          }
+        : null,
     })),
 
-  addStickyNoteNode: (projectId, options, zoom = 1) => {
+  sendNodeToBack: (nodeId) =>
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: (() => {
+              const { nodes } = state.project;
+              const node = nodes.find((n) => n.id === nodeId);
+              if (!node) return nodes;
+              if (nodes[0]?.id === nodeId) return nodes;
+              return [node, ...nodes.filter((n) => n.id !== nodeId)];
+            })(),
+          }
+        : null,
+    })),
+
+  bringNodeForward: (nodeId) =>
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: (() => {
+              const { nodes } = state.project;
+              const idx = nodes.findIndex((n) => n.id === nodeId);
+              if (idx === -1 || idx === nodes.length - 1) return nodes;
+              const node = nodes[idx];
+              if (isWebPageNode(node)) return nodes;
+              // WebPageNode をスキップして次の付箋/テキストを探す
+              let swapIdx = -1;
+              for (let i = idx + 1; i < nodes.length; i++) {
+                if (!isWebPageNode(nodes[i])) {
+                  swapIdx = i;
+                  break;
+                }
+              }
+              if (swapIdx === -1) return nodes;
+              const result = [...nodes];
+              // 対象ノードを取り出し、スワップ先の直後に挿入
+              result.splice(idx, 1);
+              result.splice(swapIdx, 0, node);
+              return result;
+            })(),
+          }
+        : null,
+    })),
+
+  sendNodeBackward: (nodeId) =>
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            nodes: (() => {
+              const { nodes } = state.project;
+              const idx = nodes.findIndex((n) => n.id === nodeId);
+              if (idx <= 0) return nodes;
+              const node = nodes[idx];
+              if (isWebPageNode(node)) return nodes;
+              // WebPageNode をスキップして前の付箋/テキストを探す
+              let swapIdx = -1;
+              for (let i = idx - 1; i >= 0; i--) {
+                if (!isWebPageNode(nodes[i])) {
+                  swapIdx = i;
+                  break;
+                }
+              }
+              if (swapIdx === -1) return nodes;
+              const result = [...nodes];
+              result.splice(idx, 1);
+              result.splice(swapIdx, 0, node);
+              return result;
+            })(),
+          }
+        : null,
+    })),
+
+  addStickyNoteNode: (options, zoom = 1) => {
     let createdNode: BoardNode | null = null;
 
     set((state) =>
-      replaceProjectNodes(state, projectId, (nodes) => {
+      replaceProjectNodes(state, (nodes) => {
         const nextNode: BoardNode = {
           id: createNodeId(),
           type: 'stickynote',
@@ -729,9 +690,9 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     return createdNode;
   },
 
-  updateStickyNoteContent: (projectId, nodeId, content) =>
+  updateStickyNoteContent: (nodeId, content) =>
     set((state) =>
-      replaceProjectNodes(state, projectId, (nodes) => {
+      replaceProjectNodes(state, (nodes) => {
         let changed = false;
         const nextNodes = nodes.map((node) => {
           if (node.id !== nodeId) return node;
@@ -743,9 +704,9 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     ),
 
-  cycleStickyNoteColor: (projectId, nodeId) =>
+  cycleStickyNoteColor: (nodeId) =>
     set((state) =>
-      replaceProjectNodes(state, projectId, (nodes) => {
+      replaceProjectNodes(state, (nodes) => {
         let changed = false;
         const nextNodes = nodes.map((node) => {
           if (node.id !== nodeId) return node;
@@ -756,9 +717,89 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     ),
 
-  pinWebNodeUrl: (projectId, nodeId) =>
+  addTextNode: (options, zoom = 1) => {
+    let createdNode: BoardNode | null = null;
+
     set((state) =>
-      replaceProjectNodes(state, projectId, (nodes) => {
+      replaceProjectNodes(state, (nodes) => {
+        const nextNode: BoardNode = {
+          id: createNodeId(),
+          type: 'text',
+          url: '',
+          title: 'Text',
+          tiptapContent: undefined,
+          fontSizePreset: 1,
+          fontWeight: 'normal',
+          italic: false,
+          strikethrough: false,
+          textColorIndex: 0,
+          widthMode: 'auto',
+          x: 0,
+          y: 0,
+          width: options?.width ?? DEFAULT_TEXT_NODE_WIDTH,
+          height: options?.height ?? DEFAULT_TEXT_NODE_HEIGHT,
+        };
+        const positioned = findNonOverlappingPosition(
+          nodes,
+          nextNode.type,
+          options?.x ?? 0,
+          options?.y ?? 0,
+          nextNode.width,
+          nextNode.height,
+          zoom,
+        );
+        const newNode = { ...nextNode, x: positioned.x, y: positioned.y };
+        createdNode = newNode;
+        return [...nodes, newNode];
+      }),
+    );
+
+    return createdNode;
+  },
+
+  updateTextNodeContent: (nodeId, tiptapContent) =>
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          changed = true;
+          return { ...node, tiptapContent };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  updateTextNodeStyle: (nodeId, style) =>
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          changed = true;
+          return { ...node, ...style };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  updateTextNodeWidthMode: (nodeId, widthMode) =>
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        let changed = false;
+        const nextNodes = nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          if (node.widthMode === widthMode) return node;
+          changed = true;
+          return { ...node, widthMode };
+        });
+        return changed ? nextNodes : null;
+      }),
+    ),
+
+  pinWebNodeUrl: (nodeId) =>
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
         let changed = false;
         const nextNodes = nodes.map((node) => {
           if (node.id !== nodeId) return node;
@@ -770,185 +811,139 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     ),
 
-  setWebNodeWebviewLabel: (projectId, nodeId, label) =>
-    set((state) => ({
-      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
-        if (runtime.labelsByNodeId[nodeId] === label) return runtime;
-        return {
-          labelsByNodeId: {
-            ...runtime.labelsByNodeId,
-            [nodeId]: label,
-          },
-          screenshotUrlsByNodeId: runtime.screenshotUrlsByNodeId,
-        };
+  addEdge: (edge) =>
+    set((state) =>
+      replaceProjectEdges(state, (edges) => {
+        const exists = edges.some(
+          (e) =>
+            e.source === edge.source &&
+            e.sourceHandle === edge.sourceHandle &&
+            e.target === edge.target &&
+            e.targetHandle === edge.targetHandle,
+        );
+        if (exists) return null;
+        return [...edges, edge];
       }),
+    ),
+
+  removeEdges: (edgeIds) =>
+    set((state) =>
+      replaceProjectEdges(state, (edges) => {
+        const idSet = new Set(edgeIds);
+        const nextEdges = edges.filter((e) => !idSet.has(e.id));
+        return nextEdges.length === edges.length ? null : nextEdges;
+      }),
+    ),
+
+  setWebNodeWebviewLabel: (nodeId, label) =>
+    set((state) => ({
+      webviewRuntime:
+        state.webviewRuntime.labelsByNodeId[nodeId] === label
+          ? state.webviewRuntime
+          : {
+              ...state.webviewRuntime,
+              labelsByNodeId: {
+                ...state.webviewRuntime.labelsByNodeId,
+                [nodeId]: label,
+              },
+            },
     })),
 
-  clearWebNodeWebviewLabel: (projectId, nodeId) =>
+  clearWebNodeWebviewLabel: (nodeId) =>
     set((state) => ({
-      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
-        if (!(nodeId in runtime.labelsByNodeId)) return runtime;
-        const { [nodeId]: _removedLabel, ...rest } = runtime.labelsByNodeId;
-        const nextRuntime = {
-          labelsByNodeId: rest,
-          screenshotUrlsByNodeId: runtime.screenshotUrlsByNodeId,
-        };
-        if (isProjectWebviewRuntimeEmpty(nextRuntime)) {
-          return null;
-        }
-        return nextRuntime;
-      }),
+      webviewRuntime: {
+        ...state.webviewRuntime,
+        labelsByNodeId: Object.fromEntries(
+          Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
+        ),
+      },
     })),
 
-  hydrateProjectScreenshotUrls: (projectId, screenshotUrlsByNodeId) =>
+  hydrateProjectScreenshotUrls: (screenshotUrlsByNodeId) =>
     set((state) => ({
-      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
-        let changed = false;
-        const nextScreenshotUrls = { ...runtime.screenshotUrlsByNodeId };
-
-        for (const [nodeId, url] of Object.entries(screenshotUrlsByNodeId)) {
-          if (!url || nextScreenshotUrls[nodeId] === url) continue;
-          nextScreenshotUrls[nodeId] = url;
-          changed = true;
-        }
-
-        if (!changed) return runtime;
-        return {
-          labelsByNodeId: runtime.labelsByNodeId,
-          screenshotUrlsByNodeId: nextScreenshotUrls,
-        };
-      }),
+      webviewRuntime: {
+        ...state.webviewRuntime,
+        screenshotUrlsByNodeId: {
+          ...state.webviewRuntime.screenshotUrlsByNodeId,
+          ...screenshotUrlsByNodeId,
+        },
+      },
     })),
 
-  setProjectScreenshotUrl: (projectId, nodeId, url) =>
+  setProjectScreenshotUrl: (nodeId, url) =>
     set((state) => ({
-      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
-        if (runtime.screenshotUrlsByNodeId[nodeId] === url) return runtime;
-        return {
-          labelsByNodeId: runtime.labelsByNodeId,
-          screenshotUrlsByNodeId: {
-            ...runtime.screenshotUrlsByNodeId,
-            [nodeId]: url,
-          },
-        };
-      }),
+      webviewRuntime: {
+        ...state.webviewRuntime,
+        screenshotUrlsByNodeId: {
+          ...state.webviewRuntime.screenshotUrlsByNodeId,
+          [nodeId]: url,
+        },
+      },
     })),
 
-  clearProjectScreenshotUrl: (projectId, nodeId) =>
+  clearProjectScreenshotUrl: (nodeId) =>
     set((state) => ({
-      webviewRuntime: updateProjectWebviewRuntime(state.webviewRuntime, projectId, (runtime) => {
-        if (!(nodeId in runtime.screenshotUrlsByNodeId)) return runtime;
-        const { [nodeId]: _removedScreenshot, ...rest } = runtime.screenshotUrlsByNodeId;
-        const nextRuntime = {
-          labelsByNodeId: runtime.labelsByNodeId,
-          screenshotUrlsByNodeId: rest,
-        };
-        if (isProjectWebviewRuntimeEmpty(nextRuntime)) {
-          return null;
-        }
-        return nextRuntime;
-      }),
+      webviewRuntime: {
+        ...state.webviewRuntime,
+        screenshotUrlsByNodeId: Object.fromEntries(
+          Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
+            ([id]) => id !== nodeId,
+          ),
+        ),
+      },
     })),
 
-  undoActiveProject: () =>
+  undoProject: () =>
     set((state) => {
-      if (state.activeId === HOME_ID) return state;
-      const projectId = state.activeId;
-      const history = state.nodeHistories[projectId];
-      if (!history || history.past.length === 0) return state;
+      if (!state.project || state.history.past.length === 0) return state;
 
-      const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-      if (projectIndex === -1) return state;
-
-      const project = state.projects[projectIndex];
-      const previousNodes = history.past[history.past.length - 1];
-      const nextPast = history.past.slice(0, -1);
-      const nextFuture = [...history.future, cloneNodes(project.nodes)];
-      const nextProjects = [...state.projects];
-      nextProjects[projectIndex] = { ...project, nodes: cloneNodes(previousNodes) };
-
+      const previous = state.history.past[state.history.past.length - 1];
       return {
-        projects: nextProjects,
-        nodeHistories: {
-          ...state.nodeHistories,
-          [projectId]: {
-            past: nextPast,
-            future: nextFuture,
-          },
+        project: {
+          ...state.project,
+          nodes: cloneNodes(previous.nodes),
+          edges: cloneEdges(previous.edges),
+        },
+        history: {
+          past: state.history.past.slice(0, -1),
+          future: [
+            ...state.history.future,
+            cloneSnapshot({ nodes: state.project.nodes, edges: state.project.edges }),
+          ],
         },
       };
     }),
 
-  redoActiveProject: () =>
+  redoProject: () =>
     set((state) => {
-      if (state.activeId === HOME_ID) return state;
-      const projectId = state.activeId;
-      const history = state.nodeHistories[projectId];
-      if (!history || history.future.length === 0) return state;
+      if (!state.project || state.history.future.length === 0) return state;
 
-      const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-      if (projectIndex === -1) return state;
-
-      const project = state.projects[projectIndex];
-      const nextNodes = history.future[history.future.length - 1];
-      const nextFuture = history.future.slice(0, -1);
-      const nextPast = [...history.past, cloneNodes(project.nodes)];
-      if (nextPast.length > NODE_HISTORY_LIMIT) {
-        nextPast.splice(0, nextPast.length - NODE_HISTORY_LIMIT);
+      const next = state.history.future[state.history.future.length - 1];
+      const nextPast = [
+        ...state.history.past,
+        cloneSnapshot({ nodes: state.project.nodes, edges: state.project.edges }),
+      ];
+      if (nextPast.length > HISTORY_LIMIT) {
+        nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
       }
-      const nextProjects = [...state.projects];
-      nextProjects[projectIndex] = { ...project, nodes: cloneNodes(nextNodes) };
 
       return {
-        projects: nextProjects,
-        nodeHistories: {
-          ...state.nodeHistories,
-          [projectId]: {
-            past: nextPast,
-            future: nextFuture,
-          },
+        project: {
+          ...state.project,
+          nodes: cloneNodes(next.nodes),
+          edges: cloneEdges(next.edges),
         },
-      };
-    }),
-
-  _restoreState: (restoredState) =>
-    set(() => {
-      const rawProjects = Array.isArray(restoredState.projects) ? restoredState.projects : [];
-      const restoredProjects = rawProjects.map((project, index) => sanitizeProject(project, index));
-      const existingIds = new Set(restoredProjects.map((project) => project.id));
-      const nextOpenIds = Array.isArray(restoredState.openIds)
-        ? restoredState.openIds.filter(
-            (id): id is string => typeof id === 'string' && existingIds.has(id),
-          )
-        : [];
-      const nextActiveId =
-        typeof restoredState.activeId === 'string' &&
-        (restoredState.activeId === HOME_ID || existingIds.has(restoredState.activeId))
-          ? restoredState.activeId
-          : (nextOpenIds[0] ?? HOME_ID);
-
-      return {
-        projects: restoredProjects,
-        openIds: nextOpenIds,
-        activeId: nextActiveId,
-        nodeHistories: {},
-        webviewRuntime: {},
+        history: {
+          past: nextPast,
+          future: state.history.future.slice(0, -1),
+        },
       };
     }),
 
   _setLoaded: () => set({ isLoaded: true }),
 }));
 
-export const selectActiveProject = (state: ProjectStore): Project | undefined =>
-  state.projects.find((project) => project.id === state.activeId);
+export const selectProject = (state: ProjectStore): Project | null => state.project;
 
-export const selectIsHome = (state: ProjectStore): boolean => state.activeId === HOME_ID;
-
-const EMPTY_WEBVIEW_RUNTIME: ProjectWebviewRuntime = createEmptyProjectWebviewRuntime();
-
-export const selectActiveProjectWebviewRuntime = (state: ProjectStore): ProjectWebviewRuntime => {
-  if (state.activeId === HOME_ID) {
-    return EMPTY_WEBVIEW_RUNTIME;
-  }
-  return state.webviewRuntime[state.activeId] ?? EMPTY_WEBVIEW_RUNTIME;
-};
+export const selectProjectWebviewRuntime = (state: ProjectStore): ProjectWebviewRuntime =>
+  state.webviewRuntime;

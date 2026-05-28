@@ -28,6 +28,8 @@
 - `set_theme`
 - `get_platform_info`
 
+テーマ切り替え UI はアプリメニュー `Siteboard > Settings > Theme` で提供する（CheckMenuItem ベース）。選択時に `theme-command` イベントを emit する。
+
 ### Webview
 
 - `create_page_webview(pageId, url, x, y, width, height, zoom)`
@@ -53,6 +55,7 @@
 - `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
 - `view-command`: メニューバー `View` 操作のビューコマンド通知（payload は `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out`）
+- `theme-command`: ネイティブテーマメニュー（`show_theme_menu`）で選択されたテーマ通知（payload は `light` / `dark` / `system`）
 
 ## Renderer <-> Renderer（window-local app quit coordination）
 

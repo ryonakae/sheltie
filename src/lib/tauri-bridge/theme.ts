@@ -5,6 +5,12 @@ import type { ThemeMode } from '@/types';
 
 import type { PlatformInfo } from './types';
 
+const THEME_COMMAND_EVENT = 'theme-command';
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === 'light' || value === 'dark' || value === 'system';
+}
+
 export const themeApi = {
   loadTheme: (): Promise<ThemeMode> => invoke('load_theme'),
 
@@ -13,6 +19,12 @@ export const themeApi = {
   onThemeChanged: (callback: (isDark: boolean) => void): void => {
     void getCurrentWindow().onThemeChanged(({ payload }) => {
       callback(payload === 'dark');
+    });
+  },
+
+  onThemeCommand: (callback: (mode: ThemeMode) => void): void => {
+    void getCurrentWindow().listen<string>(THEME_COMMAND_EVENT, ({ payload }) => {
+      if (isThemeMode(payload)) callback(payload);
     });
   },
 };

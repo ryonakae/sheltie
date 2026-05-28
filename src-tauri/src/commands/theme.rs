@@ -1,8 +1,22 @@
 use tauri::{AppHandle, Theme, Window};
 use tauri_plugin_store::StoreExt;
 
-const STORE_PATH: &str = "siteboard.json";
-const THEME_KEY: &str = "theme";
+pub const STORE_PATH: &str = "siteboard.json";
+pub const THEME_KEY: &str = "theme";
+
+pub const MENU_ID_THEME_LIGHT: &str = "theme.light";
+pub const MENU_ID_THEME_DARK: &str = "theme.dark";
+pub const MENU_ID_THEME_SYSTEM: &str = "theme.system";
+
+pub fn load_persisted_theme<R: tauri::Runtime>(app: &AppHandle<R>) -> String {
+    let Ok(store) = app.store(STORE_PATH) else {
+        return "system".to_string();
+    };
+    store
+        .get(THEME_KEY)
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "system".to_string())
+}
 
 #[tauri::command]
 pub async fn load_theme(app: AppHandle) -> Result<String, String> {
@@ -19,11 +33,7 @@ pub async fn load_theme(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn set_theme(
-    app: AppHandle,
-    window: Window,
-    mode: String,
-) -> Result<bool, String> {
+pub async fn set_theme(app: AppHandle, window: Window, mode: String) -> Result<bool, String> {
     let store = app
         .store(STORE_PATH)
         .map_err(|e| format!("ストアを開けません: {e}"))?;

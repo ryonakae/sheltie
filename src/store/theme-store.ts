@@ -30,10 +30,18 @@ export const useThemeStore = create<ThemeState>((set) => ({
   },
 }));
 
-/** OS テーマ変更イベントのリスナーを登録する。main.tsx から1回だけ呼び出す */
+/** OS テーマ変更とネイティブメニューからのテーマ変更イベントのリスナーを登録する */
 export function setupThemeListener(): void {
   themeApi.onThemeChanged((isDark: boolean) => {
     applyThemeToDocument(isDark);
     useThemeStore.setState({ isDark });
+  });
+  themeApi.onThemeCommand((mode) => {
+    void useThemeStore
+      .getState()
+      .setMode(mode)
+      .catch((error: unknown) => {
+        console.error('[theme-store] ネイティブメニューからのテーマ変更に失敗:', error);
+      });
   });
 }

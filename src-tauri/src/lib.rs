@@ -11,7 +11,10 @@ use commands::{
         load_project_file, load_window_context, new_document_tab, new_document_window,
         open_document_window, save_project_file, DocumentManagerState,
     },
-    theme::{get_platform_info, load_theme, set_theme},
+    theme::{
+        get_platform_info, load_persisted_theme, load_theme, set_theme, MENU_ID_THEME_DARK,
+        MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM,
+    },
     webview::{
         batch_update_page_webview_bounds, batch_update_webview_positions,
         capture_webview_screenshot, create_page_webview, delete_screenshot,
@@ -22,13 +25,17 @@ use commands::{
 };
 
 use tauri::{
-    menu::{Menu, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder},
+    menu::{
+        CheckMenuItem, Menu, MenuItemBuilder, MenuItemKind, PredefinedMenuItem, Submenu,
+        SubmenuBuilder,
+    },
     Emitter, Manager, RunEvent,
 };
 
 const EVENT_EDIT_COMMAND: &str = "edit-command";
 const EVENT_FILE_COMMAND: &str = "file-command";
 const EVENT_VIEW_COMMAND: &str = "view-command";
+const EVENT_THEME_COMMAND: &str = "theme-command";
 const EVENT_APP_EXIT_REQUESTED: &str = "app-exit-requested";
 const MENU_ID_APP_QUIT: &str = "app.quit";
 const MENU_ID_FILE_NEW_TAB: &str = "file.new-tab";
@@ -44,6 +51,7 @@ const MENU_ID_VIEW_RESET_ZOOM: &str = "view.reset-zoom";
 const MENU_ID_VIEW_ZOOM_IN: &str = "view.zoom-in";
 const MENU_ID_VIEW_ZOOM_OUT: &str = "view.zoom-out";
 const MENU_ID_OPEN_DEVTOOLS: &str = "develop.open-devtools";
+const MENU_ID_SETTINGS: &str = "app.settings";
 
 #[derive(Default)]
 pub struct AppExitCoordinatorState {
@@ -139,6 +147,10 @@ fn emit_edit_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str
 
 fn emit_view_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
     let _ = emit_window_command(app, EVENT_VIEW_COMMAND, command);
+}
+
+fn emit_theme_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, mode: &str) {
+    let _ = emit_window_command(app, EVENT_THEME_COMMAND, mode);
 }
 
 fn emit_file_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str) {
@@ -304,6 +316,7 @@ fn configure_app_menu<R: tauri::Runtime>(
 
         remove_submenu_item_by_id(&app_submenu, MENU_ID_APP_QUIT)?;
         remove_default_quit(&app_submenu)?;
+        remove_submenu_item_by_id(&app_submenu, MENU_ID_SETTINGS)?;
 
         let app_name = app
             .config()
@@ -315,7 +328,150 @@ fn configure_app_menu<R: tauri::Runtime>(
             .build(app)?;
         app_submenu.append(&quit_item)?;
 
+        insert_settings_submenu(app, &app_submenu)?;
+
         Ok(())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn insert_settings_submenu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    app_submenu: &Submenu<R>,
+) -> tauri::Result<()> {
+    // メニュー構築時点ではまだ tauri_plugin_store の State が manage されていないため、
+    // 初期チェックは全て off とし、setup フェーズで `update_theme_check_state` を呼んで反映する。
+    // セクションタイトル「Theme」は muda 経由では section header スタイルが使えないため、
+    // setup 後に `apply_settings_theme_section_header` で NSMenuItem.sectionHeaderWithTitle: を挿入する
+    let system_item =
+        CheckMenuItem::with_id(app, MENU_ID_THEME_SYSTEM, "System", true, false, None::<&str>)?;
+    let light_item =
+        CheckMenuItem::with_id(app, MENU_ID_THEME_LIGHT, "Light", true, false, None::<&str>)?;
+    let dark_item =
+        CheckMenuItem::with_id(app, MENU_ID_THEME_DARK, "Dark", true, false, None::<&str>)?;
+
+    let settings_submenu = SubmenuBuilder::with_id(app, MENU_ID_SETTINGS, "Settings")
+        .item(&system_item)
+        .item(&light_item)
+        .item(&dark_item)
+        .build()?;
+
+    // App メニュー既定構成 [0] About, [1] separator, [2] Services, ...
+    // の About と Services の間に Settings サブメニュー + separator を差し込む
+    let separator = PredefinedMenuItem::separator(app)?;
+    app_submenu.insert(&settings_submenu, 2)?;
+    app_submenu.insert(&separator, 3)?;
+
+    Ok(())
+}
+
+/// macOS 14+ の NSMenuItem.sectionHeaderWithTitle: を使い、Settings サブメニュー先頭に
+/// 「Theme」セクションタイトルを挿入する。setup 後（NSApp.mainMenu が利用可能な状態）に呼ぶ。
+#[cfg(target_os = "macos")]
+fn apply_settings_theme_section_header() -> Result<(), String> {
+    use objc2::runtime::{AnyClass, AnyObject};
+    use objc2_foundation::NSString;
+
+    unsafe {
+        let ns_app_class =
+            AnyClass::get(c"NSApplication").ok_or("NSApplication クラスが見つかりません")?;
+        let ns_app: *mut AnyObject = objc2::msg_send![ns_app_class, sharedApplication];
+        if ns_app.is_null() {
+            return Err("NSApplication.sharedApplication が null".to_string());
+        }
+
+        let main_menu: *mut AnyObject = objc2::msg_send![ns_app, mainMenu];
+        if main_menu.is_null() {
+            return Err("NSApplication.mainMenu が null".to_string());
+        }
+
+        // mainMenu の index 0 がアプリ submenu（Siteboard）
+        let app_item: *mut AnyObject = objc2::msg_send![main_menu, itemAtIndex: 0isize];
+        if app_item.is_null() {
+            return Err("App submenu item が見つかりません".to_string());
+        }
+        let app_submenu: *mut AnyObject = objc2::msg_send![app_item, submenu];
+        if app_submenu.is_null() {
+            return Err("App submenu が null".to_string());
+        }
+
+        // タイトル一致で Settings 項目を探す
+        let settings_title = NSString::from_str("Settings");
+        let settings_item: *mut AnyObject =
+            objc2::msg_send![app_submenu, itemWithTitle: &*settings_title];
+        if settings_item.is_null() {
+            return Err("Settings menu item が見つかりません".to_string());
+        }
+        let settings_submenu: *mut AnyObject = objc2::msg_send![settings_item, submenu];
+        if settings_submenu.is_null() {
+            return Err("Settings submenu が null".to_string());
+        }
+
+        // 既に section header を挿入済みなら何もしない（idempotency）
+        let first_item: *mut AnyObject = objc2::msg_send![settings_submenu, itemAtIndex: 0isize];
+        if !first_item.is_null() {
+            let is_section_header: bool = objc2::msg_send![first_item, isSectionHeader];
+            if is_section_header {
+                return Ok(());
+            }
+        }
+
+        let ns_menu_item_class =
+            AnyClass::get(c"NSMenuItem").ok_or("NSMenuItem クラスが見つかりません")?;
+        let theme_title = NSString::from_str("Theme");
+        let section_header: *mut AnyObject =
+            objc2::msg_send![ns_menu_item_class, sectionHeaderWithTitle: &*theme_title];
+        if section_header.is_null() {
+            return Err("section header の生成に失敗しました".to_string());
+        }
+
+        let _: () = objc2::msg_send![settings_submenu, insertItem: section_header, atIndex: 0isize];
+    }
+
+    Ok(())
+}
+
+/// menu hierarchy を再帰的に辿って、指定 id の CheckMenuItem を探す。
+fn find_check_menu_item<R: tauri::Runtime>(
+    menu: &Menu<R>,
+    id: &str,
+) -> Option<CheckMenuItem<R>> {
+    find_check_in_items(&menu.items().ok()?, id)
+}
+
+fn find_check_in_items<R: tauri::Runtime>(
+    items: &[MenuItemKind<R>],
+    id: &str,
+) -> Option<CheckMenuItem<R>> {
+    for item in items {
+        if let Some(check) = item.as_check_menuitem() {
+            if check.id() == id {
+                return Some(check.clone());
+            }
+        }
+        if let Some(submenu) = item.as_submenu() {
+            if let Ok(sub_items) = submenu.items() {
+                if let Some(found) = find_check_in_items(&sub_items, id) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn update_theme_check_state<R: tauri::Runtime>(app: &tauri::AppHandle<R>, selected_mode: &str) {
+    let Some(menu) = app.menu() else { return };
+    for (id, mode) in [
+        (MENU_ID_THEME_LIGHT, "light"),
+        (MENU_ID_THEME_DARK, "dark"),
+        (MENU_ID_THEME_SYSTEM, "system"),
+    ] {
+        if let Some(check) = find_check_menu_item(&menu, id) {
+            if let Err(error) = check.set_checked(mode == selected_mode) {
+                log::warn!("Theme メニューの check 状態更新に失敗: id={id}, error={error}");
+            }
+        }
     }
 }
 
@@ -560,6 +716,16 @@ pub fn run() {
             if let Err(error) = configure_macos_window_tabbing_policy(&app.handle()) {
                 log::error!("macOS native tab の初期化に失敗しました: {error}");
             }
+            // tauri_plugin_store の State がここで初期化済みなので、
+            // 永続化済みテーマで Settings > Theme の初期チェック状態を反映する
+            let initial_theme = load_persisted_theme(&app.handle());
+            update_theme_check_state(&app.handle(), &initial_theme);
+
+            #[cfg(target_os = "macos")]
+            if let Err(error) = apply_settings_theme_section_header() {
+                log::warn!("Settings の Theme section header 挿入に失敗: {error}");
+            }
+
             let launch_args: Vec<String> = std::env::args().collect();
             if let Err(error) = handle_launch_args(&app.handle(), &launch_args, None) {
                 log::error!("初期 window の作成に失敗しました: {error}");
@@ -578,6 +744,18 @@ pub fn run() {
                 MENU_ID_VIEW_RESET_ZOOM => emit_view_command(app, "reset-zoom"),
                 MENU_ID_VIEW_ZOOM_IN => emit_view_command(app, "zoom-in"),
                 MENU_ID_VIEW_ZOOM_OUT => emit_view_command(app, "zoom-out"),
+                MENU_ID_THEME_LIGHT => {
+                    update_theme_check_state(app, "light");
+                    emit_theme_command(app, "light");
+                }
+                MENU_ID_THEME_DARK => {
+                    update_theme_check_state(app, "dark");
+                    emit_theme_command(app, "dark");
+                }
+                MENU_ID_THEME_SYSTEM => {
+                    update_theme_check_state(app, "system");
+                    emit_theme_command(app, "system");
+                }
                 MENU_ID_OPEN_DEVTOOLS =>
                 {
                     #[cfg(debug_assertions)]

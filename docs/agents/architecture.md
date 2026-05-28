@@ -36,7 +36,7 @@ src/
 - `components/ReactFlowNodes/nodeTypes.ts`: React Flow `nodeTypes` 定数（循環依存防止のため types.ts から分離）
 - `components/ReactFlowEdges/ArrowEdge.tsx`: カスタムエッジ。ベジェ path + 始点ドット + 終端矢じり（SVG）を自前で描き、`selected` から色を React 側で出し分ける（HeroUI v3 `--accent` / `--border`）
 - `components/ReactFlowEdges/ArrowConnectionLine.tsx`: ドラッグ中の接続線。ArrowEdge と同じ見た目で、`fromX/fromY` を `Position` 方向に `handle 半径 / zoom` シフトして完成エッジと位置を揃える
-- `components/ReactFlowEdges/arrowGeometry.ts`: 矢印形状の共通定数（`ARROW_LENGTH` / `SOURCE_DOT_RADIUS` / `EDGE_STROKE_WIDTH` / `ROTATION_BY_POSITION`）
+- `components/ReactFlowEdges/arrowGeometry.ts`: 矢印形状と Handle サイズの共通定数（`ARROW_LENGTH` / `SOURCE_DOT_RADIUS` / `EDGE_STROKE_WIDTH` / `ROTATION_BY_POSITION` / `WEBPAGE_HANDLE_HIT_SIZE` / `WEBPAGE_HANDLE_VISUAL_DOT_SIZE`）
 - `components/ReactFlowEdges/edgeTypes.ts`: React Flow `edgeTypes` 定数。既定の `default` を `ArrowEdge` で上書き
 - `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
 - `store/tab-store.ts`: 単一 document window の node・edge・ビューポート状態と統合履歴（Undo/Redo）を管理

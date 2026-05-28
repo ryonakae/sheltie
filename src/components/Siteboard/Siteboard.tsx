@@ -135,6 +135,7 @@ export function Siteboard({
     clearProjectScreenshotUrl,
     addEdge: addEdgeToStore,
     removeEdges,
+    reverseEdge,
     bringNodeToFront,
     sendNodeToBack,
     bringNodeForward,
@@ -143,6 +144,7 @@ export function Siteboard({
     useShallow((s) => ({
       addEdge: s.addEdge,
       removeEdges: s.removeEdges,
+      reverseEdge: s.reverseEdge,
       clearProjectScreenshotUrl: s.clearProjectScreenshotUrl,
       cycleStickyNoteColor: s.cycleStickyNoteColor,
       updateTextNodeContent: s.updateTextNodeContent,
@@ -627,7 +629,9 @@ export function Siteboard({
 
   useSiteboardKeyboard({
     selectedNodeId,
+    selectedEdgeIds,
     onRemoveNode: handleRemoveNodeWithSettleReset,
+    onRemoveEdges: removeEdges,
     onUndo: undoProject,
     onRedo: redoProject,
     onBringNodeToFront: bringNodeToFront,
@@ -676,6 +680,42 @@ export function Siteboard({
       updateTextNodeStyle(nodeId, style);
     },
     [updateTextNodeStyle],
+  );
+
+  const handleEdgeContextMenu = useCallback(
+    (e: React.MouseEvent, edge: Edge) => {
+      e.preventDefault();
+      setSelectedEdgeIds(new Set([edge.id]));
+
+      const showMenu = async () => {
+        const menuItems: (MenuItem | PredefinedMenuItem)[] = [];
+
+        menuItems.push(
+          await MenuItem.new({
+            text: '矢印の向きを入れ替え',
+            action: () => {
+              reverseEdge(edge.id);
+            },
+          }),
+        );
+        menuItems.push(await PredefinedMenuItem.new({ item: 'Separator' }));
+        menuItems.push(
+          await MenuItem.new({
+            text: '矢印を削除',
+            accelerator: 'Backspace',
+            action: () => {
+              removeEdges([edge.id]);
+            },
+          }),
+        );
+
+        const menu = await Menu.new({ items: menuItems });
+        await menu.popup();
+      };
+
+      void showMenu();
+    },
+    [reverseEdge, removeEdges],
   );
 
   const handleNodeContextMenu = useCallback(
@@ -1254,11 +1294,19 @@ export function Siteboard({
           connectionLineComponent={ArrowConnectionLine}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
+          onEdgeContextMenu={handleEdgeContextMenu}
           onConnect={handleConnect}
           connectionMode={ConnectionMode.Loose}
+          // 吸着スナップ範囲。Handle のヒット領域より少し広めに取って、近接時の吸着を出やすくする
+          connectionRadius={40}
           isValidConnection={isValidConnection}
           defaultEdgeOptions={defaultEdgeOptions}
-          deleteKeyCode={['Backspace', 'Delete']}
+          // 自前のキーボードハンドラ（useSiteboardKeyboard）で削除を一元化するため、
+          // React Flow の組み込み delete は無効化する。
+          // 組み込み経由だと「edges 削除イベント → handleEdgesChange → store.removeEdges」と
+          // 「キーハンドラ → store.removeNode（edges を cascade 削除）」が二重に発火し、
+          // 1 つのノード削除で履歴が 2 段になる（Cmd+Z で edges が復元されない）。
+          deleteKeyCode={null}
           onViewportChange={handleViewportChange}
           onMoveStart={handleMoveStart}
           onMove={handleMove}

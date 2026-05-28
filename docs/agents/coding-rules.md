@@ -100,7 +100,9 @@
 - 丸（子要素）の表示条件: `selected` または「接続ドラッグ中かつこのノードに pointer がある」。前者は React Flow の `selected` prop、後者は `useConnection` の `inProgress` + 自前の `onPointerEnter/Leave` で判定する。`useConnection` の `toNode` は handle 近接時しか更新されないため、ノード本体ホバー検出には使えない
 - `connectionMode="loose"` で source 同士の接続を許可、`isValidConnection` で自己接続を禁止
 - エッジは `components/ReactFlowEdges/ArrowEdge.tsx` のカスタムエッジ。ベジェ path（`BaseEdge`）+ 始点ドット + 終端矢じり（SVG）を自前で描画。色は `selected` で `var(--accent)` / `var(--border)` を出し分け（HeroUI v3 テーマ追従）
-- ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。完成エッジと同じ見た目で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `8/zoom` シフトして ArrowEdge の端点（handle 外側の辺）と一致させる。矢印形状定数は `arrowGeometry.ts` で共有
+- ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。完成エッジと同じ見た目で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `(WEBPAGE_HANDLE_HIT_SIZE / 2) / zoom` シフトして ArrowEdge の端点（handle 外側の辺 = 視覚的な丸の中心）と一致させる。矢印形状と Handle サイズの定数は `arrowGeometry.ts` で共有
+- WebPageFlowNode の Handle は当たり判定（`WEBPAGE_HANDLE_HIT_SIZE`、透明）と視覚の丸（`WEBPAGE_HANDLE_VISUAL_DOT_SIZE`、青）を分離する。ヒット領域を視覚より大きく取り、ドラッグ開始と吸着のクリック判定を広げる。両者ともズーム非依存（`--canvas-zoom` で割る）。Handle 中心から外側の辺（=丸の中心）までの距離は `HIT_SIZE / 2` の前提で `ArrowConnectionLine` のオフセットを揃える
+- 吸着スナップ範囲は ReactFlow の `connectionRadius`（既定 20）で調整する。Handle のヒット領域より広めに取って近接時の吸着を出やすくする
 - エッジの選択状態は controlled mode のため Siteboard 側で自前同期する（`selectedEdgeIds` Set を `onEdgesChange` の `select` 変更で更新し、`flowEdges` に `selected` を反映）。これを行わないと選択時のスタイル変化が出ない
 - エッジの削除は選択 + `Backspace` / `Delete` キー（`onEdgesChange` で `remove` タイプを処理）
 - エッジの永続化は `Project.edges` / `SiteboardDocumentV2.edges` に保存。Undo/Redo はノードと統合スナップショットで管理
@@ -147,6 +149,8 @@
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `@tauri-apps/api/menu` の `Menu.new()` + `popup()` で macOS ネイティブメニューとして表示する。
 - node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
+- エッジ（矢印）の右クリック → コンテキストメニュー「矢印の向きを入れ替え / 矢印を削除」。`onEdgeContextMenu` でそのエッジを選択状態にしてからネイティブメニューを表示する。Webview 表示制御（`handleContextMenuOpen`）はノード向けの仕組みなので呼ばない。
+- エッジの Delete / Backspace 削除は `useSiteboardKeyboard` で扱う（選択中ノードがあればノード削除を優先、なければ選択中エッジを削除）。React Flow の `deleteKeyCode` は `null` で無効化する。組み込みの delete を有効にすると、ノード削除時に「connected edges の remove イベント → `store.removeEdges`」と「キーハンドラ → `store.removeNode`（edges を cascade 削除）」が二重に履歴へ積まれ、Cmd+Z 1 回で edges が復元されない。
 - File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
 - View メニューの `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out` 処理は `lib/view-commands.ts` に集約する。ハンドラの登録は `Siteboard.tsx` 内の `registerViewCommandHandlers` で行う。
 - `Cmd+=` は macOS が `Cmd+Shift+=` として解釈するためネイティブメニューショートカットでは拾えない。`useSiteboardKeyboard` 内で `e.key === '='` を検出して `runViewCommand('zoom-in')` を直接呼ぶことで補完する。

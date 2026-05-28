@@ -11,6 +11,10 @@ import {
 import { memo, useCallback, useState } from 'react';
 
 import { WebPageNode } from '@/components/Node/WebPageNode';
+import {
+  WEBPAGE_HANDLE_HIT_SIZE,
+  WEBPAGE_HANDLE_VISUAL_DOT_SIZE,
+} from '@/components/ReactFlowEdges/arrowGeometry';
 import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionChromeStyles';
 import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
 import { PAGE_MIN_HEIGHT, PAGE_MIN_WIDTH } from '@/constants';
@@ -109,18 +113,20 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
   // pointerEvents は常に 'auto'。非選択ノードでも接続ドラッグの接続先として認識させるため、
   // ヒットテストを無効化せず opacity のみで見た目を切り替える。
   //
-  // 構造: Handle 自身は透明な 16x16 のヒット領域。視覚的な丸は Handle の子として「外側の辺の中点」
-  // に絶対配置する。React Flow の端点計算は Handle の外側の辺（Right なら x+width など）を使うため、
-  // ここに丸の中心を揃えることで「線の始点 = 丸の中心」が一致する。
+  // 構造: Handle 自身は透明な正方形のヒット領域（WEBPAGE_HANDLE_HIT_SIZE）。視覚的な丸は Handle の
+  // 子として「外側の辺の中点」に絶対配置する（WEBPAGE_HANDLE_VISUAL_DOT_SIZE）。
+  // ヒット領域を視覚の丸より大きく取ることで、ドラッグ開始と吸着時のクリック判定を広げる。
+  // React Flow の端点計算は Handle の外側の辺（Right なら x+width など）を使うため、
+  // 丸の中心を Handle の外側の辺に揃えることで「線の始点 = 丸の中心」が一致する。
   // サイズ・offset は --canvas-zoom で zoom-invariant にする。
-  const handleSize = 'calc(16px / var(--canvas-zoom, 1))';
-  // Handle box は半分（8px）だけ外側に出るようアンカーをずらす。
-  // React Flow 既定 transform translate(±50%, ±50%) と組み合わせると、
-  // Handle の外側の辺がノード端から 16px 外側に来る = 丸の中心位置。
-  const handleAnchorOffset = 'calc(-8px / var(--canvas-zoom, 1))';
+  const handleHitSize = `calc(${WEBPAGE_HANDLE_HIT_SIZE}px / var(--canvas-zoom, 1))`;
+  const handleVisualDotSize = `calc(${WEBPAGE_HANDLE_VISUAL_DOT_SIZE}px / var(--canvas-zoom, 1))`;
+  // React Flow 既定 transform translate(±50%, ±50%) と組み合わせて、Handle の外側の辺が
+  // ノード端から (HIT_SIZE / 2) px 外側に来るようにする。HIT_SIZE = 32 のとき外側エッジは +16px。
+  // anchor offset（top/right/bottom/left）は HIT_SIZE/2 - 16 = 0 になるため指定不要。
   const handleHitStyleBase = {
-    width: handleSize,
-    height: handleSize,
+    width: handleHitSize,
+    height: handleHitSize,
     background: 'transparent',
     border: 'none',
     borderRadius: 0,
@@ -128,15 +134,15 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
     minHeight: 0,
   } satisfies React.CSSProperties;
   const handleHitStyleByPosition: Record<Position, React.CSSProperties> = {
-    [Position.Top]: { ...handleHitStyleBase, top: handleAnchorOffset },
-    [Position.Right]: { ...handleHitStyleBase, right: handleAnchorOffset },
-    [Position.Bottom]: { ...handleHitStyleBase, bottom: handleAnchorOffset },
-    [Position.Left]: { ...handleHitStyleBase, left: handleAnchorOffset },
+    [Position.Top]: handleHitStyleBase,
+    [Position.Right]: handleHitStyleBase,
+    [Position.Bottom]: handleHitStyleBase,
+    [Position.Left]: handleHitStyleBase,
   };
   const dotVisualStyleBase = {
     position: 'absolute',
-    width: handleSize,
-    height: handleSize,
+    width: handleVisualDotSize,
+    height: handleVisualDotSize,
     backgroundColor: '#3b82f6',
     border: 'calc(2px / var(--canvas-zoom, 1)) solid #fff',
     borderRadius: '50%',

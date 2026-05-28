@@ -94,6 +94,7 @@ interface ProjectActions {
   updateTextNodeWidthMode: (nodeId: string, widthMode: 'auto' | 'fixed') => void;
   addEdge: (edge: BoardEdge) => void;
   removeEdges: (edgeIds: string[]) => void;
+  reverseEdge: (edgeId: string) => void;
   pinWebNodeUrl: (nodeId: string) => void;
   setWebNodeWebviewLabel: (nodeId: string, label: string) => void;
   clearWebNodeWebviewLabel: (nodeId: string) => void;
@@ -832,6 +833,35 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         const idSet = new Set(edgeIds);
         const nextEdges = edges.filter((e) => !idSet.has(e.id));
         return nextEdges.length === edges.length ? null : nextEdges;
+      }),
+    ),
+
+  reverseEdge: (edgeId) =>
+    set((state) =>
+      replaceProjectEdges(state, (edges) => {
+        const target = edges.find((e) => e.id === edgeId);
+        if (!target) return null;
+        // 反転後と同じ向きのエッジが既に存在する場合は重複を避けるため何もしない
+        const reversedExists = edges.some(
+          (e) =>
+            e.id !== edgeId &&
+            e.source === target.target &&
+            e.sourceHandle === target.targetHandle &&
+            e.target === target.source &&
+            e.targetHandle === target.sourceHandle,
+        );
+        if (reversedExists) return null;
+        return edges.map((e) =>
+          e.id === edgeId
+            ? {
+                ...e,
+                source: e.target,
+                sourceHandle: e.targetHandle,
+                target: e.source,
+                targetHandle: e.sourceHandle,
+              }
+            : e,
+        );
       }),
     ),
 

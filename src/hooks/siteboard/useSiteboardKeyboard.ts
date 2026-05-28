@@ -5,7 +5,9 @@ import { runViewCommand } from '@/lib/view-commands';
 
 interface UseSiteboardKeyboardParams {
   selectedNodeId: string | null;
+  selectedEdgeIds: Set<string>;
   onRemoveNode: (nodeId: string) => void;
+  onRemoveEdges: (edgeIds: string[]) => void;
   onUndo: () => void;
   onRedo: () => void;
   onBringNodeToFront: (nodeId: string) => void;
@@ -16,7 +18,7 @@ interface UseSiteboardKeyboardParams {
 
 /**
  * Siteboard の編集・ビューショートカットを処理する。
- * - Delete / Backspace: 選択中ノード削除
+ * - Delete / Backspace: 選択中ノード削除 / 選択中エッジ削除
  * - Cmd/Ctrl + Z: Undo
  * - Cmd/Ctrl + Shift + Z: Redo
  * - Cmd/Ctrl + =: 拡大（Cmd+Shift+= のネイティブメニュー経路を補完）
@@ -27,7 +29,9 @@ interface UseSiteboardKeyboardParams {
  */
 export function useSiteboardKeyboard({
   selectedNodeId,
+  selectedEdgeIds,
   onRemoveNode,
+  onRemoveEdges,
   onUndo,
   onRedo,
   onBringNodeToFront,
@@ -38,9 +42,17 @@ export function useSiteboardKeyboard({
   useEffect(() => {
     return registerEditCommandHandlers({
       delete: () => {
-        if (!selectedNodeId) return false;
-        onRemoveNode(selectedNodeId);
-        return true;
+        // ノード削除時に connected edges を store.removeNode が cascade 削除するため、
+        // ノードとエッジの両方が選択中ならノード削除を優先する（履歴を 1 ステップにまとめる）
+        if (selectedNodeId) {
+          onRemoveNode(selectedNodeId);
+          return true;
+        }
+        if (selectedEdgeIds.size > 0) {
+          onRemoveEdges(Array.from(selectedEdgeIds));
+          return true;
+        }
+        return false;
       },
       redo: () => {
         onRedo();
@@ -51,7 +63,7 @@ export function useSiteboardKeyboard({
         return true;
       },
     });
-  }, [onRedo, onRemoveNode, onUndo, selectedNodeId]);
+  }, [onRedo, onRemoveEdges, onRemoveNode, onUndo, selectedEdgeIds, selectedNodeId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

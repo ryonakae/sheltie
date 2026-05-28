@@ -1,6 +1,6 @@
 import { Globe } from '@gravity-ui/icons';
 import Sticker from '@gravity-ui/icons/Sticker';
-import TextAlignLeft from '@gravity-ui/icons/TextAlignLeft';
+import Text from '@gravity-ui/icons/Text';
 import { Surface } from '@heroui/react';
 
 import { AppButton } from '@/components/Common/AppButton';
@@ -53,7 +53,7 @@ export function FloatingToolbar({
             aria-label="テキストを追加"
             className={FLOATING_CONTROL_BUTTON_CLASSNAME}
           >
-            <TextAlignLeft className="size-5" />
+            <Text className="size-5" />
           </AppButton>
         </Surface>
       </div>

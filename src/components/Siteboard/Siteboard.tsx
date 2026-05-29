@@ -38,10 +38,10 @@ import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
 import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
 import {
   DRAG_REPOSITION_GAP,
-  LOW_ZOOM_HIDE_THRESHOLD,
   MIN_ZOOM,
   MAX_ZOOM,
   PAGE_MIN_HEIGHT,
+  PAGE_MIN_WIDTH,
   STICKY_NOTE_MIN_HEIGHT,
   STICKY_NOTE_MIN_WIDTH,
   TEXT_NODE_MIN_WIDTH,
@@ -52,7 +52,12 @@ import {
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
-import { getNodeChromeHeight, getNodeFrameHeight } from '@/lib/siteboard-node-frame';
+import {
+  getNodeChromeHeight,
+  getNodeChromeWidth,
+  getNodeFrameHeight,
+  getNodeFrameWidth,
+} from '@/lib/siteboard-node-frame';
 import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
 import {
   resolveCenteredViewport,
@@ -63,7 +68,14 @@ import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-cha
 import { registerViewCommandHandlers } from '@/lib/view-commands';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
-import { isNodeEmpty, isStickyNoteNode, isTextNode, isTextNodeEmpty, isWebPageNode } from '@/types';
+import {
+  isNodeEmpty,
+  isNodeMoved,
+  isStickyNoteNode,
+  isTextNode,
+  isTextNodeEmpty,
+  isWebPageNode,
+} from '@/types';
 import type { TextNode, WebPageNode } from '@/types';
 
 interface SiteboardProps {
@@ -294,37 +306,39 @@ export function Siteboard({
 
   const handleWebPageResize = useCallback(
     (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
-      // React Flow の resize params.height は chrome 込みのフレーム全体高さ
-      const chromeHeight = getNodeChromeHeight({ type: 'webpage' }, zoomRef.current);
+      // React Flow の resize params.width / params.height は chrome 込みのフレーム外周サイズ
+      const chromeWidth = getNodeChromeWidth({ type: 'webpage' });
+      const chromeHeight = getNodeChromeHeight({ type: 'webpage' });
+      const contentWidth = Math.max(PAGE_MIN_WIDTH, params.width - chromeWidth);
       const contentHeight = Math.max(PAGE_MIN_HEIGHT, params.height - chromeHeight);
       setWebPageResizing({
         nodeId,
         x: params.x,
         y: params.y,
-        width: Math.round(params.width),
+        width: Math.round(contentWidth),
         height: Math.round(contentHeight),
       });
     },
-    [zoomRef],
+    [],
   );
 
   const handleWebPageResizeEnd = useCallback(
     (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
-      const chromeHeight = getNodeChromeHeight({ type: 'webpage' }, zoomRef.current);
+      const chromeWidth = getNodeChromeWidth({ type: 'webpage' });
+      const chromeHeight = getNodeChromeHeight({ type: 'webpage' });
+      const contentWidth = Math.max(PAGE_MIN_WIDTH, params.width - chromeWidth);
       const contentHeight = Math.max(PAGE_MIN_HEIGHT, params.height - chromeHeight);
       const nextX = Math.round(params.x);
       const nextY = Math.round(params.y);
-      const nextWidth = Math.round(params.width);
+      const nextWidth = Math.round(contentWidth);
       const nextHeight = Math.round(contentHeight);
       useProjectStore.getState().updateNodeBounds(nodeId, nextX, nextY, nextWidth, nextHeight);
       setWebPageResizing(null);
       handleInteractionChange(false, 'resize');
       handlePageResizeEnd(nodeId);
     },
-    [handleInteractionChange, handlePageResizeEnd, zoomRef],
+    [handleInteractionChange, handlePageResizeEnd],
   );
-
-  const hideCompactControls = Math.round(uiZoom * 100) <= Math.round(LOW_ZOOM_HIDE_THRESHOLD * 100);
 
   const {
     handleGoBack,
@@ -443,7 +457,6 @@ export function Siteboard({
         proposedX: node.position.x,
         proposedY: node.position.y,
         gap: DRAG_REPOSITION_GAP,
-        zoom: zoomRef.current,
       });
       if (resolvedPosition.corrected && isWebPageNode(movingNode)) {
         positionCorrectionSequenceRef.current += 1;
@@ -474,7 +487,6 @@ export function Siteboard({
       nodes,
       updateNodePosition,
       updateNodePositions,
-      zoomRef,
     ],
   );
 
@@ -1223,10 +1235,7 @@ export function Siteboard({
           isResizing ? stickyResizing.height : node.height,
           STICKY_NOTE_MIN_HEIGHT,
         );
-        const nodeHeight = getNodeFrameHeight(
-          { type: 'stickynote', height: contentHeight },
-          uiZoom,
-        );
+        const nodeHeight = getNodeFrameHeight({ type: 'stickynote', height: contentHeight });
         const nodeData: StickyNoteFlowNodeData = {
           nodeProps: {
             node: { ...node, x: 0, y: 0, width: contentWidth, height: contentHeight },
@@ -1295,28 +1304,18 @@ export function Siteboard({
         : position;
       const contentWidth = isResizing ? webPageResizing.width : node.width;
       const contentHeight = isResizing ? webPageResizing.height : node.height;
+      const empty = isNodeEmpty(node);
+      const moved = isNodeMoved(node);
       const nodeData: WebPageFlowNodeData = {
         nodeProps: {
           // isStickyNoteNode の早期 return 後に WebPageNode と確定しているが spread で型が広がるため cast
           node: { ...node, x: 0, y: 0 } as WebPageNode,
           isActive: node.id === activeNodeId,
-          title: node.title,
-          displayWidth: contentWidth,
-          displayHeight: contentHeight,
           displayMode: displayModes[node.id] ?? 'hidden',
           screenshotUrl: screenshotUrls[node.id] ?? null,
-          hideTopNavControls: hideCompactControls,
-          hideBottomPresetControls: hideCompactControls,
-          canGoBack: navStates[node.id]?.can_go_back ?? false,
-          canGoForward: navStates[node.id]?.can_go_forward ?? false,
           getZoom,
-          onGoBack: handleGoBack,
-          onGoForward: handleGoForward,
           onActivate: handleNodeActivate,
-          onReload: handleReloadWebNode,
-          onPinUrl: handlePinWebNodeUrl,
           onContextMenu: handleNodeContextMenu,
-          onResizePreset: handleResizePreset,
           onNavigated: handleNavigated,
           onTitleUpdated: handleTitleUpdated,
           onWebviewCreated: handleWebviewCreated,
@@ -1333,6 +1332,20 @@ export function Siteboard({
           positionCorrectionToY: positionCorrectionAnimations[node.id]?.toY ?? null,
           onPositionCorrectionAnimationComplete: handlePositionCorrectionAnimationComplete,
         },
+        toolbar: {
+          title: node.title,
+          displayWidth: contentWidth,
+          displayHeight: contentHeight,
+          canGoBack: navStates[node.id]?.can_go_back ?? false,
+          canGoForward: navStates[node.id]?.can_go_forward ?? false,
+          isMoved: moved,
+          isEmpty: empty,
+          onGoBack: () => handleGoBack(node.id),
+          onGoForward: () => handleGoForward(node.id),
+          onReload: () => handleReloadWebNode(node.id),
+          onPinUrl: () => handlePinWebNodeUrl(node.id),
+          onResizePreset: (width, height) => handleResizePreset(node.id, width, height),
+        },
         layoutZoom: uiZoom,
         onResizeStart: handleWebPageResizeStart,
         onResize: handleWebPageResize,
@@ -1345,8 +1358,8 @@ export function Siteboard({
         id: node.id,
         type: 'webPageFlowNode',
         position: webPagePosition,
-        width: contentWidth,
-        height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, uiZoom),
+        width: getNodeFrameWidth({ type: 'webpage', width: contentWidth }),
+        height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }),
         dragHandle: '.node-drag-handle',
         selected: selectedNodeIdSet.has(node.id),
         measured: rfMeasured[node.id],
@@ -1359,7 +1372,6 @@ export function Siteboard({
     rfMeasured,
     activeNodeId,
     selectedNodeIdSet,
-    hideCompactControls,
     stickyResizing,
     textResizing,
     webPageResizing,

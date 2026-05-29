@@ -14,9 +14,9 @@ import {
   MIN_ZOOM,
 } from '@/constants';
 import {
-  getNodeChromeScreenHeight,
   getNodeFrameHeight,
   getNodeFrameRect,
+  getNodeFrameWidth,
 } from '@/lib/siteboard-node-frame';
 import { selectProject, useProjectStore } from '@/store/tab-store';
 import { type BoardNode } from '@/types';
@@ -89,17 +89,15 @@ export function ProjectScreen() {
       const rect = siteboard.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
-      const chromeScreenHeight = getNodeChromeScreenHeight(node);
-      const heightBudget = Math.max(1, rect.height * 0.8 - chromeScreenHeight);
-      // ノード全体がビューポートに 80% フィットするズームを計算（最大 1 倍）
+      const frameRect = getNodeFrameRect(node);
+      // フレーム全体（=ノード矩形）がビューポートに 80% フィットするズームを計算（最大 1 倍）
       const targetZoom = Math.max(
         MIN_ZOOM,
-        Math.min((rect.width * 0.8) / node.width, heightBudget / node.height, 1),
+        Math.min((rect.width * 0.8) / frameRect.width, (rect.height * 0.8) / frameRect.height, 1),
       );
-      const frameRect = getNodeFrameRect(node, targetZoom);
-      // ノード中心がビューポート中心に来るパンを計算
-      const targetPanX = rect.width / 2 - (node.x + node.width / 2) * targetZoom;
-      const targetPanY = rect.height / 2 - (node.y + frameRect.height / 2) * targetZoom;
+      // フレーム中心がビューポート中心に来るパンを計算
+      const targetPanX = rect.width / 2 - (frameRect.x + frameRect.width / 2) * targetZoom;
+      const targetPanY = rect.height / 2 - (frameRect.y + frameRect.height / 2) * targetZoom;
 
       cancelCentering();
       if (prefersReducedMotion) {
@@ -164,15 +162,14 @@ export function ProjectScreen() {
       viewport?.zoom ?? 1,
       viewport?.panX ?? 0,
       viewport?.panY ?? 0,
-      DEFAULT_PAGE_WIDTH,
-      getNodeFrameHeight({ type: 'webpage', height: DEFAULT_PAGE_HEIGHT }, viewport?.zoom ?? 1),
+      getNodeFrameWidth({ type: 'webpage', width: DEFAULT_PAGE_WIDTH }),
+      getNodeFrameHeight({ type: 'webpage', height: DEFAULT_PAGE_HEIGHT }),
     );
     const created = addWebNode(
       undefined,
       centerPos
         ? { x: centerPos.x, y: centerPos.y, width: DEFAULT_PAGE_WIDTH, height: DEFAULT_PAGE_HEIGHT }
         : undefined,
-      viewport?.zoom ?? 1,
     );
     if (created) {
       setSelection([created.id]);
@@ -186,11 +183,8 @@ export function ProjectScreen() {
       viewport?.zoom ?? 1,
       viewport?.panX ?? 0,
       viewport?.panY ?? 0,
-      DEFAULT_STICKY_NOTE_WIDTH,
-      getNodeFrameHeight(
-        { type: 'stickynote', height: DEFAULT_STICKY_NOTE_HEIGHT },
-        viewport?.zoom ?? 1,
-      ),
+      getNodeFrameWidth({ type: 'stickynote', width: DEFAULT_STICKY_NOTE_WIDTH }),
+      getNodeFrameHeight({ type: 'stickynote', height: DEFAULT_STICKY_NOTE_HEIGHT }),
     );
     const created = addStickyNoteNode(
       centerPos
@@ -201,7 +195,6 @@ export function ProjectScreen() {
             height: DEFAULT_STICKY_NOTE_HEIGHT,
           }
         : undefined,
-      viewport?.zoom ?? 1,
     );
     if (created) {
       setSelection([created.id]);
@@ -215,8 +208,8 @@ export function ProjectScreen() {
       viewport?.zoom ?? 1,
       viewport?.panX ?? 0,
       viewport?.panY ?? 0,
-      DEFAULT_TEXT_NODE_WIDTH,
-      getNodeFrameHeight({ type: 'text', height: DEFAULT_TEXT_NODE_HEIGHT }, viewport?.zoom ?? 1),
+      getNodeFrameWidth({ type: 'text', width: DEFAULT_TEXT_NODE_WIDTH }),
+      getNodeFrameHeight({ type: 'text', height: DEFAULT_TEXT_NODE_HEIGHT }),
     );
     const created = addTextNode(
       centerPos
@@ -227,7 +220,6 @@ export function ProjectScreen() {
             height: DEFAULT_TEXT_NODE_HEIGHT,
           }
         : undefined,
-      viewport?.zoom ?? 1,
     );
     if (created) {
       setSelection([created.id]);

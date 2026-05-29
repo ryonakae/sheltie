@@ -33,8 +33,8 @@
 - **位置は React Flow が管理**: React Flow ノードの `position: {x, y}` には常に node の座標を設定。React Flow が `.react-flow__node` の CSS transform で絶対配置を制御
 - **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
 - **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化する
-- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` 本体内の上下 chrome shell に付け、上下バーの空き領域からだけドラッグできるようにする
-- **node 内ツールバー**: WebPage のツールバーは `NodeToolbar` を使わず、ノード本体と同じ DOM 階層に描く。重なり順はノード本体と一体で扱い、ポータル前提の click-through は使わない
+- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` のフレーム div（24px world 固定 padding 帯）に付ける。フレーム帯または `NodeToolbar` 内のタイトル段からドラッグできる
+- **NodeToolbar 2 段構成**: WebPage のツールバーは `NodeToolbar` を 2 つ使う。ツールバー段（`align="center" isVisible={selected && isActive}`）と、タイトル段（`align="start" isVisible offset={8}`）。タイトル段は常時表示で `[Moved] Title` を Webview+フレーム幅で `truncate`
 - **ツールバーの固定サイズ**: canvas zoom 中も文字・ボタン・アイコンの画面上サイズを固定したい UI は `zoomPx()` と `AppButton scaleWithCanvasZoom` を使う。高さ、padding、gap、font-size、icon size、border 幅を world 座標へ直接ハードコードしない
 - **付箋のドラッグ起点**: 付箋はノード本体をドラッグ可能にし、textarea などの操作要素だけを `nodrag` で保護する。スタイル変更は選択時に `NodeToolbar` で表示する
 - **付箋本文の編集開始**: 付箋本文は未選択時のクリックで選択だけ行い、選択済みの本文エリアを再度クリックした時だけ編集を開始する。リサイズ操作やツールバー操作からは編集開始しない
@@ -46,14 +46,14 @@
 ### ドラッグ機能
 
 - **ドラッグ中の位置管理**: `Siteboard.tsx` の `draggingNodePositions` state（React state）でドラッグ中の一時位置を管理。ストアへの書き込みは `onNodeDragStop` 完了時のみ（Undo/Redo 履歴の汚染防止）
-- **ハンドル指定**: WebPage は上下 chrome gutter に `dragHandle: '.node-drag-handle'` を使う。付箋はノード本体をドラッグ起点にする
+- **ハンドル指定**: WebPage はフレーム padding 帯（24px world 固定）に `dragHandle: '.node-drag-handle'` を使う。付箋はノード本体をドラッグ起点にする
 - **DisplayEngine 連携**: `onNodeDragStart` で `prepareInteractionStart('drag', nodeId)` を呼び出してスクリーンショット準備（`useSiteboardDisplayEngine` 統合）
 - **重なり補正**: `onNodeDragStop` で `handleRepositionOnDragEnd` を呼び出し、禁止された重なりを単軸補正（`siteboard-runtime.md` 参照）
 
 ### リサイズ機能（フェーズ 3 以降）
 
 - **StickyNoteNode リサイズ**: React Flow の `NodeResizeControl` は四隅ハンドルだけを使い、選択枠の線は共通 `SelectionFrameOverlay` で外側に描く。手動リサイズは**横幅変更のみ**許可し、高さは入力内容に応じた自動調整に委譲する。
-  - 付箋に chrome は無く、保存する `height` は本文エリアの高さそのもの
+  - 付箋にフレーム padding は無く、保存する `height` は本文エリアの高さそのもの
   - 手動リサイズの制約は `minWidth = STICKY_NOTE_MIN_WIDTH` のみを使う
   - 自動高さは `STICKY_NOTE_MIN_HEIGHT` を下限に `updateNodeSizeWithoutHistory` で反映し、Undo/Redo 履歴を積まない
   - ルート要素は `size-full` でレスポンシブ化。内部コンテンツは横方向の width 変更に追従する
@@ -63,7 +63,7 @@
   - `flowNodes` 構築時に `selected: selectedNodeIdSet.has(node.id)` を必ず明示的に設定（無いと選択連動の枠表示や複数選択ドラッグが動かない）。リサイズハンドルなど単独選択時のみ表示したい UI は、`selected` ではなく `isActive`（`selectedNodeIds.length === 1` の場合のみ true）でゲートする
   - `onNodesChange` の `dimensions` 変更を追跡して `rfMeasured` state に保存し、`flowNodes` の `measured` プロパティに付与（未初期化状態の防止）
   - `onNodesChange` の `select` 変更は複数同時に届くため、Set でまとめて反映してから配列に戻す。React Flow の Shift+クリック / ドラッグ範囲選択も全てこの経路で多選択になる
-- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizeControl` を 8 個明示配置する。可視の選択枠は共通 `SelectionFrameOverlay` で描き、line 4 本は上下左右リサイズ用の不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準に置く。見えている上下バー面とタイトル/操作 UI はどちらも `WebPageNode` 本体内に描く。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
+- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizeControl` を 8 個明示配置する。リサイズ枠とハンドルはフレーム外周（=ノード矩形）基準。可視の選択枠は共通 `SelectionFrameOverlay` で描き、line 4 本は上下左右リサイズ用の不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準に置く。`NodeResizeControl` から渡される `params.width / params.height` はフレーム外周のサイズなので、`getNodeChromeWidth / getNodeChromeHeight` を引いて Webview の content サイズに戻して保存する。タイトル / 操作 UI は `WebPageFlowNode` の `NodeToolbar` 2 段に分けて描く。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
   - リサイズ開始時に `onResizeStart` で `prepareInteractionStart('resize', nodeId)` を fire-and-forget で実行し、Webview スクリーンショット準備とスクリーンショット表示を非同期で開始
   - `onResize` で毎フレームの寸法を `webPageResizing` state に保持し、`flowNodes` useMemo で優先適用（スナップバック防止）
   - `onResizeEnd` でストア更新と `webPageResizing` クリア、DisplayEngine 復帰
@@ -71,7 +71,7 @@
 
 ### テキストノード
 
-- **透明背景**: テキストノードは chrome なし（`getNodeChromeScreenHeight` が 0 を返す）。選択枠は付箋と同じく `SelectionFrameOverlay` で外側に描く（編集中も表示する）
+- **透明背景**: テキストノードはフレーム padding なし（`getNodeChromeHeight` / `getNodeChromeWidth` が 0 を返す）。選択枠は付箋と同じく `SelectionFrameOverlay` で外側に描く（編集中も表示する）
 - **ダブルクリックで編集モード**: シングルクリックで選択+ドラッグ可能、ダブルクリックで Tiptap エディタが `editable` になりテキスト入力可能。編集中は `nodrag` で移動を抑制
 - **編集モード終了**: Escape キーまたはノード外クリック（blur）で終了。終了時に Tiptap JSON を store に保存し、Undo/Redo 用のスナップショットが積まれる
 - **空ノードの自動削除**: 選択解除のタイミングで `isTextNodeEmpty(node)` が true ならノードを自動削除する（Siteboard.tsx の useEffect 経路）
@@ -177,7 +177,7 @@
 - 可視の青い選択線は共通 `SelectionFrameOverlay` が描き、Web の line 要素は `src/index.css` で選択線をまたぐ resize hit area とカーソルを持たせる。
 - 角ハンドルは付箋ノードと同じく選択線の交点に中心が乗る配置を使う。
 - リサイズカーソルは inline style ではなく `NodeResizeControl` の class と `src/index.css` で管理する。
-- top / bottom chrome は `dragHandle: '.node-drag-handle'` を維持し、ボタン類は `nodrag` と `onMouseDown` で drag 開始を止める。
+- フレーム padding 帯（24px world 固定）は `dragHandle: '.node-drag-handle'` を維持し、ツールバー内のボタン類は `nodrag` で drag 開始を止める。
 
 ### StickyNoteNode（React Flow `NodeResizeControl` で左右辺 + 四隅ハンドルを表示）
 
@@ -222,7 +222,7 @@
 - `flowNodes` useMemo が再計算されると全ノードが新参照になりチェックが失敗し、新しい internal node が作成される。
 - このとき `node.width` / `node.height`（top-level）がなければ `nodeHasDimensions()` が `false` を返し、ノードが `visibility: hidden` になる。ResizeObserver が再計測するまで1フレーム非表示になり**全ノードちらつき**が発生する。
 - **対策**: `flowNodes` の各 Node オブジェクトに必ず top-level `width` と `height` を指定する。`style.width/height` ではなく Node 直下のプロパティ。
-  - WebPage ノード: `width: contentWidth, height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, uiZoom)`
-  - StickyNote ノード: `width: node.width, height: getNodeFrameHeight({ type: 'stickynote', height: node.height }, uiZoom)`
-  - `getNodeFrameHeight` は chrome（WebPage の top/bottom bar）込みの論理高さを返す（`src/lib/siteboard-node-frame.ts`）。StickyNote / Text は chrome 0 で本文高さそのもの
+  - WebPage ノード: `width: getNodeFrameWidth({ type: 'webpage', width: contentWidth }), height: getNodeFrameHeight({ type: 'webpage', height: contentHeight })`
+  - StickyNote ノード: `width: node.width, height: getNodeFrameHeight({ type: 'stickynote', height: node.height })`
+  - `getNodeFrameWidth / getNodeFrameHeight` は WebPage では `WEB_PAGE_FRAME_PADDING * 2` を加えた world 固定のフレーム外周サイズを返す（`src/lib/siteboard-node-frame.ts`）。StickyNote / Text は padding 0 で本文サイズそのもの
   - `uiZoom` は layout 用の reactive 値、`zoomRef.current` はイベント中の即時計算用として役割を分ける

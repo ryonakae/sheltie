@@ -129,7 +129,7 @@ return type;
 - 新規ノード追加時の自動配置も drag 補正と同じ zoom-aware な外枠矩形を使う
 - センタリングや可視判定の fallback 計算も同じ外枠矩形を使い、DOM 実測がない場合でも content だけで過小評価しない
 - 一方でネイティブ Webview の bounds 更新や safe area 判定は従来どおり placeholder 矩形を使う。外枠判定と Webview 実表示判定は責務を分ける
-- WebPage の placeholder は上下 chrome gutter を除いた content 領域だけを指す。node 内に描いた上下 chrome は外枠に含めるが、Webview bounds には含めない
+- WebPage の placeholder はフレーム padding（上下左右 24px world 固定）の内側だけを指す。Webview bounds は placeholder の rect そのもので、フレーム padding 領域には Webview を表示しない
 
 ## 遷移ルール
 
@@ -253,7 +253,7 @@ return type;
 - Webview API は例外時 no-op を許容する前提。
 - 空フレーム（`url === ''`）は Webview を作成しない。
 - Webview の create/destroy は URL 同期から切り離し、`node.url` 更新では再生成しない。
-- `Siteboard.tsx` は mount 直後の `useLayoutEffect` で `data-siteboard-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提の top/bottom chrome 高さを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする。
+- `Siteboard.tsx` は mount 直後の `useLayoutEffect` で `data-siteboard-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提のフレーム枠線太さなどを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする。
 - `webviewLabel` は `BoardNode` に持たず、`tab-store` の `webviewRuntime.labelsByNodeId` に保持する。「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。label が無いページは `native` に戻さず `screenshot` または `hidden` を使う。
 - 既存 Webview への後続操作は `pageId` から引き直さず、この `labelsByNodeId` の `label` を正本として使う。`updateBounds`、`setOpacity`、`reload`、`goBack/Forward`、`saveScreenshot` はすべて `label` ベースで呼ぶ。
 - label 登録後の native bounds 再同期は `useSiteboardNodeRuntime` から直接 `computeDisplayModes()` を呼ばず、`useSiteboardDisplayEngine` が `webviewLabelsByNodeId` の安定キー変化を検知して 2 フレーム後に実行する。これにより最新 render の closure で `placeholder` 矩形と label の両方を読み、`updateBounds()` まで確実に到達させる。

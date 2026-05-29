@@ -6,6 +6,21 @@ import type { TextNodeFontSizePreset } from '@/types';
 /** WebPageFlowNode の data 型 */
 export type WebPageFlowNodeData = {
   nodeProps: WebPageNodeProps;
+  /** タイトル段 / ツールバー段で表示する情報（ノード矩形外に NodeToolbar として描画） */
+  toolbar: {
+    title: string;
+    displayWidth: number;
+    displayHeight: number;
+    canGoBack: boolean;
+    canGoForward: boolean;
+    isMoved: boolean;
+    isEmpty: boolean;
+    onGoBack: () => void;
+    onGoForward: () => void;
+    onReload: () => void;
+    onPinUrl: () => void;
+    onResizePreset: (width: number, height: number) => void;
+  };
   /** レイアウト計算に使う現在のキャンバスズーム */
   layoutZoom: number;
   /** リサイズ開始コールバック（fire-and-forget で DisplayEngine を起動） */

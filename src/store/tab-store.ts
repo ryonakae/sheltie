@@ -18,7 +18,11 @@ import {
   documentNodeToBoardNode,
   sanitizeProjectDocument,
 } from '@/lib/project-document';
-import { getNodeFrameHeight, getNodeFrameRect } from '@/lib/siteboard-node-frame';
+import {
+  getNodeFrameHeight,
+  getNodeFrameRect,
+  getNodeFrameWidth,
+} from '@/lib/siteboard-node-frame';
 import type {
   BoardEdge,
   BoardNode,
@@ -54,7 +58,6 @@ interface ProjectActions {
   addWebNode: (
     url?: string,
     options?: { x: number; y: number; width: number; height: number },
-    zoom?: number,
   ) => BoardNode | null;
   setWebNodeUrl: (nodeId: string, url: string) => void;
   changeWebNodeUrl: (nodeId: string, url: string) => void;
@@ -72,10 +75,12 @@ interface ProjectActions {
   sendNodeToBack: (nodeId: string) => void;
   bringNodeForward: (nodeId: string) => void;
   sendNodeBackward: (nodeId: string) => void;
-  addStickyNoteNode: (
-    options?: { x: number; y: number; width: number; height: number },
-    zoom?: number,
-  ) => BoardNode | null;
+  addStickyNoteNode: (options?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => BoardNode | null;
   updateStickyNoteContent: (nodeId: string, content: string) => void;
   updateStickyNoteStyle: (
     nodeId: string,
@@ -84,10 +89,12 @@ interface ProjectActions {
       fontSizePreset?: TextNodeFontSizePreset;
     },
   ) => void;
-  addTextNode: (
-    options?: { x: number; y: number; width: number; height: number },
-    zoom?: number,
-  ) => BoardNode | null;
+  addTextNode: (options?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => BoardNode | null;
   updateTextNodeContent: (nodeId: string, tiptapContent: object) => void;
   updateTextNodeStyle: (
     nodeId: string,
@@ -189,11 +196,11 @@ function findNonOverlappingPosition(
   y: number,
   width: number,
   height: number,
-  zoom: number,
   options?: { keepY?: boolean },
 ) {
-  const existingRects = nodes.map((node) => getNodeFrameRect(node, zoom));
-  const candidateFrameHeight = getNodeFrameHeight({ type, height }, zoom);
+  const existingRects = nodes.map((node) => getNodeFrameRect(node));
+  const candidateFrameHeight = getNodeFrameHeight({ type, height });
+  const candidateFrameWidth = getNodeFrameWidth({ type, width });
 
   if (nodes.length === 0) {
     return { x, y };
@@ -210,7 +217,7 @@ function findNonOverlappingPosition(
         let candidateX = x;
         while (true) {
           const overlapNodes = sameRowNodes.filter((node) =>
-            isHorizontalOverlapping(candidateX, width, node),
+            isHorizontalOverlapping(candidateX, candidateFrameWidth, node),
           );
           if (overlapNodes.length === 0) {
             return { x: candidateX, y: candidateY };
@@ -232,7 +239,7 @@ function findNonOverlappingPosition(
       let candidateX = x;
       while (true) {
         const overlapNodes = sameRowNodes.filter((node) =>
-          isHorizontalOverlapping(candidateX, width, node),
+          isHorizontalOverlapping(candidateX, candidateFrameWidth, node),
         );
         if (overlapNodes.length === 0) {
           return { x: candidateX, y: candidateY };
@@ -342,7 +349,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       };
     }),
 
-  addWebNode: (url = '', options, zoom = 1) => {
+  addWebNode: (url = '', options) => {
     let createdNode: BoardNode | null = null;
 
     set((state) =>
@@ -374,7 +381,6 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           options?.y ?? 0,
           newNodeBase.width,
           newNodeBase.height,
-          zoom,
           { keepY: true },
         );
         const newNode = {
@@ -716,7 +722,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         : null,
     })),
 
-  addStickyNoteNode: (options, zoom = 1) => {
+  addStickyNoteNode: (options) => {
     let createdNode: BoardNode | null = null;
 
     set((state) =>
@@ -741,7 +747,6 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           options?.y ?? 0,
           nextNode.width,
           nextNode.height,
-          zoom,
         );
         const newNode = { ...nextNode, x: positioned.x, y: positioned.y };
         createdNode = newNode;
@@ -779,7 +784,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     ),
 
-  addTextNode: (options, zoom = 1) => {
+  addTextNode: (options) => {
     let createdNode: BoardNode | null = null;
 
     set((state) =>
@@ -808,7 +813,6 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           options?.y ?? 0,
           nextNode.width,
           nextNode.height,
-          zoom,
         );
         const newNode = { ...nextNode, x: positioned.x, y: positioned.y };
         createdNode = newNode;

@@ -1,6 +1,7 @@
 import {
   Handle,
   NodeResizeControl,
+  NodeToolbar,
   Position,
   ResizeControlVariant,
   useConnection,
@@ -17,20 +18,23 @@ import {
 } from '@/components/ReactFlowEdges/arrowGeometry';
 import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionChromeStyles';
 import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
+import { WebPageToolbar } from '@/components/ReactFlowNodes/WebPageToolbar';
 import { PAGE_MIN_HEIGHT, PAGE_MIN_WIDTH } from '@/constants';
-import { getNodeChromeHeight } from '@/lib/siteboard-node-frame';
+import { getNodeChromeHeight, getNodeChromeWidth } from '@/lib/siteboard-node-frame';
 
 import type { WebPageFlowNodeData } from './types';
 
+const FRAME_CHROME_WIDTH = getNodeChromeWidth({ type: 'webpage' });
+const FRAME_CHROME_HEIGHT = getNodeChromeHeight({ type: 'webpage' });
+
 /**
  * React Flow 用の WebPageNode ラッパー。
- * - nopan: ノード上でのパンを無効化
- * - React Flow がノード位置を管理するため node の x/y を 0 にオーバーライドする
- * - WebPageNode 本体に top / bottom chrome と操作 UI を持たせる
- * - NodeResizeControl を 8 個明示配置し、corner handle は付箋ノードと同じ交点基準で描画する
+ * - ノード矩形 = フレーム外周（Webview の上下左右 24px の余白を含む）
+ * - タイトル段 / ツールバー段は NodeToolbar でフレーム外側に配置（zoom-invariant）
+ * - 接続ハンドル / リサイズハンドル / バウンディングボックスはフレーム外周基準
  */
 export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selected }: NodeProps) {
-  const { nodeProps, layoutZoom, onResizeStart, onResize, onResizeEnd } =
+  const { nodeProps, toolbar, onResizeStart, onResize, onResizeEnd } =
     data as unknown as WebPageFlowNodeData;
 
   // 接続ドラッグ中かどうか。useConnection の toNode はハンドル近接時のみ更新されるため、
@@ -44,8 +48,8 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
   const handlePointerEnter = useCallback(() => setIsPointerOver(true), []);
   const handlePointerLeave = useCallback(() => setIsPointerOver(false), []);
 
-  // chrome 高さ（TopBar + BottomBar）はズームに応じて変わるため動的に計算
-  const minHeight = getNodeChromeHeight({ type: 'webpage' }, layoutZoom) + PAGE_MIN_HEIGHT;
+  const minWidth = PAGE_MIN_WIDTH + FRAME_CHROME_WIDTH;
+  const minHeight = PAGE_MIN_HEIGHT + FRAME_CHROME_HEIGHT;
 
   const handleResizeStart = useCallback(() => {
     onResizeStart(id);
@@ -111,20 +115,8 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
     },
   ];
 
-  // pointerEvents は常に 'auto'。非選択ノードでも接続ドラッグの接続先として認識させるため、
-  // ヒットテストを無効化せず opacity のみで見た目を切り替える。
-  //
-  // 構造: Handle 自身は透明な正方形のヒット領域（WEBPAGE_HANDLE_HIT_SIZE）。視覚的な丸は Handle の
-  // 子として「外側の辺の中点」に絶対配置する（WEBPAGE_HANDLE_VISUAL_DOT_SIZE）。
-  // ヒット領域を視覚の丸より大きく取ることで、ドラッグ開始と吸着時のクリック判定を広げる。
-  // React Flow の端点計算は Handle の外側の辺（Right なら x+width など）を使うため、
-  // 丸の中心を Handle の外側の辺に揃えることで「線の始点 = 丸の中心」が一致する。
-  // サイズ・offset は --canvas-zoom で zoom-invariant にする。
   const handleHitSize = `calc(${WEBPAGE_HANDLE_HIT_SIZE}px / var(--canvas-zoom, 1))`;
   const handleVisualDotSize = `calc(${WEBPAGE_HANDLE_VISUAL_DOT_SIZE}px / var(--canvas-zoom, 1))`;
-  // React Flow 既定 transform translate(±50%, ±50%) と組み合わせて、Handle の外側の辺が
-  // ノード端から (HIT_SIZE / 2) px 外側に来るようにする。HIT_SIZE = 32 のとき外側エッジは +16px。
-  // anchor offset（top/right/bottom/left）は HIT_SIZE/2 - 16 = 0 になるため指定不要。
   const handleHitStyleBase = {
     width: handleHitSize,
     height: handleHitSize,
@@ -151,7 +143,6 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
     transition: 'opacity 0.15s',
     pointerEvents: 'none',
   } satisfies React.CSSProperties;
-  // Handle 内側で、外側の辺の中点に丸の中心を揃える
   const dotVisualStyleByPosition: Record<Position, React.CSSProperties> = {
     [Position.Top]: {
       ...dotVisualStyleBase,
@@ -179,12 +170,48 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
     },
   };
 
+  // タイトル段の幅 = フレーム外周幅（画面上）= node 矩形 width * canvas-zoom
+  // タイトル段は NodeToolbar 内（zoom-invariant 領域）にあるため、CSS 変数で画面上 px を表現する
+  const titleMaxWidth = `calc((${nodeProps.node.width + FRAME_CHROME_WIDTH}px) * var(--canvas-zoom, 1))`;
+
   return (
     <div
       className="nopan relative size-full"
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
     >
+      {/* ツールバー段（中央寄せ・単独選択時のみ表示） */}
+      <NodeToolbar
+        position={Position.Top}
+        align="center"
+        isVisible={!!selected && nodeProps.isActive}
+        offset={36}
+      >
+        <WebPageToolbar
+          width={toolbar.displayWidth}
+          height={toolbar.displayHeight}
+          canGoBack={!toolbar.isEmpty && toolbar.canGoBack}
+          canGoForward={!toolbar.isEmpty && toolbar.canGoForward}
+          isMoved={toolbar.isMoved}
+          onGoBack={toolbar.onGoBack}
+          onGoForward={toolbar.onGoForward}
+          onReload={toolbar.onReload}
+          onPinUrl={toolbar.onPinUrl}
+          onResizePreset={toolbar.onResizePreset}
+        />
+      </NodeToolbar>
+
+      {/* タイトル段（左寄せ・常時表示・ドラッグ可能） */}
+      <NodeToolbar position={Position.Top} align="start" isVisible offset={8}>
+        <div
+          className="node-drag-handle flex items-baseline overflow-hidden text-xs/none whitespace-nowrap text-muted"
+          style={{ maxWidth: titleMaxWidth }}
+        >
+          {toolbar.isMoved && <span className="shrink-0">[Moved]&nbsp;</span>}
+          <span className="min-w-0 flex-1 truncate">{toolbar.title}</span>
+        </div>
+      </NodeToolbar>
+
       <WebPageNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
 
       <Handle
@@ -232,7 +259,7 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
               resizeDirection={resizeDirection}
               className={className}
               autoScale={false}
-              minWidth={PAGE_MIN_WIDTH}
+              minWidth={minWidth}
               minHeight={minHeight}
               style={resizeLineStyle}
               onResizeStart={handleResizeStart}
@@ -247,7 +274,7 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
               position={position}
               className={className}
               autoScale={false}
-              minWidth={PAGE_MIN_WIDTH}
+              minWidth={minWidth}
               minHeight={minHeight}
               style={resizeHandleStyle}
               onResizeStart={handleResizeStart}

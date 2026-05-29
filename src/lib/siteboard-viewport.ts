@@ -37,7 +37,7 @@ function createBounds(left: number, top: number, right: number, bottom: number):
   };
 }
 
-export function getNodeBounds(nodes: BoardNode[], zoom: number): Bounds | null {
+export function getNodeBounds(nodes: BoardNode[]): Bounds | null {
   if (nodes.length === 0) return null;
 
   let left = Number.POSITIVE_INFINITY;
@@ -46,7 +46,7 @@ export function getNodeBounds(nodes: BoardNode[], zoom: number): Bounds | null {
   let bottom = Number.NEGATIVE_INFINITY;
 
   for (const node of nodes) {
-    const rect = getNodeFrameRect(node, zoom);
+    const rect = getNodeFrameRect(node);
     left = Math.min(left, rect.left);
     top = Math.min(top, rect.top);
     right = Math.max(right, rect.right);
@@ -75,7 +75,7 @@ export function resolveCenteredViewport(
   viewportHeight: number,
   zoom = 1,
 ): SiteboardViewportTarget {
-  const bounds = getNodeBounds(nodes, zoom);
+  const bounds = getNodeBounds(nodes);
   if (!bounds) {
     return { x: 0, y: 0, zoom };
   }
@@ -90,7 +90,7 @@ function fitsWithinViewport(
   zoom: number,
   paddingPx: number,
 ): boolean {
-  const bounds = getNodeBounds(nodes, zoom);
+  const bounds = getNodeBounds(nodes);
   if (!bounds) return true;
 
   const availableWidth = Math.max(1, viewportWidth - paddingPx * 2);
@@ -130,7 +130,7 @@ export function resolveFitViewport(
   const zoom = fitsWithinViewport(nodes, viewportWidth, viewportHeight, high, paddingPx)
     ? high
     : low;
-  const bounds = getNodeBounds(nodes, zoom);
+  const bounds = getNodeBounds(nodes);
   if (!bounds) return null;
 
   return getCenteredViewport(bounds, viewportWidth, viewportHeight, zoom);

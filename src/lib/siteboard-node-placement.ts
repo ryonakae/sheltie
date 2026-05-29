@@ -1,4 +1,8 @@
-import { getNodeFrameHeight, getNodeFrameRect } from '@/lib/siteboard-node-frame';
+import {
+  getNodeFrameHeight,
+  getNodeFrameRect,
+  getNodeFrameWidth,
+} from '@/lib/siteboard-node-frame';
 import { type BoardNode, isWebPageNode } from '@/types';
 
 type Axis = 'x' | 'y';
@@ -9,7 +13,6 @@ interface ResolveDraggedNodePositionParams {
   proposedX: number;
   proposedY: number;
   gap: number;
-  zoom: number;
 }
 
 interface Interval {
@@ -103,11 +106,11 @@ function resolveAxisCoordinate(
   proposedX: number,
   proposedY: number,
   gap: number,
-  zoom: number,
 ): number {
-  const movingFrameHeight = getNodeFrameHeight(movingNode, zoom);
+  const movingFrameWidth = getNodeFrameWidth(movingNode);
+  const movingFrameHeight = getNodeFrameHeight(movingNode);
   const intervals = blockers.flatMap((blocker) => {
-    const blockerRect = getNodeFrameRect(blocker, zoom);
+    const blockerRect = getNodeFrameRect(blocker);
 
     if (axis === 'x') {
       const verticalOverlap = rangesOverlapWithGap(
@@ -121,7 +124,7 @@ function resolveAxisCoordinate(
 
       return [
         {
-          start: blockerRect.left - gap - movingNode.width,
+          start: blockerRect.left - gap - movingFrameWidth,
           end: blockerRect.right + gap,
         },
       ];
@@ -129,7 +132,7 @@ function resolveAxisCoordinate(
 
     const horizontalOverlap = rangesOverlapWithGap(
       proposedX,
-      proposedX + movingNode.width,
+      proposedX + movingFrameWidth,
       blockerRect.left,
       blockerRect.right,
       gap,
@@ -153,16 +156,16 @@ export function resolveDraggedNodePosition({
   proposedX,
   proposedY,
   gap,
-  zoom,
 }: ResolveDraggedNodePositionParams): ResolvedDraggedNodePosition {
   const blockers = getBlockingNodes(nodes, movingNode);
-  const movingFrameHeight = getNodeFrameHeight(movingNode, zoom);
+  const movingFrameWidth = getNodeFrameWidth(movingNode);
+  const movingFrameHeight = getNodeFrameHeight(movingNode);
   const hasConflict = blockers.some((blocker) => {
-    const blockerRect = getNodeFrameRect(blocker, zoom);
+    const blockerRect = getNodeFrameRect(blocker);
     return conflictsWithGap(
       proposedX,
       proposedY,
-      movingNode.width,
+      movingFrameWidth,
       movingFrameHeight,
       blockerRect.left,
       blockerRect.top,
@@ -176,24 +179,8 @@ export function resolveDraggedNodePosition({
     return { x: proposedX, y: proposedY, corrected: false, axis: null };
   }
 
-  const resolvedX = resolveAxisCoordinate(
-    'x',
-    blockers,
-    movingNode,
-    proposedX,
-    proposedY,
-    gap,
-    zoom,
-  );
-  const resolvedY = resolveAxisCoordinate(
-    'y',
-    blockers,
-    movingNode,
-    proposedX,
-    proposedY,
-    gap,
-    zoom,
-  );
+  const resolvedX = resolveAxisCoordinate('x', blockers, movingNode, proposedX, proposedY, gap);
+  const resolvedY = resolveAxisCoordinate('y', blockers, movingNode, proposedX, proposedY, gap);
   const deltaX = Math.abs(resolvedX - proposedX);
   const deltaY = Math.abs(resolvedY - proposedY);
 

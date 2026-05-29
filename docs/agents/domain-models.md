@@ -109,8 +109,7 @@
 - `DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 }`
 - `DEFAULT_PAGE_WIDTH = 393`
 - `DEFAULT_PAGE_HEIGHT = 852`
-- `WEB_PAGE_TOP_BAR_HEIGHT = 32`
-- `WEB_PAGE_BOTTOM_BAR_HEIGHT = 32`
+- `WEB_PAGE_FRAME_PADDING = 24`（Webview の上下左右に取るフレーム余白。world 固定 px）
 - `DEFAULT_STICKY_NOTE_WIDTH = 200`
 - `DEFAULT_STICKY_NOTE_HEIGHT = 200`
 - `DEFAULT_TEXT_NODE_WIDTH = 200`
@@ -141,9 +140,8 @@
 - Undo/Redo は現在の document window にのみ適用する
 - node / edge 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
 - ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
-- 重なり補正・新規ノード自動配置・センタリング fallback は、content 高ではなくノード外枠を基準にする。chrome は `zoomPx` で画面 px が固定されるため、world 座標での外枠高さは current zoom に依存する
-- WebPage ノードのツールバー文字・ボタン・アイコンは node 内描画だが、`zoomPx()` と `scaleWithCanvasZoom` で画面上の大きさを固定する
-- StickyNote / Text の選択時ツールバーは `NodeToolbar` を使い、ノード外枠の上部に配置する
+- 重なり補正・新規ノード自動配置・センタリング fallback は、content サイズではなくノード外枠（フレーム外周）を基準にする。WebPage のフレーム padding は world 固定 24px なので、外枠サイズは zoom に依存しない
+- WebPage / StickyNote / Text のいずれもツールバーは `NodeToolbar` を使い、ノード外枠の上部に配置する。WebPage はさらに常時表示のタイトル段（`[Moved] Title`、左寄せ）を追加で `NodeToolbar` で重ねる
 - 同一 `filePath` の `.siteboard` を複数のローカル document に関連付けない
 - `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない

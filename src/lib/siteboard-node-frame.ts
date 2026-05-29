@@ -1,4 +1,4 @@
-import { WEB_PAGE_BOTTOM_BAR_HEIGHT, WEB_PAGE_TOP_BAR_HEIGHT } from '@/constants';
+import { WEB_PAGE_FRAME_PADDING } from '@/constants';
 import type { BoardNode } from '@/types';
 
 export interface NodeFrameRect {
@@ -12,40 +12,44 @@ export interface NodeFrameRect {
   bottom: number;
 }
 
-function resolveLayoutZoom(zoom: number): number {
-  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
-}
-
-export function getNodeChromeScreenHeight(node: Pick<BoardNode, 'type'>): number {
+// Webサイトノードはコンテンツ（Webview）の上下左右に world 固定 padding を持つ。
+// テキスト/付箋ノードはフレーム padding を持たない（chrome=0）。
+function getFramePadding(node: Pick<BoardNode, 'type'>): number {
   if (node.type === 'text' || node.type === 'stickynote') {
     return 0;
   }
-
-  return WEB_PAGE_TOP_BAR_HEIGHT + WEB_PAGE_BOTTOM_BAR_HEIGHT;
+  return WEB_PAGE_FRAME_PADDING;
 }
 
-// ノード chrome は zoomPx で画面上の px が固定されるため、world 座標では zoom に応じて占有高さが変わる。
-export function getNodeChromeHeight(node: Pick<BoardNode, 'type'>, zoom: number): number {
-  return getNodeChromeScreenHeight(node) / resolveLayoutZoom(zoom);
+export function getNodeChromeHeight(node: Pick<BoardNode, 'type'>): number {
+  return getFramePadding(node) * 2;
 }
 
-export function getNodeFrameHeight(node: Pick<BoardNode, 'type' | 'height'>, zoom: number): number {
-  return node.height + getNodeChromeHeight(node, zoom);
+export function getNodeChromeWidth(node: Pick<BoardNode, 'type'>): number {
+  return getFramePadding(node) * 2;
+}
+
+export function getNodeFrameHeight(node: Pick<BoardNode, 'type' | 'height'>): number {
+  return node.height + getNodeChromeHeight(node);
+}
+
+export function getNodeFrameWidth(node: Pick<BoardNode, 'type' | 'width'>): number {
+  return node.width + getNodeChromeWidth(node);
 }
 
 export function getNodeFrameRect(
   node: Pick<BoardNode, 'type' | 'x' | 'y' | 'width' | 'height'>,
-  zoom: number,
 ): NodeFrameRect {
-  const height = getNodeFrameHeight(node, zoom);
+  const width = getNodeFrameWidth(node);
+  const height = getNodeFrameHeight(node);
   return {
     x: node.x,
     y: node.y,
-    width: node.width,
+    width,
     height,
     left: node.x,
     top: node.y,
-    right: node.x + node.width,
+    right: node.x + width,
     bottom: node.y + height,
   };
 }

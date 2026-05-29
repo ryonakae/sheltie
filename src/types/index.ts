@@ -47,6 +47,7 @@ export interface StickyNoteNode extends BoardNode {
   type: 'stickynote';
   content?: string;
   colorIndex?: number;
+  fontSizePreset?: TextNodeFontSizePreset;
 }
 
 /** フォントサイズプリセット (0=S, 1=M, 2=L, 3=XL) */
@@ -115,6 +116,7 @@ export type SiteboardDocumentNode =
       title: string;
       content: string;
       colorIndex: number;
+      fontSizePreset: number;
       x: number;
       y: number;
       width: number;
@@ -172,6 +174,20 @@ export function isStickyNoteNode(node: BoardNode): node is StickyNoteNode {
 /** テキストノードかどうか */
 export function isTextNode(node: BoardNode): node is TextNode {
   return node.type === 'text';
+}
+
+function extractTiptapText(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const record = value as { text?: unknown; content?: unknown };
+  if (typeof record.text === 'string') return record.text;
+  if (!Array.isArray(record.content)) return '';
+  return record.content.map(extractTiptapText).join('');
+}
+
+/** テキストノードの本文が空（空白のみを含む）かどうか */
+export function isTextNodeEmpty(node: TextNode): boolean {
+  if (!node.tiptapContent) return true;
+  return extractTiptapText(node.tiptapContent).trim() === '';
 }
 
 /** Webページノードかどうか（type が undefined の場合も 'webpage' 扱い = 後方互換） */

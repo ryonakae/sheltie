@@ -125,7 +125,7 @@ export const TextNodeToolbar = memo(function TextNodeToolbar({
           type="button"
           className={twMerge(
             'nodrag flex size-7 items-center justify-center rounded-sm transition-colors hover:bg-white/20',
-            currentColorIndex === index ? 'ring-1 ring-white/60' : '',
+            currentColorIndex === index ? 'bg-white/25' : '',
           )}
           title={color.label}
           onClick={() => handleColor(index)}

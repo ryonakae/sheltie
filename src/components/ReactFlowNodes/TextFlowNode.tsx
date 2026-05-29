@@ -11,6 +11,7 @@ import { memo, useCallback } from 'react';
 
 import { TextNode } from '@/components/Node/TextNode';
 import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionChromeStyles';
+import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
 import { TextNodeToolbar } from '@/components/ReactFlowNodes/TextNodeToolbar';
 import type { TextFlowNodeData } from '@/components/ReactFlowNodes/types';
 import { TEXT_NODE_MIN_WIDTH } from '@/constants';
@@ -36,6 +37,10 @@ export const TextFlowNode = memo(function TextFlowNode({ id, data, selected }: N
     [id, nodeProps.node.height, onResizeEnd],
   );
 
+  const handleRevertToAutoWidth = useCallback(() => {
+    nodeProps.onWidthModeChange(id, 'auto');
+  }, [id, nodeProps]);
+
   const resizeLineConfigs = [
     { key: 'left', position: 'left' as const },
     { key: 'right', position: 'right' as const },
@@ -49,13 +54,15 @@ export const TextFlowNode = memo(function TextFlowNode({ id, data, selected }: N
 
   return (
     <div className="nopan relative size-full">
-      <NodeToolbar isVisible={!!selected} position={Position.Top}>
+      <NodeToolbar isVisible={!!selected && nodeProps.isActive} position={Position.Top}>
         <TextNodeToolbar node={nodeProps.node} onStyleChange={nodeProps.onStyleChange} />
       </NodeToolbar>
 
       <TextNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
 
-      {nodeProps.isActive && nodeProps.node.widthMode === 'fixed' && (
+      {selected && <SelectionFrameOverlay />}
+
+      {nodeProps.isActive && (
         <>
           {resizeLineConfigs.map(({ key, position }) => (
             <NodeResizeControl
@@ -69,7 +76,9 @@ export const TextFlowNode = memo(function TextFlowNode({ id, data, selected }: N
               style={{ opacity: 0 }}
               onResize={handleResize}
               onResizeEnd={handleResizeEnd}
-            />
+            >
+              <div className="absolute inset-0" onDoubleClick={handleRevertToAutoWidth} />
+            </NodeResizeControl>
           ))}
           {resizeHandleConfigs.map(({ key, position }) => (
             <NodeResizeControl
@@ -82,7 +91,9 @@ export const TextFlowNode = memo(function TextFlowNode({ id, data, selected }: N
               style={selectionHandleBaseStyle}
               onResize={handleResize}
               onResizeEnd={handleResizeEnd}
-            />
+            >
+              <div className="absolute inset-0" onDoubleClick={handleRevertToAutoWidth} />
+            </NodeResizeControl>
           ))}
         </>
       )}

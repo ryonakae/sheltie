@@ -16,6 +16,7 @@
 - `StickyNoteNode`
   - `BoardNode` を拡張した付箋専用補助型
   - `type` は `'stickynote'`
+  - `content?: string`、`colorIndex?: number`、`fontSizePreset?: TextNodeFontSizePreset`
 - `TextNode`
   - `BoardNode` を拡張したテキストノード専用補助型
   - `type` は `'text'`
@@ -34,7 +35,7 @@
 - `SiteboardDocumentNode`
   - `.siteboard` に保存される node の union 型
   - `webpage` は `id`, `type`, `title`, `url`, `addedUrl?`, `x`, `y`, `width`, `height`
-  - `stickynote` は `id`, `type`, `title`, `content`, `colorIndex`, `x`, `y`, `width`, `height`
+  - `stickynote` は `id`, `type`, `title`, `content`, `colorIndex`, `fontSizePreset`, `x`, `y`, `width`, `height`
   - `text` は `id`, `type`, `title`, `tiptapContent?`, `fontSizePreset`, `fontWeight`, `italic`, `strikethrough`, `textColorIndex`, `widthMode`, `x`, `y`, `width`, `height`
 - `SiteboardDocumentV2`
   - `schemaVersion: 2`
@@ -50,7 +51,7 @@
   - ランタイム状態: `isLoaded`, `history`, `webviewRuntime`
   - 初期化: `initializeProject`, `markProjectSaved`, `restoreProjectFromLastSaved`
   - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `removeNodes`, `addStickyNoteNode`, `addTextNode`
-  - ノード更新: `updateNodePosition`, `updateNodePositions`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `cycleStickyNoteColor`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
+  - ノード更新: `updateNodePosition`, `updateNodePositions`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `updateStickyNoteStyle`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
   - 複数操作の集約: `removeNodes` / `updateNodePositions` は複数ノードの削除・位置更新を 1 つの履歴エントリにまとめる。複数選択の一括削除・一括ドラッグ移動はこの経路を通し、Cmd+Z 1 回で全ての変更を巻き戻せるようにする
   - エッジ: `addEdge`, `removeEdges`, `reverseEdge`（`removeNode` 時に関連エッジも自動削除。`reverseEdge` は同方向の重複が既にあれば no-op）
   - 順序/選択: `bringNodeToFront`, `sendNodeToBack`, `bringNodeForward`, `sendNodeBackward`, `pinWebNodeUrl`, `updateViewport`
@@ -87,6 +88,7 @@
 - `isStickyNoteNode(node)`: `node.type === 'stickynote'` の型ガード
 - `isTextNode(node)`: `node.type === 'text'` の型ガード
 - `isWebPageNode(node)`: webpage 判定の型ガード（`type` 未定義も webpage 扱い。`stickynote` と `text` を除外）
+- `isTextNodeEmpty(node)`: `tiptapContent` が未設定、または抽出テキストが空白のみのときに true
 - `isNodeMoved(node)`: `addedUrl` と現在 `url` の差分判定
 
 ## React Flow ノード構成
@@ -94,8 +96,8 @@
 ### Node 型と Flow ノード
 
 - `WebPageFlowNodeData = { nodeProps: WebPageNodeProps; layoutZoom; onResizeStart; onResize; onResizeEnd; getZoom }`
-- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps; onResize; onResizeEnd }`
-- `TextFlowNodeData = { nodeProps: TextNodeProps & { onStyleChange }; onResize; onResizeEnd }`
+- `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps & { onStyleChange }; onResize; onResizeEnd }`
+- `TextFlowNodeData = { nodeProps: TextNodeProps & { onStyleChange; onWidthModeChange }; onResize; onResizeEnd }`
 - `BoardNode[]` から React Flow `Node[]` を作る正本は `Siteboard.tsx` の `flowNodes` `useMemo`
 
 実装規約（position / width / height の渡し方、インタラクション制御）は `coding-rules.md` の「React Flow」セクションを参照。
@@ -113,7 +115,6 @@
 - `DEFAULT_STICKY_NOTE_HEIGHT = 200`
 - `DEFAULT_TEXT_NODE_WIDTH = 200`
 - `DEFAULT_TEXT_NODE_HEIGHT = 32`
-- `STICKY_NOTE_HEADER_HEIGHT = 32`
 - `SIZE_PRESETS = [モバイル, タブレット, PC]`
 
 `src/constants/siteboard.ts`
@@ -121,7 +122,7 @@
 - ズーム: `MIN_ZOOM = 0.25`, `MAX_ZOOM = 1.5`, `ZOOM_STEPS = [0.25, 0.5, 1.0, 1.5]`（キーボードショートカットのステップ値）
 - しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 25`
 - ドラッグ補正: `DRAG_REPOSITION_GAP = 20`
-- テキストノード: `TEXT_NODE_MIN_WIDTH = 40`, `TEXT_NODE_FONT_SIZE_PRESETS = [12, 16, 24, 36]`, `TEXT_NODE_COLORS`（黒・白・グレー・赤・青・緑の6色）
+- テキストノード: `TEXT_NODE_MIN_WIDTH = 40`, `TEXT_NODE_FONT_SIZE_PRESETS = [12, 16, 24, 36]`, `TEXT_NODE_COLORS`（HeroUI セマンティックカラー: foreground / muted / accent / success / warning / danger の 6 色を `var(--...)` で参照し、light/dark テーマに追従）
 
 `src/store/tab-store.ts`
 
@@ -132,7 +133,7 @@
 - `BoardNode` は永続化対象だけを持ち、Webview 接続状態は含めない
 - `webviewRuntime.labelsByNodeId[nodeId]` は「現在接続済みのネイティブ Webview がある」間だけ設定する。再マウント開始時に `clearWebNodeWebviewLabel` で外し、再生成完了後に `setWebNodeWebviewLabel` で付け直す。
 - `webviewRuntime.screenshotUrlsByNodeId[nodeId]` は最後に表示可能だった screenshot の asset URL を保持し、同一セッション内の再マウントと起動直後の open tab preload で使い回す。node 削除時にだけ破棄する。
-- 付箋ノードは `type: 'stickynote'` と `content` / `colorIndex` を利用する
+- 付箋ノードは `type: 'stickynote'` と `content` / `colorIndex` / `fontSizePreset` を利用する
 - テキストノードは `type: 'text'` と `tiptapContent` / `fontSizePreset` / `fontWeight` / `italic` / `strikethrough` / `textColorIndex` / `widthMode` を利用する
 - 空フレーム（`url === ''`）は Webview 未作成状態を許容する
 - `history` はランタイム専用で永続化しない
@@ -141,7 +142,8 @@
 - node / edge 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
 - ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
 - 重なり補正・新規ノード自動配置・センタリング fallback は、content 高ではなくノード外枠を基準にする。chrome は `zoomPx` で画面 px が固定されるため、world 座標での外枠高さは current zoom に依存する
-- WebPage / StickyNote のツールバー文字・ボタン・アイコンは node 内描画だが、`zoomPx()` と `scaleWithCanvasZoom` で画面上の大きさを固定する
+- WebPage ノードのツールバー文字・ボタン・アイコンは node 内描画だが、`zoomPx()` と `scaleWithCanvasZoom` で画面上の大きさを固定する
+- StickyNote / Text の選択時ツールバーは `NodeToolbar` を使い、ノード外枠の上部に配置する
 - 同一 `filePath` の `.siteboard` を複数のローカル document に関連付けない
 - `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない

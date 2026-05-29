@@ -32,14 +32,15 @@ export const TEXT_NODE_MIN_WIDTH = 40;
 // テキストノードのフォントサイズプリセット (S / M / L / XL)
 export const TEXT_NODE_FONT_SIZE_PRESETS = [12, 16, 24, 36] as const;
 
-// テキストノードの文字色プリセット（黒・白・グレー・赤・青・緑）
+// テキストノードの文字色プリセット（HeroUI セマンティックカラーに連動）
+// value は HeroUI v3 の CSS 変数で、light/dark テーマに自動追従する
 export const TEXT_NODE_COLORS = [
-  { label: '黒', value: '#000000' },
-  { label: '白', value: '#ffffff' },
-  { label: 'グレー', value: '#6b7280' },
-  { label: '赤', value: '#ef4444' },
-  { label: '青', value: '#3b82f6' },
-  { label: '緑', value: '#22c55e' },
+  { label: 'Foreground', value: 'var(--foreground)' },
+  { label: 'Muted', value: 'var(--muted)' },
+  { label: 'Accent', value: 'var(--accent)' },
+  { label: 'Success', value: 'var(--success)' },
+  { label: 'Warning', value: 'var(--warning)' },
+  { label: 'Danger', value: 'var(--danger)' },
 ] as const;
 
 // 付箋色

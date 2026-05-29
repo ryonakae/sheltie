@@ -29,7 +29,8 @@ src/
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（props インターフェース export）
 - `components/Node/TextNode.tsx`: テキストノード専用 UI。Tiptap エディタ内蔵、編集/選択モード切り替え、透明背景
 - `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`WebPageNode` 本体内の上下 chrome + node 内ツールバー + 上下 chrome の dragHandle + 8 方向 `NodeResizeControl` + 上下左右 `Handle`（selected 時のみ表示、エッジ接続用））
-- `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + sticky header 内の操作 UI）
+- `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + `NodeToolbar` でスタイル UI、`NodeResizeControl` で幅リサイズ）
+- `components/ReactFlowNodes/StickyNoteToolbar.tsx`: 付箋ノードのスタイルツールバー（フォントサイズ/色）
 - `components/ReactFlowNodes/TextFlowNode.tsx`: React Flow 用 TextNode ラッパー（`nopan`、x/y=0 固定、`NodeToolbar` で書式設定 UI、`NodeResizeControl` で幅リサイズ）
 - `components/ReactFlowNodes/TextNodeToolbar.tsx`: テキストノードの書式設定ツールバー（フォントサイズ/Bold/Italic/取り消し線/色）
 - `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`, `TextFlowNodeData`）

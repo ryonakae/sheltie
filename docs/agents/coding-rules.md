@@ -34,10 +34,10 @@
 - **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
 - **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化する
 - **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` 本体内の上下 chrome shell に付け、上下バーの空き領域からだけドラッグできるようにする
-- **node 内ツールバー**: WebPage / StickyNote のツールバーは `NodeToolbar` を使わず、ノード本体と同じ DOM 階層に描く。重なり順はノード本体と一体で扱い、ポータル前提の click-through は使わない
+- **node 内ツールバー**: WebPage のツールバーは `NodeToolbar` を使わず、ノード本体と同じ DOM 階層に描く。重なり順はノード本体と一体で扱い、ポータル前提の click-through は使わない
 - **ツールバーの固定サイズ**: canvas zoom 中も文字・ボタン・アイコンの画面上サイズを固定したい UI は `zoomPx()` と `AppButton scaleWithCanvasZoom` を使う。高さ、padding、gap、font-size、icon size、border 幅を world 座標へ直接ハードコードしない
-- **付箋のドラッグ起点**: 付箋はノード本体をドラッグ可能にし、textarea や色ボタンなどの操作要素だけを `nodrag` で保護する。header は node 内描画だが dragHandle 専用にはしない
-- **付箋本文の編集開始**: 付箋本文は未選択時のクリックで選択だけ行い、選択済みの本文エリアを再度クリックした時だけ編集を開始する。ヘッダーや色ボタン、リサイズ操作からは編集開始しない
+- **付箋のドラッグ起点**: 付箋はノード本体をドラッグ可能にし、textarea などの操作要素だけを `nodrag` で保護する。スタイル変更は選択時に `NodeToolbar` で表示する
+- **付箋本文の編集開始**: 付箋本文は未選択時のクリックで選択だけ行い、選択済みの本文エリアを再度クリックした時だけ編集を開始する。リサイズ操作やツールバー操作からは編集開始しない
 - **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用する。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
 - **Framer Motion との競合**: ノードコンポーネント内で `motion.div layout="position"` を使用しない。React Flow が CSS transform で位置を管理しているため、`layout="position"` のスプリングアニメーション（レイアウトシフト補正）がドラッグ方向を反転させる。Canvas や外側 UI の `motion.div` には使用可（ノード外）
 - `nodeTypes` 定数は**モジュールスコープで定義**。コンポーネント内に定義するとレンダーのたびにノードが再マウント（unmount→mount）される
@@ -53,7 +53,7 @@
 ### リサイズ機能（フェーズ 3 以降）
 
 - **StickyNoteNode リサイズ**: React Flow の `NodeResizeControl` は四隅ハンドルだけを使い、選択枠の線は共通 `SelectionFrameOverlay` で外側に描く。手動リサイズは**横幅変更のみ**許可し、高さは入力内容に応じた自動調整に委譲する。
-  - sticky header は node 内描画の chrome で、保存する `height` は本文エリアの高さそのもの
+  - 付箋に chrome は無く、保存する `height` は本文エリアの高さそのもの
   - 手動リサイズの制約は `minWidth = STICKY_NOTE_MIN_WIDTH` のみを使う
   - 自動高さは `STICKY_NOTE_MIN_HEIGHT` を下限に `updateNodeSizeWithoutHistory` で反映し、Undo/Redo 履歴を積まない
   - ルート要素は `size-full` でレスポンシブ化。内部コンテンツは横方向の width 変更に追従する
@@ -71,11 +71,13 @@
 
 ### テキストノード
 
-- **透明背景**: テキストノードは chrome なし（`getNodeChromeScreenHeight` が 0 を返す）。選択時は薄い `ring` で境界を示す
+- **透明背景**: テキストノードは chrome なし（`getNodeChromeScreenHeight` が 0 を返す）。選択枠は付箋と同じく `SelectionFrameOverlay` で外側に描く（編集中も表示する）
 - **ダブルクリックで編集モード**: シングルクリックで選択+ドラッグ可能、ダブルクリックで Tiptap エディタが `editable` になりテキスト入力可能。編集中は `nodrag` で移動を抑制
 - **編集モード終了**: Escape キーまたはノード外クリック（blur）で終了。終了時に Tiptap JSON を store に保存し、Undo/Redo 用のスナップショットが積まれる
-- **NodeToolbar**: React Flow の `<NodeToolbar>` を使用して書式設定 UI を表示（選択時のみ）。ツールバー内のインタラクティブ要素には `nodrag` クラスを付与
-- **幅モード**: 初期は `'auto'`（テキスト量に追従）。`NodeResizeControl` でドラッグすると `'fixed'` に切り替わり、リサイズハンドルが表示される
+- **空ノードの自動削除**: 選択解除のタイミングで `isTextNodeEmpty(node)` が true ならノードを自動削除する（Siteboard.tsx の useEffect 経路）
+- **NodeToolbar**: React Flow の `<NodeToolbar>` を使用して書式設定 UI を表示（選択時のみ）。ツールバー内のインタラクティブ要素には `nodrag` クラスを付与。付箋の `NodeToolbar` も同じ方針
+- **幅モード**: 初期は `'auto'`（テキスト幅に追従、本文ラッパーが `display: inline-block; width: max-content; min-width: TEXT_NODE_MIN_WIDTH` で natural width を取る）。`NodeResizeControl` でドラッグすると `'fixed'` に切り替わり、ボックス幅で折り返す。リサイズハンドルは常に表示（左右辺の line 2 個 + 四隅の handle 4 個、付箋と同じ構成）し、いずれかをダブルクリックで `'auto'` に戻す
+- **幅自動調整**: `widthMode === 'auto'` の間、本文ラッパーの `offsetWidth` を ResizeObserver + Tiptap `update` イベントで監視し、`onAutoWidthChange` 経由で `updateNodeSizeWithoutHistory` に反映する
 - **高さ自動調整**: `contentRef.scrollHeight` を監視し、`updateNodeSizeWithoutHistory` で反映（Undo/Redo 履歴を積まない）
 - **Tiptap 設定**: StarterKit から不要な Extension（blockquote, list, code 等）を除外。Placeholder Extension で空エディタにプレースホルダーを表示
 - **Undo/Redo 2層構造**: 編集モード中は Tiptap 内部の History が Cmd+Z を処理。編集モード終了時に store にスナップショットが積まれ、ノードレベルの Undo/Redo と統合
@@ -222,5 +224,5 @@
 - **対策**: `flowNodes` の各 Node オブジェクトに必ず top-level `width` と `height` を指定する。`style.width/height` ではなく Node 直下のプロパティ。
   - WebPage ノード: `width: contentWidth, height: getNodeFrameHeight({ type: 'webpage', height: contentHeight }, uiZoom)`
   - StickyNote ノード: `width: node.width, height: getNodeFrameHeight({ type: 'stickynote', height: node.height }, uiZoom)`
-  - `getNodeFrameHeight` は chrome（top/bottom bar / header）込みの論理高さを返す（`src/lib/siteboard-node-frame.ts`）
+  - `getNodeFrameHeight` は chrome（WebPage の top/bottom bar）込みの論理高さを返す（`src/lib/siteboard-node-frame.ts`）。StickyNote / Text は chrome 0 で本文高さそのもの
   - `uiZoom` は layout 用の reactive 値、`zoomRef.current` はイベント中の即時計算用として役割を分ける

@@ -77,7 +77,13 @@ interface ProjectActions {
     zoom?: number,
   ) => BoardNode | null;
   updateStickyNoteContent: (nodeId: string, content: string) => void;
-  cycleStickyNoteColor: (nodeId: string) => void;
+  updateStickyNoteStyle: (
+    nodeId: string,
+    style: {
+      colorIndex?: number;
+      fontSizePreset?: TextNodeFontSizePreset;
+    },
+  ) => void;
   addTextNode: (
     options?: { x: number; y: number; width: number; height: number },
     zoom?: number,
@@ -722,6 +728,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           title: 'Sticky Note',
           content: '',
           colorIndex: 0,
+          fontSizePreset: 1,
           x: 0,
           y: 0,
           width: options?.width ?? DEFAULT_STICKY_NOTE_WIDTH,
@@ -759,14 +766,14 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }),
     ),
 
-  cycleStickyNoteColor: (nodeId) =>
+  updateStickyNoteStyle: (nodeId, style) =>
     set((state) =>
       replaceProjectNodes(state, (nodes) => {
         let changed = false;
         const nextNodes = nodes.map((node) => {
           if (node.id !== nodeId) return node;
           changed = true;
-          return { ...node, colorIndex: ((node.colorIndex ?? 0) + 1) % 4 };
+          return { ...node, ...style };
         });
         return changed ? nextNodes : null;
       }),

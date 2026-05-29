@@ -1,8 +1,11 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
-import { AppButton } from '@/components/Common/AppButton';
-import { STICKY_NOTE_COLORS, STICKY_NOTE_HEADER_HEIGHT, STICKY_NOTE_MIN_HEIGHT } from '@/constants';
+import {
+  STICKY_NOTE_COLORS,
+  STICKY_NOTE_MIN_HEIGHT,
+  TEXT_NODE_FONT_SIZE_PRESETS,
+} from '@/constants';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
 
@@ -13,7 +16,6 @@ export interface StickyNoteNodeProps {
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
   onContentChange: (nodeId: string, content: string) => void;
   onAutoHeightChange: (nodeId: string, height: number) => void;
-  onColorCycle: (nodeId: string) => void;
 }
 
 export const StickyNoteNode = memo(function StickyNoteNode({
@@ -23,7 +25,6 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   onContextMenu,
   onContentChange,
   onAutoHeightChange,
-  onColorCycle,
 }: StickyNoteNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   // 編集中テキスト。ストア反映は 500ms デバウンス + blur 時 flush で行う。
@@ -41,7 +42,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
 
   const colorIndex = node.colorIndex ?? 0;
   const color = STICKY_NOTE_COLORS[colorIndex];
-  const nextColor = STICKY_NOTE_COLORS[(colorIndex + 1) % STICKY_NOTE_COLORS.length];
+  const fontSize = TEXT_NODE_FONT_SIZE_PRESETS[node.fontSizePreset ?? 1];
   const noteContent = isEditing ? editingContent : (node.content ?? '');
 
   useEffect(() => {
@@ -160,7 +161,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
   );
 
   const noteClassName = twMerge(
-    'flex flex-col overflow-hidden shadow-lg',
+    'overflow-hidden shadow-lg',
     'border-solid outline-offset-0',
     isActive ? '' : 'border',
     color.borderClass,
@@ -171,67 +172,16 @@ export const StickyNoteNode = memo(function StickyNoteNode({
     <div
       className={twMerge('size-full', noteClassName)}
       style={{
-        borderRadius: zoomPx(16),
         borderWidth: zoomPx(1),
       }}
       data-node-id={node.id}
       onMouseDown={handleActivate}
       onContextMenu={(e) => onContextMenu(e, node.id)}
     >
-      <div
-        className={twMerge('shrink-0', color.bgClass)}
-        style={{ height: zoomPx(STICKY_NOTE_HEADER_HEIGHT) }}
-      >
-        <div
-          className="flex size-full min-w-0 items-center"
-          style={{
-            gap: zoomPx(4),
-            paddingInline: zoomPx(8),
-            fontSize: zoomPx(12),
-            lineHeight: zoomPx(16),
-            boxShadow: `inset 0 ${zoomPx(-1)} 0 ${color.dividerColor}`,
-          }}
-        >
-          <span
-            className="min-w-0 flex-1 truncate text-foreground"
-            style={{ paddingInline: zoomPx(4) }}
-            title="Sticky Note"
-          >
-            Sticky Note
-          </span>
-          <AppButton
-            size="xs"
-            scaleWithCanvasZoom
-            className="nodrag shrink-0 overflow-hidden rounded-full text-muted"
-            style={{
-              padding: 0,
-              visibility: isActive ? 'visible' : 'hidden',
-              pointerEvents: isActive ? 'auto' : 'none',
-            }}
-            aria-hidden={!isActive}
-            onMouseDown={(e) => e.stopPropagation()}
-            onPress={() => onColorCycle(node.id)}
-            aria-label="色を切り替え"
-          >
-            <span
-              className={twMerge(
-                'block size-full rounded-full border-2',
-                nextColor.borderClass,
-                nextColor.bgClass,
-              )}
-              style={{ borderWidth: zoomPx(2) }}
-            />
-          </AppButton>
-        </div>
-      </div>
-
       {/* テキスト表示/編集エリア */}
       <div
         data-webview-placeholder
-        className={twMerge(
-          'relative box-border min-h-0 w-full flex-1 overflow-hidden',
-          color.bgClass,
-        )}
+        className={twMerge('relative box-border size-full overflow-hidden', color.bgClass)}
         onMouseDownCapture={handleContentMouseDownCapture}
         onMouseMoveCapture={handleContentMouseMoveCapture}
         onClick={handleContentClick}
@@ -243,15 +193,15 @@ export const StickyNoteNode = memo(function StickyNoteNode({
           readOnly
           tabIndex={-1}
           value={noteContent}
-          className="pointer-events-none absolute top-0 left-0 m-0 box-border block min-h-0 resize-none overflow-hidden border-0 bg-transparent p-2 text-[18px] leading-normal text-transparent focus:outline-none"
-          style={{ width: '100%', height: 0, fontFamily: 'inherit' }}
+          className="pointer-events-none absolute top-0 left-0 m-0 box-border block min-h-0 resize-none overflow-hidden border-0 bg-transparent p-3 leading-normal text-transparent focus:outline-none"
+          style={{ width: '100%', height: 0, fontFamily: 'inherit', fontSize: `${fontSize}px` }}
         />
 
         {isEditing ? (
           <textarea
             ref={textareaRef}
-            className="nodrag m-0 box-border block size-full min-h-0 resize-none overflow-auto border-0 bg-transparent p-2 text-[18px] leading-normal text-[#333] focus:outline-none"
-            style={{ fontFamily: 'inherit' }}
+            className="nodrag m-0 box-border block size-full min-h-0 resize-none overflow-auto border-0 bg-transparent p-3 leading-normal text-[#333] focus:outline-none"
+            style={{ fontFamily: 'inherit', fontSize: `${fontSize}px` }}
             value={editingContent}
             onChange={(e) => setEditingContent(e.target.value)}
             onBlur={handleBlur}
@@ -261,9 +211,10 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         ) : (
           <div
             className={twMerge(
-              'size-full p-2 text-[18px] leading-normal wrap-break-word whitespace-pre-wrap',
+              'size-full p-3 leading-normal wrap-break-word whitespace-pre-wrap',
               noteBodyColorClassName,
             )}
+            style={{ fontSize: `${fontSize}px` }}
           >
             {node.content || 'Type anything'}
           </div>

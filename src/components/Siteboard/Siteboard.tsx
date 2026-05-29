@@ -44,6 +44,7 @@ import {
   PAGE_MIN_HEIGHT,
   STICKY_NOTE_MIN_HEIGHT,
   STICKY_NOTE_MIN_WIDTH,
+  TEXT_NODE_MIN_WIDTH,
   ZOOM_END_DEBOUNCE_MS,
   ZOOM_RESET_TARGET,
   ZOOM_STEPS,
@@ -62,7 +63,7 @@ import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-cha
 import { registerViewCommandHandlers } from '@/lib/view-commands';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
-import { isNodeEmpty, isStickyNoteNode, isTextNode, isWebPageNode } from '@/types';
+import { isNodeEmpty, isStickyNoteNode, isTextNode, isTextNodeEmpty, isWebPageNode } from '@/types';
 import type { TextNode, WebPageNode } from '@/types';
 
 interface SiteboardProps {
@@ -129,7 +130,7 @@ export function Siteboard({
     changeWebNodeUrl,
     pinWebNodeUrl,
     updateStickyNoteContent,
-    cycleStickyNoteColor,
+    updateStickyNoteStyle,
     updateTextNodeContent,
     updateTextNodeStyle,
     updateTextNodeWidthMode,
@@ -149,7 +150,7 @@ export function Siteboard({
       removeEdges: s.removeEdges,
       reverseEdge: s.reverseEdge,
       clearProjectScreenshotUrl: s.clearProjectScreenshotUrl,
-      cycleStickyNoteColor: s.cycleStickyNoteColor,
+      updateStickyNoteStyle: s.updateStickyNoteStyle,
       updateTextNodeContent: s.updateTextNodeContent,
       updateTextNodeStyle: s.updateTextNodeStyle,
       updateTextNodeWidthMode: s.updateTextNodeWidthMode,
@@ -335,7 +336,7 @@ export function Siteboard({
     handleRemoveNodes,
     handleResizePreset,
     handleStickyNoteAutoHeightChange,
-    handleStickyNoteColorCycle,
+    handleStickyNoteStyleChange,
     handleStickyNoteContentChange,
     handleTitleUpdated,
     handleUrlSubmit,
@@ -363,7 +364,7 @@ export function Siteboard({
     updateNodeSize,
     updateNodeSizeWithoutHistory,
     updateStickyNoteContent,
-    cycleStickyNoteColor,
+    updateStickyNoteStyle,
     captureScreenshot,
   });
 
@@ -715,6 +716,30 @@ export function Siteboard({
     [updateTextNodeContent],
   );
 
+  // 直前の選択を保持し、テキストノードが選択解除されたタイミングで空なら削除する
+  const previousSelectedNodeIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const previous = previousSelectedNodeIdsRef.current;
+    previousSelectedNodeIdsRef.current = selectedNodeIds;
+
+    const currentSet = new Set(selectedNodeIds);
+    const deselected = previous.filter((id) => !currentSet.has(id));
+    if (deselected.length === 0) return;
+
+    const emptyTextNodeIds = deselected.filter((id) => {
+      if (id === editingTextNodeId) return false;
+      const node = nodes.find((candidate) => candidate.id === id);
+      return !!node && isTextNode(node) && isTextNodeEmpty(node);
+    });
+    if (emptyTextNodeIds.length === 0) return;
+
+    if (emptyTextNodeIds.length === 1) {
+      removeNode(emptyTextNodeIds[0]);
+    } else {
+      removeNodes(emptyTextNodeIds);
+    }
+  }, [editingTextNodeId, nodes, removeNode, removeNodes, selectedNodeIds]);
+
   const handleTextNodeAutoHeightChange = useCallback(
     (nodeId: string, height: number) => {
       updateNodeSizeWithoutHistory(
@@ -724,6 +749,22 @@ export function Siteboard({
       );
     },
     [updateNodeSizeWithoutHistory],
+  );
+
+  const handleTextNodeAutoWidthChange = useCallback(
+    (nodeId: string, width: number) => {
+      const node = useProjectStore.getState().project?.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      updateNodeSizeWithoutHistory(nodeId, Math.max(width, TEXT_NODE_MIN_WIDTH), node.height);
+    },
+    [updateNodeSizeWithoutHistory],
+  );
+
+  const handleTextNodeWidthModeChange = useCallback(
+    (nodeId: string, mode: 'auto' | 'fixed') => {
+      updateTextNodeWidthMode(nodeId, mode);
+    },
+    [updateTextNodeWidthMode],
   );
 
   const handleTextNodeStyleChange = useCallback(
@@ -1194,7 +1235,7 @@ export function Siteboard({
             onContextMenu: handleNodeContextMenu,
             onContentChange: handleStickyNoteContentChange,
             onAutoHeightChange: handleStickyNoteAutoHeightChange,
-            onColorCycle: handleStickyNoteColorCycle,
+            onStyleChange: handleStickyNoteStyleChange,
           },
           onResize: handleStickyNoteResize,
           onResizeEnd: handleStickyNoteResizeEnd,
@@ -1229,7 +1270,9 @@ export function Siteboard({
             onStartEditing: handleTextNodeStartEditing,
             onStopEditing: handleTextNodeStopEditing,
             onAutoHeightChange: handleTextNodeAutoHeightChange,
+            onAutoWidthChange: handleTextNodeAutoWidthChange,
             onStyleChange: handleTextNodeStyleChange,
+            onWidthModeChange: handleTextNodeWidthModeChange,
           },
           onResize: handleTextNodeResize,
           onResizeEnd: handleTextNodeResizeEnd,
@@ -1331,12 +1374,14 @@ export function Siteboard({
     handleStickyNoteResizeEnd,
     handleStickyNoteContentChange,
     handleStickyNoteAutoHeightChange,
-    handleStickyNoteColorCycle,
+    handleStickyNoteStyleChange,
     editingTextNodeId,
     handleTextNodeStartEditing,
     handleTextNodeStopEditing,
     handleTextNodeAutoHeightChange,
+    handleTextNodeAutoWidthChange,
     handleTextNodeStyleChange,
+    handleTextNodeWidthModeChange,
     handleTextNodeResize,
     handleTextNodeResizeEnd,
     getZoom,

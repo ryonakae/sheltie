@@ -26,7 +26,15 @@ export type WebPageFlowNodeData = {
 
 /** StickyNoteFlowNode の data 型 */
 export type StickyNoteFlowNodeData = {
-  nodeProps: StickyNoteNodeProps;
+  nodeProps: StickyNoteNodeProps & {
+    onStyleChange: (
+      nodeId: string,
+      style: {
+        colorIndex?: number;
+        fontSizePreset?: TextNodeFontSizePreset;
+      },
+    ) => void;
+  };
   /** 横幅リサイズ中の毎フレームコールバック（リアルタイム追従用。height は現在の本文高さを維持） */
   onResize: (
     nodeId: string,
@@ -49,6 +57,8 @@ export type TextFlowNodeData = {
         textColorIndex?: number;
       },
     ) => void;
+    /** リサイズハンドルのダブルクリックで widthMode を 'auto' に戻すためのコールバック */
+    onWidthModeChange: (nodeId: string, widthMode: 'auto' | 'fixed') => void;
   };
   /** 横幅リサイズ中の毎フレームコールバック */
   onResize: (

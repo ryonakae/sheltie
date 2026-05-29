@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { NavigationState } from '@/lib/tauri-bridge';
 import { webviewApi } from '@/lib/tauri-bridge';
-import type { BoardNode } from '@/types';
+import type { BoardNode, TextNodeFontSizePreset } from '@/types';
 
 interface UseSiteboardNodeRuntimeParams {
   nodes: BoardNode[];
@@ -21,7 +21,10 @@ interface UseSiteboardNodeRuntimeParams {
   updateNodeSize: (nodeId: string, width: number, height: number) => void;
   updateNodeSizeWithoutHistory: (nodeId: string, width: number, height: number) => void;
   updateStickyNoteContent: (nodeId: string, content: string) => void;
-  cycleStickyNoteColor: (nodeId: string) => void;
+  updateStickyNoteStyle: (
+    nodeId: string,
+    style: { colorIndex?: number; fontSizePreset?: TextNodeFontSizePreset },
+  ) => void;
   captureScreenshot: (nodeId: string) => Promise<boolean>;
 }
 
@@ -49,7 +52,7 @@ export function useSiteboardNodeRuntime({
   updateNodeSize,
   updateNodeSizeWithoutHistory,
   updateStickyNoteContent,
-  cycleStickyNoteColor,
+  updateStickyNoteStyle,
   captureScreenshot,
 }: UseSiteboardNodeRuntimeParams) {
   const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
@@ -391,11 +394,11 @@ export function useSiteboardNodeRuntime({
     [updateStickyNoteContent],
   );
 
-  const handleStickyNoteColorCycle = useCallback(
-    (nodeId: string) => {
-      cycleStickyNoteColor(nodeId);
+  const handleStickyNoteStyleChange = useCallback(
+    (nodeId: string, style: { colorIndex?: number; fontSizePreset?: TextNodeFontSizePreset }) => {
+      updateStickyNoteStyle(nodeId, style);
     },
-    [cycleStickyNoteColor],
+    [updateStickyNoteStyle],
   );
 
   const handleStickyNoteAutoHeightChange = useCallback(
@@ -434,7 +437,7 @@ export function useSiteboardNodeRuntime({
     handleResizePreset,
     handleScrollEnded,
     handleStickyNoteAutoHeightChange,
-    handleStickyNoteColorCycle,
+    handleStickyNoteStyleChange,
     handleStickyNoteContentChange,
     handleTitleUpdated,
     handleUrlSubmit,

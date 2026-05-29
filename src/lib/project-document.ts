@@ -65,6 +65,10 @@ function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
   if (type === 'stickynote') {
     const content = parseString(rawNode.content ?? '', `nodes[${index}].content`);
     const colorIndex = parseNumber(rawNode.colorIndex ?? 0, `nodes[${index}].colorIndex`);
+    const fontSizePreset = parseNumber(
+      rawNode.fontSizePreset ?? 1,
+      `nodes[${index}].fontSizePreset`,
+    );
 
     return {
       id,
@@ -72,6 +76,7 @@ function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
       title,
       content,
       colorIndex,
+      fontSizePreset,
       x,
       y,
       width,
@@ -188,6 +193,7 @@ export function boardNodeToDocumentNode(node: BoardNode): SiteboardDocumentNode 
       title: node.title,
       content: node.content ?? '',
       colorIndex: node.colorIndex ?? 0,
+      fontSizePreset: node.fontSizePreset ?? 1,
       x: node.x,
       y: node.y,
       width: node.width,
@@ -256,6 +262,7 @@ export function documentNodeToBoardNode(node: SiteboardDocumentNode): BoardNode 
       url: '',
       content: node.content,
       colorIndex: node.colorIndex,
+      fontSizePreset: node.fontSizePreset as TextNodeFontSizePreset,
       x: node.x,
       y: node.y,
       width: node.width,

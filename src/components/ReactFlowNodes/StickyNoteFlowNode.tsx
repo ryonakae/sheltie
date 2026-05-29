@@ -1,5 +1,7 @@
 import {
   NodeResizeControl,
+  NodeToolbar,
+  Position,
   ResizeControlVariant,
   type NodeProps,
   type ResizeDragEvent,
@@ -10,6 +12,7 @@ import { memo, useCallback } from 'react';
 import { StickyNoteNode } from '@/components/Node/StickyNoteNode';
 import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionChromeStyles';
 import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
+import { StickyNoteToolbar } from '@/components/ReactFlowNodes/StickyNoteToolbar';
 import { STICKY_NOTE_MIN_HEIGHT, STICKY_NOTE_MIN_WIDTH } from '@/constants';
 
 import type { StickyNoteFlowNodeData } from './types';
@@ -76,6 +79,10 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
 
   return (
     <div className="nopan relative size-full">
+      <NodeToolbar isVisible={!!selected && nodeProps.isActive} position={Position.Top}>
+        <StickyNoteToolbar node={nodeProps.node} onStyleChange={nodeProps.onStyleChange} />
+      </NodeToolbar>
+
       <StickyNoteNode {...nodeProps} node={{ ...nodeProps.node, x: 0, y: 0 }} />
       {selected && <SelectionFrameOverlay />}
       {/* 左右辺と四隅は FigJam 風の見た目に寄せつつ、実際の操作は左右幅リサイズだけに制限する */}

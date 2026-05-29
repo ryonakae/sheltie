@@ -36,7 +36,7 @@ export async function promptUnsavedChangesDialog(
     });
     return (result as UnsavedChangesDecision) ?? 'cancel';
   } catch (error) {
-    console.error('[unsaved-changes] ネイティブダイアログの表示に失敗:', error);
+    console.error('[unsaved-changes] failed to show native dialog:', error);
     return 'cancel';
   } finally {
     exitUnsavedChangesDialogDisplay();

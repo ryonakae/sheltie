@@ -22,7 +22,7 @@ pub fn load_persisted_theme<R: tauri::Runtime>(app: &AppHandle<R>) -> String {
 pub async fn load_theme(app: AppHandle) -> Result<String, String> {
     let store = app
         .store(STORE_PATH)
-        .map_err(|e| format!("ストアを開けません: {e}"))?;
+        .map_err(|e| format!("failed to open store: {e}"))?;
 
     let mode = store
         .get(THEME_KEY)
@@ -36,33 +36,33 @@ pub async fn load_theme(app: AppHandle) -> Result<String, String> {
 pub async fn set_theme(app: AppHandle, window: Window, mode: String) -> Result<bool, String> {
     let store = app
         .store(STORE_PATH)
-        .map_err(|e| format!("ストアを開けません: {e}"))?;
+        .map_err(|e| format!("failed to open store: {e}"))?;
 
     store.set(THEME_KEY, serde_json::Value::String(mode.clone()));
-    store.save().map_err(|e| format!("保存に失敗しました: {e}"))?;
+    store.save().map_err(|e| format!("failed to save store: {e}"))?;
 
     let is_dark = match mode.as_str() {
         "dark" => {
             window
                 .set_theme(Some(Theme::Dark))
-                .map_err(|e| format!("テーマ設定に失敗しました: {e}"))?;
+                .map_err(|e| format!("failed to set theme: {e}"))?;
             true
         }
         "light" => {
             window
                 .set_theme(Some(Theme::Light))
-                .map_err(|e| format!("テーマ設定に失敗しました: {e}"))?;
+                .map_err(|e| format!("failed to set theme: {e}"))?;
             false
         }
         // "system" またはその他: OS の設定に従う
         _ => {
             window
                 .set_theme(None)
-                .map_err(|e| format!("テーマ設定に失敗しました: {e}"))?;
+                .map_err(|e| format!("failed to set theme: {e}"))?;
             // Tauri API で現在の実効テーマを取得
             let current_theme = window
                 .theme()
-                .map_err(|e| format!("テーマ取得に失敗しました: {e}"))?;
+                .map_err(|e| format!("failed to read theme: {e}"))?;
             current_theme == Theme::Dark
         }
     };

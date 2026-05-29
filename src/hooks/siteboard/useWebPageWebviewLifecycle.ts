@@ -179,7 +179,7 @@ export function useWebPageWebviewLifecycle({
         );
         onWebviewCreated(nodeId, label);
       } catch (error: unknown) {
-        console.error('[WebPageNode] Webview 作成に失敗:', error);
+        console.error('[WebPageNode] failed to create Webview:', error);
         isCreatingRef.current = false;
       }
     })();

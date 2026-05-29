@@ -173,7 +173,7 @@ export function useSiteboardDisplayEngine({
   );
   const warnMissingWebviewLabel = useCallback((nodeId: string, command: string) => {
     if (!import.meta.env.DEV) return;
-    console.warn(`[useSiteboardDisplayEngine] ${command}: WebView label がありません`, {
+    console.warn(`[useSiteboardDisplayEngine] ${command}: WebView label missing`, {
       nodeId,
     });
   }, []);

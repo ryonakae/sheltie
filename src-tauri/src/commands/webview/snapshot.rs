@@ -22,7 +22,7 @@ pub async fn capture_webview_png_bytes_with_options(
 
     let webview = app
         .get_webview(&label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+        .ok_or_else(|| format!("Webview '{label}' not found"))?;
 
     let (tx, rx) = oneshot::channel::<Result<Vec<u8>, String>>();
     let tx = Arc::new(Mutex::new(Some(tx)));
@@ -32,12 +32,12 @@ pub async fn capture_webview_png_bytes_with_options(
             let raw_ptr = platform_wv.inner() as *mut objc2::runtime::AnyObject;
             take_wkwebview_snapshot(raw_ptr, tx);
         })
-        .map_err(|e| format!("with_webview エラー: {e}"))?;
+        .map_err(|e| format!("with_webview error: {e}"))?;
 
     if hide_after_snapshot_request {
         if let Err(error) = webview.hide() {
             log::warn!(
-                "Webview を snapshot 要求直後に hide できませんでした: page_id={}, error={}",
+                "failed to hide Webview right after snapshot request: page_id={}, error={}",
                 label,
                 error
             );
@@ -45,7 +45,7 @@ pub async fn capture_webview_png_bytes_with_options(
     }
 
     rx.await
-        .map_err(|_| "スクリーンショットチャネルが閉じられました".to_string())?
+        .map_err(|_| "screenshot channel closed".to_string())?
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -53,7 +53,7 @@ pub async fn capture_webview_png_bytes(
     _app: &AppHandle,
     _label: &str,
 ) -> Result<Vec<u8>, String> {
-    Err("この OS ではサポートされていません".to_string())
+    Err("this OS is not supported".to_string())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -62,7 +62,7 @@ pub async fn capture_webview_png_bytes_with_options(
     _label: &str,
     _hide_after_snapshot_request: bool,
 ) -> Result<Vec<u8>, String> {
-    Err("この OS ではサポートされていません".to_string())
+    Err("this OS is not supported".to_string())
 }
 
 pub async fn capture_webview_base64(
@@ -90,7 +90,7 @@ fn take_wkwebview_snapshot(
 
     let block = RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
         let result = if image.is_null() {
-            Err("NSImage が null です（Webview が非表示の可能性があります）".to_string())
+            Err("NSImage is null (Webview may be hidden)".to_string())
         } else {
             nsimage_to_png_bytes(image)
         };
@@ -118,14 +118,14 @@ fn nsimage_to_png_bytes(image: *mut objc2::runtime::AnyObject) -> Result<Vec<u8>
     unsafe {
         let tiff: *mut AnyObject = objc2::msg_send![image, TIFFRepresentation];
         if tiff.is_null() {
-            return Err("TIFFRepresentation が null です".to_string());
+            return Err("TIFFRepresentation is null".to_string());
         }
 
         let cls = AnyClass::get(c"NSBitmapImageRep")
-            .ok_or("NSBitmapImageRep クラスが見つかりません")?;
+            .ok_or("NSBitmapImageRep class not found")?;
         let bitmap: *mut AnyObject = objc2::msg_send![cls, imageRepWithData: tiff];
         if bitmap.is_null() {
-            return Err("NSBitmapImageRep の生成に失敗しました".to_string());
+            return Err("failed to create NSBitmapImageRep".to_string());
         }
 
         let nil_dict: *mut AnyObject = std::ptr::null_mut();
@@ -135,7 +135,7 @@ fn nsimage_to_png_bytes(image: *mut objc2::runtime::AnyObject) -> Result<Vec<u8>
             properties: nil_dict
         ];
         if png_data.is_null() {
-            return Err("PNG データの生成に失敗しました".to_string());
+            return Err("failed to produce PNG data".to_string());
         }
 
         let bytes: *const u8 = objc2::msg_send![png_data, bytes];

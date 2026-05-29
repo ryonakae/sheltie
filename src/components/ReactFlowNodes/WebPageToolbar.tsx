@@ -13,8 +13,8 @@ import { SIZE_PRESETS } from '@/constants';
 type SvgComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
 const PRESET_ICONS: Record<string, SvgComponent> = {
-  モバイル: Smartphone,
-  タブレット: NodeTabletIcon,
+  Mobile: Smartphone,
+  Tablet: NodeTabletIcon,
   PC: Display,
 };
 
@@ -59,7 +59,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
           canGoBack ? `${enabledColor} ${enabledHover}` : disabledClass,
         )}
         disabled={!canGoBack}
-        title="前のページに戻る"
+        title="Go Back"
         onClick={onGoBack}
       >
         <ChevronLeft width={14} height={14} />
@@ -71,7 +71,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
           canGoForward ? `${enabledColor} ${enabledHover}` : disabledClass,
         )}
         disabled={!canGoForward}
-        title="次のページに進む"
+        title="Go Forward"
         onClick={onGoForward}
       >
         <ChevronRight width={14} height={14} />
@@ -79,7 +79,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
       <button
         type="button"
         className={twMerge(buttonBase, `${enabledColor} ${enabledHover}`)}
-        title="ページをリロード"
+        title="Reload Page"
         onClick={onReload}
       >
         <ArrowRotateRight width={14} height={14} />
@@ -98,7 +98,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
               buttonBase,
               isActive ? activeClass : `${enabledColor} ${enabledHover}`,
             )}
-            title={`${preset.label}サイズに変更 (${preset.width}×${preset.height})`}
+            title={`Resize to ${preset.label} (${preset.width}×${preset.height})`}
             onClick={() => onResizePreset(preset.width, preset.height)}
           >
             <Icon width={14} height={14} />
@@ -118,7 +118,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
           <button
             type="button"
             className={twMerge(buttonBase, `${enabledColor} ${enabledHover}`)}
-            title="表示中のページをデフォルトに固定"
+            title="Pin Current Page as Default"
             onClick={onPinUrl}
           >
             <Pin width={14} height={14} />

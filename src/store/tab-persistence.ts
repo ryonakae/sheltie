@@ -7,7 +7,7 @@ let initialized = false;
 
 function schedulePendingTabAttach(): void {
   void api.attachPendingDocumentTab().catch((error) => {
-    console.error('[tab-persistence] 新規タブの attach に失敗:', error);
+    console.error('[tab-persistence] failed to attach new tab:', error);
   });
 }
 

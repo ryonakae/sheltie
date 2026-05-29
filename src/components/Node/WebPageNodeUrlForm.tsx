@@ -46,7 +46,7 @@ export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
         <TextField
           value={value}
           onChange={setValue}
-          aria-label="開くURL"
+          aria-label="URL to Open"
           className="w-full"
           isInvalid={hasValue && !isValid}
         >
@@ -61,7 +61,7 @@ export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
             }}
           />
           {hasValue && !isValid && (
-            <FieldError style={{ fontSize: zoomPx(12) }}>有効なURLを入力してください</FieldError>
+            <FieldError style={{ fontSize: zoomPx(12) }}>Please enter a valid URL</FieldError>
           )}
         </TextField>
         <AppButton
@@ -71,7 +71,7 @@ export function WebPageNodeUrlForm({ onSubmit }: WebPageNodeUrlFormProps) {
           isDisabled={!isValid}
           style={{ fontSize: zoomPx(14) }}
         >
-          開く
+          Open
         </AppButton>
       </form>
     </div>

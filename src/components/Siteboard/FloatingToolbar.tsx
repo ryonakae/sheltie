@@ -30,27 +30,27 @@ export function FloatingToolbar({
         >
           <AppButton
             size="lg"
-            tooltipMessage="Webページを追加"
+            tooltipMessage="Add Web Page"
             onPress={onAddWebNode}
-            aria-label="Webページを追加"
+            aria-label="Add Web Page"
             className={FLOATING_CONTROL_BUTTON_CLASSNAME}
           >
             <Globe className="size-5" />
           </AppButton>
           <AppButton
             size="lg"
-            tooltipMessage="付箋を追加"
+            tooltipMessage="Add Sticky Note"
             onPress={onAddStickyNote}
-            aria-label="付箋を追加"
+            aria-label="Add Sticky Note"
             className={FLOATING_CONTROL_BUTTON_CLASSNAME}
           >
             <Sticker className="size-5" />
           </AppButton>
           <AppButton
             size="lg"
-            tooltipMessage="テキストを追加"
+            tooltipMessage="Add Text"
             onPress={onAddTextNode}
-            aria-label="テキストを追加"
+            aria-label="Add Text"
             className={FLOATING_CONTROL_BUTTON_CLASSNAME}
           >
             <Text className="size-5" />

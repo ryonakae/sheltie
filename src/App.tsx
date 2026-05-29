@@ -16,7 +16,7 @@ export default function App() {
       .setTitle(getProjectDisplayName(project))
       .catch((error) => {
         if (!import.meta.env.DEV) return;
-        console.warn('[App] window title 更新に失敗', error);
+        console.warn('[App] failed to update window title', error);
       });
   }, [project]);
 

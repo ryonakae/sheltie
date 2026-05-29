@@ -67,7 +67,7 @@ export function useSiteboardNodeRuntime({
     (nodeId: string, command: string, labelOverride?: string): string | null => {
       const label = labelOverride ?? webviewLabelsByNodeId[nodeId];
       if (!label && import.meta.env.DEV) {
-        console.warn(`[useSiteboardNodeRuntime] ${command}: WebView label がありません`, {
+        console.warn(`[useSiteboardNodeRuntime] ${command}: WebView label missing`, {
           nodeId,
         });
       }
@@ -368,7 +368,7 @@ export function useSiteboardNodeRuntime({
   const handlePinWebNodeUrl = useCallback(
     (nodeId: string) => {
       pinWebNodeUrl(nodeId);
-      toast.success('表示中のページで固定しました');
+      toast.success('Pinned current page as default');
     },
     [pinWebNodeUrl],
   );

@@ -26,9 +26,9 @@ export function ZoomIndicator({ zoom, onResetViewport }: ZoomIndicatorProps) {
     <AppButton
       size="sm"
       isIconOnly={false}
-      tooltipMessage="100%で中央表示"
+      tooltipMessage="Zoom to 100%"
       onPress={onResetViewport}
-      aria-label="100%で中央表示"
+      aria-label="Zoom to 100%"
       className={`w-14 justify-center px-3 tabular-nums ${FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}`}
     >
       <motion.span

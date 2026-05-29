@@ -86,7 +86,7 @@ export const TextNodeToolbar = memo(function TextNodeToolbar({
           'font-bold',
           currentWeight === 'bold' ? activeClass : inactiveClass,
         )}
-        title="太字"
+        title="Bold"
         onClick={toggleBold}
       >
         B
@@ -96,7 +96,7 @@ export const TextNodeToolbar = memo(function TextNodeToolbar({
       <button
         type="button"
         className={twMerge(buttonBase, 'italic', currentItalic ? activeClass : inactiveClass)}
-        title="斜体"
+        title="Italic"
         onClick={toggleItalic}
       >
         I
@@ -110,7 +110,7 @@ export const TextNodeToolbar = memo(function TextNodeToolbar({
           'line-through',
           currentStrikethrough ? activeClass : inactiveClass,
         )}
-        title="取り消し線"
+        title="Strikethrough"
         onClick={toggleStrikethrough}
       >
         S

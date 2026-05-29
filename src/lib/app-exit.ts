@@ -61,7 +61,7 @@ function createCurrentWindowStateSnapshot(): AppExitStateSnapshot {
   const project = getProject();
   return {
     windowLabel: getCurrentWindowLabel(),
-    projectTitle: project ? getProjectDisplayName(project) : '名称未設定',
+    projectTitle: project ? getProjectDisplayName(project) : 'Untitled',
     dirty: project ? isProjectDirty(project) : false,
   };
 }
@@ -103,7 +103,7 @@ async function requestWindowResponses<
   const responsePromise = new Promise<Map<string, TResponse>>((resolve, reject) => {
     resolveResponses = resolve;
     const timeoutId = window.setTimeout(() => {
-      reject(new Error(`${requestEvent} の応答待機がタイムアウトしました`));
+      reject(new Error(`timed out waiting for ${requestEvent} response`));
     }, APP_EXIT_RESPONSE_TIMEOUT_MS);
     clearResponseTimeout = () => {
       window.clearTimeout(timeoutId);
@@ -139,7 +139,7 @@ async function requestWindowResponses<
 
     return await responsePromise;
   } catch (error) {
-    throw normalizeError(error, `${requestEvent} の送信に失敗しました`);
+    throw normalizeError(error, `failed to emit ${requestEvent}`);
   } finally {
     clearResponseTimeout();
     unlisten();
@@ -184,7 +184,7 @@ async function requestAppExitSave(windowLabel: string): Promise<SaveProjectStatu
 async function focusDocumentWindow(windowLabel: string): Promise<void> {
   const targetWindow = await Window.getByLabel(windowLabel);
   if (!targetWindow) {
-    throw new Error(`保存対象の window が見つかりません: ${windowLabel}`);
+    throw new Error(`target window not found: ${windowLabel}`);
   }
   await targetWindow.setFocus();
 }
@@ -206,7 +206,7 @@ async function handleAppExitStateRequest(payload: AppExitStateRequest): Promise<
       requestId: payload.requestId,
     } satisfies AppExitStateResponse);
   } catch (error) {
-    console.error('[app-exit] state 応答の送信に失敗:', error);
+    console.error('[app-exit] failed to send state response:', error);
   }
 }
 
@@ -219,7 +219,7 @@ async function handleAppExitSaveRequest(payload: AppExitSaveRequest): Promise<vo
       windowLabel: getCurrentWindowLabel(),
     } satisfies AppExitSaveResponse);
   } catch (error) {
-    console.error('[app-exit] save 応答の送信に失敗:', error);
+    console.error('[app-exit] failed to send save response:', error);
     try {
       await getCurrentWindow().emitTo(payload.coordinatorLabel, EVENT_APP_EXIT_SAVE_RESPONSE, {
         requestId: payload.requestId,
@@ -227,7 +227,7 @@ async function handleAppExitSaveRequest(payload: AppExitSaveRequest): Promise<vo
         windowLabel: getCurrentWindowLabel(),
       } satisfies AppExitSaveResponse);
     } catch (emitError) {
-      console.error('[app-exit] error 応答の送信にも失敗:', emitError);
+      console.error('[app-exit] failed to send error response as well:', emitError);
     }
   }
 }
@@ -274,7 +274,7 @@ async function requestAggregatedAppExit(): Promise<void> {
     try {
       await runAppExitFlow();
     } catch (error) {
-      console.error('[app-exit] Quit の集約処理に失敗:', error);
+      console.error('[app-exit] failed to coordinate Quit:', error);
       await api.abortAppExit();
     }
   });

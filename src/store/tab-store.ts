@@ -354,7 +354,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
     set((state) =>
       replaceProjectNodes(state, (nodes) => {
-        let title = '新規ページ';
+        let title = 'Untitled';
         if (url) {
           try {
             title = new URL(url).hostname;

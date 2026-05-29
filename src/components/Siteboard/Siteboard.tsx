@@ -827,7 +827,7 @@ export function Siteboard({
 
         menuItems.push(
           await MenuItem.new({
-            text: '矢印の向きを入れ替え',
+            text: 'Reverse Arrow Direction',
             action: () => {
               reverseEdge(edge.id);
             },
@@ -836,7 +836,7 @@ export function Siteboard({
         menuItems.push(await PredefinedMenuItem.new({ item: 'Separator' }));
         menuItems.push(
           await MenuItem.new({
-            text: '矢印を削除',
+            text: 'Delete Arrow',
             accelerator: 'Backspace',
             action: () => {
               removeEdges([edge.id]);
@@ -870,7 +870,7 @@ export function Siteboard({
         if (node && isWebPageNode(node) && !isNodeEmpty(node)) {
           menuItems.push(
             await MenuItem.new({
-              text: 'サイトのURLを変更',
+              text: 'Change URL',
               action: () => {
                 setEditingUrlNodeId(nodeId);
                 handleContextMenuCloseDisplay();
@@ -887,7 +887,7 @@ export function Siteboard({
 
           menuItems.push(
             await MenuItem.new({
-              text: '最前面へ',
+              text: 'Bring to Front',
               accelerator: 'CmdOrCtrl+Alt+]',
               enabled: !isAtFront,
               action: () => {
@@ -898,7 +898,7 @@ export function Siteboard({
           );
           menuItems.push(
             await MenuItem.new({
-              text: '1つ前面へ',
+              text: 'Bring Forward',
               accelerator: 'CmdOrCtrl+]',
               enabled: !isAtFront,
               action: () => {
@@ -909,7 +909,7 @@ export function Siteboard({
           );
           menuItems.push(
             await MenuItem.new({
-              text: '1つ背面へ',
+              text: 'Send Backward',
               accelerator: 'CmdOrCtrl+[',
               enabled: !isAtBack,
               action: () => {
@@ -920,7 +920,7 @@ export function Siteboard({
           );
           menuItems.push(
             await MenuItem.new({
-              text: '最背面へ',
+              text: 'Send to Back',
               accelerator: 'CmdOrCtrl+Alt+[',
               enabled: !isAtBack,
               action: () => {
@@ -934,7 +934,7 @@ export function Siteboard({
 
         menuItems.push(
           await MenuItem.new({
-            text: 'ノードを削除',
+            text: 'Delete Node',
             accelerator: 'Backspace',
             action: () => {
               handleContextMenuCloseDisplay();
@@ -1514,9 +1514,9 @@ export function Siteboard({
               <AppButton
                 size="sm"
                 isIconOnly={true}
-                tooltipMessage="全体を表示"
+                tooltipMessage="Zoom to Fit"
                 onPress={handleFitAllNodes}
-                aria-label="全体を表示"
+                aria-label="Zoom to Fit"
                 isDisabled={nodes.length === 0}
                 className={FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}
               >

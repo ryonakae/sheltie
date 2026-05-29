@@ -17,21 +17,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseNumber(value: unknown, field: string): number {
   if (typeof value !== 'number' || Number.isNaN(value)) {
-    throw new Error(`${field} は数値である必要があります`);
+    throw new Error(`${field} must be a number`);
   }
   return value;
 }
 
 function parseString(value: unknown, field: string): string {
   if (typeof value !== 'string') {
-    throw new Error(`${field} は文字列である必要があります`);
+    throw new Error(`${field} must be a string`);
   }
   return value;
 }
 
 function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
   if (!isRecord(rawNode)) {
-    throw new Error(`nodes[${index}] はオブジェクトである必要があります`);
+    throw new Error(`nodes[${index}] must be an object`);
   }
 
   const type = parseString(rawNode.type, `nodes[${index}].type`);
@@ -121,12 +121,12 @@ function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
     };
   }
 
-  throw new Error(`nodes[${index}].type が未対応です: ${type}`);
+  throw new Error(`nodes[${index}].type is not supported: ${type}`);
 }
 
 function parseEdge(rawEdge: unknown, index: number): SiteboardDocumentEdge {
   if (!isRecord(rawEdge)) {
-    throw new Error(`edges[${index}] はオブジェクトである必要があります`);
+    throw new Error(`edges[${index}] must be an object`);
   }
 
   return {
@@ -146,14 +146,14 @@ function parseEdge(rawEdge: unknown, index: number): SiteboardDocumentEdge {
 
 function parseProjectDocumentValue(value: unknown): SiteboardDocumentV2 {
   if (!isRecord(value)) {
-    throw new Error('ルートはオブジェクトである必要があります');
+    throw new Error('root must be an object');
   }
 
   if (value.schemaVersion === 1) {
     const title = parseString(value.title, 'title').trim() || 'Untitled';
     const rawNodes = value.nodes;
     if (!Array.isArray(rawNodes)) {
-      throw new Error('nodes は配列である必要があります');
+      throw new Error('nodes must be an array');
     }
 
     void title;
@@ -165,12 +165,12 @@ function parseProjectDocumentValue(value: unknown): SiteboardDocumentV2 {
   }
 
   if (value.schemaVersion !== 2) {
-    throw new Error('schemaVersion は 1 または 2 のみ対応しています');
+    throw new Error('schemaVersion must be 1 or 2');
   }
 
   const rawNodes = value.nodes;
   if (!Array.isArray(rawNodes)) {
-    throw new Error('nodes は配列である必要があります');
+    throw new Error('nodes must be an array');
   }
 
   const rawEdges = value.edges;
@@ -323,7 +323,7 @@ export function parseProjectDocument(contents: string): SiteboardDocumentV2 {
   try {
     parsed = JSON.parse(contents);
   } catch (error) {
-    throw new Error(`JSON の解析に失敗しました: ${error}`);
+    throw new Error(`failed to parse JSON: ${error}`);
   }
 
   return parseProjectDocumentValue(parsed);

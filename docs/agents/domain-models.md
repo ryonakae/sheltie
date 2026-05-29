@@ -114,7 +114,7 @@
 - `DEFAULT_STICKY_NOTE_HEIGHT = 200`
 - `DEFAULT_TEXT_NODE_WIDTH = 200`
 - `DEFAULT_TEXT_NODE_HEIGHT = 32`
-- `SIZE_PRESETS = [モバイル, タブレット, PC]`
+- `SIZE_PRESETS = [Mobile, Tablet, PC]`
 
 `src/constants/siteboard.ts`
 

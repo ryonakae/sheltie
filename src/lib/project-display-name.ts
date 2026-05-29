@@ -1,10 +1,10 @@
 import type { Project } from '@/types';
 
-const UNTITLED_PREFIX = '名称未設定';
+const UNTITLED_PREFIX = 'Untitled';
 const SITEBOARD_EXTENSION = '.siteboard';
 
 export function getUntitledDisplayName(index: number): string {
-  return index <= 1 ? UNTITLED_PREFIX : `${UNTITLED_PREFIX}${index}`;
+  return index <= 1 ? UNTITLED_PREFIX : `${UNTITLED_PREFIX} ${index}`;
 }
 
 export function getDisplayNameFromFilePath(filePath: string): string {

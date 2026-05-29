@@ -21,7 +21,7 @@ function logWebviewWarning(
   error: unknown,
 ): void {
   if (!import.meta.env.DEV) return;
-  console.warn(`[webviewApi] ${command} に失敗`, { ...context, error });
+  console.warn(`[webviewApi] ${command} failed`, { ...context, error });
 }
 
 function logWebviewCommand(command: string, context: Record<string, unknown>): void {

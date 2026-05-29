@@ -93,11 +93,11 @@ fn log_child_webview_metrics(
 fn child_webview_top_inset(window: &Window) -> Result<f64, String> {
     let raw_ns_window = window
         .ns_window()
-        .map_err(|e| format!("ns_window 取得エラー: {e}"))?
+        .map_err(|e| format!("failed to obtain ns_window: {e}"))?
         as *mut objc2::runtime::AnyObject;
     let raw_ns_view = window
         .ns_view()
-        .map_err(|e| format!("ns_view 取得エラー: {e}"))?
+        .map_err(|e| format!("failed to obtain ns_view: {e}"))?
         as *mut objc2::runtime::AnyObject;
 
     unsafe {
@@ -132,7 +132,7 @@ pub async fn go_back_page_webview(
     let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
     webview
         .eval("history.back()")
-        .map_err(|e| format!("history.back() の実行に失敗: {e}"))
+        .map_err(|e| format!("failed to run history.back(): {e}"))
 }
 
 /// ページ Webview のブラウザ履歴を1つ進める。
@@ -144,7 +144,7 @@ pub async fn go_forward_page_webview(
     let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
     webview
         .eval("history.forward()")
-        .map_err(|e| format!("history.forward() の実行に失敗: {e}"))
+        .map_err(|e| format!("failed to run history.forward(): {e}"))
 }
 
 #[derive(serde::Serialize)]
@@ -197,10 +197,10 @@ async fn get_navigation_state_impl(
                 }
             }
         })
-        .map_err(|e| format!("with_webview エラー: {e}"))?;
+        .map_err(|e| format!("with_webview error: {e}"))?;
 
     rx.await
-        .map_err(|_| "ナビゲーション状態チャネルが閉じられました".to_string())?
+        .map_err(|_| "navigation state channel closed".to_string())?
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -225,10 +225,10 @@ pub async fn reload_page_webview(
     let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
     let parsed_url = url
         .parse::<tauri::Url>()
-        .map_err(|e| format!("URL のパースに失敗しました: {e}"))?;
+        .map_err(|e| format!("failed to parse URL: {e}"))?;
     webview
         .navigate(parsed_url)
-        .map_err(|e| format!("ナビゲーションに失敗: {e}"))
+        .map_err(|e| format!("navigation failed: {e}"))
 }
 
 /// ページ用のネイティブ Webview を作成しイベントハンドラーを登録する。
@@ -291,7 +291,7 @@ pub async fn create_page_webview(
 
     let parsed_url = url
         .parse::<tauri::Url>()
-        .map_err(|e| format!("URL のパースに失敗しました: {e}"))?;
+        .map_err(|e| format!("failed to parse URL: {e}"))?;
 
     window
         .add_child(
@@ -347,7 +347,7 @@ pub async fn create_page_webview(
             LogicalPosition::new(x, adjusted_y),
             LogicalSize::new(width, height),
         )
-        .map_err(|e| format!("Webview の作成に失敗しました: {e}"))?;
+        .map_err(|e| format!("failed to create Webview: {e}"))?;
 
     // macOS: _WKLayoutModeDynamicSizeComputedFromViewScale（layoutMode=2）+ _setViewScale: zoom を設定。
     // これにより CSS viewport = frame.size / viewScale となり、frame が物理的に縮小されても
@@ -463,7 +463,7 @@ async fn set_opacity_impl(
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
         set_webview_alpha(raw, opacity);
     })
-    .map_err(|e| format!("with_webview エラー: {e}"))?;
+    .map_err(|e| format!("with_webview error: {e}"))?;
 
     Ok(())
 }
@@ -504,9 +504,9 @@ async fn update_bounds_impl(
     }
 
     wv.set_position(LogicalPosition::new(x, y))
-        .map_err(|e| format!("setPosition エラー: {e}"))?;
+        .map_err(|e| format!("setPosition error: {e}"))?;
     wv.set_size(LogicalSize::new(width, height))
-        .map_err(|e| format!("setSize エラー: {e}"))?;
+        .map_err(|e| format!("setSize error: {e}"))?;
 
     wv.with_webview(move |platform_wv| {
         let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
@@ -514,7 +514,7 @@ async fn update_bounds_impl(
         update_existing_webview_viewport(raw, width, height, zoom);
         log_child_webview_metrics("update_bounds_impl:child-after-viewport", &label_string, raw);
     })
-    .map_err(|e| format!("with_webview エラー: {e}"))?;
+    .map_err(|e| format!("with_webview error: {e}"))?;
 
     Ok(())
 }
@@ -532,9 +532,9 @@ async fn update_bounds_impl(
 ) -> Result<(), String> {
     let wv = resolve_page_webview(app, window_label, label)?;
     wv.set_position(LogicalPosition::new(x, y))
-        .map_err(|e| format!("setPosition エラー: {e}"))?;
+        .map_err(|e| format!("setPosition error: {e}"))?;
     wv.set_size(LogicalSize::new(width, height))
-        .map_err(|e| format!("setSize エラー: {e}"))?;
+        .map_err(|e| format!("setSize error: {e}"))?;
     Ok(())
 }
 
@@ -651,13 +651,13 @@ async fn save_screenshot_impl(
         .app_handle()
         .path()
         .app_data_dir()
-        .map_err(|e| format!("app_data_dir 取得エラー: {e}"))?;
+        .map_err(|e| format!("failed to obtain app_data_dir: {e}"))?;
     let screenshots_dir = data_dir.join("screenshots").join(&project_id);
     std::fs::create_dir_all(&screenshots_dir)
-        .map_err(|e| format!("ディレクトリ作成エラー: {e}"))?;
+        .map_err(|e| format!("failed to create directory: {e}"))?;
     let file_path = screenshots_dir.join(format!("{page_id}.png"));
     std::fs::write(&file_path, &png_bytes)
-        .map_err(|e| format!("ファイル保存エラー: {e}"))?;
+        .map_err(|e| format!("failed to save file: {e}"))?;
 
     Ok(file_path.to_string_lossy().to_string())
 }
@@ -670,7 +670,7 @@ async fn save_screenshot_impl(
     _project_id: String,
     _hide_after_snapshot_request: bool,
 ) -> Result<String, String> {
-    Err("この OS ではサポートされていません".to_string())
+    Err("this OS is not supported".to_string())
 }
 
 /// 複数ページの既存スクリーンショットパスを一括取得する（起動時の復元用）。
@@ -685,7 +685,7 @@ pub async fn get_existing_screenshot_paths(
     let data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("app_data_dir 取得エラー: {e}"))?;
+        .map_err(|e| format!("failed to obtain app_data_dir: {e}"))?;
     let screenshots_dir = data_dir.join("screenshots").join(&project_id);
     let mut results = Vec::new();
     for page_id in page_ids {
@@ -707,14 +707,14 @@ pub async fn delete_screenshot(
     let data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("app_data_dir 取得エラー: {e}"))?;
+        .map_err(|e| format!("failed to obtain app_data_dir: {e}"))?;
     let file_path = data_dir
         .join("screenshots")
         .join(&project_id)
         .join(format!("{page_id}.png"));
     if file_path.exists() {
         std::fs::remove_file(&file_path)
-            .map_err(|e| format!("ファイル削除エラー: {e}"))?;
+            .map_err(|e| format!("failed to delete file: {e}"))?;
     }
     Ok(())
 }
@@ -730,11 +730,11 @@ fn resolve_page_webview<R: tauri::Runtime>(
 ) -> Result<tauri::Webview<R>, String> {
     let webview = app
         .get_webview(label)
-        .ok_or_else(|| format!("Webview '{label}' が見つかりません"))?;
+        .ok_or_else(|| format!("Webview '{label}' not found"))?;
 
     if webview.window().label() != current_window_label {
         return Err(format!(
-            "Webview '{label}' は現在の document window '{current_window_label}' に属していません"
+            "Webview '{label}' does not belong to the current document window '{current_window_label}'"
         ));
     }
 

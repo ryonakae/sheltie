@@ -23,7 +23,7 @@ export const CANVAS_CENTER_ANIMATION_EASE = [0.215, 0.61, 0.355, 1] as const;
 
 // デバイスプリセット
 export const SIZE_PRESETS = [
-  { label: 'モバイル', width: 393, height: 852 },
-  { label: 'タブレット', width: 768, height: 1024 },
+  { label: 'Mobile', width: 393, height: 852 },
+  { label: 'Tablet', width: 768, height: 1024 },
   { label: 'PC', width: 1280, height: 800 },
 ] as const;

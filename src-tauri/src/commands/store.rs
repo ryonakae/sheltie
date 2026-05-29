@@ -78,14 +78,14 @@ impl DocumentManagerState {
         let mut inner = self
             .inner
             .lock()
-            .map_err(|_| "document state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
 
         if let Some(existing) = file_path
             .as_ref()
             .and_then(|path| inner.file_windows.get(path).cloned())
         {
             return Err(format!(
-                "このファイルは既に別ウィンドウで開かれています: {existing}"
+                "this file is already open in another window: {existing}"
             ));
         }
 
@@ -99,7 +99,7 @@ impl DocumentManagerState {
                 .windows
                 .get(host_label)
                 .map(|record| record.tabbing_identifier.clone())
-                .ok_or_else(|| format!("ホストウィンドウ '{host_label}' の状態が見つかりません"))?,
+                .ok_or_else(|| format!("host window '{host_label}' state not found"))?,
         };
         let untitled_index = if file_path.is_some() {
             0
@@ -150,13 +150,13 @@ impl DocumentManagerState {
         let inner = self
             .inner
             .lock()
-            .map_err(|_| "document state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
 
         inner
             .windows
             .get(label)
             .map(WindowRecord::to_context)
-            .ok_or_else(|| format!("ウィンドウ '{label}' の状態が見つかりません"))
+            .ok_or_else(|| format!("window '{label}' state not found"))
     }
 
     fn existing_window_label_for_path(&self, path: &Path) -> Option<String> {
@@ -170,18 +170,18 @@ impl DocumentManagerState {
         let mut inner = self
             .inner
             .lock()
-            .map_err(|_| "document state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
 
         if let Some(existing_label) = inner.file_windows.get(&next_path) {
             if existing_label != label {
-                return Err("そのファイルは既に別ウィンドウで開かれています".to_string());
+                return Err("that file is already open in another window".to_string());
             }
         }
 
         let previous_path = inner
             .windows
             .get(label)
-            .ok_or_else(|| format!("ウィンドウ '{label}' の状態が見つかりません"))?
+            .ok_or_else(|| format!("window '{label}' state not found"))?
             .file_path
             .clone();
 
@@ -192,7 +192,7 @@ impl DocumentManagerState {
         let record = inner
             .windows
             .get_mut(label)
-            .ok_or_else(|| format!("ウィンドウ '{label}' の状態が見つかりません"))?;
+            .ok_or_else(|| format!("window '{label}' state not found"))?;
         record.file_path = Some(next_path.clone());
         inner.file_windows.insert(next_path, label.to_string());
 
@@ -203,11 +203,11 @@ impl DocumentManagerState {
         let inner = self
             .inner
             .lock()
-            .map_err(|_| "document state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
 
         if let Some(existing_label) = inner.file_windows.get(next_path) {
             if existing_label != label {
-                return Err("そのファイルは既に別ウィンドウで開かれています".to_string());
+                return Err("that file is already open in another window".to_string());
             }
         }
 
@@ -228,12 +228,12 @@ impl DocumentManagerState {
         let mut inner = self
             .inner
             .lock()
-            .map_err(|_| "document state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
 
         let record = inner
             .windows
             .get_mut(label)
-            .ok_or_else(|| format!("ウィンドウ '{label}' の状態が見つかりません"))?;
+            .ok_or_else(|| format!("window '{label}' state not found"))?;
         let tabbing_identifier = record.tabbing_identifier.clone();
         let host_label = record.pending_tab_host_label.take();
 
@@ -244,14 +244,14 @@ impl DocumentManagerState {
 fn normalize_project_file_path(path: &str, cwd: Option<&Path>) -> Result<PathBuf, String> {
     let mut normalized = PathBuf::from(path);
     if normalized.as_os_str().is_empty() {
-        return Err("空のパスは扱えません".to_string());
+        return Err("empty paths are not supported".to_string());
     }
 
     if normalized.is_relative() {
         let base_dir = match cwd {
             Some(path) => path.to_path_buf(),
             None => std::env::current_dir()
-                .map_err(|error| format!("current_dir の取得に失敗しました: {error}"))?,
+                .map_err(|error| format!("failed to obtain current_dir: {error}"))?,
         };
         normalized = base_dir.join(normalized);
     }
@@ -274,7 +274,7 @@ fn normalize_existing_project_file_path(path: &str, cwd: Option<&Path>) -> Resul
     let normalized = normalize_project_file_path(path, cwd)?;
     normalized
         .canonicalize()
-        .map_err(|error| format!("ファイルパスの正規化に失敗しました: {error}"))
+        .map_err(|error| format!("failed to normalize file path: {error}"))
 }
 
 fn get_window_title(record: &WindowRecord) -> String {
@@ -290,15 +290,15 @@ fn get_file_display_name(path: &Path) -> String {
         .or_else(|| path.file_name())
         .and_then(OsStr::to_str)
         .filter(|name| !name.is_empty())
-        .unwrap_or("名称未設定")
+        .unwrap_or("Untitled")
         .to_string()
 }
 
 fn get_untitled_display_name(index: usize) -> String {
     if index <= 1 {
-        "名称未設定".to_string()
+        "Untitled".to_string()
     } else {
-        format!("名称未設定{index}")
+        format!("Untitled {index}")
     }
 }
 
@@ -331,7 +331,7 @@ fn build_document_window<R: tauri::Runtime>(
 
     builder
         .build()
-        .map_err(|error| format!("document window の生成に失敗しました: {error}"))
+        .map_err(|error| format!("failed to create document window: {error}"))
 }
 
 #[cfg(target_os = "macos")]
@@ -347,26 +347,26 @@ where
         let result = operation(app_handle);
         let _ = sender.send(result);
     })
-    .map_err(|error| format!("main thread への切り替えに失敗しました: {error}"))?;
+    .map_err(|error| format!("failed to switch to the main thread: {error}"))?;
 
     receiver
         .recv()
-        .map_err(|_| "main thread の結果受信に失敗しました".to_string())?
+        .map_err(|_| "failed to receive result from the main thread".to_string())?
 }
 
 #[cfg(target_os = "macos")]
 fn ns_window_class() -> Result<&'static AnyClass, String> {
-    AnyClass::get(c"NSWindow").ok_or("NSWindow クラスが見つかりません".to_string())
+    AnyClass::get(c"NSWindow").ok_or("NSWindow class not found".to_string())
 }
 
 #[cfg(target_os = "macos")]
 fn get_ns_window_object<R: Runtime>(window: &Window<R>) -> Result<*mut AnyObject, String> {
     let raw = window
         .ns_window()
-        .map_err(|error| format!("NSWindow の取得に失敗しました: {error}"))?;
+        .map_err(|error| format!("failed to obtain NSWindow: {error}"))?;
     let ns_window = raw.cast::<AnyObject>();
     if ns_window.is_null() {
-        return Err("NSWindow が null です".to_string());
+        return Err("NSWindow is null".to_string());
     }
     Ok(ns_window)
 }
@@ -415,7 +415,7 @@ fn configure_macos_document_window<R: Runtime>(
     run_on_app_main_thread(app, move |app| {
         let window = app
             .get_window(&label)
-            .ok_or_else(|| format!("ウィンドウ '{label}' が見つかりません"))?;
+            .ok_or_else(|| format!("window '{label}' not found"))?;
         let ns_window = get_ns_window_object(&window)?;
         configure_ns_document_window(ns_window);
         Ok(())
@@ -486,13 +486,13 @@ fn focus_document_window_internal<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let window = app
         .get_window(label)
-        .ok_or_else(|| format!("ウィンドウ '{label}' が見つかりません"))?;
+        .ok_or_else(|| format!("window '{label}' not found"))?;
 
     let _ = window.unminimize();
     let _ = window.show();
     window
         .set_focus()
-        .map_err(|error| format!("ウィンドウの前面化に失敗しました: {error}"))
+        .map_err(|error| format!("failed to bring the window to front: {error}"))
 }
 
 fn open_or_focus_document_window_internal<R: tauri::Runtime>(
@@ -638,7 +638,7 @@ pub fn create_untitled_document_tab<R: tauri::Runtime>(
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (app, host_label);
-        Err("New Tab は macOS document window でのみサポートしています".to_string())
+        Err("New Tab is only supported on macOS document windows".to_string())
     }
 }
 
@@ -669,10 +669,10 @@ pub async fn attach_pending_document_tab(
 
         let host_window = app
             .get_window(&attach_host_label)
-            .ok_or_else(|| format!("ホストウィンドウ '{attach_host_label}' が見つかりません"))?;
+            .ok_or_else(|| format!("host window '{attach_host_label}' not found"))?;
         let child_window = app
             .get_window(&attach_child_label)
-            .ok_or_else(|| format!("child ウィンドウ '{attach_child_label}' が見つかりません"))?;
+            .ok_or_else(|| format!("child window '{attach_child_label}' not found"))?;
         let host_ns_window = get_ns_window_object(&host_window)?;
         let child_ns_window = get_ns_window_object(&child_window)?;
 
@@ -807,7 +807,7 @@ pub async fn complete_app_exit(
         if let Some(window) = app.get_window(&label) {
             window
                 .destroy()
-                .map_err(|error| format!("ウィンドウ破棄に失敗しました: {label}, {error}"))?;
+                .map_err(|error| format!("failed to destroy window: {label}, {error}"))?;
         }
     }
 
@@ -831,13 +831,13 @@ pub async fn close_ready(
     state.unregister_window(window.label());
     window
         .destroy()
-        .map_err(|error| format!("ウィンドウ破棄に失敗しました: {error}"))
+        .map_err(|error| format!("failed to destroy window: {error}"))
 }
 
 #[tauri::command]
 pub async fn load_project_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(Path::new(&path))
-        .map_err(|error| format!("ファイル読み込みに失敗しました: {error}"))
+        .map_err(|error| format!("failed to read file: {error}"))
 }
 
 #[tauri::command]
@@ -853,12 +853,12 @@ pub async fn save_project_file(
     if let Some(parent) = normalized_path.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent)
-                .map_err(|error| format!("保存先ディレクトリの作成に失敗しました: {error}"))?;
+                .map_err(|error| format!("failed to create destination directory: {error}"))?;
         }
     }
 
     std::fs::write(&normalized_path, contents)
-        .map_err(|error| format!("ファイル保存に失敗しました: {error}"))?;
+        .map_err(|error| format!("failed to save file: {error}"))?;
 
     let canonical_path = normalized_path
         .canonicalize()
@@ -866,7 +866,7 @@ pub async fn save_project_file(
     state.update_window_file_path(window.label(), canonical_path.clone())?;
     window
         .set_title(&get_file_display_name(&canonical_path))
-        .map_err(|error| format!("window title の更新に失敗しました: {error}"))?;
+        .map_err(|error| format!("failed to update window title: {error}"))?;
 
     Ok(canonical_path.to_string_lossy().to_string())
 }

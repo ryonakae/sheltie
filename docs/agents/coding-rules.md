@@ -18,7 +18,7 @@
 ## Document App
 
 - 1 document tab / window = 1 document を前提にする。ホーム画面やプロジェクト一覧は置かない。
-- 表示名はファイル basename を正本にし、未保存時だけ `名称未設定` 系の仮名を使う。
+- 表示名はファイル basename を正本にし、未保存時だけ `Untitled` 系の仮名を使う。
 - `project.title` のような表示名を永続状態の正本にしない。必要なら `filePath` から導出する。
 - `main` のような固定 window label を前提にしない。window-local な処理は現在の window から解決する。
 - macOS の document window は native tab group ごとに固有の `tabbingIdentifier` を共有する。`New Window` は新しい standalone group を開き、`New Tab` は hidden child を起動後、renderer ready 後に host 限定の explicit attach で同じ group に追加する。1 タブ状態で tab bar を強制表示しない。
@@ -155,15 +155,15 @@
 - ノード右上の閉じるボタン（インライン Xmark）は設けない。削除は以下の 3 経路に統一する:
   1. Delete / Backspace キー（`useSiteboardKeyboard` で処理。テキスト入力フォーカス中はスキップ）
   2. メニューバー `Edit -> Delete`（Tauri メニューイベントを `edit-command` として受信）
-  3. ノードの右クリック → コンテキストメニュー「ノードを削除」
+  3. ノードの右クリック → コンテキストメニュー「Delete Node」
 - ノードの重なり順変更は付箋・テキストノードのみ対象（WebPageNode は重なれないため除外）。配列順で管理し、WebPageNode をスキップして付箋/テキスト同士の順序を操作する。操作経路:
-  1. コンテキストメニュー「最前面へ / 1つ前面へ / 1つ背面へ / 最背面へ」（配列の端にいる場合は disabled）
+  1. コンテキストメニュー「Bring to Front / Bring Forward / Send Backward / Send to Back」（配列の端にいる場合は disabled）
   2. キーボードショートカット `Cmd+Alt+]` / `Cmd+]` / `Cmd+[` / `Cmd+Alt+[`（Figma 準拠）
 - Undo/Redo は `CmdOrCtrl+Z` / `CmdOrCtrl+Shift+Z` とメニューバー `Edit -> Undo / Redo` を同じ `edit-command` 経路で処理する。
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `@tauri-apps/api/menu` の `Menu.new()` + `popup()` で macOS ネイティブメニューとして表示する。
 - node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
-- エッジ（矢印）の右クリック → コンテキストメニュー「矢印の向きを入れ替え / 矢印を削除」。`onEdgeContextMenu` でそのエッジを選択状態にしてからネイティブメニューを表示する。Webview 表示制御（`handleContextMenuOpen`）はノード向けの仕組みなので呼ばない。
+- エッジ（矢印）の右クリック → コンテキストメニュー「Reverse Arrow Direction / Delete Arrow」。`onEdgeContextMenu` でそのエッジを選択状態にしてからネイティブメニューを表示する。Webview 表示制御（`handleContextMenuOpen`）はノード向けの仕組みなので呼ばない。
 - エッジの Delete / Backspace 削除は `useSiteboardKeyboard` で扱う（選択中ノードがあればノード削除を優先、なければ選択中エッジを削除）。React Flow の `deleteKeyCode` は `null` で無効化する。組み込みの delete を有効にすると、ノード削除時に「connected edges の remove イベント → `store.removeEdges`」と「キーハンドラ → `store.removeNode`（edges を cascade 削除）」が二重に履歴へ積まれ、Cmd+Z 1 回で edges が復元されない。
 - File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
 - View メニューの `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out` 処理は `lib/view-commands.ts` に集約する。ハンドラの登録は `Siteboard.tsx` 内の `registerViewCommandHandlers` で行う。

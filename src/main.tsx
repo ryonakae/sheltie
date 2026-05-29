@@ -113,7 +113,7 @@ void useThemeStore
   .getState()
   .initialize()
   .catch((error: unknown) => {
-    console.error('[theme-store] 初期テーマの適用に失敗:', error);
+    console.error('[theme-store] failed to apply initial theme:', error);
   });
 
 createRoot(document.getElementById('root')!).render(

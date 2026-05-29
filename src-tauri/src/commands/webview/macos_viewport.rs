@@ -18,7 +18,7 @@ where
             .map(|e| format!("{e:?}"))
             .unwrap_or_else(|| "nil exception".to_string());
         log::warn!(
-            "Objective-C 呼び出し `{context}` で例外が発生したため補正をスキップしました: {detail}"
+            "Objective-C call `{context}` threw an exception; skipping adjustment: {detail}"
         );
     }
 }
@@ -36,7 +36,7 @@ where
                 .map(|e| format!("{e:?}"))
                 .unwrap_or_else(|| "nil exception".to_string());
             log::warn!(
-                "Objective-C 呼び出し `{context}` で例外が発生したため `false` を返します: {detail}"
+                "Objective-C call `{context}` threw an exception; returning `false`: {detail}"
             );
             false
         }

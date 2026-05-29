@@ -41,7 +41,7 @@ export function setupThemeListener(): void {
       .getState()
       .setMode(mode)
       .catch((error: unknown) => {
-        console.error('[theme-store] ネイティブメニューからのテーマ変更に失敗:', error);
+        console.error('[theme-store] failed to apply theme change from native menu:', error);
       });
   });
 }

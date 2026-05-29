@@ -12,28 +12,28 @@ fn build_alert_texts(params: &UnsavedChangesDialogParams) -> (String, String, &'
     let is_app_exit = params.kind == "app-exit";
 
     let titles = params.project_titles.as_deref().unwrap_or(&[]);
-    let title_text = params.project_title.as_deref().unwrap_or("名称未設定");
+    let title_text = params.project_title.as_deref().unwrap_or("Untitled");
 
     let message_text = if is_app_exit {
         let n = titles.len();
-        format!("未保存の変更がある {n} 件の書類があります。")
+        format!("You have {n} documents with unsaved changes.")
     } else {
-        format!("「{title_text}」の変更内容を保存しますか？")
+        format!("Do you want to save the changes you made to \u{201C}{title_text}\u{201D}?")
     };
 
     let informative_text = if is_app_exit && !titles.is_empty() {
         let list: String = titles
             .iter()
-            .map(|t| format!("・{t}"))
+            .map(|t| format!("\u{2022} {t}"))
             .collect::<Vec<_>>()
             .join("\n");
-        format!("保存しないと、変更内容は失われます。\n\n{list}")
+        format!("Your changes will be lost if you don\u{2019}t save them.\n\n{list}")
     } else {
-        "保存しないと、変更内容は失われます。".to_string()
+        "Your changes will be lost if you don\u{2019}t save them.".to_string()
     };
 
-    let save_label = if is_app_exit { "すべて保存" } else { "保存" };
-    let discard_label = "削除";
+    let save_label = if is_app_exit { "Save All" } else { "Save" };
+    let discard_label = "Discard";
 
     (message_text, informative_text, save_label, discard_label)
 }
@@ -60,7 +60,7 @@ fn show_nsalert_sheet(
 
     let result = objc2::exception::catch(std::panic::AssertUnwindSafe(|| unsafe {
         let alert_class = AnyClass::get(c"NSAlert")
-            .expect("NSAlert クラスが見つかりません");
+            .expect("NSAlert class not found");
         let alert: *mut AnyObject = objc2::msg_send![alert_class, new];
 
         let _: () = objc2::msg_send![alert, setAlertStyle: NS_ALERT_STYLE_WARNING];
@@ -75,7 +75,7 @@ fn show_nsalert_sheet(
         let ns_save = NSString::from_str(save_label);
         let _: () = objc2::msg_send![alert, addButtonWithTitle: &*ns_save];
 
-        let ns_cancel = NSString::from_str("キャンセル");
+        let ns_cancel = NSString::from_str("Cancel");
         let _: () = objc2::msg_send![alert, addButtonWithTitle: &*ns_cancel];
 
         let ns_discard = NSString::from_str(discard_label);
@@ -90,7 +90,7 @@ fn show_nsalert_sheet(
         let _: () = objc2::msg_send![discard_btn, setKeyEquivalentModifierMask: (1u64 << 20)];
 
         // macOS システムレッド（CotEditor の「削除」ボタンと同じ）
-        let color_class = AnyClass::get(c"NSColor").expect("NSColor クラスが見つかりません");
+        let color_class = AnyClass::get(c"NSColor").expect("NSColor class not found");
         let danger_color: *mut AnyObject = objc2::msg_send![color_class, systemRedColor];
         let _: () = objc2::msg_send![discard_btn, setBezelColor: danger_color];
 
@@ -126,7 +126,7 @@ fn show_nsalert_sheet(
             .as_ref()
             .map(|e| format!("{e:?}"))
             .unwrap_or_else(|| "nil exception".to_string());
-        log::warn!("NSAlert シート表示中に Objective-C 例外が発生しました: {detail}");
+        log::warn!("Objective-C exception thrown while showing NSAlert sheet: {detail}");
     }
 }
 
@@ -142,7 +142,7 @@ pub async fn show_unsaved_changes_dialog(
         // NSWindow ポインタを取得（run_on_main_thread の外で取得可能）
         let ns_window_raw = window
             .ns_window()
-            .map_err(|e| format!("NSWindow の取得に失敗しました: {e}"))?;
+            .map_err(|e| format!("failed to obtain NSWindow: {e}"))?;
 
         // usize は Send なのでポインタ値としてクロージャに渡す
         let ns_window_addr = ns_window_raw as usize;
@@ -155,11 +155,11 @@ pub async fn show_unsaved_changes_dialog(
                 let ns_window = ns_window_addr as *mut AnyObject;
                 show_nsalert_sheet(&params, ns_window, tx);
             })
-            .map_err(|e| format!("main thread への切り替えに失敗しました: {e}"))?;
+            .map_err(|e| format!("failed to switch to the main thread: {e}"))?;
 
         receiver
             .recv()
-            .map_err(|_| "ダイアログの結果受信に失敗しました".to_string())
+            .map_err(|_| "failed to receive dialog result".to_string())
     }
 
     #[cfg(not(target_os = "macos"))]

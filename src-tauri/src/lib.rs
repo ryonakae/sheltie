@@ -69,7 +69,7 @@ impl AppExitCoordinatorState {
         let mut inner = self
             .inner
             .lock()
-            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire app exit state lock".to_string())?;
 
         if inner.pending_quit {
             return Ok(false);
@@ -83,7 +83,7 @@ impl AppExitCoordinatorState {
         let mut inner = self
             .inner
             .lock()
-            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire app exit state lock".to_string())?;
 
         if !inner.allow_exit_once {
             return Ok(false);
@@ -97,7 +97,7 @@ impl AppExitCoordinatorState {
         let inner = self
             .inner
             .lock()
-            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire app exit state lock".to_string())?;
         Ok(inner.pending_quit)
     }
 
@@ -105,7 +105,7 @@ impl AppExitCoordinatorState {
         let mut inner = self
             .inner
             .lock()
-            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire app exit state lock".to_string())?;
         inner.pending_quit = false;
         inner.allow_exit_once = true;
         Ok(())
@@ -115,7 +115,7 @@ impl AppExitCoordinatorState {
         let mut inner = self
             .inner
             .lock()
-            .map_err(|_| "app exit state のロック取得に失敗しました".to_string())?;
+            .map_err(|_| "failed to acquire app exit state lock".to_string())?;
         inner.pending_quit = false;
         inner.allow_exit_once = false;
         Ok(())
@@ -133,7 +133,7 @@ fn emit_window_command<R: tauri::Runtime>(
 
     if let Err(error) = app.emit_to(&label, event_name, command) {
         log::warn!(
-            "window command の送信に失敗しました: label={label}, event={event_name}, command={command}, error={error}"
+            "failed to emit window command: label={label}, event={event_name}, command={command}, error={error}"
         );
         return false;
     }
@@ -161,12 +161,12 @@ fn emit_file_command<R: tauri::Runtime>(app: &tauri::AppHandle<R>, command: &str
     match command {
         "new-window" => {
             if let Err(error) = create_untitled_document_window(app) {
-                log::warn!("new window の生成に失敗しました: {error}");
+                log::warn!("failed to create new window: {error}");
             }
         }
         "new-tab" => {
             log::warn!(
-                "new tab を現在の document window へ配送できませんでした: current document window が解決できません"
+                "failed to dispatch new tab to current document window: no current document window resolved"
             );
         }
         _ => {}
@@ -297,6 +297,53 @@ fn remove_default_quit<R: tauri::Runtime>(submenu: &Submenu<R>) -> tauri::Result
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn replace_default_about_and_hide<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    submenu: &Submenu<R>,
+    product_name: &str,
+) -> tauri::Result<()> {
+    // PredefinedMenuItem の About / Hide は package_info().name を参照するため、
+    // lower-case の crate 名がそのまま「About siteboard」「Hide siteboard」と出てしまう。
+    // 既存項目を index 位置で差し替え、productName に揃えたラベルを明示する。
+    let items = submenu.items()?;
+    let mut about_index = None;
+    let mut hide_index = None;
+    for (index, item) in items.iter().enumerate() {
+        let Some(predefined) = item.as_predefined_menuitem() else {
+            continue;
+        };
+        let title = normalize_menu_text(&predefined.text()?);
+        if title.starts_with("about") && about_index.is_none() {
+            about_index = Some(index);
+        } else if title.starts_with("hide") && !title.contains("others") && hide_index.is_none() {
+            hide_index = Some(index);
+        }
+    }
+
+    if let Some(index) = about_index {
+        if let Some(item) = submenu.items()?.get(index) {
+            if let Some(predefined) = item.as_predefined_menuitem() {
+                submenu.remove(predefined)?;
+            }
+        }
+        let about_item = PredefinedMenuItem::about(app, Some(&format!("About {product_name}")), None)?;
+        submenu.insert(&about_item, index)?;
+    }
+
+    if let Some(index) = hide_index {
+        if let Some(item) = submenu.items()?.get(index) {
+            if let Some(predefined) = item.as_predefined_menuitem() {
+                submenu.remove(predefined)?;
+            }
+        }
+        let hide_item = PredefinedMenuItem::hide(app, Some(&format!("Hide {product_name}")))?;
+        submenu.insert(&hide_item, index)?;
+    }
+
+    Ok(())
+}
+
 fn configure_app_menu<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     menu: &Menu<R>,
@@ -310,19 +357,22 @@ fn configure_app_menu<R: tauri::Runtime>(
     #[cfg(target_os = "macos")]
     {
         let Some(app_submenu) = find_app_submenu(menu)? else {
-            log::warn!("既定の App メニューが見つからなかったため Quit 差し替えをスキップします");
+            log::warn!("default App menu not found; skipping Quit replacement");
             return Ok(());
         };
-
-        remove_submenu_item_by_id(&app_submenu, MENU_ID_APP_QUIT)?;
-        remove_default_quit(&app_submenu)?;
-        remove_submenu_item_by_id(&app_submenu, MENU_ID_SETTINGS)?;
 
         let app_name = app
             .config()
             .product_name
             .clone()
             .unwrap_or_else(|| app.package_info().name.clone());
+
+        replace_default_about_and_hide(app, &app_submenu, &app_name)?;
+
+        remove_submenu_item_by_id(&app_submenu, MENU_ID_APP_QUIT)?;
+        remove_default_quit(&app_submenu)?;
+        remove_submenu_item_by_id(&app_submenu, MENU_ID_SETTINGS)?;
+
         let quit_item = MenuItemBuilder::with_id(MENU_ID_APP_QUIT, format!("Quit {app_name}"))
             .accelerator("CmdOrCtrl+Q")
             .build(app)?;
@@ -374,25 +424,25 @@ fn apply_settings_theme_section_header() -> Result<(), String> {
 
     unsafe {
         let ns_app_class =
-            AnyClass::get(c"NSApplication").ok_or("NSApplication クラスが見つかりません")?;
+            AnyClass::get(c"NSApplication").ok_or("NSApplication class not found")?;
         let ns_app: *mut AnyObject = objc2::msg_send![ns_app_class, sharedApplication];
         if ns_app.is_null() {
-            return Err("NSApplication.sharedApplication が null".to_string());
+            return Err("NSApplication.sharedApplication is null".to_string());
         }
 
         let main_menu: *mut AnyObject = objc2::msg_send![ns_app, mainMenu];
         if main_menu.is_null() {
-            return Err("NSApplication.mainMenu が null".to_string());
+            return Err("NSApplication.mainMenu is null".to_string());
         }
 
         // mainMenu の index 0 がアプリ submenu（Siteboard）
         let app_item: *mut AnyObject = objc2::msg_send![main_menu, itemAtIndex: 0isize];
         if app_item.is_null() {
-            return Err("App submenu item が見つかりません".to_string());
+            return Err("App submenu item not found".to_string());
         }
         let app_submenu: *mut AnyObject = objc2::msg_send![app_item, submenu];
         if app_submenu.is_null() {
-            return Err("App submenu が null".to_string());
+            return Err("App submenu is null".to_string());
         }
 
         // タイトル一致で Settings 項目を探す
@@ -400,11 +450,11 @@ fn apply_settings_theme_section_header() -> Result<(), String> {
         let settings_item: *mut AnyObject =
             objc2::msg_send![app_submenu, itemWithTitle: &*settings_title];
         if settings_item.is_null() {
-            return Err("Settings menu item が見つかりません".to_string());
+            return Err("Settings menu item not found".to_string());
         }
         let settings_submenu: *mut AnyObject = objc2::msg_send![settings_item, submenu];
         if settings_submenu.is_null() {
-            return Err("Settings submenu が null".to_string());
+            return Err("Settings submenu is null".to_string());
         }
 
         // 既に section header を挿入済みなら何もしない（idempotency）
@@ -417,12 +467,12 @@ fn apply_settings_theme_section_header() -> Result<(), String> {
         }
 
         let ns_menu_item_class =
-            AnyClass::get(c"NSMenuItem").ok_or("NSMenuItem クラスが見つかりません")?;
+            AnyClass::get(c"NSMenuItem").ok_or("NSMenuItem class not found")?;
         let theme_title = NSString::from_str("Theme");
         let section_header: *mut AnyObject =
             objc2::msg_send![ns_menu_item_class, sectionHeaderWithTitle: &*theme_title];
         if section_header.is_null() {
-            return Err("section header の生成に失敗しました".to_string());
+            return Err("failed to create section header".to_string());
         }
 
         let _: () = objc2::msg_send![settings_submenu, insertItem: section_header, atIndex: 0isize];
@@ -469,7 +519,7 @@ fn update_theme_check_state<R: tauri::Runtime>(app: &tauri::AppHandle<R>, select
     ] {
         if let Some(check) = find_check_menu_item(&menu, id) {
             if let Err(error) = check.set_checked(mode == selected_mode) {
-                log::warn!("Theme メニューの check 状態更新に失敗: id={id}, error={error}");
+                log::warn!("failed to update Theme menu check state: id={id}, error={error}");
             }
         }
     }
@@ -487,7 +537,7 @@ fn configure_file_menu<R: tauri::Runtime>(
     {
         existing
     } else {
-        log::warn!("既定の File メニューが見つからなかったため新規作成します");
+        log::warn!("default File menu not found; creating a new one");
         let fallback = SubmenuBuilder::with_id(app, "file", "File").build()?;
         menu.append(&fallback)?;
         fallback
@@ -544,7 +594,7 @@ fn configure_edit_menu<R: tauri::Runtime>(
     let edit_submenu = if let Some(existing) = find_edit_submenu(menu)? {
         existing
     } else {
-        log::warn!("既定の Edit メニューが見つからなかったため新規作成します");
+        log::warn!("default Edit menu not found; creating a new one");
         let fallback = SubmenuBuilder::with_id(app, "edit", "Edit").build()?;
         menu.append(&fallback)?;
         fallback
@@ -611,16 +661,16 @@ fn configure_view_menu<R: tauri::Runtime>(
     remove_submenu_item_by_id(&view_submenu, MENU_ID_VIEW_ZOOM_IN)?;
     remove_submenu_item_by_id(&view_submenu, MENU_ID_VIEW_ZOOM_OUT)?;
 
-    let fit_item = MenuItemBuilder::with_id(MENU_ID_VIEW_FIT, "全体を表示")
+    let fit_item = MenuItemBuilder::with_id(MENU_ID_VIEW_FIT, "Zoom to Fit")
         .accelerator("Shift+1")
         .build(app)?;
-    let reset_zoom_item = MenuItemBuilder::with_id(MENU_ID_VIEW_RESET_ZOOM, "100%で中央表示")
+    let reset_zoom_item = MenuItemBuilder::with_id(MENU_ID_VIEW_RESET_ZOOM, "Zoom to 100%")
         .accelerator("CmdOrCtrl+0")
         .build(app)?;
-    let zoom_in_item = MenuItemBuilder::with_id(MENU_ID_VIEW_ZOOM_IN, "拡大")
+    let zoom_in_item = MenuItemBuilder::with_id(MENU_ID_VIEW_ZOOM_IN, "Zoom In")
         .accelerator("CmdOrCtrl+Shift+=")
         .build(app)?;
-    let zoom_out_item = MenuItemBuilder::with_id(MENU_ID_VIEW_ZOOM_OUT, "縮小")
+    let zoom_out_item = MenuItemBuilder::with_id(MENU_ID_VIEW_ZOOM_OUT, "Zoom Out")
         .accelerator("CmdOrCtrl+Minus")
         .build(app)?;
 
@@ -639,25 +689,25 @@ fn emit_app_exit_requested<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         Ok(true) => {}
         Ok(false) => return,
         Err(error) => {
-            log::error!("app exit state の更新に失敗しました: {error}");
+            log::error!("failed to update app exit state: {error}");
             return;
         }
     }
 
     if let Some(label) = focused_document_window_label(app) {
         if let Err(error) = app.emit_to(&label, EVENT_APP_EXIT_REQUESTED, ()) {
-            log::warn!("app exit request の送信に失敗しました: label={label}, error={error}");
+            log::warn!("failed to emit app exit request: label={label}, error={error}");
             if let Err(reset_error) = exit_state.abort_pending_quit() {
-                log::error!("app exit state のリセットに失敗しました: {reset_error}");
+                log::error!("failed to reset app exit state: {reset_error}");
             }
         }
         return;
     }
 
     if let Err(error) = exit_state.allow_next_exit() {
-        log::error!("app exit state の更新に失敗しました: {error}");
+        log::error!("failed to update app exit state: {error}");
         if let Err(reset_error) = exit_state.abort_pending_quit() {
-            log::error!("app exit state のリセットに失敗しました: {reset_error}");
+            log::error!("failed to reset app exit state: {reset_error}");
         }
         return;
     }
@@ -674,7 +724,7 @@ pub fn run() {
         .manage(AppExitCoordinatorState::default())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if let Err(error) = handle_launch_args(app, &argv, Some(cwd.as_str())) {
-                log::error!("single-instance 起動要求の処理に失敗しました: {error}");
+                log::error!("failed to handle single-instance launch request: {error}");
             }
         }))
         .plugin(tauri_plugin_dialog::init())
@@ -714,7 +764,7 @@ pub fn run() {
                 )?;
             }
             if let Err(error) = configure_macos_window_tabbing_policy(&app.handle()) {
-                log::error!("macOS native tab の初期化に失敗しました: {error}");
+                log::error!("failed to initialize macOS native tab: {error}");
             }
             // tauri_plugin_store の State がここで初期化済みなので、
             // 永続化済みテーマで Settings > Theme の初期チェック状態を反映する
@@ -723,12 +773,12 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             if let Err(error) = apply_settings_theme_section_header() {
-                log::warn!("Settings の Theme section header 挿入に失敗: {error}");
+                log::warn!("failed to insert Theme section header in Settings: {error}");
             }
 
             let launch_args: Vec<String> = std::env::args().collect();
             if let Err(error) = handle_launch_args(&app.handle(), &launch_args, None) {
-                log::error!("初期 window の作成に失敗しました: {error}");
+                log::error!("failed to create initial window: {error}");
             }
             app.on_menu_event(|app, event| match event.id().as_ref() {
                 MENU_ID_APP_QUIT => emit_app_exit_requested(app),
@@ -808,7 +858,7 @@ pub fn run() {
             show_unsaved_changes_dialog,
         ])
         .build(tauri::generate_context!())
-        .expect("Tauri アプリの起動中にエラーが発生しました");
+        .expect("an error occurred while running the Tauri app");
 
     app.run(|app_handle, event| {
         #[cfg(target_os = "macos")]
@@ -820,12 +870,12 @@ pub fn run() {
                     Ok(true) => api.prevent_exit(),
                     Ok(false) => {}
                     Err(error) => {
-                        log::error!("ExitRequested の処理に失敗しました: {error}");
+                        log::error!("failed to handle ExitRequested: {error}");
                         api.prevent_exit();
                     }
                 },
                 Err(error) => {
-                    log::error!("ExitRequested の処理に失敗しました: {error}");
+                    log::error!("failed to handle ExitRequested: {error}");
                     api.prevent_exit();
                 }
             }

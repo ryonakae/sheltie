@@ -36,7 +36,7 @@ function sanitizeFileName(name: string): string {
     .join('')
     .replace(/\s+/g, ' ')
     .trim();
-  return cleaned || '名称未設定';
+  return cleaned || 'Untitled';
 }
 
 function enqueueFileOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -74,7 +74,7 @@ async function runOpenProjectFromDialog(): Promise<void> {
   try {
     await api.openDocumentWindow(normalizeSiteboardPath(selected));
   } catch (error) {
-    await showError(error instanceof Error ? error.message : 'ファイルを開けませんでした');
+    await showError(error instanceof Error ? error.message : 'Could not open the file');
   }
 }
 
@@ -82,7 +82,7 @@ async function runNewDocumentTab(): Promise<void> {
   try {
     await api.newDocumentTab();
   } catch (error) {
-    await showError(error instanceof Error ? error.message : '新しいタブを開けませんでした');
+    await showError(error instanceof Error ? error.message : 'Could not open a new tab');
   }
 }
 
@@ -90,7 +90,7 @@ async function runNewDocumentWindow(): Promise<void> {
   try {
     await api.newDocumentWindow();
   } catch (error) {
-    await showError(error instanceof Error ? error.message : '新しいウインドウを開けませんでした');
+    await showError(error instanceof Error ? error.message : 'Could not open a new window');
   }
 }
 
@@ -134,7 +134,7 @@ async function runSaveCurrentProject(
     useProjectStore.getState().markProjectSaved(savedPath, document);
     return { status: 'saved', filePath: savedPath };
   } catch (error) {
-    await showError(error instanceof Error ? error.message : 'ファイル保存に失敗しました');
+    await showError(error instanceof Error ? error.message : 'Failed to save the file');
     return { status: 'error' };
   }
 }
@@ -166,7 +166,7 @@ export async function runFileCommand(command: FileCommand): Promise<void> {
 
     const project = getProject();
     if (!project) {
-      await showInfo('保存対象のプロジェクトがありません');
+      await showInfo('No project available to save');
       return;
     }
 

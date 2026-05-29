@@ -83,6 +83,10 @@ interface SiteboardProps {
   setSelection: (idsOrUpdater: string[] | ((prev: string[]) => string[])) => void;
   centeredNodeId?: string | null;
   onCenteredNodeHandled?: () => void;
+  autoEditTextNodeId?: string | null;
+  onAutoEditTextNodeHandled?: () => void;
+  autoEditStickyNoteId?: string | null;
+  onAutoEditStickyNoteHandled?: () => void;
   onAddWebNode: () => void;
   onAddStickyNote: () => void;
   onAddTextNode: () => void;
@@ -113,6 +117,10 @@ export function Siteboard({
   setSelection,
   centeredNodeId = null,
   onCenteredNodeHandled,
+  autoEditTextNodeId = null,
+  onAutoEditTextNodeHandled,
+  autoEditStickyNoteId = null,
+  onAutoEditStickyNoteHandled,
   onAddWebNode,
   onAddStickyNote,
   onAddTextNode,
@@ -716,6 +724,20 @@ export function Siteboard({
   const [editingUrlNodeId, setEditingUrlNodeId] = useState<string | null>(null);
   const [editingTextNodeId, setEditingTextNodeId] = useState<string | null>(null);
 
+  // 新規テキストノード作成時に親からリクエストされた編集開始を反映する
+  useEffect(() => {
+    if (!autoEditTextNodeId) return;
+    setEditingTextNodeId(autoEditTextNodeId);
+    onAutoEditTextNodeHandled?.();
+  }, [autoEditTextNodeId, onAutoEditTextNodeHandled]);
+
+  // 付箋は内部 state で編集状態を持つため、flowNodes 構築時に autoStartEditing を渡す。
+  // 渡した直後に親へ ack して再 render で false に戻し、二度起動を防ぐ
+  useEffect(() => {
+    if (!autoEditStickyNoteId) return;
+    onAutoEditStickyNoteHandled?.();
+  }, [autoEditStickyNoteId, onAutoEditStickyNoteHandled]);
+
   const handleTextNodeStartEditing = useCallback((nodeId: string) => {
     setEditingTextNodeId(nodeId);
   }, []);
@@ -1240,6 +1262,7 @@ export function Siteboard({
           nodeProps: {
             node: { ...node, x: 0, y: 0, width: contentWidth, height: contentHeight },
             isActive: node.id === activeNodeId,
+            autoStartEditing: autoEditStickyNoteId === node.id,
             onActivate: handleNodeActivate,
             onContextMenu: handleNodeContextMenu,
             onContentChange: handleStickyNoteContentChange,
@@ -1387,6 +1410,7 @@ export function Siteboard({
     handleStickyNoteContentChange,
     handleStickyNoteAutoHeightChange,
     handleStickyNoteStyleChange,
+    autoEditStickyNoteId,
     editingTextNodeId,
     handleTextNodeStartEditing,
     handleTextNodeStopEditing,

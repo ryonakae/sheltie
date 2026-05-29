@@ -52,15 +52,16 @@ export const TextNode = memo(function TextNode({
         gapcursor: false,
       }),
       Placeholder.configure({
-        placeholder: 'テキストを入力...',
+        placeholder: 'Type anything',
         showOnlyWhenEditable: false,
+        showOnlyCurrent: false,
       }),
     ],
     content: node.tiptapContent ?? '',
     editable: isEditing,
     editorProps: {
       attributes: {
-        class: 'outline-none bg-transparent',
+        class: 'outline-none bg-transparent siteboard-text-node-editor',
       },
     },
   });

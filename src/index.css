@@ -31,6 +31,18 @@
 }
 
 /*
+ * Tiptap Placeholder Extension の表示。`showOnlyWhenEditable: false` と組み合わせ、
+ * 編集モードでも非編集モードでも、空のときだけプレースホルダ文字列を表示する。
+ */
+.siteboard-text-node-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #aaa;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/*
  * マウスカーソル統一ポリシー:
  * - リサイズハンドル: 方向別 resize カーソル（React Flow の既定 .react-flow__resize-control.handle 系を維持）
  * - 編集中のテキスト: text (I-beam)

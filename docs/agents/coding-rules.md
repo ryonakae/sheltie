@@ -38,6 +38,8 @@
 - **ツールバーの固定サイズ**: canvas zoom 中も文字・ボタン・アイコンの画面上サイズを固定したい UI は `zoomPx()` と `AppButton scaleWithCanvasZoom` を使う。高さ、padding、gap、font-size、icon size、border 幅を world 座標へ直接ハードコードしない
 - **付箋のドラッグ起点**: 付箋はノード本体をドラッグ可能にし、textarea などの操作要素だけを `nodrag` で保護する。スタイル変更は選択時に `NodeToolbar` で表示する
 - **付箋本文の編集開始**: 付箋本文は未選択時のクリックで選択だけ行い、選択済みの本文エリアを再度クリックした時だけ編集を開始する。リサイズ操作やツールバー操作からは編集開始しない
+- **新規追加時は編集モードから開始**: FloatingToolbar から作成した直後は親 (`ProjectScreen`) が `autoEditStickyNoteId` を Siteboard に渡し、`StickyNoteNode` の `autoStartEditing` prop 経由でマウント時に編集モードで起動する
+- **プレースホルダ**: 本文が空のときは編集モード/非編集モードどちらでも `'Type anything'` を表示する。テキストノードと文言を揃える。編集モードでは textarea の `placeholder` 属性、非編集モードでは本文 div の代替表示を使う
 - **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用する。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
 - **Framer Motion との競合**: ノードコンポーネント内で `motion.div layout="position"` を使用しない。React Flow が CSS transform で位置を管理しているため、`layout="position"` のスプリングアニメーション（レイアウトシフト補正）がドラッグ方向を反転させる。Canvas や外側 UI の `motion.div` には使用可（ノード外）
 - `nodeTypes` 定数は**モジュールスコープで定義**。コンポーネント内に定義するとレンダーのたびにノードが再マウント（unmount→mount）される
@@ -73,6 +75,8 @@
 
 - **透明背景**: テキストノードはフレーム padding なし（`getNodeChromeHeight` / `getNodeChromeWidth` が 0 を返す）。選択枠は付箋と同じく `SelectionFrameOverlay` で外側に描く（編集中も表示する）
 - **ダブルクリックで編集モード**: シングルクリックで選択+ドラッグ可能、ダブルクリックで Tiptap エディタが `editable` になりテキスト入力可能。編集中は `nodrag` で移動を抑制
+- **新規追加時は編集モードから開始**: FloatingToolbar から作成した直後は親 (`ProjectScreen`) が `autoEditTextNodeId` を Siteboard に渡し、`editingTextNodeId` に反映してそのまま編集を開始する
+- **プレースホルダ**: 本文が空のときは編集モード/非編集モードどちらでも `'Type anything'` を表示する。付箋ノードと文言を揃える。Tiptap Placeholder Extension を `showOnlyWhenEditable: false` / `showOnlyCurrent: false` で設定し、`siteboard-text-node-editor` クラスを介して `index.css` の `p.is-editor-empty::before` ルールで描画する
 - **編集モード終了**: Escape キーまたはノード外クリック（blur）で終了。終了時に Tiptap JSON を store に保存し、Undo/Redo 用のスナップショットが積まれる
 - **空ノードの自動削除**: 選択解除のタイミングで `isTextNodeEmpty(node)` が true ならノードを自動削除する（Siteboard.tsx の useEffect 経路）
 - **NodeToolbar**: React Flow の `<NodeToolbar>` を使用して書式設定 UI を表示（選択時のみ）。ツールバー内のインタラクティブ要素には `nodrag` クラスを付与。付箋の `NodeToolbar` も同じ方針

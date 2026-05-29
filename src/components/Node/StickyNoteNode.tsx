@@ -12,6 +12,8 @@ import { type StickyNoteNode as StickyNoteNodeModel } from '@/types';
 export interface StickyNoteNodeProps {
   node: StickyNoteNodeModel;
   isActive: boolean;
+  /** マウント直後から編集モードで起動する（FloatingToolbar からの新規追加用） */
+  autoStartEditing?: boolean;
   onActivate: (nodeId: string, addToSelection: boolean) => void;
   onContextMenu: (e: React.MouseEvent, nodeId: string) => void;
   onContentChange: (nodeId: string, content: string) => void;
@@ -21,14 +23,17 @@ export interface StickyNoteNodeProps {
 export const StickyNoteNode = memo(function StickyNoteNode({
   node,
   isActive,
+  autoStartEditing,
   onActivate,
   onContextMenu,
   onContentChange,
   onAutoHeightChange,
 }: StickyNoteNodeProps) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(autoStartEditing ?? false);
   // 編集中テキスト。ストア反映は 500ms デバウンス + blur 時 flush で行う。
-  const [editingContent, setEditingContent] = useState('');
+  const [editingContent, setEditingContent] = useState(
+    autoStartEditing ? (node.content ?? '') : '',
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentMeasureRef = useRef<HTMLTextAreaElement>(null);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,6 +64,18 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       lastCommittedContentRef.current = node.content ?? '';
     }
   }, [isEditing, node.content]);
+
+  useEffect(() => {
+    // autoStartEditing はマウント時のみ参照する（state 初期値で isEditing=true 起動済み）。
+    // mount 後の rAF で focus + select し、placeholder テキストごと全選択する
+    if (!autoStartEditing) return;
+    const frame = requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const commitContent = useCallback(
     (content: string) => {
@@ -173,6 +190,7 @@ export const StickyNoteNode = memo(function StickyNoteNode({
       className={twMerge('size-full', noteClassName)}
       style={{
         borderWidth: zoomPx(1),
+        borderRadius: `${16}px`,
       }}
       data-node-id={node.id}
       onMouseDown={handleActivate}
@@ -200,9 +218,10 @@ export const StickyNoteNode = memo(function StickyNoteNode({
         {isEditing ? (
           <textarea
             ref={textareaRef}
-            className="nodrag m-0 box-border block size-full min-h-0 resize-none overflow-auto border-0 bg-transparent p-3 leading-normal text-[#333] focus:outline-none"
+            className="nodrag m-0 box-border block size-full min-h-0 resize-none overflow-auto border-0 bg-transparent p-3 leading-normal text-[#333] placeholder:text-[#aaa] focus:outline-none"
             style={{ fontFamily: 'inherit', fontSize: `${fontSize}px` }}
             value={editingContent}
+            placeholder="Type anything"
             onChange={(e) => setEditingContent(e.target.value)}
             onBlur={handleBlur}
             onMouseDown={(e) => e.stopPropagation()}

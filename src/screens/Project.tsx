@@ -53,6 +53,8 @@ export function ProjectScreen() {
   const viewport = project?.viewport;
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [centeredNodeId, setCenteredNodeId] = useState<string | null>(null);
+  const [autoEditTextNodeId, setAutoEditTextNodeId] = useState<string | null>(null);
+  const [autoEditStickyNoteId, setAutoEditStickyNoteId] = useState<string | null>(null);
   const centeringAnimationRef = useRef<Array<{ stop: () => void }>>([]);
   const prefersReducedMotion = useReducedMotion();
 
@@ -66,6 +68,14 @@ export function ProjectScreen() {
 
   const handleCenteredNodeHandled = useCallback(() => {
     setCenteredNodeId(null);
+  }, []);
+
+  const handleAutoEditTextNodeHandled = useCallback(() => {
+    setAutoEditTextNodeId(null);
+  }, []);
+
+  const handleAutoEditStickyNoteHandled = useCallback(() => {
+    setAutoEditStickyNoteId(null);
   }, []);
 
   const cancelCentering = useCallback(() => {
@@ -198,6 +208,7 @@ export function ProjectScreen() {
     );
     if (created) {
       setSelection([created.id]);
+      setAutoEditStickyNoteId(created.id);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
   }, [addStickyNoteNode, viewport, centerOnNewNode, setSelection, handleCenteredNode]);
@@ -223,6 +234,7 @@ export function ProjectScreen() {
     );
     if (created) {
       setSelection([created.id]);
+      setAutoEditTextNodeId(created.id);
       centerOnNewNode(created, () => handleCenteredNode(created.id));
     }
   }, [addTextNode, viewport, centerOnNewNode, setSelection, handleCenteredNode]);
@@ -244,6 +256,10 @@ export function ProjectScreen() {
         setSelection={setSelection}
         centeredNodeId={centeredNodeId}
         onCenteredNodeHandled={handleCenteredNodeHandled}
+        autoEditTextNodeId={autoEditTextNodeId}
+        onAutoEditTextNodeHandled={handleAutoEditTextNodeHandled}
+        autoEditStickyNoteId={autoEditStickyNoteId}
+        onAutoEditStickyNoteHandled={handleAutoEditStickyNoteHandled}
         onAddWebNode={handleAddWebNode}
         onAddStickyNote={handleAddStickyNote}
         onAddTextNode={handleAddTextNode}

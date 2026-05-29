@@ -1,6 +1,3 @@
-import { motion } from 'motion/react';
-import { useEffect, useState } from 'react';
-
 import { AppButton } from '@/components/Common/AppButton';
 import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
 
@@ -11,16 +8,6 @@ interface ZoomIndicatorProps {
 
 export function ZoomIndicator({ zoom, onResetViewport }: ZoomIndicatorProps) {
   const zoomPercent = Math.round(zoom * 100);
-  // ズーム操作が止まった時だけ pop アニメーションを再生するためのフラグ
-  const [settled, setSettled] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(true), 200);
-    return () => {
-      clearTimeout(timer);
-      setSettled(false);
-    };
-  }, [zoomPercent]);
 
   return (
     <AppButton
@@ -29,14 +16,9 @@ export function ZoomIndicator({ zoom, onResetViewport }: ZoomIndicatorProps) {
       tooltipMessage="Zoom to 100%"
       onPress={onResetViewport}
       aria-label="Zoom to 100%"
-      className={`w-14 justify-center px-3 tabular-nums ${FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}`}
+      className={`w-14 justify-center px-3 text-xs tabular-nums ${FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}`}
     >
-      <motion.span
-        animate={settled ? { scale: [1.08, 1] } : undefined}
-        transition={{ duration: 0.15 }}
-      >
-        {zoomPercent}%
-      </motion.span>
+      {zoomPercent}%
     </AppButton>
   );
 }

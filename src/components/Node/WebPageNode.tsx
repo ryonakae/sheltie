@@ -1,7 +1,7 @@
+import Globe from '@gravity-ui/icons/Globe';
 import { useReducedMotion } from 'motion/react';
 import { memo, useCallback, useLayoutEffect, useRef } from 'react';
 
-import { WebPageNodeUrlForm } from '@/components/Node/WebPageNodeUrlForm';
 import { WEB_PAGE_FRAME_PADDING } from '@/constants';
 import { useWebPageWebviewLifecycle } from '@/hooks/siteboard/useWebPageWebviewLifecycle';
 import { zoomPx } from '@/lib/canvas-zoom';
@@ -23,8 +23,6 @@ export interface WebPageNodeProps {
   onWebviewLoaded: (nodeId: string) => void;
   onScreenshotPresented: (nodeId: string, url: string) => void;
   onScrollEnded: (nodeId: string) => void;
-  onUrlSubmit: (nodeId: string, url: string) => void;
-  isEditingUrl: boolean;
   positionCorrectionAnimationToken: number | null;
   positionCorrectionFromX: number | null;
   positionCorrectionFromY: number | null;
@@ -47,8 +45,6 @@ export const WebPageNode = memo(function WebPageNode({
   onWebviewLoaded,
   onScreenshotPresented,
   onScrollEnded,
-  onUrlSubmit,
-  isEditingUrl,
   positionCorrectionAnimationToken,
   positionCorrectionFromX,
   positionCorrectionFromY,
@@ -185,8 +181,14 @@ export const WebPageNode = memo(function WebPageNode({
           outlineOffset: 0,
         }}
       >
-        {isNodeEmpty(node) || isEditingUrl ? (
-          <WebPageNodeUrlForm onSubmit={(url) => onUrlSubmit(node.id, url)} />
+        {isNodeEmpty(node) ? (
+          <div
+            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-muted"
+            style={{ gap: zoomPx(8) }}
+          >
+            <Globe style={{ width: zoomPx(28), height: zoomPx(28) }} />
+            <span style={{ fontSize: zoomPx(12) }}>Enter URL above</span>
+          </div>
         ) : (
           screenshotUrl && (
             <img

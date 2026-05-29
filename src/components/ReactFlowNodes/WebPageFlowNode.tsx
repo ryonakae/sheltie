@@ -185,7 +185,7 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
         position={Position.Top}
         align="center"
         isVisible={!!selected && nodeProps.isActive}
-        offset={36}
+        offset={30}
       >
         <WebPageToolbar
           width={toolbar.displayWidth}
@@ -193,19 +193,25 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
           canGoBack={!toolbar.isEmpty && toolbar.canGoBack}
           canGoForward={!toolbar.isEmpty && toolbar.canGoForward}
           isMoved={toolbar.isMoved}
+          isEmpty={toolbar.isEmpty}
+          isEditingUrl={toolbar.isEditingUrl}
+          currentUrl={toolbar.currentUrl}
           onGoBack={toolbar.onGoBack}
           onGoForward={toolbar.onGoForward}
           onReload={toolbar.onReload}
           onPinUrl={toolbar.onPinUrl}
           onResizePreset={toolbar.onResizePreset}
+          onUrlSubmit={toolbar.onUrlSubmit}
         />
       </NodeToolbar>
 
       {/* タイトル段（左寄せ・常時表示・ドラッグ可能） */}
       <NodeToolbar position={Position.Top} align="start" isVisible offset={8}>
         <div
-          className="node-drag-handle flex items-baseline overflow-hidden text-xs/none whitespace-nowrap text-muted"
+          className="flex cursor-default items-baseline overflow-hidden text-xs/none whitespace-nowrap text-muted select-none"
           style={{ maxWidth: titleMaxWidth }}
+          onPointerDown={toolbar.onTitlePointerDown}
+          onContextMenu={toolbar.onTitleContextMenu}
         >
           {toolbar.isMoved && <span className="shrink-0">[Moved]&nbsp;</span>}
           <span className="min-w-0 flex-1 truncate">{toolbar.title}</span>

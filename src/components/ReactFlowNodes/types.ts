@@ -15,11 +15,16 @@ export type WebPageFlowNodeData = {
     canGoForward: boolean;
     isMoved: boolean;
     isEmpty: boolean;
+    isEditingUrl: boolean;
+    currentUrl: string;
     onGoBack: () => void;
     onGoForward: () => void;
     onReload: () => void;
     onPinUrl: () => void;
     onResizePreset: (width: number, height: number) => void;
+    onUrlSubmit: (url: string) => void;
+    onTitlePointerDown: (event: React.PointerEvent) => void;
+    onTitleContextMenu: (event: React.MouseEvent) => void;
   };
   /** レイアウト計算に使う現在のキャンバスズーム */
   layoutZoom: number;

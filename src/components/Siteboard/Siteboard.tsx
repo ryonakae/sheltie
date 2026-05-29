@@ -995,6 +995,98 @@ export function Siteboard({
     [setSelection],
   );
 
+  // タイトル段ドラッグ。React Flow の NodeToolbar はノード DOM サブツリー外に portal 配置されるため
+  // dragHandle が効かない。ここで pointer 系イベントを直接取り、draggingNodePositions を更新する
+  const handleTitlePointerDown = useCallback(
+    (nodeId: string, event: React.PointerEvent) => {
+      if (event.button !== 0) return;
+      event.stopPropagation();
+
+      handleNodeActivate(nodeId, event.shiftKey);
+
+      const startClientX = event.clientX;
+      const startClientY = event.clientY;
+      const startZoom = zoomRef.current;
+
+      const movingIds =
+        selectedNodeIds.includes(nodeId) && selectedNodeIds.length > 1 ? selectedNodeIds : [nodeId];
+      const startPositions = new Map<string, { x: number; y: number }>();
+      for (const id of movingIds) {
+        const target = nodes.find((candidate) => candidate.id === id);
+        if (target) startPositions.set(id, { x: target.x, y: target.y });
+      }
+      if (startPositions.size === 0) return;
+
+      let dragStarted = false;
+      const DRAG_THRESHOLD_PX = 3;
+
+      const handleMove = (ev: PointerEvent) => {
+        const screenDx = ev.clientX - startClientX;
+        const screenDy = ev.clientY - startClientY;
+        if (!dragStarted) {
+          if (Math.hypot(screenDx, screenDy) < DRAG_THRESHOLD_PX) return;
+          dragStarted = true;
+          void prepareInteractionStart('drag', nodeId);
+          handleInteractionChange(true, 'drag');
+        }
+        const dx = screenDx / startZoom;
+        const dy = screenDy / startZoom;
+        setDraggingNodePositions((prev) => {
+          const next = { ...prev };
+          for (const [id, start] of startPositions) {
+            next[id] = { x: start.x + dx, y: start.y + dy };
+          }
+          return next;
+        });
+      };
+
+      const handleUp = (ev: PointerEvent) => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleUp);
+
+        if (!dragStarted) return;
+
+        handleInteractionChange(false, 'drag');
+
+        const dx = (ev.clientX - startClientX) / startZoom;
+        const dy = (ev.clientY - startClientY) / startZoom;
+
+        setDraggingNodePositions((prev) => {
+          const next = { ...prev };
+          for (const id of startPositions.keys()) delete next[id];
+          return next;
+        });
+
+        if (startPositions.size > 1) {
+          updateNodePositions(
+            Array.from(startPositions.entries()).map(([id, start]) => ({
+              nodeId: id,
+              x: start.x + dx,
+              y: start.y + dy,
+            })),
+          );
+        } else {
+          const start = startPositions.get(nodeId);
+          if (start) {
+            updateNodePosition(nodeId, start.x + dx, start.y + dy);
+          }
+        }
+      };
+
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+    },
+    [
+      nodes,
+      selectedNodeIds,
+      handleNodeActivate,
+      prepareInteractionStart,
+      handleInteractionChange,
+      updateNodePosition,
+      updateNodePositions,
+    ],
+  );
+
   // React Flow のビューポート変更ハンドラー
   const handleViewportChange = useCallback(
     (viewport: FlowViewport) => {
@@ -1346,8 +1438,6 @@ export function Siteboard({
           onWebviewLoaded: handleWebviewLoaded,
           onScreenshotPresented: handleScreenshotPresented,
           onScrollEnded: handleScrollEnded,
-          onUrlSubmit: editingUrlNodeId === node.id ? handleChangeUrlSubmit : handleUrlSubmit,
-          isEditingUrl: editingUrlNodeId === node.id,
           positionCorrectionAnimationToken: positionCorrectionAnimations[node.id]?.token ?? null,
           positionCorrectionFromX: positionCorrectionAnimations[node.id]?.fromX ?? null,
           positionCorrectionFromY: positionCorrectionAnimations[node.id]?.fromY ?? null,
@@ -1363,11 +1453,19 @@ export function Siteboard({
           canGoForward: navStates[node.id]?.can_go_forward ?? false,
           isMoved: moved,
           isEmpty: empty,
+          isEditingUrl: editingUrlNodeId === node.id,
+          currentUrl: node.url,
           onGoBack: () => handleGoBack(node.id),
           onGoForward: () => handleGoForward(node.id),
           onReload: () => handleReloadWebNode(node.id),
           onPinUrl: () => handlePinWebNodeUrl(node.id),
           onResizePreset: (width, height) => handleResizePreset(node.id, width, height),
+          onUrlSubmit: (url) =>
+            editingUrlNodeId === node.id
+              ? handleChangeUrlSubmit(node.id, url)
+              : handleUrlSubmit(node.id, url),
+          onTitlePointerDown: (event) => handleTitlePointerDown(node.id, event),
+          onTitleContextMenu: (event) => handleNodeContextMenu(event, node.id),
         },
         layoutZoom: uiZoom,
         onResizeStart: handleWebPageResizeStart,
@@ -1439,6 +1537,7 @@ export function Siteboard({
     handleUrlSubmit,
     handleChangeUrlSubmit,
     editingUrlNodeId,
+    handleTitlePointerDown,
     handlePositionCorrectionAnimationComplete,
   ]);
 

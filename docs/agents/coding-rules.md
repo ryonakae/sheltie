@@ -33,7 +33,7 @@
 - **位置は React Flow が管理**: React Flow ノードの `position: {x, y}` には常に node の座標を設定。React Flow が `.react-flow__node` の CSS transform で絶対配置を制御
 - **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
 - **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化する
-- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` のフレーム div（24px world 固定 padding 帯）に付ける。フレーム帯または `NodeToolbar` 内のタイトル段からドラッグできる
+- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` のフレーム div（24px world 固定 padding 帯）に付ける。タイトル段は `NodeToolbar` 内（ノード DOM サブツリー外に portal 配置されるため `dragHandle` が効かない）なので、`Siteboard.tsx` の `handleTitlePointerDown` が pointer 系イベントを直接処理し `draggingNodePositions` を更新する。右クリックも同じタイトル段の `onContextMenu` で `handleNodeContextMenu` を発火する
 - **NodeToolbar 2 段構成**: WebPage のツールバーは `NodeToolbar` を 2 つ使う。ツールバー段（`align="center" isVisible={selected && isActive}`）と、タイトル段（`align="start" isVisible offset={8}`）。タイトル段は常時表示で `[Moved] Title` を Webview+フレーム幅で `truncate`
 - **ツールバーの固定サイズ**: canvas zoom 中も文字・ボタン・アイコンの画面上サイズを固定したい UI は `zoomPx()` と `AppButton scaleWithCanvasZoom` を使う。高さ、padding、gap、font-size、icon size、border 幅を world 座標へ直接ハードコードしない
 - **付箋のドラッグ起点**: 付箋はノード本体をドラッグ可能にし、textarea などの操作要素だけを `nodrag` で保護する。スタイル変更は選択時に `NodeToolbar` で表示する

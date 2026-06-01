@@ -39,27 +39,20 @@ import {
   MAX_ZOOM,
   STICKY_NOTE_MIN_HEIGHT,
   STICKY_NOTE_MIN_WIDTH,
-  TEXT_NODE_MIN_WIDTH,
 } from '@/constants';
 import { useSiteboardContextMenus } from '@/hooks/siteboard/useSiteboardContextMenus';
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
 import { useSiteboardResize } from '@/hooks/siteboard/useSiteboardResize';
+import { useSiteboardTextEditing } from '@/hooks/siteboard/useSiteboardTextEditing';
 import { useSiteboardViewportController } from '@/hooks/siteboard/useSiteboardViewportController';
 import { getNodeFrameHeight, getNodeFrameWidth } from '@/lib/siteboard-node-frame';
 import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
-import {
-  isNodeEmpty,
-  isNodeMoved,
-  isStickyNoteNode,
-  isTextNode,
-  isTextNodeEmpty,
-  isWebPageNode,
-} from '@/types';
+import { isNodeEmpty, isNodeMoved, isStickyNoteNode, isTextNode, isWebPageNode } from '@/types';
 import type { TextNode, WebPageNode } from '@/types';
 
 interface SiteboardProps {
@@ -631,101 +624,32 @@ export function Siteboard({
     onSendNodeBackward: sendNodeBackward,
   });
 
-  const [editingUrlNodeId, setEditingUrlNodeId] = useState<string | null>(null);
-  const [editingTextNodeId, setEditingTextNodeId] = useState<string | null>(null);
-
-  // 新規テキストノード作成時に親からリクエストされた編集開始を反映する
-  useEffect(() => {
-    if (!autoEditTextNodeId) return;
-    setEditingTextNodeId(autoEditTextNodeId);
-    onAutoEditTextNodeHandled?.();
-  }, [autoEditTextNodeId, onAutoEditTextNodeHandled]);
-
-  // 付箋は内部 state で編集状態を持つため、flowNodes 構築時に autoStartEditing を渡す。
-  // 渡した直後に親へ ack して再 render で false に戻し、二度起動を防ぐ
-  useEffect(() => {
-    if (!autoEditStickyNoteId) return;
-    onAutoEditStickyNoteHandled?.();
-  }, [autoEditStickyNoteId, onAutoEditStickyNoteHandled]);
-
-  const handleTextNodeStartEditing = useCallback((nodeId: string) => {
-    setEditingTextNodeId(nodeId);
-  }, []);
-
-  const handleTextNodeStopEditing = useCallback(
-    (nodeId: string, tiptapContent: object) => {
-      updateTextNodeContent(nodeId, tiptapContent);
-      setEditingTextNodeId(null);
-    },
-    [updateTextNodeContent],
-  );
-
-  // 直前の選択を保持し、テキストノードが選択解除されたタイミングで空なら削除する
-  const previousSelectedNodeIdsRef = useRef<string[]>([]);
-  useEffect(() => {
-    const previous = previousSelectedNodeIdsRef.current;
-    previousSelectedNodeIdsRef.current = selectedNodeIds;
-
-    const currentSet = new Set(selectedNodeIds);
-    const deselected = previous.filter((id) => !currentSet.has(id));
-    if (deselected.length === 0) return;
-
-    const emptyTextNodeIds = deselected.filter((id) => {
-      if (id === editingTextNodeId) return false;
-      const node = nodes.find((candidate) => candidate.id === id);
-      return !!node && isTextNode(node) && isTextNodeEmpty(node);
-    });
-    if (emptyTextNodeIds.length === 0) return;
-
-    if (emptyTextNodeIds.length === 1) {
-      removeNode(emptyTextNodeIds[0]);
-    } else {
-      removeNodes(emptyTextNodeIds);
-    }
-  }, [editingTextNodeId, nodes, removeNode, removeNodes, selectedNodeIds]);
-
-  const handleTextNodeAutoHeightChange = useCallback(
-    (nodeId: string, height: number) => {
-      updateNodeSizeWithoutHistory(
-        nodeId,
-        useProjectStore.getState().project?.nodes.find((n) => n.id === nodeId)?.width ?? 200,
-        height,
-      );
-    },
-    [updateNodeSizeWithoutHistory],
-  );
-
-  const handleTextNodeAutoWidthChange = useCallback(
-    (nodeId: string, width: number) => {
-      const node = useProjectStore.getState().project?.nodes.find((n) => n.id === nodeId);
-      if (!node) return;
-      updateNodeSizeWithoutHistory(nodeId, Math.max(width, TEXT_NODE_MIN_WIDTH), node.height);
-    },
-    [updateNodeSizeWithoutHistory],
-  );
-
-  const handleTextNodeWidthModeChange = useCallback(
-    (nodeId: string, mode: 'auto' | 'fixed') => {
-      updateTextNodeWidthMode(nodeId, mode);
-    },
-    [updateTextNodeWidthMode],
-  );
-
-  const handleTextNodeStyleChange = useCallback(
-    (
-      nodeId: string,
-      style: {
-        fontSizePreset?: import('@/types').TextNodeFontSizePreset;
-        fontWeight?: 'normal' | 'bold';
-        italic?: boolean;
-        strikethrough?: boolean;
-        textColorIndex?: number;
-      },
-    ) => {
-      updateTextNodeStyle(nodeId, style);
-    },
-    [updateTextNodeStyle],
-  );
+  const {
+    editingTextNodeId,
+    editingUrlNodeId,
+    setEditingUrlNodeId,
+    handleTextNodeStartEditing,
+    handleTextNodeStopEditing,
+    handleTextNodeAutoHeightChange,
+    handleTextNodeAutoWidthChange,
+    handleTextNodeWidthModeChange,
+    handleTextNodeStyleChange,
+    handleChangeUrlSubmit,
+  } = useSiteboardTextEditing({
+    nodes,
+    selectedNodeIds,
+    autoEditTextNodeId,
+    onAutoEditTextNodeHandled,
+    autoEditStickyNoteId,
+    onAutoEditStickyNoteHandled,
+    updateTextNodeContent,
+    updateNodeSizeWithoutHistory,
+    updateTextNodeWidthMode,
+    updateTextNodeStyle,
+    changeWebNodeUrl,
+    removeNode,
+    removeNodes,
+  });
 
   const { handleNodeContextMenu, handleEdgeContextMenu } = useSiteboardContextMenus({
     nodes,
@@ -742,14 +666,6 @@ export function Siteboard({
     bringNodeForward,
     sendNodeBackward,
   });
-
-  const handleChangeUrlSubmit = useCallback(
-    (nodeId: string, url: string) => {
-      changeWebNodeUrl(nodeId, url);
-      setEditingUrlNodeId(null);
-    },
-    [changeWebNodeUrl],
-  );
 
   // ペイン（空白エリア）クリックで選択解除（Shift 押下時は複数選択操作の途中とみなして維持）
   const handlePaneClick = useCallback(

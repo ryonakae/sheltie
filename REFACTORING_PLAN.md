@@ -208,7 +208,7 @@ src-tauri/src/
 - 📝 ブランチ: `refactor/siteboard-cleanup`
 - [x] 2-1 Rust top_inset ヘルパー ✅ platform_top_inset に集約（4箇所の cfg 分岐 + adjusted_y 分岐を解消）。cargo check OK
 - [x] 3-1 useSiteboardViewportController ✅ viewport 管理を抽出。Siteboard.tsx 1634→1395行。typecheck/lint/test/format OK（要実機確認: pan/zoom/fit/reset）
-- [ ] 3-2 useSiteboardContextMenus
+- [x] 3-2 useSiteboardContextMenus ✅ ノード/エッジ右クリックメニューを抽出。Siteboard.tsx 1395→1265行（要実機確認: 右クリックメニュー各種）
 - [ ] 3-3 useSiteboardResize
 - [ ] 3-4 useSiteboardTextEditing
 - [ ] 3-5 useSiteboardDrag

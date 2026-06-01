@@ -25,6 +25,14 @@ export const NATIVE_SAFE_MARGIN_BOTTOM_PX = 75;
 export const PRE_DISPLAY_MARGIN_PX = 50;
 export const WEBVIEW_REVEAL_DELAY_MS = 100;
 
+// 鮮度キャプチャ（保存スクショを最新に保つ撮影）の遅延。トリガ種別ごとに要求が異なる。
+// nav は新コンテンツの描画待ち、load/scroll は既に描画済み/停止済みのため即時。
+export const FRESHNESS_CAPTURE_DELAY_MS = {
+  navigation: 1000,
+  load: 0,
+  scroll: 0,
+} as const;
+
 // テキストノードの最小幅
 export const TEXT_NODE_MIN_WIDTH = 40;
 

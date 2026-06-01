@@ -23,6 +23,7 @@ const PRESET_ICONS: Record<string, SvgComponent> = {
 };
 
 interface WebPageToolbarProps {
+  nodeId: string;
   width: number;
   height: number;
   canGoBack: boolean;
@@ -40,6 +41,7 @@ interface WebPageToolbarProps {
 }
 
 export const WebPageToolbar = memo(function WebPageToolbar({
+  nodeId,
   width,
   height,
   canGoBack,
@@ -65,7 +67,10 @@ export const WebPageToolbar = memo(function WebPageToolbar({
   const showUrlInput = isEmpty || isEditingUrl;
 
   return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg">
+    <div
+      data-node-toolbar={nodeId}
+      className="flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg"
+    >
       {showUrlInput ? (
         <WebPageToolbarUrlInput
           key={isEditingUrl ? `editing:${currentUrl}` : 'empty'}

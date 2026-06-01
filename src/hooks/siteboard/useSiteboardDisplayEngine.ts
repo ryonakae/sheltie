@@ -5,8 +5,16 @@ import { WEBVIEW_REVEAL_DELAY_MS } from '@/constants';
 import { getPlatformInfo, webviewApi } from '@/lib/tauri-bridge';
 import type { DisplayMode, WebPageNode } from '@/types';
 
-import { getWebPageElements, setDisplayModeAttribute } from './display-engine/dom';
-import { isOutsideExpandedViewport, resolveViewportDisplayMode } from './display-engine/mode';
+import {
+  getSelectionToolbarRects,
+  getWebPageElements,
+  setDisplayModeAttribute,
+} from './display-engine/dom';
+import {
+  isOutsideExpandedViewport,
+  rectsOverlap,
+  resolveViewportDisplayMode,
+} from './display-engine/mode';
 
 import type { InteractionType } from './types';
 
@@ -22,6 +30,7 @@ interface UseSiteboardDisplayEngineParams {
   zoomRef: React.RefObject<number>;
   centeredNodeId?: string | null;
   onCenteredNodeHandled?: () => void;
+  selectedNodeIds?: string[];
   hydrateCachedScreenshotUrls: (
     projectId: string,
     screenshotUrlsByNodeId: Record<string, string>,
@@ -103,6 +112,8 @@ function buildScreenshotReadyState(
   return next;
 }
 
+const EMPTY_SELECTION: string[] = [];
+
 export function useSiteboardDisplayEngine({
   webPageNodes,
   webviewLabelsByNodeId,
@@ -112,6 +123,7 @@ export function useSiteboardDisplayEngine({
   zoomRef,
   centeredNodeId = null,
   onCenteredNodeHandled,
+  selectedNodeIds = EMPTY_SELECTION,
   hydrateCachedScreenshotUrls,
   setCachedScreenshotUrl,
   clearCachedScreenshotUrl,
@@ -147,6 +159,8 @@ export function useSiteboardDisplayEngine({
   const contextMenuNodeIdRef = useRef<string | null>(null);
   const unsavedChangesDialogOpenRef = useRef(false);
   const settlingNodeIdsRef = useRef<Set<string>>(new Set());
+  // ノードツールバーに被られているページ。被り開始の検出（fresh 撮影の 1 回発火）に使う。
+  const toolbarOccludedIdsRef = useRef<Set<string>>(new Set());
   const forceHiddenInteractionNodeIdsRef = useRef<Set<string>>(new Set());
   const nativeHiddenByInteractionCaptureRef = useRef<Set<string>>(new Set());
   const interactionCaptureRetryNodeIdsRef = useRef<Set<string>>(new Set());
@@ -443,6 +457,14 @@ export function useSiteboardDisplayEngine({
     // 非 macOS: screenshot→native 遷移ページは show 後 1 フレーム待ってスクショを消す
     const deferredNativeSwaps: HTMLElement[] = [];
 
+    // native も screenshot も安全に使えない瞬間の退避先。
+    const demoteToSafeMode = (nodeId: string): DisplayMode =>
+      hasDisplayableScreenshot(nodeId) ? 'screenshot' : 'hidden';
+
+    // 選択中ノードのツールバー矩形。被られたページは native へ復帰させない。
+    const toolbarRects = getSelectionToolbarRects(containerRef.current);
+    const nextToolbarOccludedIds = new Set<string>();
+
     for (const page of webPageNodes) {
       const label = getWebviewLabel(page.id);
       const { wrapper, placeholder } = getWebPageElements(containerRef.current, page.id);
@@ -460,14 +482,30 @@ export function useSiteboardDisplayEngine({
       );
 
       if (unsavedChangesDialogOpenRef.current && nextMode === 'native') {
-        nextMode = hasDisplayableScreenshot(page.id) ? 'screenshot' : 'hidden';
+        nextMode = demoteToSafeMode(page.id);
       }
       // コンテキストメニュー表示中のページは native に復帰させない
       if (contextMenuNodeIdRef.current === page.id && nextMode === 'native') {
-        nextMode = hasDisplayableScreenshot(page.id) ? 'screenshot' : 'hidden';
+        nextMode = demoteToSafeMode(page.id);
       }
       if (settlingNodeIdsRef.current.has(page.id) && nextMode === 'native') {
-        nextMode = hasDisplayableScreenshot(page.id) ? 'screenshot' : 'hidden';
+        nextMode = demoteToSafeMode(page.id);
+      }
+      // ノードツールバー（HTML）が被るページは native に復帰させない。
+      // 被り開始時は webview がまだ native(可視) のうちに fresh 撮影を要求してから降格する。
+      // （context メニューと同じ順序。hide 後はスナップショットできず古い stale のままになるため）
+      if (
+        nextMode === 'native' &&
+        toolbarRects.length > 0 &&
+        toolbarRects.some(
+          (toolbar) => toolbar.ownerId !== page.id && rectsOverlap(toolbar.rect, placeholderRect),
+        )
+      ) {
+        if (label && !toolbarOccludedIdsRef.current.has(page.id)) {
+          void ensureScreenshotReady(page.id, { source: 'interaction-start' });
+        }
+        nextToolbarOccludedIds.add(page.id);
+        nextMode = demoteToSafeMode(page.id);
       }
       if (!label && nextMode === 'native') {
         nextMode = getFallbackDisplayMode(page.id);
@@ -567,6 +605,9 @@ export function useSiteboardDisplayEngine({
       }
     }
 
+    // 被り状態を更新する。被り開始（前パスで未被り）だけが上の fresh 撮影を発火させる。
+    toolbarOccludedIdsRef.current = nextToolbarOccludedIds;
+
     if (deferredNativeSwaps.length > 0) {
       // WebView が OS レベルで描画されるのを 1 フレーム待ってからスクリーンショットを非表示にする
       requestAnimationFrame(() => {
@@ -581,6 +622,7 @@ export function useSiteboardDisplayEngine({
   }, [
     containerRef,
     cancelNativeReveal,
+    ensureScreenshotReady,
     getFallbackDisplayMode,
     getWebviewLabel,
     hasDisplayableScreenshot,
@@ -1352,16 +1394,25 @@ export function useSiteboardDisplayEngine({
     return () => cancelAnimationFrame(frameId);
   }, [centeredNodeId, computeDisplayModes, onCenteredNodeHandled, webPageNodes]);
 
+  // 選択変化でノードツールバーの表示/位置が変わるため、描画反映後に表示モードを再判定する。
+  const selectionKey = selectedNodeIds.join(' ');
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => computeDisplayModes());
+    return () => cancelAnimationFrame(frameId);
+  }, [selectionKey, computeDisplayModes]);
+
   useEffect(() => {
     const settlingNodeIds = settlingNodeIdsRef.current;
     const nativeHiddenByInteractionCaptureNodeIds = nativeHiddenByInteractionCaptureRef.current;
     const interactionCaptureRetryNodeIds = interactionCaptureRetryNodeIdsRef.current;
+    const toolbarOccludedNodeIds = toolbarOccludedIdsRef.current;
     return () => {
       cancelInteractionCaptureRetry();
       cancelAllNativeReveals();
       nativeHiddenByInteractionCaptureNodeIds.clear();
       interactionCaptureRetryNodeIds.clear();
       settlingNodeIds.clear();
+      toolbarOccludedNodeIds.clear();
       resizingNodeIdRef.current = null;
     };
   }, [cancelAllNativeReveals, cancelInteractionCaptureRetry]);

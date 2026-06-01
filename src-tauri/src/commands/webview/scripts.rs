@@ -30,12 +30,16 @@ pub const SCROLL_DETECTION_SCRIPT: &str = r#"(function() {
     document.title = '\x02scroll-end';
     requestAnimationFrame(function() { document.title = orig; });
   }
+  // scroll はバブルしないため capture:true で内側スクロールコンテナの scroll も捕捉する。
+  // scrollend はサポート時のみ即時通知に使い、未サポート/未発火環境では debounce が拾う。
+  window.addEventListener('scroll', function() {
+    if (t) clearTimeout(t);
+    t = setTimeout(notify, DELAY);
+  }, { passive: true, capture: true });
   if ('onscrollend' in window) {
-    window.addEventListener('scrollend', notify, { passive: true });
-  } else {
-    window.addEventListener('scroll', function() {
-      if (t) clearTimeout(t);
-      t = setTimeout(notify, DELAY);
+    window.addEventListener('scrollend', function() {
+      if (t) { clearTimeout(t); t = null; }
+      notify();
     }, { passive: true, capture: true });
   }
 })();"#;

@@ -198,13 +198,14 @@ src-tauri/src/
 - [x] 0-4 Vitest 最小導入 ✅ vitest@2.1.9 / vitest.config.mts / `npm run test`
 - [x] 1-1 デバッグ utils 統合 ✅ `src/lib/webview-debug.ts` に集約（2ファイルの重複除去）
 - [x] 1-2 tab-store 純関数抽出 ✅ `siteboard-placement.ts` / `project-history.ts` + テスト計8件
-- [ ] 1-3 patchNode / omitKeys / 履歴型分離 ← 次はここから
+- [x] 1-3 patchNode / omitKeys / 履歴型分離 ✅ tab-store 1044→852行。replaceProjectNodes を record/without-history に分離
 - [x] ~~1-4 tab-store slice 分割~~ → 今回スコープ外（決定済み）
 
-### 検証ログ（最終: 0-1〜1-2 完了時点）
-- `npm run test` → 8 passed / `npm run typecheck` → OK / `npm run lint` → OK / `npm run format` → OK
-- ⚠️ 手動シナリオ（0-3 チェックリスト）は未実施。`npm run dev` でビルド系の挙動確認が必要。
-- 📝 ブランチ: `refactor/siteboard-cleanup`（未コミット）
+### 検証ログ
+- 0-1〜1-2（commit 9cf112e）: test 8 / typecheck / lint / format すべて OK。push 済み。
+- 1-3（未コミット）: test 15 / typecheck / lint / format すべて OK。
+- ⚠️ 手動シナリオ（0-3 チェックリスト）は未実施。`npm run dev` でのビルド系挙動確認が必要。
+- 📝 ブランチ: `refactor/siteboard-cleanup`
 - [ ] 2-1 Rust top_inset ヘルパー
 - [ ] 3-1 useSiteboardViewportController
 - [ ] 3-2 useSiteboardContextMenus

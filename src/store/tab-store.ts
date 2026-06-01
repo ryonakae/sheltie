@@ -151,28 +151,66 @@ function createNodeId(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * 単一ノードを書き換える共通ヘルパー。
+ * patch は対象ノードを受け取り、変更後ノードを返す。変更不要なら null を返す。
+ * いずれのノードも変わらなければ全体で null を返し、呼び出し側で no-op（履歴を積まない）にできる。
+ */
+export function patchNode(
+  nodes: BoardNode[],
+  nodeId: string,
+  patch: (node: BoardNode) => BoardNode | null,
+): BoardNode[] | null {
+  let changed = false;
+  const nextNodes = nodes.map((node) => {
+    if (node.id !== nodeId) return node;
+    const patched = patch(node);
+    if (!patched || patched === node) return node;
+    changed = true;
+    return patched;
+  });
+  return changed ? nextNodes : null;
+}
+
+/** record から指定キー（単一 id または id 集合）を取り除いた新しい record を返す */
+export function omitKeys<T>(
+  record: Record<string, T>,
+  ids: string | ReadonlySet<string>,
+): Record<string, T> {
+  const shouldKeep =
+    typeof ids === 'string' ? (id: string) => id !== ids : (id: string) => !ids.has(id);
+  return Object.fromEntries(Object.entries(record).filter(([id]) => shouldKeep(id)));
+}
+
 function replaceProjectNodes(
   state: ProjectStore,
   updater: (nodes: BoardNode[]) => BoardNode[] | null,
-  historyMode: 'record' | 'skip' = 'record',
 ): ProjectStore | Pick<ProjectStore, 'project' | 'history'> {
   if (!state.project) return state;
 
   const nextNodes = updater(state.project.nodes);
   if (!nextNodes) return state;
 
-  const nextProject = { ...state.project, nodes: nextNodes };
-  if (historyMode === 'skip') {
-    return { project: nextProject, history: state.history };
-  }
-
   return {
-    project: nextProject,
+    project: { ...state.project, nodes: nextNodes },
     history: pushHistory(state.history, {
       nodes: state.project.nodes,
       edges: state.project.edges,
     }),
   };
+}
+
+/** 履歴を積まずにノードを書き換える（自動高さ調整など、Undo 対象にしたくない更新専用） */
+function replaceProjectNodesWithoutHistory(
+  state: ProjectStore,
+  updater: (nodes: BoardNode[]) => BoardNode[] | null,
+): ProjectStore | Pick<ProjectStore, 'project'> {
+  if (!state.project) return state;
+
+  const nextNodes = updater(state.project.nodes);
+  if (!nextNodes) return state;
+
+  return { project: { ...state.project, nodes: nextNodes } };
 }
 
 function replaceProjectEdges(
@@ -309,21 +347,12 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }
 
       return {
-        ...replaceProjectNodes(state, (nodes) => {
-          return nodes.map((node) => {
-            if (node.id !== nodeId) return node;
-            return { ...node, url, addedUrl: url, title };
-          });
-        }),
+        ...replaceProjectNodes(state, (nodes) =>
+          patchNode(nodes, nodeId, (node) => ({ ...node, url, addedUrl: url, title })),
+        ),
         webviewRuntime: {
-          labelsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
-          ),
-          screenshotUrlsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-              ([id]) => id !== nodeId,
-            ),
-          ),
+          labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, nodeId),
+          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
         },
       };
     }),
@@ -346,14 +375,8 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           edges: state.project.edges,
         }),
         webviewRuntime: {
-          labelsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
-          ),
-          screenshotUrlsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-              ([id]) => id !== nodeId,
-            ),
-          ),
+          labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, nodeId),
+          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
         },
       };
     }),
@@ -378,32 +401,19 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           edges: state.project.edges,
         }),
         webviewRuntime: {
-          labelsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.labelsByNodeId).filter(
-              ([id]) => !removeSet.has(id),
-            ),
-          ),
-          screenshotUrlsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-              ([id]) => !removeSet.has(id),
-            ),
-          ),
+          labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, removeSet),
+          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, removeSet),
         },
       };
     }),
 
   updateNodePosition: (nodeId, x, y) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (node.x === x && node.y === y) return node;
-          changed = true;
-          return { ...node, x, y };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.x === x && node.y === y ? null : { ...node, x, y },
+        ),
+      ),
     ),
 
   updateNodePositions: (updates) =>
@@ -426,49 +436,30 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   updateNodeSize: (nodeId, width, height) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (node.width === width && node.height === height) return node;
-          changed = true;
-          return { ...node, width, height };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.width === width && node.height === height ? null : { ...node, width, height },
+        ),
+      ),
     ),
 
   updateNodeBounds: (nodeId, x, y, width, height) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (node.x === x && node.y === y && node.width === width && node.height === height) {
-            return node;
-          }
-          changed = true;
-          return { ...node, x, y, width, height };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.x === x && node.y === y && node.width === width && node.height === height
+            ? null
+            : { ...node, x, y, width, height },
+        ),
+      ),
     ),
 
   updateNodeSizeWithoutHistory: (nodeId, width, height) =>
     set((state) =>
-      replaceProjectNodes(
-        state,
-        (nodes) => {
-          let changed = false;
-          const nextNodes = nodes.map((node) => {
-            if (node.id !== nodeId) return node;
-            if (node.width === width && node.height === height) return node;
-            changed = true;
-            return { ...node, width, height };
-          });
-          return changed ? nextNodes : null;
-        },
-        'skip',
+      replaceProjectNodesWithoutHistory(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.width === width && node.height === height ? null : { ...node, width, height },
+        ),
       ),
     ),
 
@@ -618,29 +609,18 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   updateStickyNoteContent: (nodeId, content) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if ((node.content ?? '') === content) return node;
-          changed = true;
-          return { ...node, content };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          (node.content ?? '') === content ? null : { ...node, content },
+        ),
+      ),
     ),
 
   updateStickyNoteStyle: (nodeId, style) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          changed = true;
-          return { ...node, ...style };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) => ({ ...node, ...style })),
+      ),
     ),
 
   addTextNode: (options) => {
@@ -684,56 +664,34 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   updateTextNodeContent: (nodeId, tiptapContent) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          changed = true;
-          return { ...node, tiptapContent };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) => ({ ...node, tiptapContent })),
+      ),
     ),
 
   updateTextNodeStyle: (nodeId, style) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          changed = true;
-          return { ...node, ...style };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) => ({ ...node, ...style })),
+      ),
     ),
 
   updateTextNodeWidthMode: (nodeId, widthMode) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (node.widthMode === widthMode) return node;
-          changed = true;
-          return { ...node, widthMode };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.widthMode === widthMode ? null : { ...node, widthMode },
+        ),
+      ),
     ),
 
   pinWebNodeUrl: (nodeId) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (!node.url || node.addedUrl === node.url) return node;
-          changed = true;
-          return { ...node, addedUrl: node.url };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          !node.url || node.addedUrl === node.url ? null : { ...node, addedUrl: node.url },
+        ),
+      ),
     ),
 
   addEdge: (edge) =>
@@ -807,9 +765,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     set((state) => ({
       webviewRuntime: {
         ...state.webviewRuntime,
-        labelsByNodeId: Object.fromEntries(
-          Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
-        ),
+        labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, nodeId),
       },
     })),
 
@@ -839,11 +795,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     set((state) => ({
       webviewRuntime: {
         ...state.webviewRuntime,
-        screenshotUrlsByNodeId: Object.fromEntries(
-          Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-            ([id]) => id !== nodeId,
-          ),
-        ),
+        screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
       },
     })),
 

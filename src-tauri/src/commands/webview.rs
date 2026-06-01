@@ -110,6 +110,20 @@ fn child_webview_top_inset(window: &Window) -> Result<f64, String> {
     }
 }
 
+/// 子 Webview を配置する際の上端オフセット。macOS のタイトルバー分だけ下げる。
+/// 非 macOS では 0 を返す（プラットフォーム分岐を呼び出し側から隠す）。
+fn platform_top_inset(window: &Window) -> Result<f64, String> {
+    #[cfg(target_os = "macos")]
+    {
+        child_webview_top_inset(window)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        Ok(0.0)
+    }
+}
+
 /// WKWebView のスクリーンショットをキャプチャし、base64 PNG Data URL として返す。
 ///
 /// 現在は macOS のみサポート。WKWebView が表示中（native モード）の時に呼び出すこと。
@@ -256,14 +270,8 @@ pub async fn create_page_webview(
     let app = window.app_handle();
     let window_label = window.label().to_string();
     let label = scoped_page_label(&window_label, &page_id);
-    #[cfg(target_os = "macos")]
-    let top_inset = child_webview_top_inset(&window)?;
-    #[cfg(not(target_os = "macos"))]
-    let top_inset = 0.0;
-    #[cfg(target_os = "macos")]
+    let top_inset = platform_top_inset(&window)?;
     let adjusted_y = y + top_inset;
-    #[cfg(not(target_os = "macos"))]
-    let adjusted_y = y;
 
     #[cfg(target_os = "macos")]
     log_host_window_metrics(&window, "create_page_webview:host-before");
@@ -389,14 +397,8 @@ pub async fn update_page_webview_bounds(
     height: f64,
     zoom: f64,
 ) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let top_inset = child_webview_top_inset(&window)?;
-    #[cfg(not(target_os = "macos"))]
-    let top_inset = 0.0;
-    #[cfg(target_os = "macos")]
+    let top_inset = platform_top_inset(&window)?;
     let adjusted_y = y + top_inset;
-    #[cfg(not(target_os = "macos"))]
-    let adjusted_y = y;
 
     if cfg!(debug_assertions) {
         log::info!(
@@ -556,10 +558,7 @@ pub async fn batch_update_page_webview_bounds(
 ) -> Result<(), String> {
     let app = window.app_handle();
     let window_label = window.label().to_string();
-    #[cfg(target_os = "macos")]
-    let top_inset = child_webview_top_inset(&window)?;
-    #[cfg(not(target_os = "macos"))]
-    let top_inset = 0.0;
+    let top_inset = platform_top_inset(&window)?;
 
     // エラーは個別に無視（一括更新中の孤児 Webview 対策）
     for e in entries {
@@ -596,10 +595,7 @@ pub async fn batch_update_webview_positions(
 ) -> Result<(), String> {
     let app = window.app_handle();
     let window_label = window.label().to_string();
-    #[cfg(target_os = "macos")]
-    let top_inset = child_webview_top_inset(&window)?;
-    #[cfg(not(target_os = "macos"))]
-    let top_inset = 0.0;
+    let top_inset = platform_top_inset(&window)?;
 
     for e in entries {
         if let Ok(wv) = resolve_page_webview(&app, &window_label, &e.label) {

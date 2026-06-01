@@ -206,7 +206,7 @@ src-tauri/src/
 - 1-3（未コミット）: test 15 / typecheck / lint / format すべて OK。
 - ⚠️ 手動シナリオ（0-3 チェックリスト）は未実施。`npm run dev` でのビルド系挙動確認が必要。
 - 📝 ブランチ: `refactor/siteboard-cleanup`
-- [ ] 2-1 Rust top_inset ヘルパー
+- [x] 2-1 Rust top_inset ヘルパー ✅ platform_top_inset に集約（4箇所の cfg 分岐 + adjusted_y 分岐を解消）。cargo check OK
 - [ ] 3-1 useSiteboardViewportController
 - [ ] 3-2 useSiteboardContextMenus
 - [ ] 3-3 useSiteboardResize

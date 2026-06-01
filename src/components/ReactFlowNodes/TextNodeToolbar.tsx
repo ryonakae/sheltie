@@ -62,7 +62,10 @@ export const TextNodeToolbar = memo(function TextNodeToolbar({
   const inactiveClass = 'text-white/70';
 
   return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg">
+    <div
+      data-node-toolbar={node.id}
+      className="flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg"
+    >
       {/* フォントサイズプリセット */}
       {FONT_SIZE_LABELS.map((label, index) => (
         <button

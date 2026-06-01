@@ -19,3 +19,23 @@ export function setDisplayModeAttribute(wrapper: HTMLElement | null, mode: Displ
     wrapper?.setAttribute('data-display-mode', mode);
   }
 }
+
+export interface SelectionToolbarRect {
+  ownerId: string;
+  rect: DOMRect;
+}
+
+// 単独選択時に表示されるノードツールバー（data-node-toolbar）の矩形を集める。
+// ネイティブ Webview の上に重なるとツールバーが下に潜るため、降格判定の入力に使う。
+export function getSelectionToolbarRects(canvasEl: HTMLElement | null): SelectionToolbarRect[] {
+  if (!canvasEl) return [];
+  const elements = canvasEl.querySelectorAll<HTMLElement>('[data-node-toolbar]');
+  const rects: SelectionToolbarRect[] = [];
+  elements.forEach((element) => {
+    rects.push({
+      ownerId: element.getAttribute('data-node-toolbar') ?? '',
+      rect: element.getBoundingClientRect(),
+    });
+  });
+  return rects;
+}

@@ -188,6 +188,7 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
         offset={30}
       >
         <WebPageToolbar
+          nodeId={id}
           width={toolbar.displayWidth}
           height={toolbar.displayHeight}
           canGoBack={!toolbar.isEmpty && toolbar.canGoBack}

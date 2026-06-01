@@ -15,6 +15,10 @@ export function isOutsideViewport(nodeRect: DOMRect, containerRect: DOMRect): bo
   );
 }
 
+export function rectsOverlap(a: DOMRect, b: DOMRect): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 export function isFullyInsideNativeSafeArea(nodeRect: DOMRect, containerRect: DOMRect): boolean {
   return (
     nodeRect.left >= containerRect.left + NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX &&

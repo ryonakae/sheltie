@@ -290,6 +290,7 @@ export function Siteboard({
     zoomRef,
     centeredNodeId,
     onCenteredNodeHandled,
+    selectedNodeIds,
     hydrateCachedScreenshotUrls,
     setCachedScreenshotUrl,
     clearCachedScreenshotUrl,

@@ -1,6 +1,7 @@
 import { toast } from '@heroui/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { FRESHNESS_CAPTURE_DELAY_MS } from '@/constants';
 import type { NavigationState } from '@/lib/tauri-bridge';
 import { webviewApi } from '@/lib/tauri-bridge';
 import type { BoardNode, TextNodeFontSizePreset } from '@/types';
@@ -113,6 +114,24 @@ export function useSiteboardNodeRuntime({
     window.clearTimeout(timerId);
     delete captureTimerRef.current[nodeId];
   }, []);
+
+  // 鮮度キャプチャ（load/nav/scroll）を 1 本に集約する。
+  // 遅延はトリガ種別ごとの名前付き定数で持ち、node 単位で latest-wins（連続イベントは最新を採用）。
+  const scheduleFreshnessCapture = useCallback(
+    (nodeId: string, reason: keyof typeof FRESHNESS_CAPTURE_DELAY_MS) => {
+      clearCaptureTimer(nodeId);
+      const delay = FRESHNESS_CAPTURE_DELAY_MS[reason];
+      if (delay <= 0) {
+        void captureScreenshot(nodeId);
+        return;
+      }
+      captureTimerRef.current[nodeId] = window.setTimeout(() => {
+        delete captureTimerRef.current[nodeId];
+        void captureScreenshot(nodeId);
+      }, delay);
+    },
+    [captureScreenshot, clearCaptureTimer],
+  );
 
   const clearRefreshTimer = useCallback((nodeId: string) => {
     const timerId = refreshTimerRef.current[nodeId];
@@ -241,11 +260,7 @@ export function useSiteboardNodeRuntime({
     (nodeId: string, url: string, title: string) => {
       updateWebNodeUrl(nodeId, url, title);
 
-      clearCaptureTimer(nodeId);
-      captureTimerRef.current[nodeId] = window.setTimeout(() => {
-        delete captureTimerRef.current[nodeId];
-        void captureScreenshot(nodeId);
-      }, 1000);
+      scheduleFreshnessCapture(nodeId, 'navigation');
 
       const runtime = ensureNavigationRuntime(nodeId);
       const pendingAction = pendingActionRef.current[nodeId];
@@ -274,10 +289,9 @@ export function useSiteboardNodeRuntime({
       scheduleRefreshNavigationState(nodeId);
     },
     [
-      captureScreenshot,
-      clearCaptureTimer,
       ensureNavigationRuntime,
       refreshNavigationState,
+      scheduleFreshnessCapture,
       scheduleRefreshNavigationState,
       updateResolvedNavigationState,
       updateWebNodeUrl,
@@ -313,17 +327,17 @@ export function useSiteboardNodeRuntime({
 
   const handleWebviewLoaded = useCallback(
     (nodeId: string) => {
-      void captureScreenshot(nodeId);
+      scheduleFreshnessCapture(nodeId, 'load');
       void refreshNavigationState(nodeId);
     },
-    [captureScreenshot, refreshNavigationState],
+    [refreshNavigationState, scheduleFreshnessCapture],
   );
 
   const handleScrollEnded = useCallback(
     (nodeId: string) => {
-      void captureScreenshot(nodeId);
+      scheduleFreshnessCapture(nodeId, 'scroll');
     },
-    [captureScreenshot],
+    [scheduleFreshnessCapture],
   );
 
   const handleRemoveNode = useCallback(

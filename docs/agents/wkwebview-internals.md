@@ -12,6 +12,12 @@ Siteboard の WKWebView（macOS）に固有のワークアラウンドと注意�
 
 新しい通知を増やす場合はプレフィックス衝突を避ける。
 
+### スクロール完了の捕捉（capture:true 必須）
+
+`scroll` イベントはバブルしないため、`window` のリスナは **`capture: true`** で登録しないと内側スクロールコンテナ（`overflow:auto` の div など）の scroll を捕捉できない。`scrollend`（macOS 26.x の WKWebView はサポート）も同様に `capture: true` で登録する。
+
+`SCROLL_DETECTION_SCRIPT` は capture:true の `scroll` + 150ms debounce を常に張り（未サポート/未発火環境のフォールバック）、`scrollend` があれば即時通知に使う（debounce を解除して `notify()`）。`'onscrollend' in window` の true 枝だけにすると内側スクロールを取りこぼすので、scroll debounce を併用する。
+
 ## CSS Viewport Units（svh/lvh）の補正
 
 `_setLayoutMode: 2` + `_setViewScale: zoom` は `vh`/`dvh` のビューポートのみに効き、

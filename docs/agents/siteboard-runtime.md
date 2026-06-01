@@ -32,6 +32,7 @@
 - `PRE_DISPLAY_MARGIN_PX = 50`
 - `HYSTERESIS_PX = 4`
 - `WEBVIEW_REVEAL_DELAY_MS = 100`
+- `FRESHNESS_CAPTURE_DELAY_MS = { navigation: 1000, load: 0, scroll: 0 }`（鮮度キャプチャの種別別遅延）
 - `SCREENSHOT_CLIPPING_ENABLED`（`useSiteboardDisplayEngine.ts` 内）
 
 近接判定ではヒステリシスを使い、境界振動を防ぐ。
@@ -139,6 +140,7 @@ return type;
 - `drag/resize` 中は相対的に少ない display mode 更新を行い、リサイズ終了後に最終的な表示を確定
 - コンテキストメニュー表示中のページは `native` への復帰を抑制（`contextMenuNodeIdRef` が設定されている場合）
 - 未保存確認ダイアログ表示中も、現在表示中 Siteboard の visible webpage node は `native` へ復帰させず `screenshot/hidden` を維持する
+- 選択中ノードのツールバー（HTML）に被る webpage node は `native` へ復帰させない（後述「ノードツールバーと Webview 制御」）
 
 ## コンテキストメニューと Webview 制御
 
@@ -155,6 +157,17 @@ return type;
 8. ページ削除ケース — 各メニューアクションの `action` コールバック内で `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
 
 付箋ノードは Webview を持たないため、コンテキストメニュー表示時に `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` の node type 判定で分岐）。
+
+## ノードツールバーと Webview 制御
+
+ノード選択時のツールバー（付箋/テキスト/Webページの `NodeToolbar position={Position.Top}`、単独選択時のみ表示）は HTML 要素のため、近接する Webpage ノードのネイティブ Webview に被ると OS レイヤーで最前面に描画される Webview の下に潜る。これを防ぐため、ツールバーに被る Webpage は `screenshot` に降格する。
+
+- ツールバー root の `div` に `data-node-toolbar={nodeId}` を付与する（`StickyNoteToolbar` / `TextNodeToolbar` / `WebPageToolbar`）。常時表示のタイトル段は対象外。
+- `computeDisplayModes()` は `getSelectionToolbarRects()` で全ツールバー矩形を取得し、各 placeholder 矩形と `rectsOverlap()` で交差判定する。自ノードのツールバー（`ownerId === page.id`）は除外する。
+- 被られたページが `native` の場合、**被り開始時（前パスで未被り）に webview がまだ native(可視) のうちに** `ensureScreenshotReady()` で fresh 撮影を要求してから `screenshot`/`hidden` に降格する。`handleContextMenuOpen` と同じ「撮影 → hide」順序。hide 後の webview はスナップショットできず古い stale のまま固着するため、この順序が必須。
+- 被り状態は `toolbarOccludedIdsRef`（前パスの被り集合）で管理し、被り開始の 1 回だけ撮影を発火させる（毎パス再撮影しない）。選択し直すたびに被り開始扱いとなり fresh を撮り直す。
+- 選択変化では `selectedNodeIds` 依存 effect が `requestAnimationFrame` 後に `computeDisplayModes()` を呼び、ツールバー DOM 反映後の矩形で再判定する（`centeredNodeId` と同じパターン）。
+- コンテキストメニュー（単一ターゲット・await）と違い、選択は持続・複数同時被りもあり得るため、専用の Set 管理で additive に実装し、既存の pan/zoom・drag/resize・context-menu の経路には手を入れない。
 
 ## 未保存確認ダイアログと Webview 制御
 
@@ -214,14 +227,24 @@ return type;
 
 ## スクリーンショット撮影タイミング
 
-- pan/zoom 操作開始時（保存済みがあれば stale を即表示しつつ fresh capture）
+撮影は目的の違う 2 系統に分かれる。
+
+### ① 鮮度キャプチャ（保存スクショを最新に保つ・Webview は native 維持）
+
+`useSiteboardNodeRuntime` の `scheduleFreshnessCapture(nodeId, reason)` に集約する。`reason` 別の遅延は `FRESHNESS_CAPTURE_DELAY_MS` で持ち、node 単位で latest-wins（連続イベントは最新を採用）。
+
+- `navigation`: ナビゲーション後 1000ms（新コンテンツの描画待ち）。SPA URL 変更（`\x01`）とフルページ遷移開始の両方が対象。
+- `load`: 初回ロード相当（最初のタイトル変更）で即時。
+- `scroll`: Webview 内スクロール完了時（`page-scroll-ended-{pageId}`）で即時。
+
+### ② 退避キャプチャ（native→screenshot/hidden に落とす直前の現フレーム押さえ）
+
+- pan/zoom 操作開始時（保存済みがあれば stale を即表示しつつ fresh capture、`hideAfterSnapshotRequest=true` の原子 hide）
 - drag 操作開始時（毎回 fresh capture）
-- ナビゲーション後（遅延あり）
-- 初回ロード完了時
 - リサイズ開始時（毎回 fresh capture）
 - リサイズ終了時（最終サイズの再撮影）
 - 右クリックメニュー表示前（保存済みがなければ待機、あれば stale を表示しつつ fresh capture）
-- Webview 内スクロール完了時（`page-scroll-ended-{pageId}`）
+- ノードツールバーに被られた時（未スクショなら native 維持しつつ撮影を促す。前述「ノードツールバーと Webview 制御」）
 
 ## hidden モードの役割
 

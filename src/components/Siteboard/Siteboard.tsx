@@ -37,8 +37,6 @@ import {
   DRAG_REPOSITION_GAP,
   MIN_ZOOM,
   MAX_ZOOM,
-  PAGE_MIN_HEIGHT,
-  PAGE_MIN_WIDTH,
   STICKY_NOTE_MIN_HEIGHT,
   STICKY_NOTE_MIN_WIDTH,
   TEXT_NODE_MIN_WIDTH,
@@ -47,13 +45,9 @@ import { useSiteboardContextMenus } from '@/hooks/siteboard/useSiteboardContextM
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
+import { useSiteboardResize } from '@/hooks/siteboard/useSiteboardResize';
 import { useSiteboardViewportController } from '@/hooks/siteboard/useSiteboardViewportController';
-import {
-  getNodeChromeHeight,
-  getNodeChromeWidth,
-  getNodeFrameHeight,
-  getNodeFrameWidth,
-} from '@/lib/siteboard-node-frame';
+import { getNodeFrameHeight, getNodeFrameWidth } from '@/lib/siteboard-node-frame';
 import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
@@ -196,23 +190,6 @@ export function Siteboard({
   // 選択中のエッジ ID。controlled mode では flowEdges.selected を自前で同期しないと
   // React Flow の選択スタイル（CSS class や custom edge への selected prop）が反映されない
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(() => new Set());
-  // 付箋リサイズ中の中間サイズ（controlled mode でのリアルタイム追従用）
-  const [stickyResizing, setStickyResizing] = useState<{
-    nodeId: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number; // 本文高さ（sticky header 除く）
-  } | null>(null);
-  // WebPage リサイズ中の中間サイズ（controlled mode でのリアルタイム追従用。height はコンテンツ高さ）
-  const [webPageResizing, setWebPageResizing] = useState<{
-    nodeId: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number; // コンテンツ高さ（chrome 除く）
-  } | null>(null);
-
   const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
   const hydrateCachedScreenshotUrls = useCallback(
     (_projectId: string, screenshotUrlsByNodeId: Record<string, string>) => {
@@ -296,58 +273,31 @@ export function Siteboard({
     scheduleInteractionUpdate,
   });
 
+  const {
+    stickyResizing,
+    webPageResizing,
+    textResizing,
+    handleWebPageResizeStart,
+    handleWebPageResize,
+    handleWebPageResizeEnd,
+    handleStickyNoteResize,
+    handleStickyNoteResizeEnd,
+    handleTextNodeResize,
+    handleTextNodeResizeEnd,
+  } = useSiteboardResize({
+    prepareInteractionStart,
+    handleInteractionChange,
+    handlePageResizeStart,
+    handlePageResizeEnd,
+    updateNodeSize,
+    updateTextNodeWidthMode,
+  });
+
   const [positionCorrectionAnimations, setPositionCorrectionAnimations] = useState<
     Record<string, PositionCorrectionAnimation>
   >({});
   const positionCorrectionAnimationsRef = useRef<Record<string, PositionCorrectionAnimation>>({});
   const positionCorrectionSequenceRef = useRef(0);
-
-  // WebPage の React Flow resize control コールバック群
-  const handleWebPageResizeStart = useCallback(
-    (nodeId: string) => {
-      // Phase 4 ドラッグと同じ fire-and-forget パターン
-      void prepareInteractionStart('resize', nodeId);
-      handleInteractionChange(true, 'resize');
-      handlePageResizeStart(nodeId);
-    },
-    [handleInteractionChange, handlePageResizeStart, prepareInteractionStart],
-  );
-
-  const handleWebPageResize = useCallback(
-    (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
-      // React Flow の resize params.width / params.height は chrome 込みのフレーム外周サイズ
-      const chromeWidth = getNodeChromeWidth({ type: 'webpage' });
-      const chromeHeight = getNodeChromeHeight({ type: 'webpage' });
-      const contentWidth = Math.max(PAGE_MIN_WIDTH, params.width - chromeWidth);
-      const contentHeight = Math.max(PAGE_MIN_HEIGHT, params.height - chromeHeight);
-      setWebPageResizing({
-        nodeId,
-        x: params.x,
-        y: params.y,
-        width: Math.round(contentWidth),
-        height: Math.round(contentHeight),
-      });
-    },
-    [],
-  );
-
-  const handleWebPageResizeEnd = useCallback(
-    (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
-      const chromeWidth = getNodeChromeWidth({ type: 'webpage' });
-      const chromeHeight = getNodeChromeHeight({ type: 'webpage' });
-      const contentWidth = Math.max(PAGE_MIN_WIDTH, params.width - chromeWidth);
-      const contentHeight = Math.max(PAGE_MIN_HEIGHT, params.height - chromeHeight);
-      const nextX = Math.round(params.x);
-      const nextY = Math.round(params.y);
-      const nextWidth = Math.round(contentWidth);
-      const nextHeight = Math.round(contentHeight);
-      useProjectStore.getState().updateNodeBounds(nodeId, nextX, nextY, nextWidth, nextHeight);
-      setWebPageResizing(null);
-      handleInteractionChange(false, 'resize');
-      handlePageResizeEnd(nodeId);
-    },
-    [handleInteractionChange, handlePageResizeEnd],
-  );
 
   const {
     handleGoBack,
@@ -638,47 +588,6 @@ export function Siteboard({
       handleRemoveNodes(nodeIds);
     },
     [clearPositionCorrectionAnimation, handleRemoveNodes],
-  );
-
-  const handleStickyNoteResize = useCallback(
-    (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
-      setStickyResizing({ nodeId, ...params });
-    },
-    [],
-  );
-
-  const handleStickyNoteResizeEnd = useCallback(
-    (nodeId: string, width: number, height: number) => {
-      updateNodeSize(nodeId, width, height);
-      setStickyResizing(null);
-    },
-    [updateNodeSize],
-  );
-
-  // テキストノードのリサイズ中間状態
-  const [textResizing, setTextResizing] = useState<{
-    nodeId: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
-
-  const handleTextNodeResize = useCallback(
-    (nodeId: string, params: { x: number; y: number; width: number; height: number }) => {
-      setTextResizing({ nodeId, ...params });
-      // ドラッグでリサイズした時点で fixed モードに切り替え
-      updateTextNodeWidthMode(nodeId, 'fixed');
-    },
-    [updateTextNodeWidthMode],
-  );
-
-  const handleTextNodeResizeEnd = useCallback(
-    (nodeId: string, width: number, height: number) => {
-      updateNodeSize(nodeId, width, height);
-      setTextResizing(null);
-    },
-    [updateNodeSize],
   );
 
   useEffect(() => {

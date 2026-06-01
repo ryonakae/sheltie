@@ -211,7 +211,7 @@ src-tauri/src/
 - [x] 3-2 useSiteboardContextMenus ✅ ノード/エッジ右クリックメニューを抽出。Siteboard.tsx 1395→1265行（要実機確認: 右クリックメニュー各種）
 - [x] 3-3 useSiteboardResize ✅ WebPage/付箋/テキストのリサイズ中間状態+ハンドラを抽出。Siteboard.tsx 1265→1174行（要実機確認: 各ノードのリサイズ）
 - [x] 3-4 useSiteboardTextEditing ✅ テキスト/URL編集状態・autoEdit・空テキスト自動削除を抽出。Siteboard.tsx 1174→1090行。autoEdit を queueMicrotask 化（set-state-in-effect 対応）（要実機確認: 新規テキスト/付箋の自動編集、空テキスト削除、URL編集）
-- [ ] 3-5 useSiteboardDrag
+- [x] 3-5 useSiteboardDrag ✅ ネイティブ/タイトル段ドラッグ・位置補正アニメ・draggingNodePositions を抽出。Siteboard.tsx 1090→837行（要実機確認: 単独/複数ドラッグ、タイトル段ドラッグ、重なり補正アニメ）
 - [ ] 3-6 buildFlowNodes + useSiteboardSelection
 - [ ] 4 Rust モジュール分割（lib.rs / store.rs / webview.rs）
 - [ ] 5-1 Display Engine 純粋判定拡充

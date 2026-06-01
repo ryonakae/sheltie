@@ -15,12 +15,10 @@ import {
   type NodeSelectionChange,
   ReactFlow,
   ReactFlowProvider,
-  type ReactFlowInstance,
   SelectionMode,
   type Viewport as FlowViewport,
 } from '@xyflow/react';
-import { useReducedMotion } from 'motion/react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { AppButton } from '@/components/Common/AppButton';
@@ -45,13 +43,11 @@ import {
   STICKY_NOTE_MIN_HEIGHT,
   STICKY_NOTE_MIN_WIDTH,
   TEXT_NODE_MIN_WIDTH,
-  ZOOM_END_DEBOUNCE_MS,
-  ZOOM_RESET_TARGET,
-  ZOOM_STEPS,
 } from '@/constants';
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
 import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
+import { useSiteboardViewportController } from '@/hooks/siteboard/useSiteboardViewportController';
 import {
   getNodeChromeHeight,
   getNodeChromeWidth,
@@ -59,13 +55,7 @@ import {
   getNodeFrameWidth,
 } from '@/lib/siteboard-node-frame';
 import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
-import {
-  resolveCenteredViewport,
-  resolveFitViewport,
-  type SiteboardViewportTarget,
-} from '@/lib/siteboard-viewport';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
-import { registerViewCommandHandlers } from '@/lib/view-commands';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
 import {
@@ -98,18 +88,6 @@ interface PositionCorrectionAnimation {
   fromY: number;
   toX: number;
   toY: number;
-}
-
-const VIEWPORT_SYNC_EPSILON = 0.001;
-
-function isSameViewport(a: FlowViewport | null, b: FlowViewport): boolean {
-  if (!a) return false;
-
-  return (
-    Math.abs(a.x - b.x) < VIEWPORT_SYNC_EPSILON &&
-    Math.abs(a.y - b.y) < VIEWPORT_SYNC_EPSILON &&
-    Math.abs(a.zoom - b.zoom) < VIEWPORT_SYNC_EPSILON
-  );
 }
 
 export function Siteboard({
@@ -207,7 +185,6 @@ export function Siteboard({
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(project?.viewport.zoom ?? 1);
 
-  const [uiZoom, setUiZoom] = useState(() => project?.viewport.zoom ?? 1);
   // React Flow ネイティブドラッグ中のノード位置（ストアへの反映は dragStop 時のみ）
   const [draggingNodePositions, setDraggingNodePositions] = useState<
     Record<string, { x: number; y: number }>
@@ -235,14 +212,6 @@ export function Siteboard({
     width: number;
     height: number; // コンテンツ高さ（chrome 除く）
   } | null>(null);
-  const viewportUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const zoomRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const uiZoomRafRef = useRef<number | null>(null);
-  // setViewport のみ使用するため広い型で保持
-  const reactFlowInstanceRef = useRef<Pick<ReactFlowInstance, 'setViewport'> | null>(null);
-  const flowViewportRef = useRef<FlowViewport | null>(null);
-  const moveInteractionTypeRef = useRef<'pan' | 'zoom' | null>(null);
-  const prefersReducedMotion = useReducedMotion();
 
   const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
   const hydrateCachedScreenshotUrls = useCallback(
@@ -294,6 +263,37 @@ export function Siteboard({
     hydrateCachedScreenshotUrls,
     setCachedScreenshotUrl,
     clearCachedScreenshotUrl,
+  });
+
+  const storeViewport = useMemo<FlowViewport>(
+    () => ({
+      x: project?.viewport.panX ?? 0,
+      y: project?.viewport.panY ?? 0,
+      zoom: project?.viewport.zoom ?? 1,
+    }),
+    [project?.viewport.panX, project?.viewport.panY, project?.viewport.zoom],
+  );
+
+  const {
+    uiZoom,
+    handleInit,
+    handleViewportChange,
+    handleMoveStart,
+    handleMove,
+    handleMoveEnd,
+    handleFitAllNodes,
+    handleResetViewport,
+  } = useSiteboardViewportController({
+    containerRef,
+    zoomRef,
+    nodes,
+    storeViewport,
+    updateViewport,
+    cancelZoomRestore,
+    scheduleZoomRestoreAfterReflow,
+    prepareInteractionStart,
+    handleInteractionChange,
+    scheduleInteractionUpdate,
   });
 
   const [positionCorrectionAnimations, setPositionCorrectionAnimations] = useState<
@@ -1088,74 +1088,6 @@ export function Siteboard({
     ],
   );
 
-  // React Flow のビューポート変更ハンドラー
-  const handleViewportChange = useCallback(
-    (viewport: FlowViewport) => {
-      flowViewportRef.current = viewport;
-      zoomRef.current = viewport.zoom;
-      // --canvas-zoom CSS 変数を同期（zoomPx() が引き続き動作するために必要）
-      if (containerRef.current) {
-        containerRef.current.style.setProperty('--canvas-zoom', String(viewport.zoom));
-      }
-
-      // setUiZoom は rAF で1フレームに1回に制限（毎フレームの re-render を防ぐ）
-      if (uiZoomRafRef.current === null) {
-        uiZoomRafRef.current = requestAnimationFrame(() => {
-          uiZoomRafRef.current = null;
-          setUiZoom(zoomRef.current);
-        });
-      }
-
-      // debounce でストアへ永続化
-      if (viewportUpdateTimerRef.current) clearTimeout(viewportUpdateTimerRef.current);
-      viewportUpdateTimerRef.current = setTimeout(() => {
-        viewportUpdateTimerRef.current = null;
-        updateViewport({ zoom: viewport.zoom, panX: viewport.x, panY: viewport.y });
-      }, ZOOM_END_DEBOUNCE_MS);
-    },
-    [containerRef, updateViewport, zoomRef],
-  );
-
-  const storeViewport = useMemo<FlowViewport>(
-    () => ({
-      x: project?.viewport.panX ?? 0,
-      y: project?.viewport.panY ?? 0,
-      zoom: project?.viewport.zoom ?? 1,
-    }),
-    [project?.viewport.panX, project?.viewport.panY, project?.viewport.zoom],
-  );
-
-  const syncViewportFromStore = useCallback(
-    (instance = reactFlowInstanceRef.current) => {
-      if (!instance) return;
-      if (isSameViewport(flowViewportRef.current, storeViewport)) return;
-
-      flowViewportRef.current = storeViewport;
-      zoomRef.current = storeViewport.zoom;
-      setUiZoom(storeViewport.zoom);
-      if (containerRef.current) {
-        containerRef.current.style.setProperty('--canvas-zoom', String(storeViewport.zoom));
-      }
-
-      void instance.setViewport(storeViewport, { duration: 0 });
-    },
-    [containerRef, storeViewport, zoomRef],
-  );
-
-  useEffect(() => {
-    syncViewportFromStore();
-  }, [syncViewportFromStore]);
-
-  // --canvas-zoom を mount 直後（子 useEffect より前）に初期化する。
-  // syncViewportFromStore は useEffect のため子コンポーネントの useEffect より後に走り、
-  // Webview 作成時に --canvas-zoom が未設定（fallback 1）になって TopBar 高さが崩れる。
-  // useLayoutEffect は useEffect より先に実行されるため、Webview 作成前に正しい値が設定できる。
-  useLayoutEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.style.setProperty('--canvas-zoom', String(zoomRef.current));
-    }
-  }, []); // mount 時のみ実行（zoomRef は ref であり変更が依存要因にならないため空配列で問題なし）
-
   useEffect(() => {
     const unregister = registerUnsavedChangesDialogDisplayController({
       enter: handleUnsavedChangesDialogOpen,
@@ -1164,174 +1096,6 @@ export function Siteboard({
 
     return unregister;
   }, [handleUnsavedChangesDialogClose, handleUnsavedChangesDialogOpen]);
-
-  // React Flow は pan/zoom を同じ onMove 系 callback で通知するため、event から操作種別を復元する。
-  // 現構成ではホイールは pan、Cmd/Ctrl+ホイールとピンチは zoom、programmatic setViewport は zoom 扱いにする。
-  // Tauri WKWebView 環境では TouchEvent グローバルが未定義のため typeof ガードが必須。
-  const resolveViewportInteractionType = useCallback(
-    (event: MouseEvent | TouchEvent | null | undefined): 'pan' | 'zoom' =>
-      event == null
-        ? 'zoom'
-        : 'deltaY' in event
-          ? event.metaKey || event.ctrlKey
-            ? 'zoom'
-            : 'pan'
-          : typeof TouchEvent !== 'undefined' &&
-              event instanceof TouchEvent &&
-              event.touches.length >= 2
-            ? 'zoom'
-            : 'pan',
-    [],
-  );
-
-  // pan/zoom のインタラクション開始を記録し display engine を起動する共通処理。
-  // handleMoveStart（主経路）と handleMove（fallback）の両方から呼ばれる。
-  const beginViewportInteraction = useCallback(
-    (event: MouseEvent | TouchEvent | null | undefined) => {
-      const type = resolveViewportInteractionType(event);
-      moveInteractionTypeRef.current = type;
-      void prepareInteractionStart(type);
-      handleInteractionChange(true, type);
-      return type;
-    },
-    [resolveViewportInteractionType, prepareInteractionStart, handleInteractionChange],
-  );
-
-  const handleMoveStart = useCallback(
-    (_event: MouseEvent | TouchEvent | null, _viewport: FlowViewport) => {
-      beginViewportInteraction(_event);
-    },
-    [beginViewportInteraction],
-  );
-
-  const handleMove = useCallback(
-    (_event: MouseEvent | TouchEvent | null, _viewport: FlowViewport) => {
-      // onMoveStart が取りこぼされた場合のフォールバック。
-      // onMove は viewport が実際に動いた時のみ発火するためクリック誤発火がない。
-      if (moveInteractionTypeRef.current === null) {
-        beginViewportInteraction(_event);
-      }
-      scheduleInteractionUpdate();
-    },
-    [beginViewportInteraction, scheduleInteractionUpdate],
-  );
-
-  const handleMoveEnd = useCallback(
-    (_event: MouseEvent | TouchEvent | null, _viewport: FlowViewport) => {
-      // start が取りこぼされた場合も 'pan' にフォールバックして display engine を正常終了させる
-      const type = moveInteractionTypeRef.current ?? 'pan';
-      moveInteractionTypeRef.current = null;
-      handleInteractionChange(false, type);
-    },
-    [handleInteractionChange],
-  );
-
-  const applyViewportTarget = useCallback(
-    (target: SiteboardViewportTarget) => {
-      const instance = reactFlowInstanceRef.current;
-      if (!instance) return;
-
-      const currentViewport = flowViewportRef.current;
-      const zoomChanged =
-        !currentViewport || Math.abs(currentViewport.zoom - target.zoom) >= VIEWPORT_SYNC_EPSILON;
-      const animationDurationMs = prefersReducedMotion ? 0 : 240;
-
-      cancelZoomRestore();
-      if (zoomRestoreTimerRef.current) clearTimeout(zoomRestoreTimerRef.current);
-      instance.setViewport(target, { duration: animationDurationMs });
-
-      if (!zoomChanged) return;
-      zoomRestoreTimerRef.current = setTimeout(
-        () => {
-          zoomRestoreTimerRef.current = null;
-          scheduleZoomRestoreAfterReflow();
-        },
-        prefersReducedMotion ? 0 : animationDurationMs + 20,
-      );
-    },
-    [cancelZoomRestore, prefersReducedMotion, scheduleZoomRestoreAfterReflow],
-  );
-
-  const handleCenterViewportAtDefaultZoom = useCallback(() => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return;
-
-    applyViewportTarget(resolveCenteredViewport(nodes, rect.width, rect.height, ZOOM_RESET_TARGET));
-  }, [applyViewportTarget, nodes]);
-
-  const handleFitAllNodes = useCallback(() => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return;
-
-    const target = resolveFitViewport(nodes, rect.width, rect.height);
-    if (!target) return;
-    applyViewportTarget(target);
-  }, [applyViewportTarget, nodes]);
-
-  const handleResetViewport = useCallback(() => {
-    handleCenterViewportAtDefaultZoom();
-  }, [handleCenterViewportAtDefaultZoom]);
-
-  const handleZoomIn = useCallback(() => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return;
-
-    const viewport = flowViewportRef.current;
-    if (!viewport) return;
-
-    const { x, y, zoom } = viewport;
-    const nextZoom =
-      ZOOM_STEPS.find((step) => step > zoom + 0.001) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
-    if (Math.abs(nextZoom - zoom) < 0.001) return;
-
-    // ビューポート中心のワールド座標を固定してズーム
-    const worldX = (rect.width / 2 - x) / zoom;
-    const worldY = (rect.height / 2 - y) / zoom;
-    applyViewportTarget({
-      x: rect.width / 2 - worldX * nextZoom,
-      y: rect.height / 2 - worldY * nextZoom,
-      zoom: nextZoom,
-    });
-  }, [applyViewportTarget]);
-
-  const handleZoomOut = useCallback(() => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return;
-
-    const viewport = flowViewportRef.current;
-    if (!viewport) return;
-
-    const { x, y, zoom } = viewport;
-    const prevZoom = [...ZOOM_STEPS].reverse().find((step) => step < zoom - 0.001) ?? ZOOM_STEPS[0];
-    if (Math.abs(prevZoom - zoom) < 0.001) return;
-
-    // ビューポート中心のワールド座標を固定してズーム
-    const worldX = (rect.width / 2 - x) / zoom;
-    const worldY = (rect.height / 2 - y) / zoom;
-    applyViewportTarget({
-      x: rect.width / 2 - worldX * prevZoom,
-      y: rect.height / 2 - worldY * prevZoom,
-      zoom: prevZoom,
-    });
-  }, [applyViewportTarget]);
-
-  // ビューポートの debounce タイマーと rAF のクリーンアップ
-  useEffect(() => {
-    return () => {
-      if (viewportUpdateTimerRef.current) clearTimeout(viewportUpdateTimerRef.current);
-      if (zoomRestoreTimerRef.current) clearTimeout(zoomRestoreTimerRef.current);
-      if (uiZoomRafRef.current !== null) cancelAnimationFrame(uiZoomRafRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    return registerViewCommandHandlers({
-      fitView: handleFitAllNodes,
-      resetZoom: handleResetViewport,
-      zoomIn: handleZoomIn,
-      zoomOut: handleZoomOut,
-    });
-  }, [handleFitAllNodes, handleResetViewport, handleZoomIn, handleZoomOut]);
 
   // React Flow の flowNodes 配列を構築する
   // displayModes/screenshotUrls/navStates/resizingSize の変化に追従するため useMemo 依存に含める
@@ -1573,10 +1337,7 @@ export function Siteboard({
           onNodeDragStart={handleNodeDragStart}
           onNodeDragStop={handleNodeDragStop}
           onPaneClick={handlePaneClick}
-          onInit={(instance) => {
-            reactFlowInstanceRef.current = instance;
-            syncViewportFromStore(instance);
-          }}
+          onInit={handleInit}
           panActivationKeyCode="Space"
           panOnDrag={[1]}
           panOnScroll={true}

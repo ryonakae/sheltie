@@ -8,21 +8,23 @@ import {
   DEFAULT_TEXT_NODE_HEIGHT,
   DEFAULT_TEXT_NODE_WIDTH,
   DEFAULT_VIEWPORT,
-  MAX_VERTICAL_SEARCH_STEPS,
   MAX_ZOOM,
   MIN_ZOOM,
-  PAGE_GAP,
 } from '@/constants';
 import {
   documentEdgeToBoardEdge,
   documentNodeToBoardNode,
   sanitizeProjectDocument,
 } from '@/lib/project-document';
+import { findNonOverlappingPosition } from '@/lib/siteboard-placement';
 import {
-  getNodeFrameHeight,
-  getNodeFrameRect,
-  getNodeFrameWidth,
-} from '@/lib/siteboard-node-frame';
+  appendCappedSnapshot,
+  cloneEdges,
+  cloneNodes,
+  cloneSnapshot,
+  type ProjectHistory,
+  pushHistory,
+} from '@/store/project-history';
 import type {
   BoardEdge,
   BoardNode,
@@ -34,18 +36,6 @@ import type {
   Viewport,
 } from '@/types';
 import { isWebPageNode } from '@/types';
-
-const HISTORY_LIMIT = 100;
-
-interface ProjectSnapshot {
-  nodes: BoardNode[];
-  edges: BoardEdge[];
-}
-
-interface ProjectHistory {
-  past: ProjectSnapshot[];
-  future: ProjectSnapshot[];
-}
 
 interface ProjectActions {
   initializeProject: (params: {
@@ -134,18 +124,6 @@ function createEmptyProjectWebviewRuntime(): ProjectWebviewRuntime {
   };
 }
 
-function cloneNodes(nodes: BoardNode[]): BoardNode[] {
-  return nodes.map((node) => ({ ...node }));
-}
-
-function cloneEdges(edges: BoardEdge[]): BoardEdge[] {
-  return edges.map((edge) => ({ ...edge }));
-}
-
-function cloneSnapshot(snapshot: { nodes: BoardNode[]; edges: BoardEdge[] }): ProjectSnapshot {
-  return { nodes: cloneNodes(snapshot.nodes), edges: cloneEdges(snapshot.edges) };
-}
-
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
@@ -171,102 +149,6 @@ function createProject(params: {
 
 function createNodeId(): string {
   return crypto.randomUUID();
-}
-
-function isVerticalOverlapping(
-  y: number,
-  h: number,
-  node: Pick<BoardNode, 'y' | 'height'>,
-): boolean {
-  return !(y + h <= node.y || node.y + node.height <= y);
-}
-
-function isHorizontalOverlapping(
-  x: number,
-  w: number,
-  node: Pick<BoardNode, 'x' | 'width'>,
-): boolean {
-  return !(x + w <= node.x || node.x + node.width <= x);
-}
-
-function findNonOverlappingPosition(
-  nodes: BoardNode[],
-  type: BoardNode['type'],
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  options?: { keepY?: boolean },
-) {
-  const existingRects = nodes.map((node) => getNodeFrameRect(node));
-  const candidateFrameHeight = getNodeFrameHeight({ type, height });
-  const candidateFrameWidth = getNodeFrameWidth({ type, width });
-
-  if (nodes.length === 0) {
-    return { x, y };
-  }
-
-  for (let step = 0; step <= MAX_VERTICAL_SEARCH_STEPS; step++) {
-    const yCandidates = step === 0 ? [0] : [step * PAGE_GAP, -step * PAGE_GAP];
-    for (const yOffset of yCandidates) {
-      const candidateY = y + yOffset;
-      if (options?.keepY) {
-        const sameRowNodes = existingRects.filter((node) =>
-          isVerticalOverlapping(candidateY, candidateFrameHeight, node),
-        );
-        let candidateX = x;
-        while (true) {
-          const overlapNodes = sameRowNodes.filter((node) =>
-            isHorizontalOverlapping(candidateX, candidateFrameWidth, node),
-          );
-          if (overlapNodes.length === 0) {
-            return { x: candidateX, y: candidateY };
-          }
-
-          const rightmost = Math.max(...overlapNodes.map((node) => node.x + node.width));
-          candidateX = rightmost + PAGE_GAP;
-        }
-      }
-
-      const sameRowNodes = existingRects.filter((node) =>
-        isVerticalOverlapping(candidateY, candidateFrameHeight, node),
-      );
-
-      if (sameRowNodes.length === 0) {
-        return { x, y: candidateY };
-      }
-
-      let candidateX = x;
-      while (true) {
-        const overlapNodes = sameRowNodes.filter((node) =>
-          isHorizontalOverlapping(candidateX, candidateFrameWidth, node),
-        );
-        if (overlapNodes.length === 0) {
-          return { x: candidateX, y: candidateY };
-        }
-
-        const rightmost = Math.max(...overlapNodes.map((node) => node.x + node.width));
-        candidateX = rightmost + PAGE_GAP;
-      }
-    }
-  }
-
-  const fallbackY = Math.max(...existingRects.map((node) => node.bottom)) + PAGE_GAP;
-  return { x, y: fallbackY };
-}
-
-function pushHistory(
-  history: ProjectHistory,
-  snapshot: { nodes: BoardNode[]; edges: BoardEdge[] },
-): ProjectHistory {
-  const nextPast = [...history.past, cloneSnapshot(snapshot)];
-  if (nextPast.length > HISTORY_LIMIT) {
-    nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
-  }
-  return {
-    past: nextPast,
-    future: [],
-  };
 }
 
 function replaceProjectNodes(
@@ -632,95 +514,72 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     })),
 
   bringNodeToFront: (nodeId) =>
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            nodes: (() => {
-              const { nodes } = state.project;
-              const node = nodes.find((n) => n.id === nodeId);
-              if (!node) return nodes;
-              if (nodes[nodes.length - 1]?.id === nodeId) return nodes;
-              return [...nodes.filter((n) => n.id !== nodeId), node];
-            })(),
-          }
-        : null,
-    })),
+    set((state) =>
+      // 重なり順変更は nodes 配列順を変える＝永続状態の変更なので履歴に記録する
+      replaceProjectNodes(state, (nodes) => {
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) return null;
+        if (nodes[nodes.length - 1]?.id === nodeId) return null;
+        return [...nodes.filter((n) => n.id !== nodeId), node];
+      }),
+    ),
 
   sendNodeToBack: (nodeId) =>
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            nodes: (() => {
-              const { nodes } = state.project;
-              const node = nodes.find((n) => n.id === nodeId);
-              if (!node) return nodes;
-              if (nodes[0]?.id === nodeId) return nodes;
-              return [node, ...nodes.filter((n) => n.id !== nodeId)];
-            })(),
-          }
-        : null,
-    })),
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) return null;
+        if (nodes[0]?.id === nodeId) return null;
+        return [node, ...nodes.filter((n) => n.id !== nodeId)];
+      }),
+    ),
 
   bringNodeForward: (nodeId) =>
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            nodes: (() => {
-              const { nodes } = state.project;
-              const idx = nodes.findIndex((n) => n.id === nodeId);
-              if (idx === -1 || idx === nodes.length - 1) return nodes;
-              const node = nodes[idx];
-              if (isWebPageNode(node)) return nodes;
-              // WebPageNode をスキップして次の付箋/テキストを探す
-              let swapIdx = -1;
-              for (let i = idx + 1; i < nodes.length; i++) {
-                if (!isWebPageNode(nodes[i])) {
-                  swapIdx = i;
-                  break;
-                }
-              }
-              if (swapIdx === -1) return nodes;
-              const result = [...nodes];
-              // 対象ノードを取り出し、スワップ先の直後に挿入
-              result.splice(idx, 1);
-              result.splice(swapIdx, 0, node);
-              return result;
-            })(),
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        const idx = nodes.findIndex((n) => n.id === nodeId);
+        if (idx === -1 || idx === nodes.length - 1) return null;
+        const node = nodes[idx];
+        if (isWebPageNode(node)) return null;
+        // WebPageNode をスキップして次の付箋/テキストを探す
+        let swapIdx = -1;
+        for (let i = idx + 1; i < nodes.length; i++) {
+          if (!isWebPageNode(nodes[i])) {
+            swapIdx = i;
+            break;
           }
-        : null,
-    })),
+        }
+        if (swapIdx === -1) return null;
+        const result = [...nodes];
+        // 対象ノードを取り出し、スワップ先の直後に挿入
+        result.splice(idx, 1);
+        result.splice(swapIdx, 0, node);
+        return result;
+      }),
+    ),
 
   sendNodeBackward: (nodeId) =>
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            nodes: (() => {
-              const { nodes } = state.project;
-              const idx = nodes.findIndex((n) => n.id === nodeId);
-              if (idx <= 0) return nodes;
-              const node = nodes[idx];
-              if (isWebPageNode(node)) return nodes;
-              // WebPageNode をスキップして前の付箋/テキストを探す
-              let swapIdx = -1;
-              for (let i = idx - 1; i >= 0; i--) {
-                if (!isWebPageNode(nodes[i])) {
-                  swapIdx = i;
-                  break;
-                }
-              }
-              if (swapIdx === -1) return nodes;
-              const result = [...nodes];
-              result.splice(idx, 1);
-              result.splice(swapIdx, 0, node);
-              return result;
-            })(),
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        const idx = nodes.findIndex((n) => n.id === nodeId);
+        if (idx <= 0) return null;
+        const node = nodes[idx];
+        if (isWebPageNode(node)) return null;
+        // WebPageNode をスキップして前の付箋/テキストを探す
+        let swapIdx = -1;
+        for (let i = idx - 1; i >= 0; i--) {
+          if (!isWebPageNode(nodes[i])) {
+            swapIdx = i;
+            break;
           }
-        : null,
-    })),
+        }
+        if (swapIdx === -1) return null;
+        const result = [...nodes];
+        result.splice(idx, 1);
+        result.splice(swapIdx, 0, node);
+        return result;
+      }),
+    ),
 
   addStickyNoteNode: (options) => {
     let createdNode: BoardNode | null = null;
@@ -1014,13 +873,10 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       if (!state.project || state.history.future.length === 0) return state;
 
       const next = state.history.future[state.history.future.length - 1];
-      const nextPast = [
-        ...state.history.past,
-        cloneSnapshot({ nodes: state.project.nodes, edges: state.project.edges }),
-      ];
-      if (nextPast.length > HISTORY_LIMIT) {
-        nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
-      }
+      const nextPast = appendCappedSnapshot(state.history.past, {
+        nodes: state.project.nodes,
+        edges: state.project.edges,
+      });
 
       return {
         project: {

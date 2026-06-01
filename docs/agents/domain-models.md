@@ -57,7 +57,7 @@
   - 順序/選択: `bringNodeToFront`, `sendNodeToBack`, `bringNodeForward`, `sendNodeBackward`, `pinWebNodeUrl`, `updateViewport`
   - 履歴: `undoProject`, `redoProject`
   - runtime: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
-- `ProjectHistory`（`tab-store.ts` 内部）
+- `ProjectHistory`（`store/project-history.ts`。clone/pushHistory/上限管理の純関数もここに集約）
   - `past`: 直前までの `ProjectSnapshot` 配列（`{ nodes: BoardNode[]; edges: BoardEdge[] }`）
   - `future`: Redo 用の `ProjectSnapshot` 配列
   - ノードとエッジを統合スナップショットとして管理し、Undo/Redo で両方が同時に復元される
@@ -139,6 +139,7 @@
 - `webviewRuntime` はランタイム専用で永続化しない
 - Undo/Redo は現在の document window にのみ適用する
 - node / edge 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
+- 重なり順変更（`bringNodeToFront` / `sendNodeToBack` / `bringNodeForward` / `sendNodeBackward`）は nodes 配列順＝永続状態を変えるため履歴へ記録し、Undo/Redo で元の順序に戻せる。順序が変わらない場合（端のノードなど）は no-op で履歴を積まない
 - ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
 - 重なり補正・新規ノード自動配置・センタリング fallback は、content サイズではなくノード外枠（フレーム外周）を基準にする。WebPage のフレーム padding は world 固定 24px なので、外枠サイズは zoom に依存しない
 - WebPage / StickyNote / Text のいずれもツールバーは `NodeToolbar` を使い、ノード外枠の上部に配置する。WebPage はさらに常時表示のタイトル段（`[Moved] Title`、左寄せ）を追加で `NodeToolbar` で重ねる

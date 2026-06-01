@@ -1,6 +1,12 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
 import { webviewApi } from '@/lib/tauri-bridge';
+import {
+  createScopedLogger,
+  readCanvasZoomDebugValue,
+  roundDebugValue,
+  serializeRect,
+} from '@/lib/webview-debug';
 
 const webviewOwnerTokens = new Map<string, symbol>();
 const pendingWebviewDestroyPromises = new Map<string, Promise<void>>();
@@ -19,34 +25,7 @@ function scheduleWebviewDestroy(nodeId: string, label: string): Promise<void> {
   return destroyPromise;
 }
 
-function roundDebugValue(value: number): number {
-  return Number(value.toFixed(2));
-}
-
-function serializeRect(rect: DOMRect | null) {
-  if (!rect) return null;
-  return {
-    left: roundDebugValue(rect.left),
-    top: roundDebugValue(rect.top),
-    width: roundDebugValue(rect.width),
-    height: roundDebugValue(rect.height),
-    right: roundDebugValue(rect.right),
-    bottom: roundDebugValue(rect.bottom),
-  };
-}
-
-function readCanvasZoomDebugValue(element: HTMLElement | null): string | null {
-  if (!element) return null;
-  const container = element.closest('[data-siteboard-container]') as HTMLElement | null;
-  if (!container) return null;
-  const computedValue = window.getComputedStyle(container).getPropertyValue('--canvas-zoom').trim();
-  return computedValue || container.style.getPropertyValue('--canvas-zoom') || null;
-}
-
-function logWebviewLifecycleDebug(message: string, details: Record<string, unknown>): void {
-  if (!import.meta.env.DEV) return;
-  console.info(`[webview-layout][lifecycle] ${message}`, details);
-}
+const logWebviewLifecycleDebug = createScopedLogger('lifecycle');
 
 interface UseWebPageWebviewLifecycleParams {
   nodeId: string;

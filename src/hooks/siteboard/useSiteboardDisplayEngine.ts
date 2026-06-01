@@ -3,6 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { WEBVIEW_REVEAL_DELAY_MS } from '@/constants';
 import { getPlatformInfo, webviewApi } from '@/lib/tauri-bridge';
+import {
+  createScopedLogger,
+  readCanvasZoomDebugValue,
+  roundDebugValue,
+  serializeRect,
+} from '@/lib/webview-debug';
 import type { DisplayMode, WebPageNode } from '@/types';
 
 import {
@@ -48,34 +54,7 @@ interface CaptureScreenshotOptions {
 
 type InteractionPreparationType = InteractionType | 'context-menu' | 'unsaved-changes-dialog';
 
-function roundDebugValue(value: number): number {
-  return Number(value.toFixed(2));
-}
-
-function serializeRect(rect: DOMRect | null) {
-  if (!rect) return null;
-  return {
-    left: roundDebugValue(rect.left),
-    top: roundDebugValue(rect.top),
-    width: roundDebugValue(rect.width),
-    height: roundDebugValue(rect.height),
-    right: roundDebugValue(rect.right),
-    bottom: roundDebugValue(rect.bottom),
-  };
-}
-
-function readCanvasZoomDebugValue(element: HTMLElement | null): string | null {
-  if (!element) return null;
-  const container = element.closest('[data-siteboard-container]') as HTMLElement | null;
-  if (!container) return null;
-  const computedValue = window.getComputedStyle(container).getPropertyValue('--canvas-zoom').trim();
-  return computedValue || container.style.getPropertyValue('--canvas-zoom') || null;
-}
-
-function logDisplayEngineDebug(message: string, details: Record<string, unknown>): void {
-  if (!import.meta.env.DEV) return;
-  console.info(`[webview-layout][display-engine] ${message}`, details);
-}
+const logDisplayEngineDebug = createScopedLogger('display-engine');
 
 function buildSeededScreenshotUrls(
   webPageNodes: WebPageNode[],
@@ -1395,7 +1374,7 @@ export function useSiteboardDisplayEngine({
   }, [centeredNodeId, computeDisplayModes, onCenteredNodeHandled, webPageNodes]);
 
   // 選択変化でノードツールバーの表示/位置が変わるため、描画反映後に表示モードを再判定する。
-  const selectionKey = selectedNodeIds.join(' ');
+  const selectionKey = selectedNodeIds.join(' ');
   useEffect(() => {
     const frameId = requestAnimationFrame(() => computeDisplayModes());
     return () => cancelAnimationFrame(frameId);

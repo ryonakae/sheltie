@@ -22,7 +22,7 @@ src/
 
 - `screens/Project.tsx`: 1 document window の Siteboard 画面を統括する。新規ノード追加後のセンタリングと選択状態を管理する
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
-- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/右下 viewport controls をコンポーネント state と helper で管理する。flowNodes を `useMemo` で直接構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装し、`onNodesChange` で選択状態・計測寸法・ドラッグ中座標を同期する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
+- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。表示制御・ビューポート・ドラッグ・リサイズ・テキスト編集・コンテキストメニュー・flowNodes 構築をそれぞれ `hooks/siteboard/useSiteboard*` フックへ委譲し、Siteboard.tsx 自身は配線と `onNodesChange`/`onEdgesChange`（選択状態・計測寸法・ドラッグ中座標の同期）に専念する。flowNodes 配列は `useSiteboardFlowNodes` で構築する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
 - `components/Siteboard/FloatingToolbar.tsx`: Web ページ/付箋/テキスト追加ボタン群
 - `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン。押下で `100% + 全ノード中央寄せ`
 - `components/Node/WebPageNode.tsx`: webpage ノード本体 UI（フレーム（`bg-default` + `WEB_PAGE_FRAME_PADDING` 24px world 固定 + 角丸 16px world 固定 + 枠線 1px zoomPx）+ 内側に Webview placeholder。空のときは Globe アイコン + "Enter URL above" ヒントを表示。props インターフェース export）

@@ -15,10 +15,13 @@ npm run lint
 npm run format
 npm run typecheck
 npm run test
+# Rust を触った時のみ
+(cd src-tauri && cargo test --lib)
 ```
 
-- 可能な限り 4 つすべて実行する。
+- 可能な限り全部実行する。
 - 未実行がある場合は理由を明記する。
+- pre-commit hook（`.husky/pre-commit`）で `lint-staged` / `typecheck` / `vitest` は自動実行される。`src-tauri/` 配下の変更が staged されている時は `cargo test --lib` も自動で走る。
 
 ## 追加の確認
 

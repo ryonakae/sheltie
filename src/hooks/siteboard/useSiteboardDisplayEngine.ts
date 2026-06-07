@@ -455,112 +455,68 @@ export function useSiteboardDisplayEngine({
     [isPanOrZoomInteractionActive],
   );
 
+  // 操作中・操作開始直後の表示モード適用ロジック（同型構造）。
+  // 渡された containerRect を基準に、label / 拡張ビューポート外 / screenshot 有無で
+  // mode を決め、setNodeDisplayMode と hideNodeWebview を呼ぶ。
+  // - applyPrepared は操作開始直後の最新 containerRect で実行する
+  // - computeInteraction は操作中 rAF で cached containerRectRef を使う
+  // forceHiddenInteractionNodeIds は最終 else と同じく hidden + hide なので分岐不要。
+  const applyInteractionDisplayModes = useCallback(
+    (containerRect: DOMRect) => {
+      if (!containerRef.current) return;
+
+      for (const page of webPageNodes) {
+        const label = getWebviewLabel(page.id);
+        const { wrapper, placeholder } = getWebPageElements(containerRef.current, page.id);
+        if (!wrapper || !placeholder) continue;
+
+        const placeholderRect = placeholder.getBoundingClientRect();
+        const isOutsideExpanded = isOutsideExpandedViewport(placeholderRect, containerRect);
+
+        if (!label) {
+          setNodeDisplayMode(page.id, getFallbackDisplayMode(page.id, isOutsideExpanded), wrapper);
+          continue;
+        }
+
+        let nextMode: DisplayMode;
+        if (isOutsideExpanded) {
+          nextMode = 'hidden';
+        } else if (hasDisplayableScreenshot(page.id)) {
+          nextMode = 'screenshot';
+        } else {
+          // 操作開始直後は native を残さず hidden に退避し、fresh capture 完了後に screenshot へ差し替える。
+          nextMode = 'hidden';
+        }
+
+        setNodeDisplayMode(page.id, nextMode, wrapper);
+        if (!shouldSkipImmediateInteractionHide(page.id)) {
+          hideNodeWebview(label);
+        }
+      }
+    },
+    [
+      containerRef,
+      getFallbackDisplayMode,
+      getWebviewLabel,
+      hasDisplayableScreenshot,
+      hideNodeWebview,
+      setNodeDisplayMode,
+      shouldSkipImmediateInteractionHide,
+      webPageNodes,
+    ],
+  );
+
   const applyPreparedInteractionModes = useCallback(() => {
     const containerRect = containerRef.current?.getBoundingClientRect();
-    if (!containerRect || !containerRef.current) return;
-
-    for (const page of webPageNodes) {
-      const label = getWebviewLabel(page.id);
-      const { wrapper, placeholder } = getWebPageElements(containerRef.current, page.id);
-      if (!wrapper || !placeholder) continue;
-
-      const placeholderRect = placeholder.getBoundingClientRect();
-      const isOutsideExpanded = isOutsideExpandedViewport(placeholderRect, containerRect);
-
-      if (!label) {
-        setNodeDisplayMode(page.id, getFallbackDisplayMode(page.id, isOutsideExpanded), wrapper);
-        continue;
-      }
-
-      if (isOutsideExpanded) {
-        setNodeDisplayMode(page.id, 'hidden', wrapper);
-        if (!shouldSkipImmediateInteractionHide(page.id)) {
-          hideNodeWebview(label);
-        }
-        continue;
-      }
-
-      if (hasDisplayableScreenshot(page.id)) {
-        setNodeDisplayMode(page.id, 'screenshot', wrapper);
-        if (!shouldSkipImmediateInteractionHide(page.id)) {
-          hideNodeWebview(label);
-        }
-        continue;
-      }
-
-      if (forceHiddenInteractionNodeIdsRef.current.has(page.id)) {
-        setNodeDisplayMode(page.id, 'hidden', wrapper);
-        if (!shouldSkipImmediateInteractionHide(page.id)) {
-          hideNodeWebview(label);
-        }
-        continue;
-      }
-
-      // 操作開始直後は native を残さず hidden に退避し、fresh capture 完了後に screenshot へ差し替える。
-      setNodeDisplayMode(page.id, 'hidden', wrapper);
-      if (!shouldSkipImmediateInteractionHide(page.id)) {
-        hideNodeWebview(label);
-      }
-    }
-  }, [
-    containerRef,
-    getFallbackDisplayMode,
-    getWebviewLabel,
-    hasDisplayableScreenshot,
-    hideNodeWebview,
-    setNodeDisplayMode,
-    shouldSkipImmediateInteractionHide,
-    webPageNodes,
-  ]);
+    if (!containerRect) return;
+    applyInteractionDisplayModes(containerRect);
+  }, [applyInteractionDisplayModes, containerRef]);
 
   const computeInteractionModes = useCallback(() => {
     const containerRect = containerRectRef.current;
-    if (!containerRect || !containerRef.current) return;
-
-    for (const page of webPageNodes) {
-      const label = getWebviewLabel(page.id);
-      const { wrapper, placeholder } = getWebPageElements(containerRef.current, page.id);
-      if (!placeholder || !wrapper) continue;
-
-      const placeholderRect = placeholder.getBoundingClientRect();
-      const isOutsideExpanded = isOutsideExpandedViewport(placeholderRect, containerRect);
-
-      if (!label) {
-        setNodeDisplayMode(page.id, getFallbackDisplayMode(page.id, isOutsideExpanded), wrapper);
-        continue;
-      }
-
-      if (isOutsideExpanded) {
-        setNodeDisplayMode(page.id, 'hidden', wrapper);
-        if (!shouldSkipImmediateInteractionHide(page.id)) {
-          hideNodeWebview(label);
-        }
-        continue;
-      }
-
-      if (hasDisplayableScreenshot(page.id)) {
-        setNodeDisplayMode(page.id, 'screenshot', wrapper);
-        if (!shouldSkipImmediateInteractionHide(page.id)) {
-          hideNodeWebview(label);
-        }
-        continue;
-      }
-
-      setNodeDisplayMode(page.id, 'hidden', wrapper);
-      if (!shouldSkipImmediateInteractionHide(page.id)) {
-        hideNodeWebview(label);
-      }
-    }
-  }, [
-    containerRef,
-    getFallbackDisplayMode,
-    getWebviewLabel,
-    hasDisplayableScreenshot,
-    hideNodeWebview,
-    setNodeDisplayMode,
-    shouldSkipImmediateInteractionHide,
-    webPageNodes,
-  ]);
+    if (!containerRect) return;
+    applyInteractionDisplayModes(containerRect);
+  }, [applyInteractionDisplayModes]);
 
   const scheduleInteractionCaptureRetry = useCallback(() => {
     cancelInteractionCaptureRetry();

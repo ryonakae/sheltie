@@ -213,7 +213,9 @@ src-tauri/src/
 - [x] 3-4 useSiteboardTextEditing ✅ テキスト/URL編集状態・autoEdit・空テキスト自動削除を抽出。Siteboard.tsx 1174→1090行。autoEdit を queueMicrotask 化（set-state-in-effect 対応）（要実機確認: 新規テキスト/付箋の自動編集、空テキスト削除、URL編集）
 - [x] 3-5 useSiteboardDrag ✅ ネイティブ/タイトル段ドラッグ・位置補正アニメ・draggingNodePositions を抽出。Siteboard.tsx 1090→837行（要実機確認: 単独/複数ドラッグ、タイトル段ドラッグ、重なり補正アニメ）
 - [x] 3-6 useSiteboardFlowNodes ✅ flowNodes useMemo を挙動完全保存でフックへ抽出（top-level width/height・measured・依存配列を維持）。Siteboard.tsx 837→676行。flowEdges/handleNodesChange/handleEdgesChange/selectedEdgeIds は小さいため Siteboard に残置（当初案の buildStickyFlowNode 等への分割・useSiteboardSelection は過剰分割と判断し見送り）（要実機確認: 各ノードの表示・ドラッグ・リサイズ・URL編集・ツールバーが従来通り動くか）
-- [ ] 4 Rust モジュール分割（lib.rs / store.rs / webview.rs）
+- [x] 4 Rust モジュール分割（lib.rs） ✅ lib.rs 884→7行。app_exit.rs / menus/{mod,helpers,macos,app,file,edit,view,theme}.rs / setup.rs に分割。cargo check / typecheck / lint / test OK（要実機確認: メニュー各種、アプリ終了フロー、テーマ切替）
+- [ ] 4 Rust モジュール分割（store.rs）
+- [ ] 4 Rust モジュール分割（webview.rs）
 - [ ] 5-1 Display Engine 純粋判定拡充
 - [ ] 5-2 ScreenshotCaptureQueue 抽出
 - [ ] 5-3 NativeRevealController 抽出

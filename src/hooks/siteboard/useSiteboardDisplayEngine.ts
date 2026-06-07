@@ -1,4 +1,3 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { WEBVIEW_REVEAL_DELAY_MS } from '@/constants';
@@ -23,11 +22,9 @@ import {
   resolveViewportDisplayMode,
   shouldUseOpacityReveal,
 } from './display-engine/mode';
+import { useScreenshotCaptureQueue } from './useScreenshotCaptureQueue';
 
 import type { InteractionType } from './types';
-
-/** 検証用フラグ: false にするとスクリーンショットクリッピング機能を完全に無効化する */
-const SCREENSHOT_CLIPPING_ENABLED = true;
 
 interface UseSiteboardDisplayEngineParams {
   webPageNodes: WebPageNode[];
@@ -47,48 +44,18 @@ interface UseSiteboardDisplayEngineParams {
   clearCachedScreenshotUrl: (projectId: string, nodeId: string) => void;
 }
 
-interface CaptureScreenshotOptions {
-  forceDuringInteraction?: boolean;
-  hideAfterSnapshotRequest?: boolean;
-  source?: 'default' | 'interaction-start' | 'resize-end';
-  waitForPresentation?: boolean;
-}
-
 type InteractionPreparationType = InteractionType | 'context-menu' | 'unsaved-changes-dialog';
 
 const logDisplayEngineDebug = createScopedLogger('display-engine');
 
-function buildSeededScreenshotUrls(
-  webPageNodes: WebPageNode[],
-  cachedScreenshotUrlsByNodeId: Record<string, string>,
-): Record<string, string> {
-  const next: Record<string, string> = {};
-  for (const page of webPageNodes) {
-    if (!page.url) continue;
-    const cachedUrl = cachedScreenshotUrlsByNodeId[page.id];
-    if (!cachedUrl) continue;
-    next[page.id] = cachedUrl;
-  }
-  return next;
-}
-
 function buildInitialDisplayModes(
   webPageNodes: WebPageNode[],
-  seededScreenshotUrls: Record<string, string>,
+  cachedScreenshotUrlsByNodeId: Record<string, string>,
 ): Record<string, DisplayMode> {
   const next: Record<string, DisplayMode> = {};
   for (const page of webPageNodes) {
-    next[page.id] = seededScreenshotUrls[page.id] ? 'screenshot' : 'hidden';
-  }
-  return next;
-}
-
-function buildScreenshotReadyState(
-  seededScreenshotUrls: Record<string, string>,
-): Record<string, boolean> {
-  const next: Record<string, boolean> = {};
-  for (const nodeId of Object.keys(seededScreenshotUrls)) {
-    next[nodeId] = true;
+    const hasSeeded = Boolean(page.url) && Boolean(cachedScreenshotUrlsByNodeId[page.id]);
+    next[page.id] = hasSeeded ? 'screenshot' : 'hidden';
   }
   return next;
 }
@@ -109,26 +76,15 @@ export function useSiteboardDisplayEngine({
   setCachedScreenshotUrl,
   clearCachedScreenshotUrl,
 }: UseSiteboardDisplayEngineParams) {
-  const seededScreenshotUrls = useMemo(
-    () => buildSeededScreenshotUrls(webPageNodes, cachedScreenshotUrlsByNodeId),
-    [cachedScreenshotUrlsByNodeId, webPageNodes],
-  );
   const [displayModes, setDisplayModes] = useState<Record<string, DisplayMode>>(() =>
-    buildInitialDisplayModes(webPageNodes, seededScreenshotUrls),
+    buildInitialDisplayModes(webPageNodes, cachedScreenshotUrlsByNodeId),
   );
-  const [screenshotUrls, setScreenshotUrls] =
-    useState<Record<string, string>>(seededScreenshotUrls);
 
-  const screenshotReadyRef = useRef<Record<string, boolean>>(
-    buildScreenshotReadyState(seededScreenshotUrls),
-  );
-  const capturePromiseRef = useRef<Record<string, Promise<boolean> | undefined>>({});
-  const pendingCaptureOptionsRef = useRef<Record<string, CaptureScreenshotOptions | undefined>>({});
-  const queuedFreshCaptureRef = useRef<Record<string, boolean>>({});
-  const captureScreenshotRef = useRef<
-    ((nodeId: string, options?: CaptureScreenshotOptions) => Promise<boolean>) | null
-  >(null);
   const computeDisplayModesRef = useRef<(() => void) | null>(null);
+  const setNodeDisplayModeRef = useRef<
+    ((nodeId: string, mode: DisplayMode, wrapper?: HTMLElement | null) => void) | null
+  >(null);
+  const hideNodeWebviewRef = useRef<((label: string) => void) | null>(null);
   const interactionRafRef = useRef<number | null>(null);
   const containerRectRef = useRef<DOMRect | null>(null);
   const activeInteractionsRef = useRef<Set<InteractionType>>(new Set());
@@ -148,11 +104,6 @@ export function useSiteboardDisplayEngine({
   const interactionCaptureRetryTimerRef = useRef<number | null>(null);
   const resizeObserverRafRef = useRef<number | null>(null);
 
-  const screenshotUrlsRef = useRef<Record<string, string>>(seededScreenshotUrls);
-  const presentedScreenshotUrlRef = useRef<Record<string, string>>({});
-  const screenshotPresentationWaitersRef = useRef<
-    Record<string, { url: string; resolvers: Array<() => void> }>
-  >({});
   const knownNodeIdsRef = useRef<Set<string>>(new Set());
   const webPageIds = useMemo(() => webPageNodes.map((page) => page.id), [webPageNodes]);
   const webPageIdsKey = useMemo(() => webPageIds.join('|'), [webPageIds]);
@@ -172,6 +123,39 @@ export function useSiteboardDisplayEngine({
       nodeId,
     });
   }, []);
+
+  const sharedRefs = useMemo(
+    () => ({
+      activeInteractionsRef,
+      unsavedChangesDialogOpenRef,
+      contextMenuNodeIdRef,
+      forceHiddenInteractionNodeIdsRef,
+      interactionCaptureRetryNodeIdsRef,
+      nativeHiddenByInteractionCaptureRef,
+    }),
+    [],
+  );
+
+  const {
+    screenshotUrls,
+    hasDisplayableScreenshot,
+    handleScreenshotPresented,
+    captureScreenshot,
+    ensureScreenshotReady,
+    cleanupScreenshot,
+  } = useScreenshotCaptureQueue({
+    webPageNodes,
+    projectId,
+    cachedScreenshotUrlsByNodeId,
+    hydrateCachedScreenshotUrls,
+    setCachedScreenshotUrl,
+    getWebviewLabel,
+    warnMissingWebviewLabel,
+    sharedRefs,
+    setNodeDisplayModeRef,
+    hideNodeWebviewRef,
+    computeDisplayModesRef,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -239,34 +223,9 @@ export function useSiteboardDisplayEngine({
     interactionCaptureRetryTimerRef.current = null;
   }, []);
 
-  const hasDisplayableScreenshot = useCallback((nodeId: string) => {
-    return Boolean(screenshotReadyRef.current[nodeId] && screenshotUrlsRef.current[nodeId]);
-  }, []);
-
   const isPanOrZoomInteractionActive = useCallback(() => {
     return activeInteractionsRef.current.has('pan') || activeInteractionsRef.current.has('zoom');
   }, []);
-
-  const mergeCaptureOptions = useCallback(
-    (
-      current: CaptureScreenshotOptions | undefined,
-      next: CaptureScreenshotOptions | undefined,
-    ): CaptureScreenshotOptions | undefined => {
-      if (!current) return next;
-      if (!next) return current;
-      return {
-        forceDuringInteraction: Boolean(
-          current.forceDuringInteraction || next.forceDuringInteraction,
-        ),
-        hideAfterSnapshotRequest: Boolean(
-          current.hideAfterSnapshotRequest || next.hideAfterSnapshotRequest,
-        ),
-        source: next.source ?? current.source,
-        waitForPresentation: Boolean(current.waitForPresentation || next.waitForPresentation),
-      };
-    },
-    [],
-  );
 
   const getFallbackDisplayMode = useCallback(
     (nodeId: string, isOutside = false): DisplayMode => {
@@ -295,65 +254,6 @@ export function useSiteboardDisplayEngine({
     }
     void webviewApi.hide(label);
   }, []);
-
-  const waitForScreenshotPresentation = useCallback((nodeId: string, url: string) => {
-    if (!url) {
-      return Promise.resolve();
-    }
-    if (presentedScreenshotUrlRef.current[nodeId] === url) {
-      return Promise.resolve();
-    }
-
-    return new Promise<void>((resolve) => {
-      const settle = () => {
-        clearTimeout(timeoutId);
-        resolve();
-      };
-
-      const existing = screenshotPresentationWaitersRef.current[nodeId];
-      if (existing?.url === url) {
-        existing.resolvers.push(settle);
-      } else {
-        screenshotPresentationWaitersRef.current[nodeId] = {
-          url,
-          resolvers: [settle],
-        };
-      }
-
-      const timeoutId = window.setTimeout(() => {
-        const current = screenshotPresentationWaitersRef.current[nodeId];
-        if (current?.url === url) {
-          current.resolvers = current.resolvers.filter((resolver) => resolver !== settle);
-          if (current.resolvers.length === 0) {
-            delete screenshotPresentationWaitersRef.current[nodeId];
-          }
-        }
-        resolve();
-      }, 250);
-    });
-  }, []);
-
-  const ensureScreenshotReady = useCallback(
-    async (nodeId: string, options?: CaptureScreenshotOptions) => {
-      if (!SCREENSHOT_CLIPPING_ENABLED) return false;
-
-      if (hasDisplayableScreenshot(nodeId)) {
-        void captureScreenshotRef.current?.(nodeId, {
-          ...options,
-          waitForPresentation: false,
-        });
-        return true;
-      }
-
-      return (
-        (await captureScreenshotRef.current?.(nodeId, {
-          ...options,
-          waitForPresentation: true,
-        })) ?? false
-      );
-    },
-    [hasDisplayableScreenshot],
-  );
 
   const getInteractionPreparationNodeIds = useCallback(
     (type: InteractionPreparationType, targetNodeId?: string) => {
@@ -764,13 +664,13 @@ export function useSiteboardDisplayEngine({
         const { wrapper } = getWebPageElements(containerRef.current, nodeId);
         if (!label || wrapper?.getAttribute('data-display-mode') !== 'native') continue;
 
-        void captureScreenshotRef.current?.(nodeId, {
+        void captureScreenshot(nodeId, {
           source: 'default',
           waitForPresentation: false,
         });
       }
     }, WEBVIEW_REVEAL_DELAY_MS + 32);
-  }, [cancelInteractionCaptureRetry, containerRef, getWebviewLabel]);
+  }, [cancelInteractionCaptureRetry, captureScreenshot, containerRef, getWebviewLabel]);
 
   const scheduleInteractionUpdate = useCallback(() => {
     if (activeInteractionsRef.current.has('drag') || activeInteractionsRef.current.has('resize'))
@@ -782,134 +682,6 @@ export function useSiteboardDisplayEngine({
       computeInteractionModes();
     });
   }, [computeInteractionModes]);
-
-  const captureScreenshot = useCallback(
-    async (nodeId: string, options?: CaptureScreenshotOptions) => {
-      if (!SCREENSHOT_CLIPPING_ENABLED) return false;
-      const label = getWebviewLabel(nodeId);
-      if (!label) {
-        warnMissingWebviewLabel(nodeId, 'saveScreenshot');
-        return false;
-      }
-
-      pendingCaptureOptionsRef.current[nodeId] = mergeCaptureOptions(
-        pendingCaptureOptionsRef.current[nodeId],
-        options,
-      );
-
-      const existingPromise = capturePromiseRef.current[nodeId];
-      if (existingPromise) {
-        queuedFreshCaptureRef.current[nodeId] = true;
-        return existingPromise;
-      }
-
-      const captureTask = (async () => {
-        let lastResult = false;
-
-        while (true) {
-          const nextOptions = pendingCaptureOptionsRef.current[nodeId];
-          delete pendingCaptureOptionsRef.current[nodeId];
-          queuedFreshCaptureRef.current[nodeId] = false;
-
-          const forceDuringInteraction = nextOptions?.forceDuringInteraction ?? false;
-          const hideAfterSnapshotRequest = nextOptions?.hideAfterSnapshotRequest ?? false;
-          if (
-            !forceDuringInteraction &&
-            (activeInteractionsRef.current.has('drag') ||
-              activeInteractionsRef.current.has('resize'))
-          ) {
-            lastResult = false;
-          } else {
-            if (hideAfterSnapshotRequest) {
-              nativeHiddenByInteractionCaptureRef.current.add(nodeId);
-            }
-
-            const filePath = await webviewApi.saveScreenshot(label, nodeId, projectId, {
-              hideAfterSnapshotRequest,
-            });
-            if (!filePath) {
-              if (nextOptions?.source === 'interaction-start' && hideAfterSnapshotRequest) {
-                interactionCaptureRetryNodeIdsRef.current.add(nodeId);
-              }
-              lastResult = false;
-            } else if (
-              !forceDuringInteraction &&
-              (activeInteractionsRef.current.has('drag') ||
-                activeInteractionsRef.current.has('resize'))
-            ) {
-              lastResult = false;
-            } else {
-              const assetUrl = `${convertFileSrc(filePath)}?t=${Date.now()}`;
-
-              const img = new Image();
-              img.src = assetUrl;
-              try {
-                await img.decode();
-              } catch {
-                // no-op
-              }
-
-              screenshotReadyRef.current[nodeId] = true;
-              delete presentedScreenshotUrlRef.current[nodeId];
-              forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
-              interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
-              setCachedScreenshotUrl(projectId, nodeId, assetUrl);
-
-              setScreenshotUrls((prev) => {
-                const next = { ...prev, [nodeId]: assetUrl };
-                screenshotUrlsRef.current = next;
-                return next;
-              });
-
-              if (nextOptions?.waitForPresentation ?? true) {
-                await waitForScreenshotPresentation(nodeId, assetUrl);
-              }
-
-              const shouldUseScreenshotNow =
-                unsavedChangesDialogOpenRef.current ||
-                contextMenuNodeIdRef.current === nodeId ||
-                activeInteractionsRef.current.size > 0;
-
-              if (shouldUseScreenshotNow) {
-                setNodeDisplayMode(nodeId, 'screenshot');
-                if (!hideAfterSnapshotRequest) {
-                  hideNodeWebview(label);
-                }
-              }
-
-              if (activeInteractionsRef.current.size === 0) {
-                computeDisplayModes();
-              }
-
-              lastResult = true;
-            }
-          }
-
-          if (!queuedFreshCaptureRef.current[nodeId]) {
-            return lastResult;
-          }
-        }
-      })().finally(() => {
-        delete capturePromiseRef.current[nodeId];
-        delete pendingCaptureOptionsRef.current[nodeId];
-        delete queuedFreshCaptureRef.current[nodeId];
-      });
-
-      capturePromiseRef.current[nodeId] = captureTask;
-      return captureTask;
-    },
-    [
-      computeDisplayModes,
-      getWebviewLabel,
-      hideNodeWebview,
-      mergeCaptureOptions,
-      projectId,
-      setCachedScreenshotUrl,
-      setNodeDisplayMode,
-      waitForScreenshotPresentation,
-      warnMissingWebviewLabel,
-    ],
-  );
 
   const waitForWebviewResizeRelayout = useCallback(async () => {
     // updateBounds 後の WKWebView レイアウト反映を待つ（フレーム境界反映 + 余裕時間）
@@ -937,7 +709,7 @@ export function useSiteboardDisplayEngine({
       if (hasDisplayableScreenshot(nodeId)) {
         setNodeDisplayMode(nodeId, 'screenshot', wrapper);
         hideNodeWebview(label);
-        void captureScreenshotRef.current?.(nodeId, {
+        void captureScreenshot(nodeId, {
           source: 'interaction-start',
           waitForPresentation: false,
         });
@@ -948,6 +720,7 @@ export function useSiteboardDisplayEngine({
     [
       containerRef,
       cancelNativeReveal,
+      captureScreenshot,
       getWebviewLabel,
       hasDisplayableScreenshot,
       hideNodeWebview,
@@ -1000,7 +773,7 @@ export function useSiteboardDisplayEngine({
           await waitForWebviewResizeRelayout();
           if (activeInteractionsRef.current.has('resize')) return;
 
-          await captureScreenshotRef.current?.(nodeId, {
+          await captureScreenshot(nodeId, {
             forceDuringInteraction: true,
             source: 'resize-end',
           });
@@ -1016,6 +789,7 @@ export function useSiteboardDisplayEngine({
     },
     [
       containerRef,
+      captureScreenshot,
       computeDisplayModes,
       getWebviewLabel,
       setNodeDisplayMode,
@@ -1166,17 +940,7 @@ export function useSiteboardDisplayEngine({
         delete next[nodeId];
         return next;
       });
-      setScreenshotUrls((prev) => {
-        const next = { ...prev };
-        delete next[nodeId];
-        return next;
-      });
-      delete screenshotReadyRef.current[nodeId];
-      delete capturePromiseRef.current[nodeId];
-      delete pendingCaptureOptionsRef.current[nodeId];
-      delete queuedFreshCaptureRef.current[nodeId];
-      delete presentedScreenshotUrlRef.current[nodeId];
-      delete screenshotPresentationWaitersRef.current[nodeId];
+      cleanupScreenshot(nodeId);
       forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
       nativeHiddenByInteractionCaptureRef.current.delete(nodeId);
       interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
@@ -1188,7 +952,7 @@ export function useSiteboardDisplayEngine({
       // スクリーンショットファイルをクリーンアップ
       void webviewApi.deleteScreenshot(nodeId, projectId);
     },
-    [cancelNativeReveal, clearCachedScreenshotUrl, projectId],
+    [cancelNativeReveal, cleanupScreenshot, clearCachedScreenshotUrl, projectId],
   );
 
   useEffect(() => {
@@ -1202,76 +966,16 @@ export function useSiteboardDisplayEngine({
   }, [cleanupPageArtifacts, webPageIds, webPageIdsKey]);
 
   useEffect(() => {
-    captureScreenshotRef.current = captureScreenshot;
-  }, [captureScreenshot]);
-
-  useEffect(() => {
     computeDisplayModesRef.current = computeDisplayModes;
   }, [computeDisplayModes]);
 
   useEffect(() => {
-    screenshotUrlsRef.current = screenshotUrls;
-  }, [screenshotUrls]);
+    setNodeDisplayModeRef.current = setNodeDisplayMode;
+  }, [setNodeDisplayMode]);
 
-  const handleScreenshotPresented = useCallback(
-    (nodeId: string, url: string) => {
-      presentedScreenshotUrlRef.current[nodeId] = url;
-      const waiter = screenshotPresentationWaitersRef.current[nodeId];
-      if (waiter?.url === url) {
-        delete screenshotPresentationWaitersRef.current[nodeId];
-        for (const resolve of waiter.resolvers) {
-          resolve();
-        }
-      }
-
-      if (activeInteractionsRef.current.size === 0) {
-        computeDisplayModes();
-      }
-    },
-    [computeDisplayModes],
-  );
-
-  // 起動時に保存済みスクリーンショットをファイルシステムから復元する。
-  // screenshotReadyRef を true に設定することで、右クリック時の白画面や
-  // 起動直後の Webview がサイドバーに重なる問題を防ぐ。
   useEffect(() => {
-    const restorablePageIds = webPageNodes.filter((page) => page.url).map((page) => page.id);
-    const missingPageIds = restorablePageIds.filter((nodeId) => !screenshotUrlsRef.current[nodeId]);
-    if (missingPageIds.length === 0) return;
-
-    let cancelled = false;
-    void webviewApi.getExistingScreenshotPaths(projectId, missingPageIds).then((entries) => {
-      if (cancelled || entries.length === 0) return;
-
-      const restoredUrls: Record<string, string> = {};
-      for (const [nodeId, filePath] of entries) {
-        if (screenshotUrlsRef.current[nodeId]) continue;
-        screenshotReadyRef.current[nodeId] = true;
-        restoredUrls[nodeId] = `${convertFileSrc(filePath)}?t=restored`;
-      }
-      if (Object.keys(restoredUrls).length === 0) return;
-
-      hydrateCachedScreenshotUrls(projectId, restoredUrls);
-      setScreenshotUrls((prev) => {
-        let changed = false;
-        const next = { ...prev };
-        for (const [nodeId, url] of Object.entries(restoredUrls)) {
-          if (next[nodeId]) continue;
-          next[nodeId] = url;
-          changed = true;
-        }
-        if (!changed) return prev;
-        screenshotUrlsRef.current = next;
-        return next;
-      });
-      // 復元後にモード判定を再実行し、端のページが screenshot モードで表示されるようにする
-      requestAnimationFrame(() => computeDisplayModes());
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [computeDisplayModes, hydrateCachedScreenshotUrls, projectId, webPageIdsKey, webPageNodes]);
+    hideNodeWebviewRef.current = hideNodeWebview;
+  }, [hideNodeWebview]);
 
   useEffect(() => {
     const el = containerRef.current;

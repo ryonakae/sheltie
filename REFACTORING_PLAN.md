@@ -218,7 +218,7 @@ src-tauri/src/
 - [x] 4 Rust モジュール分割（webview.rs） ✅ webview.rs 738→7行（入口）。labels / navigation / bounds / screenshots に分割。snapshot.rs は低レベル PNG 変換のままで温存（screenshots と分離）。cargo check / typecheck / lint / test OK（要実機確認: ページ Webview の作成・ナビゲーション・bounds 更新・スクリーンショット save/restore）
 - [x] 5-1 Display Engine 純粋判定拡充 ✅ `applyDisplayModeDemotions` / `isToolbarOccluded` / `shouldUseOpacityReveal` を mode.ts に追加（テスト計14件）。computeDisplayModes のインライン降格・toolbar 占有・macOS opacity reveal 判定を関数化（挙動保存・順序維持）。test 98 / typecheck / lint / format OK（要実機確認: pan/zoom/contextMenu/unsaved-dialog/設定中ノード/ツールバー被り時の表示モード遷移）
 - [x] 5-2 ScreenshotCaptureQueue 抽出 ✅ `useScreenshotCaptureQueue` を新規作成。capture queue（capturePromise/pendingOptions/queuedFresh）・screenshotUrls/Ref・screenshotReady・presentation waiter・hasDisplayableScreenshot・waitForScreenshotPresentation・handleScreenshotPresented・captureScreenshot・ensureScreenshotReady・起動時復元 effect・cleanupScreenshot を集約。useSiteboardDisplayEngine.ts 1422→1130行（-292）。シグネチャ不変・挙動保存。test 98 / typecheck / lint / format OK（要実機確認: スクリーンショット撮影/復元、context メニュー、resize、起動時白画面回避）
-- [ ] 5-3 NativeRevealController 抽出
+- [x] 5-3 NativeRevealController 抽出 ✅ `useNativeRevealController` を新規作成。isMacOsRef・platform 検出・pendingNativeReveal/timer/token・cancelNativeReveal・cancelAllNativeReveals・hideNodeWebview・beginNativeRevealFade を集約。computeDisplayModes 内の macOS フェード開始ロジック（30行超）を `beginNativeRevealFade(nodeId, label)` 一行へ置換。useSiteboardDisplayEngine.ts 1130→1045 行（-85）。挙動・トークン管理は保存。test 98 / typecheck / lint / format OK（要実機確認: macOS で screenshot→native 復帰時の白フラッシュなし、blur 時の opacity 復元、cancel）
 - [ ] 5-4 DisplayModeResolver 共通化
 - [ ] 5-5 状態機械化（任意・要相談）
 

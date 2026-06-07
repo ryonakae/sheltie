@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { WEBVIEW_REVEAL_DELAY_MS } from '@/constants';
-import { getPlatformInfo, webviewApi } from '@/lib/tauri-bridge';
+import { webviewApi } from '@/lib/tauri-bridge';
 import {
   createScopedLogger,
   readCanvasZoomDebugValue,
@@ -22,6 +22,7 @@ import {
   resolveViewportDisplayMode,
   shouldUseOpacityReveal,
 } from './display-engine/mode';
+import { useNativeRevealController } from './useNativeRevealController';
 import { useScreenshotCaptureQueue } from './useScreenshotCaptureQueue';
 
 import type { InteractionType } from './types';
@@ -88,10 +89,6 @@ export function useSiteboardDisplayEngine({
   const interactionRafRef = useRef<number | null>(null);
   const containerRectRef = useRef<DOMRect | null>(null);
   const activeInteractionsRef = useRef<Set<InteractionType>>(new Set());
-  const isMacOsRef = useRef(false);
-  const pendingNativeRevealRef = useRef<Set<string>>(new Set());
-  const nativeRevealTimersRef = useRef<Record<string, number>>({});
-  const nativeRevealTokenRef = useRef<Record<string, number>>({});
   const resizingNodeIdRef = useRef<string | null>(null);
   const contextMenuNodeIdRef = useRef<string | null>(null);
   const unsavedChangesDialogOpenRef = useRef(false);
@@ -123,6 +120,20 @@ export function useSiteboardDisplayEngine({
       nodeId,
     });
   }, []);
+
+  const {
+    isMacOsRef,
+    cancelNativeReveal,
+    cancelAllNativeReveals,
+    hideNodeWebview,
+    isNativeRevealPending,
+    hasPendingReveals,
+    beginNativeRevealFade,
+  } = useNativeRevealController({
+    containerRef,
+    getWebviewLabel,
+    setDisplayModes,
+  });
 
   const sharedRefs = useMemo(
     () => ({
@@ -157,66 +168,6 @@ export function useSiteboardDisplayEngine({
     computeDisplayModesRef,
   });
 
-  useEffect(() => {
-    let cancelled = false;
-    void getPlatformInfo()
-      .then(({ platform }) => {
-        if (cancelled) return;
-        isMacOsRef.current = platform === 'macos';
-      })
-      .catch(() => {
-        // no-op
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const cancelNativeReveal = useCallback(
-    (nodeId: string) => {
-      const label = getWebviewLabel(nodeId);
-      const timerId = nativeRevealTimersRef.current[nodeId];
-      const wasPending = pendingNativeRevealRef.current.delete(nodeId);
-      const hadToken = nodeId in nativeRevealTokenRef.current;
-
-      if (timerId !== undefined) {
-        clearTimeout(timerId);
-        delete nativeRevealTimersRef.current[nodeId];
-      }
-      if (hadToken) {
-        delete nativeRevealTokenRef.current[nodeId];
-      }
-
-      if (isMacOsRef.current && label && (wasPending || hadToken || timerId !== undefined)) {
-        void webviewApi.setOpacity(label, 1);
-      }
-    },
-    [getWebviewLabel],
-  );
-
-  const cancelAllNativeReveals = useCallback(() => {
-    const nodeIds = new Set([
-      ...Object.keys(nativeRevealTimersRef.current),
-      ...Object.keys(nativeRevealTokenRef.current),
-      ...pendingNativeRevealRef.current,
-    ]);
-
-    for (const timerId of Object.values(nativeRevealTimersRef.current)) {
-      clearTimeout(timerId);
-    }
-    nativeRevealTimersRef.current = {};
-    nativeRevealTokenRef.current = {};
-    pendingNativeRevealRef.current.clear();
-
-    if (!isMacOsRef.current) return;
-    for (const nodeId of nodeIds) {
-      const label = getWebviewLabel(nodeId);
-      if (!label) continue;
-      void webviewApi.setOpacity(label, 1);
-    }
-  }, [getWebviewLabel]);
-
   const cancelInteractionCaptureRetry = useCallback(() => {
     if (interactionCaptureRetryTimerRef.current === null) return;
     clearTimeout(interactionCaptureRetryTimerRef.current);
@@ -247,13 +198,6 @@ export function useSiteboardDisplayEngine({
     },
     [containerRef],
   );
-
-  const hideNodeWebview = useCallback((label: string) => {
-    if (isMacOsRef.current) {
-      void webviewApi.setOpacity(label, 1);
-    }
-    void webviewApi.hide(label);
-  }, []);
 
   const getInteractionPreparationNodeIds = useCallback(
     (type: InteractionPreparationType, targetNodeId?: string) => {
@@ -404,7 +348,7 @@ export function useSiteboardDisplayEngine({
           containerRect: serializeRect(containerRect),
         });
       }
-      if (nextMode !== 'native' && pendingNativeRevealRef.current.has(page.id)) {
+      if (nextMode !== 'native' && isNativeRevealPending(page.id)) {
         cancelNativeReveal(page.id);
       }
 
@@ -431,40 +375,7 @@ export function useSiteboardDisplayEngine({
           if (useOpacityReveal) {
             // macOS: show/hide の代わりに alpha を 0→1 へ遷移させて復帰時の白フラッシュを回避
             modes[page.id] = 'screenshot';
-
-            if (!pendingNativeRevealRef.current.has(page.id)) {
-              pendingNativeRevealRef.current.add(page.id);
-
-              const token = (nativeRevealTokenRef.current[page.id] ?? 0) + 1;
-              nativeRevealTokenRef.current[page.id] = token;
-
-              void webviewApi.setOpacity(label, 0);
-              void webviewApi.show(label);
-
-              nativeRevealTimersRef.current[page.id] = window.setTimeout(() => {
-                if (nativeRevealTokenRef.current[page.id] !== token) return;
-                delete nativeRevealTimersRef.current[page.id];
-
-                void webviewApi.setOpacity(label, 1);
-
-                requestAnimationFrame(() => {
-                  if (nativeRevealTokenRef.current[page.id] !== token) return;
-                  pendingNativeRevealRef.current.delete(page.id);
-                  delete nativeRevealTokenRef.current[page.id];
-
-                  const latestWrapper = getWebPageElements(containerRef.current, page.id).wrapper;
-                  if (!latestWrapper) return;
-
-                  setDisplayModeAttribute(latestWrapper, 'native');
-                  setDisplayModes((prev) => {
-                    if (prev[page.id] === 'native') return prev;
-                    return { ...prev, [page.id]: 'native' };
-                  });
-                });
-              }, WEBVIEW_REVEAL_DELAY_MS);
-            } else {
-              void webviewApi.show(label);
-            }
+            beginNativeRevealFade(page.id, label);
           } else {
             if (isMacOsRef.current) {
               void webviewApi.setOpacity(label, 1);
@@ -503,12 +414,15 @@ export function useSiteboardDisplayEngine({
       setDisplayModes(modes);
     }
   }, [
-    containerRef,
+    beginNativeRevealFade,
     cancelNativeReveal,
+    containerRef,
     ensureScreenshotReady,
     getFallbackDisplayMode,
     getWebviewLabel,
     hasDisplayableScreenshot,
+    isMacOsRef,
+    isNativeRevealPending,
     webPageNodes,
     zoomRef,
   ]);
@@ -792,6 +706,7 @@ export function useSiteboardDisplayEngine({
       captureScreenshot,
       computeDisplayModes,
       getWebviewLabel,
+      isMacOsRef,
       setNodeDisplayMode,
       waitForWebviewResizeRelayout,
       zoomRef,
@@ -1034,8 +949,7 @@ export function useSiteboardDisplayEngine({
 
   useEffect(() => {
     const handleBlur = () => {
-      if (activeInteractionsRef.current.size === 0 && pendingNativeRevealRef.current.size === 0)
-        return;
+      if (activeInteractionsRef.current.size === 0 && !hasPendingReveals()) return;
       activeInteractionsRef.current.clear();
 
       if (interactionRafRef.current !== null) {
@@ -1062,6 +976,7 @@ export function useSiteboardDisplayEngine({
     cancelInteractionCaptureRetry,
     cancelZoomRestore,
     computeDisplayModes,
+    hasPendingReveals,
   ]);
 
   useEffect(() => {

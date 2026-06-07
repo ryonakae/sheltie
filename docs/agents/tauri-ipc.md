@@ -1,7 +1,15 @@
 # Tauri IPC 契約
 
-実装の正本は `src-tauri/src/lib.rs` と `src/lib/tauri-bridge.ts`。
+実装の正本は `src-tauri/src/{setup.rs, app_exit.rs, menus/*, commands/*}` と `src/lib/tauri-bridge.ts`。
 この文書は契約の読みやすい要約。
+
+- 起動・menu 配線・`invoke_handler` 登録: `setup.rs`
+- アプリ終了集約フロー: `app_exit.rs`
+- メニュー構築（App/File/Edit/View/Theme）: `menus/`
+- ドキュメントウィンドウ・ファイル IO: `commands/store/{document_manager,document_window,file_io,macos_tabs}.rs`
+- Webview 関連 IPC: `commands/webview/{labels,navigation,bounds,screenshots,snapshot}.rs`
+- ダイアログ: `commands/dialog.rs`
+- テーマ: `commands/theme.rs`
 
 ## Renderer -> Backend（invoke）
 
@@ -122,11 +130,11 @@
 
 - コマンド名・引数・戻り値を変更したら、Rust 側・bridge 側・このドキュメントを同時更新する
 - イベント名を変更したら listener 側（`WebPageNode` / runtime hooks / `main.tsx`）も同時更新する
-- `edit-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/edit-commands.ts` を同時更新する
-- `file-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/file-commands.ts` を同時更新する
-- `view-command` の payload 仕様や発火元を変更したら、`src-tauri/src/lib.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/view-commands.ts` を同時更新する
-- `app-exit-requested` や `complete_app_exit` / `abort_app_exit` を変更したら、`src-tauri/src/lib.rs`・`src-tauri/src/commands/store.rs`・`src/lib/app-exit.ts`・`src/lib/tauri-bridge.ts`・`src/main.tsx` を同時更新する
-- document window を増やす/閉じる/前面化する処理を変えたら、`src-tauri/src/lib.rs`・`src/lib/file-commands.ts`・`src/lib/project-close.ts` を同時更新する
+- `edit-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/edit.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/edit-commands.ts` を同時更新する
+- `file-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/file.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/file-commands.ts` を同時更新する
+- `view-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/view.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/view-commands.ts` を同時更新する
+- `app-exit-requested` や `complete_app_exit` / `abort_app_exit` を変更したら、`src-tauri/src/app_exit.rs`・`src-tauri/src/commands/store/document_window.rs`・`src/lib/app-exit.ts`・`src/lib/tauri-bridge.ts`・`src/main.tsx` を同時更新する
+- document window を増やす/閉じる/前面化する処理を変えたら、`src-tauri/src/commands/store/document_window.rs`・`src-tauri/src/commands/store/macos_tabs.rs`・`src/lib/file-commands.ts`・`src/lib/project-close.ts` を同時更新する
 ## Multiwebview command context
 
 - document window に child webview が存在しうる command は `tauri::WebviewWindow` ではなく `tauri::Window` を受ける。

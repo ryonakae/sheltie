@@ -83,3 +83,57 @@ pub async fn save_project_file(
 
     Ok(canonical_path.to_string_lossy().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_base() -> PathBuf {
+        // macOS の /tmp は /private/tmp に正規化されるため、canonicalize 済みの値で固定する
+        std::env::temp_dir()
+            .canonicalize()
+            .expect("temp_dir should canonicalize")
+    }
+
+    #[test]
+    fn empty_path_returns_error() {
+        assert!(normalize_project_file_path("", None).is_err());
+    }
+
+    #[test]
+    fn appends_siteboard_extension_when_missing() {
+        let base = temp_base();
+        let result = normalize_project_file_path("my-project", Some(&base)).unwrap();
+        assert_eq!(result, base.join("my-project.siteboard"));
+    }
+
+    #[test]
+    fn replaces_non_siteboard_extension() {
+        let base = temp_base();
+        let result = normalize_project_file_path("my-project.txt", Some(&base)).unwrap();
+        assert_eq!(result, base.join("my-project.siteboard"));
+    }
+
+    #[test]
+    fn keeps_existing_siteboard_extension() {
+        let base = temp_base();
+        let result = normalize_project_file_path("my-project.siteboard", Some(&base)).unwrap();
+        assert_eq!(result, base.join("my-project.siteboard"));
+    }
+
+    #[test]
+    fn absolute_path_ignores_cwd() {
+        let base = temp_base();
+        let abs = base.join("foo");
+        let result = normalize_project_file_path(abs.to_str().unwrap(), None).unwrap();
+        assert_eq!(result, base.join("foo.siteboard"));
+    }
+
+    #[test]
+    fn relative_path_joins_with_cwd() {
+        let base = temp_base();
+        // parent "sub" は存在しないので canonicalize は fallback して base/sub のまま
+        let result = normalize_project_file_path("sub/project", Some(&base)).unwrap();
+        assert_eq!(result, base.join("sub").join("project.siteboard"));
+    }
+}

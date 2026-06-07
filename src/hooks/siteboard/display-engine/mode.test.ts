@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyDisplayModeDemotions,
   isFullyInsideNativeSafeArea,
   isOutsideExpandedViewport,
   isOutsideViewport,
+  isToolbarOccluded,
   rectsOverlap,
   resolveViewportDisplayMode,
+  shouldUseOpacityReveal,
 } from './mode';
 
 // 関数群は left/right/top/bottom/width/height のみ参照するため、テストでは plain object を DOMRect として扱う
@@ -134,5 +137,125 @@ describe('resolveViewportDisplayMode', () => {
 
   it('viewport 内だが安全領域外 + screenshot なし → native（フォールバック）', () => {
     expect(resolveViewportDisplayMode(rect(900, 100, 100, 100), CONTAINER, false)).toBe('native');
+  });
+});
+
+describe('applyDisplayModeDemotions', () => {
+  const noFlags = {
+    unsavedChangesDialogOpen: false,
+    isContextMenuTarget: false,
+    isSettling: false,
+    isToolbarOccluded: false,
+  };
+
+  it('native でなければ降格条件があっても元のモードを返す', () => {
+    expect(
+      applyDisplayModeDemotions('screenshot', true, { ...noFlags, unsavedChangesDialogOpen: true }),
+    ).toBe('screenshot');
+    expect(applyDisplayModeDemotions('hidden', false, { ...noFlags, isSettling: true })).toBe(
+      'hidden',
+    );
+  });
+
+  it('native で降格条件が無ければ native のまま', () => {
+    expect(applyDisplayModeDemotions('native', true, noFlags)).toBe('native');
+    expect(applyDisplayModeDemotions('native', false, noFlags)).toBe('native');
+  });
+
+  it('native + 降格条件 + screenshot あり → screenshot', () => {
+    expect(
+      applyDisplayModeDemotions('native', true, { ...noFlags, unsavedChangesDialogOpen: true }),
+    ).toBe('screenshot');
+    expect(
+      applyDisplayModeDemotions('native', true, { ...noFlags, isContextMenuTarget: true }),
+    ).toBe('screenshot');
+    expect(applyDisplayModeDemotions('native', true, { ...noFlags, isSettling: true })).toBe(
+      'screenshot',
+    );
+    expect(applyDisplayModeDemotions('native', true, { ...noFlags, isToolbarOccluded: true })).toBe(
+      'screenshot',
+    );
+  });
+
+  it('native + 降格条件 + screenshot なし → hidden', () => {
+    expect(
+      applyDisplayModeDemotions('native', false, { ...noFlags, unsavedChangesDialogOpen: true }),
+    ).toBe('hidden');
+    expect(
+      applyDisplayModeDemotions('native', false, { ...noFlags, isToolbarOccluded: true }),
+    ).toBe('hidden');
+  });
+
+  it('複数の降格条件が重なっても結果は同じ（OR）', () => {
+    expect(
+      applyDisplayModeDemotions('native', true, {
+        unsavedChangesDialogOpen: true,
+        isContextMenuTarget: true,
+        isSettling: true,
+        isToolbarOccluded: true,
+      }),
+    ).toBe('screenshot');
+  });
+});
+
+describe('isToolbarOccluded', () => {
+  const nodeRect = rect(100, 100, 200, 100); // [100,100]-[300,200]
+
+  it('自分自身のツールバーは被り判定に含めない', () => {
+    expect(
+      isToolbarOccluded('node-a', nodeRect, [
+        { ownerId: 'node-a', rect: rect(100, 200, 200, 30) }, // 自分のツールバー（直下）
+      ]),
+    ).toBe(false);
+  });
+
+  it('他ノードのツールバーが重なれば true', () => {
+    expect(
+      isToolbarOccluded('node-a', nodeRect, [
+        { ownerId: 'node-b', rect: rect(150, 150, 100, 30) }, // 重なる
+      ]),
+    ).toBe(true);
+  });
+
+  it('他ノードのツールバーでも重ならなければ false', () => {
+    expect(
+      isToolbarOccluded('node-a', nodeRect, [
+        { ownerId: 'node-b', rect: rect(500, 500, 100, 30) }, // 離れている
+      ]),
+    ).toBe(false);
+  });
+
+  it('複数ツールバーのうち 1 つでも重なれば true', () => {
+    expect(
+      isToolbarOccluded('node-a', nodeRect, [
+        { ownerId: 'node-b', rect: rect(500, 500, 100, 30) },
+        { ownerId: 'node-c', rect: rect(150, 150, 50, 30) }, // 重なる
+      ]),
+    ).toBe(true);
+  });
+
+  it('ツールバー配列が空なら false', () => {
+    expect(isToolbarOccluded('node-a', nodeRect, [])).toBe(false);
+  });
+});
+
+describe('shouldUseOpacityReveal', () => {
+  it('macOS + screenshot→native の遷移のみ true', () => {
+    expect(shouldUseOpacityReveal(true, 'screenshot', 'native')).toBe(true);
+  });
+
+  it('macOS でなければ false（hidden→native も含む）', () => {
+    expect(shouldUseOpacityReveal(false, 'screenshot', 'native')).toBe(false);
+    expect(shouldUseOpacityReveal(false, 'hidden', 'native')).toBe(false);
+  });
+
+  it('macOS でも遷移元が screenshot でなければ false', () => {
+    expect(shouldUseOpacityReveal(true, 'hidden', 'native')).toBe(false);
+    expect(shouldUseOpacityReveal(true, 'native', 'native')).toBe(false);
+  });
+
+  it('macOS でも遷移先が native でなければ false', () => {
+    expect(shouldUseOpacityReveal(true, 'screenshot', 'screenshot')).toBe(false);
+    expect(shouldUseOpacityReveal(true, 'screenshot', 'hidden')).toBe(false);
   });
 });

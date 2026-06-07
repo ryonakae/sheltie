@@ -17,9 +17,11 @@ import {
   setDisplayModeAttribute,
 } from './display-engine/dom';
 import {
+  applyDisplayModeDemotions,
   isOutsideExpandedViewport,
-  rectsOverlap,
+  isToolbarOccluded,
   resolveViewportDisplayMode,
+  shouldUseOpacityReveal,
 } from './display-engine/mode';
 
 import type { InteractionType } from './types';
@@ -436,10 +438,6 @@ export function useSiteboardDisplayEngine({
     // 非 macOS: screenshot→native 遷移ページは show 後 1 フレーム待ってスクショを消す
     const deferredNativeSwaps: HTMLElement[] = [];
 
-    // native も screenshot も安全に使えない瞬間の退避先。
-    const demoteToSafeMode = (nodeId: string): DisplayMode =>
-      hasDisplayableScreenshot(nodeId) ? 'screenshot' : 'hidden';
-
     // 選択中ノードのツールバー矩形。被られたページは native へ復帰させない。
     const toolbarRects = getSelectionToolbarRects(containerRef.current);
     const nextToolbarOccludedIds = new Set<string>();
@@ -454,38 +452,39 @@ export function useSiteboardDisplayEngine({
       }
 
       const placeholderRect = placeholder.getBoundingClientRect();
-      let nextMode = resolveViewportDisplayMode(
-        placeholderRect,
-        containerRect,
-        hasDisplayableScreenshot(page.id),
-      );
+      const hasScreenshot = hasDisplayableScreenshot(page.id);
+      const initialMode = resolveViewportDisplayMode(placeholderRect, containerRect, hasScreenshot);
 
-      if (unsavedChangesDialogOpenRef.current && nextMode === 'native') {
-        nextMode = demoteToSafeMode(page.id);
-      }
-      // コンテキストメニュー表示中のページは native に復帰させない
-      if (contextMenuNodeIdRef.current === page.id && nextMode === 'native') {
-        nextMode = demoteToSafeMode(page.id);
-      }
-      if (settlingNodeIdsRef.current.has(page.id) && nextMode === 'native') {
-        nextMode = demoteToSafeMode(page.id);
-      }
+      // unsaved / contextMenu / settling のいずれかで既に降格対象なら、toolbar 被り判定の
+      // 副作用（fresh 撮影トリガと occluded 登録）はスキップする（元実装の順序を維持）。
+      const preToolbarDemoted =
+        initialMode === 'native' &&
+        (unsavedChangesDialogOpenRef.current ||
+          contextMenuNodeIdRef.current === page.id ||
+          settlingNodeIdsRef.current.has(page.id));
+
       // ノードツールバー（HTML）が被るページは native に復帰させない。
       // 被り開始時は webview がまだ native(可視) のうちに fresh 撮影を要求してから降格する。
-      // （context メニューと同じ順序。hide 後はスナップショットできず古い stale のままになるため）
-      if (
-        nextMode === 'native' &&
-        toolbarRects.length > 0 &&
-        toolbarRects.some(
-          (toolbar) => toolbar.ownerId !== page.id && rectsOverlap(toolbar.rect, placeholderRect),
-        )
-      ) {
+      // hide 後はスナップショットできず古い stale のままになる（context メニューと同じ順序）。
+      const occluded =
+        !preToolbarDemoted &&
+        initialMode === 'native' &&
+        isToolbarOccluded(page.id, placeholderRect, toolbarRects);
+
+      if (occluded) {
         if (label && !toolbarOccludedIdsRef.current.has(page.id)) {
           void ensureScreenshotReady(page.id, { source: 'interaction-start' });
         }
         nextToolbarOccludedIds.add(page.id);
-        nextMode = demoteToSafeMode(page.id);
       }
+
+      let nextMode = applyDisplayModeDemotions(initialMode, hasScreenshot, {
+        unsavedChangesDialogOpen: unsavedChangesDialogOpenRef.current,
+        isContextMenuTarget: contextMenuNodeIdRef.current === page.id,
+        isSettling: settlingNodeIdsRef.current.has(page.id),
+        isToolbarOccluded: occluded,
+      });
+
       if (!label && nextMode === 'native') {
         nextMode = getFallbackDisplayMode(page.id);
       }
@@ -523,8 +522,13 @@ export function useSiteboardDisplayEngine({
           );
 
           const isScreenshotToNative = currentAttr === 'screenshot';
-          const shouldUseOpacityReveal = isMacOsRef.current && isScreenshotToNative;
-          if (shouldUseOpacityReveal) {
+          // currentAttr は wrapper の data-display-mode 属性。'native' (default) / 'screenshot' / 'hidden' のいずれか。
+          const useOpacityReveal = shouldUseOpacityReveal(
+            isMacOsRef.current,
+            currentAttr as DisplayMode,
+            'native',
+          );
+          if (useOpacityReveal) {
             // macOS: show/hide の代わりに alpha を 0→1 へ遷移させて復帰時の白フラッシュを回避
             modes[page.id] = 'screenshot';
 

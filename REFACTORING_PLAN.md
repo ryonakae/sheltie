@@ -216,7 +216,7 @@ src-tauri/src/
 - [x] 4 Rust モジュール分割（lib.rs） ✅ lib.rs 884→7行。app_exit.rs / menus/{mod,helpers,macos,app,file,edit,view,theme}.rs / setup.rs に分割。cargo check / typecheck / lint / test OK（要実機確認: メニュー各種、アプリ終了フロー、テーマ切替）
 - [x] 4 Rust モジュール分割（store.rs） ✅ store.rs 872→11行（入口）。document_manager / document_window / file_io / macos_tabs に分割（macOS NSWindow helpers は macos_tabs に集約し plan の範囲を若干広げた）。cargo check / typecheck / lint / test OK（要実機確認: 新規ウィンドウ・タブ・ファイル open/save・close フロー）
 - [x] 4 Rust モジュール分割（webview.rs） ✅ webview.rs 738→7行（入口）。labels / navigation / bounds / screenshots に分割。snapshot.rs は低レベル PNG 変換のままで温存（screenshots と分離）。cargo check / typecheck / lint / test OK（要実機確認: ページ Webview の作成・ナビゲーション・bounds 更新・スクリーンショット save/restore）
-- [ ] 5-1 Display Engine 純粋判定拡充
+- [x] 5-1 Display Engine 純粋判定拡充 ✅ `applyDisplayModeDemotions` / `isToolbarOccluded` / `shouldUseOpacityReveal` を mode.ts に追加（テスト計14件）。computeDisplayModes のインライン降格・toolbar 占有・macOS opacity reveal 判定を関数化（挙動保存・順序維持）。test 98 / typecheck / lint / format OK（要実機確認: pan/zoom/contextMenu/unsaved-dialog/設定中ノード/ツールバー被り時の表示モード遷移）
 - [ ] 5-2 ScreenshotCaptureQueue 抽出
 - [ ] 5-3 NativeRevealController 抽出
 - [ ] 5-4 DisplayModeResolver 共通化

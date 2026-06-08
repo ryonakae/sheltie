@@ -31,6 +31,7 @@ import {
   isInteractionActive,
   isNativeHiddenByCapture,
   isPanOrZoomActive,
+  isSettling,
   type DisplayEngineAction,
   type DisplayEngineState,
   displayEngineReducer,
@@ -111,7 +112,7 @@ export function useSiteboardDisplayEngine({
   const containerRectRef = useRef<DOMRect | null>(null);
   // 5-5 段階 2: resizingNodeId / contextMenuNodeId / unsavedDialogOpen は stateRef に集約
   // 5-5 段階 3: activeInteractions も stateRef に集約
-  const settlingNodeIdsRef = useRef<Set<string>>(new Set());
+  // 5-5 段階 4d: settlingIds は stateRef.settlingIds に集約
   // ノードツールバーに被られているページ。被り開始の検出（fresh 撮影の 1 回発火）に使う。
   const toolbarOccludedIdsRef = useRef<Set<string>>(new Set());
   // 5-5 段階 4a-4b: forceHiddenIds / nativeHiddenByCaptureIds は stateRef に集約
@@ -320,7 +321,7 @@ export function useSiteboardDisplayEngine({
         initialMode === 'native' &&
         (stateRef.current.unsavedDialogOpen ||
           isContextMenuTarget(stateRef.current, page.id) ||
-          settlingNodeIdsRef.current.has(page.id));
+          isSettling(stateRef.current, page.id));
 
       // ノードツールバー（HTML）が被るページは native に復帰させない。
       // 被り開始時は webview がまだ native(可視) のうちに fresh 撮影を要求してから降格する。
@@ -340,7 +341,7 @@ export function useSiteboardDisplayEngine({
       let nextMode = applyDisplayModeDemotions(initialMode, hasScreenshot, {
         unsavedChangesDialogOpen: stateRef.current.unsavedDialogOpen,
         isContextMenuTarget: isContextMenuTarget(stateRef.current, page.id),
-        isSettling: settlingNodeIdsRef.current.has(page.id),
+        isSettling: isSettling(stateRef.current, page.id),
         isToolbarOccluded: occluded,
       });
 
@@ -803,7 +804,6 @@ export function useSiteboardDisplayEngine({
 
   const holdNodeDuringPositionSettle = useCallback(
     (nodeId: string) => {
-      settlingNodeIdsRef.current.add(nodeId);
       dispatch({ type: 'SETTLE_NODE', nodeId });
       cancelNativeReveal(nodeId);
     },
@@ -812,7 +812,7 @@ export function useSiteboardDisplayEngine({
 
   const releaseNodeAfterPositionSettle = useCallback(
     (nodeId: string) => {
-      if (!settlingNodeIdsRef.current.delete(nodeId)) return;
+      if (!isSettling(stateRef.current, nodeId)) return;
       dispatch({ type: 'RELEASE_NODE', nodeId });
       if (!hasAnyInteraction(stateRef.current)) {
         computeDisplayModes();
@@ -831,7 +831,6 @@ export function useSiteboardDisplayEngine({
         return next;
       });
       cleanupScreenshot(nodeId);
-      settlingNodeIdsRef.current.delete(nodeId);
       clearCachedScreenshotUrl(projectId, nodeId);
       dispatch({ type: 'CLEANUP_NODE', nodeId });
       // スクリーンショットファイルをクリーンアップ
@@ -930,7 +929,6 @@ export function useSiteboardDisplayEngine({
       cancelInteractionCaptureRetry();
       cancelZoomRestore();
       cancelAllNativeReveals();
-      settlingNodeIdsRef.current.clear();
       dispatch({ type: 'INTERACTION_CLEAR_ALL' });
       computeDisplayModes();
     };
@@ -971,12 +969,10 @@ export function useSiteboardDisplayEngine({
   }, [selectionKey, computeDisplayModes]);
 
   useEffect(() => {
-    const settlingNodeIds = settlingNodeIdsRef.current;
     const toolbarOccludedNodeIds = toolbarOccludedIdsRef.current;
     return () => {
       cancelInteractionCaptureRetry();
       cancelAllNativeReveals();
-      settlingNodeIds.clear();
       toolbarOccludedNodeIds.clear();
     };
   }, [cancelAllNativeReveals, cancelInteractionCaptureRetry]);

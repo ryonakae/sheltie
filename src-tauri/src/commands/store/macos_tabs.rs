@@ -135,13 +135,7 @@ fn create_document_tab_internal<R: Runtime>(
         "[new-tab] build child before: host_label={host_label}, child_label={child_label}, tabbing_identifier={tabbing_identifier}"
     );
 
-    match build_document_window(
-        app,
-        &label,
-        &title,
-        &record.tabbing_identifier,
-        &disposition,
-    ) {
+    match build_document_window(app, &label, &title, &record.tabbing_identifier) {
         Ok(window) => {
             log::info!(
                 "[new-tab] build child after: host_label={host_label}, child_label={child_label}, tabbing_identifier={tabbing_identifier}"
@@ -194,14 +188,24 @@ pub async fn new_document_tab(window: Window) -> Result<(), String> {
     result
 }
 
+/// renderer の初期化完了後に呼ばれ、document window をユーザーに見せる。
+/// pending な tab attachment があれば NSWindow の `addTabbedWindow` でタブに合流させ、
+/// 無ければ単独 window として show + setFocus する。いずれも window 生成時点の
+/// `visible(false)` を解除する役割を持ち、React 描画前のちらつきを防ぐ。
 #[tauri::command]
-pub async fn attach_pending_document_tab(
+pub async fn present_document_window(
     window: Window,
     state: State<'_, DocumentManagerState>,
 ) -> Result<(), String> {
     let child_label = window.label().to_string();
     let Some((host_label, tabbing_identifier)) = state.take_pending_tab_attachment(&child_label)?
     else {
+        window
+            .show()
+            .map_err(|error| format!("failed to show window '{child_label}': {error}"))?;
+        window
+            .set_focus()
+            .map_err(|error| format!("failed to focus window '{child_label}': {error}"))?;
         return Ok(());
     };
 

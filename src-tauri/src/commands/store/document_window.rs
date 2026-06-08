@@ -51,54 +51,28 @@ pub(super) fn build_document_window<R: tauri::Runtime>(
     label: &str,
     title: &str,
     tabbing_identifier: &str,
-    disposition: &DocumentWindowDisposition,
 ) -> Result<WebviewWindow<R>, String> {
+    // 描画前のちらつきを避けるため常に visible(false) で作成し、
+    // renderer 側が ready になったタイミングで present_document_window から表示する
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::default())
         .title(title)
-        .inner_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
+        .inner_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+        .visible(false);
 
     #[cfg(target_os = "macos")]
-    let builder = {
-        let builder = if matches!(disposition, DocumentWindowDisposition::TabInGroup { .. }) {
-            builder.visible(false)
-        } else {
-            builder
-        };
-
-        builder
-            .title_bar_style(TitleBarStyle::Visible)
-            .tabbing_identifier(tabbing_identifier)
-    };
+    let builder = builder
+        .title_bar_style(TitleBarStyle::Visible)
+        .tabbing_identifier(tabbing_identifier);
 
     #[cfg(not(target_os = "macos"))]
     let builder = {
-        let _ = (tabbing_identifier, disposition);
+        let _ = tabbing_identifier;
         builder
     };
 
     builder
         .build()
         .map_err(|error| format!("failed to create document window: {error}"))
-}
-
-#[cfg(target_os = "macos")]
-fn present_document_window_after_creation<R: tauri::Runtime>(
-    window: &WebviewWindow<R>,
-    disposition: &DocumentWindowDisposition,
-) {
-    if matches!(disposition, DocumentWindowDisposition::Standalone) {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn present_document_window_after_creation<R: tauri::Runtime>(
-    window: &WebviewWindow<R>,
-    _: &DocumentWindowDisposition,
-) {
-    let _ = window.show();
-    let _ = window.set_focus();
 }
 
 fn create_document_window_internal<R: tauri::Runtime>(
@@ -110,13 +84,7 @@ fn create_document_window_internal<R: tauri::Runtime>(
     let (label, record) = manager.reserve_window(file_path, &disposition)?;
     let title = get_window_title(&record);
 
-    match build_document_window(
-        app,
-        &label,
-        &title,
-        &record.tabbing_identifier,
-        &disposition,
-    ) {
+    match build_document_window(app, &label, &title, &record.tabbing_identifier) {
         Ok(window) => {
             if let Err(error) = configure_macos_document_window(app, &label) {
                 let _ = window.destroy();
@@ -124,7 +92,6 @@ fn create_document_window_internal<R: tauri::Runtime>(
                 return Err(error);
             }
 
-            present_document_window_after_creation(&window, &disposition);
             Ok(label)
         }
         Err(error) => {

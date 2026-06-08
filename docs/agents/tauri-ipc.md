@@ -16,7 +16,7 @@
 ### プロジェクト状態
 
 - `load_window_context` - 現在の document window に紐づく `filePath` / `untitledIndex` を読む
-- `attach_pending_document_tab` - 現在 window が pending な macOS `New Tab` child なら、renderer 初期化完了後に host document window へ attach する
+- `present_document_window` - renderer 初期化完了後（最初の paint 後）に呼び出され、`visible(false)` で生成された document window をユーザーに見せる。pending な macOS `New Tab` child の場合は host document window へ attach し、それ以外は `show` + `setFocus` する
 - `new_document_tab` - 現在の macOS document window が解決できた時だけ、その native tab group と同じ `tabbingIdentifier` を継承した untitled document を host 限定の explicit attach で追加する。standalone window へはフォールバックしない
 - `new_document_window` - 新しい untitled standalone document window を開く
 - `open_document_window(path)` - 対象 `.siteboard` 用の document window を開く。既に開いていればその window を前面化する
@@ -90,7 +90,7 @@
 
 - `loadWindowContext`, `newDocumentTab`, `newDocumentWindow`, `openDocumentWindow`, `closeReady`
 - `completeAppExit`, `abortAppExit`
-- `attachPendingDocumentTab`
+- `presentDocumentWindow`
 - `loadProjectFile`, `saveProjectFile`
 - `loadTheme`, `saveTheme`, `getPlatformInfo`
 - `onAppExitRequested`

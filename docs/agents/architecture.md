@@ -60,6 +60,8 @@ src/
 - 起動時は window context を読み、`filePath` があれば `.siteboard` を読み込み、無ければ空 document を初期化する
 - window close 時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的な window 破棄だけ `close_ready` を使う
 - `Cmd+Q` / app menu `Quit` は Rust の custom `app.quit` menu event から renderer coordinator を起動し、集約確認と順次保存の完了後に `complete_app_exit` でまとめて終了する
+- 一般的な Mac アプリと同様、全ウインドウを閉じてもプロセスは終了しない。`setup.rs` の `RunEvent::ExitRequested` 受信時に `AppExitCoordinatorState` で `Cmd+Q` 起源かを判定し、それ以外の発火（最後の window クローズ等）は `api.prevent_exit()` で抑止する
+- Dock アイコンクリックなどの `RunEvent::Reopen { has_visible_windows: false }` で document window が 1 枚も無い場合は新規 untitled を開く。最小化等で window 自体は残っているケースは OS の標準復帰に委ねる
 
 ## Siteboard と React Flow の協業
 

@@ -6,8 +6,9 @@ use tauri::{
 use crate::app_exit::{emit_app_exit_requested, AppExitCoordinatorState};
 use crate::commands::{
     store::{
-        configure_macos_window_tabbing_policy, focus_document_window,
-        focused_document_window_label, handle_launch_args, DocumentManagerState,
+        configure_macos_window_tabbing_policy, create_untitled_document_window,
+        focus_document_window, focused_document_window_label, handle_launch_args,
+        DocumentManagerState,
     },
     theme::{load_persisted_theme, MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM},
 };
@@ -170,23 +171,44 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         #[cfg(target_os = "macos")]
-        if let RunEvent::ExitRequested { api, .. } = event {
-            let exit_state = app_handle.state::<AppExitCoordinatorState>();
-            match exit_state.consume_allow_exit() {
-                Ok(true) => {}
-                Ok(false) => match exit_state.has_pending_quit() {
-                    Ok(true) => api.prevent_exit(),
-                    Ok(false) => {}
+        match event {
+            RunEvent::ExitRequested { api, .. } => {
+                let exit_state = app_handle.state::<AppExitCoordinatorState>();
+                match exit_state.consume_allow_exit() {
+                    Ok(true) => {}
+                    // Cmd+Q / Quit メニュー以外（全ウインドウクローズ等）で発火した
+                    // ExitRequested は無視し、一般的な Mac アプリと同様にプロセスを維持する
+                    Ok(false) => match exit_state.has_pending_quit() {
+                        Ok(true) | Ok(false) => api.prevent_exit(),
+                        Err(error) => {
+                            log::error!("failed to handle ExitRequested: {error}");
+                            api.prevent_exit();
+                        }
+                    },
                     Err(error) => {
                         log::error!("failed to handle ExitRequested: {error}");
                         api.prevent_exit();
                     }
-                },
-                Err(error) => {
-                    log::error!("failed to handle ExitRequested: {error}");
-                    api.prevent_exit();
                 }
             }
+            // Dock アイコンクリック等の applicationShouldHandleReopen 発火時、
+            // document window が 1 枚も無ければ新規 untitled を開く。
+            // 最小化など「window はあるが不可視」の場合は OS の標準復帰に任せる。
+            RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } => {
+                let has_document_window = app_handle
+                    .windows()
+                    .keys()
+                    .any(|label| label.starts_with("document-"));
+                if !has_document_window {
+                    if let Err(error) = create_untitled_document_window(app_handle) {
+                        log::error!("failed to create window on dock reopen: {error}");
+                    }
+                }
+            }
+            _ => {}
         }
     });
 }

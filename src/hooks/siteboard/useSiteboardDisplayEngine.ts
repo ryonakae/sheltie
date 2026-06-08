@@ -28,6 +28,7 @@ import {
   isContextMenuTarget,
   isDragOrResizeActive,
   isInteractionActive,
+  isNativeHiddenByCapture,
   isPanOrZoomActive,
   type DisplayEngineAction,
   type DisplayEngineState,
@@ -112,8 +113,7 @@ export function useSiteboardDisplayEngine({
   const settlingNodeIdsRef = useRef<Set<string>>(new Set());
   // ノードツールバーに被られているページ。被り開始の検出（fresh 撮影の 1 回発火）に使う。
   const toolbarOccludedIdsRef = useRef<Set<string>>(new Set());
-  // 5-5 段階 4a: forceHiddenIds は stateRef.forceHiddenIds に集約
-  const nativeHiddenByInteractionCaptureRef = useRef<Set<string>>(new Set());
+  // 5-5 段階 4a-4b: forceHiddenIds / nativeHiddenByCaptureIds は stateRef に集約
   const interactionCaptureRetryNodeIdsRef = useRef<Set<string>>(new Set());
   const interactionCaptureRetryTimerRef = useRef<number | null>(null);
   const resizeObserverRafRef = useRef<number | null>(null);
@@ -157,7 +157,6 @@ export function useSiteboardDisplayEngine({
       stateRef,
       dispatch,
       interactionCaptureRetryNodeIdsRef,
-      nativeHiddenByInteractionCaptureRef,
     }),
     [dispatch],
   );
@@ -463,7 +462,7 @@ export function useSiteboardDisplayEngine({
 
   const shouldSkipImmediateInteractionHide = useCallback(
     (nodeId: string) => {
-      if (!nativeHiddenByInteractionCaptureRef.current.has(nodeId)) {
+      if (!isNativeHiddenByCapture(stateRef.current, nodeId)) {
         return false;
       }
 
@@ -713,7 +712,6 @@ export function useSiteboardDisplayEngine({
           interactionRafRef.current = null;
         }
         containerRectRef.current = null;
-        nativeHiddenByInteractionCaptureRef.current.clear();
 
         if (type === 'zoom') {
           scheduleZoomRestoreAfterReflow();
@@ -836,7 +834,6 @@ export function useSiteboardDisplayEngine({
         return next;
       });
       cleanupScreenshot(nodeId);
-      nativeHiddenByInteractionCaptureRef.current.delete(nodeId);
       interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
       settlingNodeIdsRef.current.delete(nodeId);
       clearCachedScreenshotUrl(projectId, nodeId);
@@ -937,7 +934,6 @@ export function useSiteboardDisplayEngine({
       cancelInteractionCaptureRetry();
       cancelZoomRestore();
       cancelAllNativeReveals();
-      nativeHiddenByInteractionCaptureRef.current.clear();
       interactionCaptureRetryNodeIdsRef.current.clear();
       settlingNodeIdsRef.current.clear();
       dispatch({ type: 'INTERACTION_CLEAR_ALL' });
@@ -981,13 +977,11 @@ export function useSiteboardDisplayEngine({
 
   useEffect(() => {
     const settlingNodeIds = settlingNodeIdsRef.current;
-    const nativeHiddenByInteractionCaptureNodeIds = nativeHiddenByInteractionCaptureRef.current;
     const interactionCaptureRetryNodeIds = interactionCaptureRetryNodeIdsRef.current;
     const toolbarOccludedNodeIds = toolbarOccludedIdsRef.current;
     return () => {
       cancelInteractionCaptureRetry();
       cancelAllNativeReveals();
-      nativeHiddenByInteractionCaptureNodeIds.clear();
       interactionCaptureRetryNodeIds.clear();
       settlingNodeIds.clear();
       toolbarOccludedNodeIds.clear();

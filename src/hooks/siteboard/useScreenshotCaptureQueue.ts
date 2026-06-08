@@ -23,11 +23,10 @@ export interface CaptureScreenshotOptions {
 }
 
 export interface ScreenshotCaptureSharedRefs {
-  // 5-5 段階 2-4a: state machine への移行が進むにつれ、ref は徐々に dispatch に置換される。
+  // 5-5 段階 2-4b: state machine への移行が進むにつれ、ref は徐々に dispatch に置換される。
   stateRef: React.MutableRefObject<DisplayEngineState>;
   dispatch: (action: DisplayEngineAction) => void;
   interactionCaptureRetryNodeIdsRef: React.MutableRefObject<Set<string>>;
-  nativeHiddenByInteractionCaptureRef: React.MutableRefObject<Set<string>>;
 }
 
 interface UseScreenshotCaptureQueueParams {
@@ -226,7 +225,7 @@ export function useScreenshotCaptureQueue({
             lastResult = false;
           } else {
             if (hideAfterSnapshotRequest) {
-              sharedRefs.nativeHiddenByInteractionCaptureRef.current.add(nodeId);
+              sharedRefs.dispatch({ type: 'NATIVE_HIDDEN_BY_CAPTURE_ADD', nodeId });
             }
 
             const filePath = await webviewApi.saveScreenshot(label, nodeId, projectId, {

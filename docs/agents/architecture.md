@@ -22,7 +22,7 @@ src/
 
 - `screens/Project.tsx`: 1 document window の Siteboard 画面を統括する。新規ノード追加後のセンタリングと選択状態を管理する
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
-- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。uiZoom/右下 viewport controls をコンポーネント state と helper で管理する。flowNodes を `useMemo` で直接構築。`draggingNodePositions` state でドラッグ中の一時位置管理。`onNodeDragStart`/`onNodeDragStop` でドラッグハンドラーを実装し、`onNodesChange` で選択状態・計測寸法・ドラッグ中座標を同期する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
+- `components/Siteboard/Siteboard.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。表示制御・ビューポート・ドラッグ・リサイズ・テキスト編集・コンテキストメニュー・flowNodes 構築をそれぞれ `hooks/siteboard/useSiteboard*` フックへ委譲し、Siteboard.tsx 自身は配線と `onNodesChange`/`onEdgesChange`（選択状態・計測寸法・ドラッグ中座標の同期）に専念する。flowNodes 配列は `useSiteboardFlowNodes` で構築する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
 - `components/Siteboard/FloatingToolbar.tsx`: Web ページ/付箋/テキスト追加ボタン群
 - `components/Siteboard/ZoomIndicator.tsx`: ズーム率表示ボタン。押下で `100% + 全ノード中央寄せ`
 - `components/Node/WebPageNode.tsx`: webpage ノード本体 UI（フレーム（`bg-default` + `WEB_PAGE_FRAME_PADDING` 24px world 固定 + 角丸 16px world 固定 + 枠線 1px zoomPx）+ 内側に Webview placeholder。空のときは Globe アイコン + "Enter URL above" ヒントを表示。props インターフェース export）
@@ -87,11 +87,19 @@ src/
 
 ## バックエンド責務
 
-- `commands/store.rs`: ローカル document state と `.siteboard` ファイルの読み書き
-- `commands/store.rs`: document window の生成・前面化・window context・`.siteboard` ファイルの読み書き
+- `lib.rs`: モジュール宣言と `pub use` の入口（実体は持たない）
+- `setup.rs`: `pub fn run()` 本体、`invoke_handler` 登録、menu event 配信
+- `app_exit.rs`: `AppExitCoordinatorState` とアプリ終了の集約フロー
+- `menus/{app,file,edit,view,theme}.rs` + `menus/{helpers,macos}.rs`: メニュー構築と `file-command` / `edit-command` / `view-command` / `theme-command` 配信
+- `commands/store/document_manager.rs`: document window 状態機械（ラベル採番・untitled index・filePath 競合チェック）
+- `commands/store/document_window.rs`: document window 生成・前面化・window context、終了/クローズ系コマンド
+- `commands/store/file_io.rs`: `.siteboard` ファイルの load/save とパス正規化
+- `commands/store/macos_tabs.rs`: macOS NSWindow 操作（タブ attach + window 設定）
 - `commands/theme.rs`: テーマ設定、プラットフォーム情報
-- `commands/webview.rs`: webpage Webview 作成、位置更新、ナビゲーション、スクリーンショット。child webview label は親 document window ごとに namespacing する
-- `src-tauri/src/lib.rs`: File / Edit メニュー構成、メニューイベントの `file-command` / `edit-command` 配信、Tauri プラグイン登録、macOS の native tab / standalone window 分岐を含む document window 生成
+- `commands/webview/labels.rs`: child webview label の解決と namespacing
+- `commands/webview/navigation.rs`: back/forward/reload とナビゲーション状態取得
+- `commands/webview/bounds.rs`: ページ Webview の生成・frame/opacity/batch 更新
+- `commands/webview/screenshots.rs`: スクリーンショット capture/save/delete/restore（低レベル変換は `snapshot.rs`）
 
 IPC 契約は `tauri-ipc.md` を参照。
 
@@ -100,7 +108,7 @@ IPC 契約は `tauri-ipc.md` を参照。
 - 開発: `npm run dev`
 - ビルド: `npm run build`
 
-Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/lib.rs` で登録する。
+Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/setup.rs` の `pub fn run()` で登録する。
 
 ## テックスタック（フロントエンド依存関係）
 

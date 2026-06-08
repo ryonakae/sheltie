@@ -18,8 +18,9 @@ Tauri v2 + React + TypeScript + Tailwind CSS v4 で構築されています。
 - ライブラリ/API の仕様確認は Context7 を使う。
 - import は `@/` エイリアスを使用し、`../` 相対パスは使わない。
 - 変更対象に応じて `docs/agents` の関連ドキュメントを同じコミットで更新する（詳細は `docs/agents/workflow.md` の「ドキュメント更新ルール」参照）。
-- 実装完了時は `npm run lint` `npm run format` `npm run typecheck` を実行する。
-- テストフレームワークは未導入のため、最低限の動作確認手順を PR 説明に残す。
+- 実装完了時は `npm run lint` `npm run format` `npm run typecheck` `npm run test` を実行する。
+- **TDD で進める**: テスト可能な層（Rust / `src/lib/*` / `src/store/*` / DOM 非依存の hook 内部ロジック）は「失敗テスト → 通す最小実装 → リファクタ」のサイクルを守る。バグ修正も先に再現テストを書く。詳細は `docs/agents/workflow.md` の「TDD ルール」参照。
+- UI コンポーネント・Webview 挙動・`getBoundingClientRect` 等 DOM/ref に強く依存する hook はテスト対象外。最低限の動作確認手順を PR 説明に残す。
 - 変わりやすい一時情報は書かず、恒久ルールだけを残す。
 
 ## 開発コマンド
@@ -32,6 +33,7 @@ npm run lint:fix     # ESLint 自動修正
 npm run format:fix     # Prettier 書き込み
 npm run format         # Prettier 検査
 npm run typecheck    # TypeScript 型チェック
+npm run test         # Vitest（純ロジックの単体テスト）
 ```
 
 ## 詳細ドキュメント
@@ -43,6 +45,7 @@ npm run typecheck    # TypeScript 型チェック
 - `docs/agents/domain-models.md`: 主要型・定数・不変条件
 - `docs/agents/tauri-ipc.md`: Tauri IPC コマンドとイベント契約
 - `docs/agents/siteboard-runtime.md`: Siteboard の表示モードと Webview ランタイム仕様
+- `docs/agents/siteboard-screenshots.md`: スクリーンショット撮影・永続化・ちらつき回避
 - `docs/agents/wkwebview-internals.md`: WKWebView プラットフォーム固有のワークアラウンド
 
 ## 更新ポリシー

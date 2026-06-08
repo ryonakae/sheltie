@@ -1,0 +1,192 @@
+use tauri::{
+    menu::{Menu, MenuItemBuilder, SubmenuBuilder},
+    Manager, RunEvent,
+};
+
+use crate::app_exit::{emit_app_exit_requested, AppExitCoordinatorState};
+use crate::commands::{
+    store::{
+        configure_macos_window_tabbing_policy, focus_document_window,
+        focused_document_window_label, handle_launch_args, DocumentManagerState,
+    },
+    theme::{load_persisted_theme, MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM},
+};
+use crate::menus::{
+    app::configure_app_menu,
+    edit::{configure_edit_menu, emit_edit_command},
+    file::{configure_file_menu, emit_file_command},
+    theme::{emit_theme_command, update_theme_check_state},
+    view::{configure_view_menu, emit_view_command},
+    MENU_ID_APP_QUIT, MENU_ID_EDIT_DELETE, MENU_ID_EDIT_REDO, MENU_ID_EDIT_UNDO,
+    MENU_ID_FILE_NEW_TAB, MENU_ID_FILE_NEW_WINDOW, MENU_ID_FILE_OPEN, MENU_ID_FILE_SAVE,
+    MENU_ID_FILE_SAVE_AS, MENU_ID_OPEN_DEVTOOLS, MENU_ID_VIEW_FIT, MENU_ID_VIEW_RESET_ZOOM,
+    MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
+};
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    use tauri_plugin_prevent_default::Flags;
+
+    let builder = tauri::Builder::default()
+        .manage(DocumentManagerState::default())
+        .manage(AppExitCoordinatorState::default())
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            if let Err(error) = handle_launch_args(app, &argv, Some(cwd.as_str())) {
+                log::error!("failed to handle single-instance launch request: {error}");
+            }
+        }))
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_prevent_default::Builder::new()
+                .with_flags(Flags::CONTEXT_MENU)
+                .build(),
+        )
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .menu(|app| {
+            let menu = Menu::default(app)?;
+            configure_app_menu(app, &menu)?;
+            configure_file_menu(app, &menu)?;
+            configure_edit_menu(app, &menu)?;
+            configure_view_menu(app, &menu)?;
+
+            #[cfg(debug_assertions)]
+            {
+                let devtools_item =
+                    MenuItemBuilder::with_id(MENU_ID_OPEN_DEVTOOLS, "Open DevTools").build(app)?;
+                let develop_menu = SubmenuBuilder::with_id(app, "develop", "Develop")
+                    .item(&devtools_item)
+                    .build()?;
+                menu.append(&develop_menu)?;
+            }
+
+            Ok(menu)
+        });
+
+    let app = builder
+        .setup(|app| {
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            if let Err(error) = configure_macos_window_tabbing_policy(&app.handle()) {
+                log::error!("failed to initialize macOS native tab: {error}");
+            }
+            // tauri_plugin_store の State がここで初期化済みなので、
+            // 永続化済みテーマで Settings > Theme の初期チェック状態を反映する
+            let initial_theme = load_persisted_theme(&app.handle());
+            update_theme_check_state(&app.handle(), &initial_theme);
+
+            #[cfg(target_os = "macos")]
+            if let Err(error) = crate::menus::macos::apply_settings_theme_section_header() {
+                log::warn!("failed to insert Theme section header in Settings: {error}");
+            }
+
+            let launch_args: Vec<String> = std::env::args().collect();
+            if let Err(error) = handle_launch_args(&app.handle(), &launch_args, None) {
+                log::error!("failed to create initial window: {error}");
+            }
+            app.on_menu_event(|app, event| match event.id().as_ref() {
+                MENU_ID_APP_QUIT => emit_app_exit_requested(app),
+                MENU_ID_FILE_NEW_TAB => emit_file_command(app, "new-tab"),
+                MENU_ID_FILE_NEW_WINDOW => emit_file_command(app, "new-window"),
+                MENU_ID_FILE_OPEN => emit_file_command(app, "open"),
+                MENU_ID_FILE_SAVE => emit_file_command(app, "save"),
+                MENU_ID_FILE_SAVE_AS => emit_file_command(app, "save-as"),
+                MENU_ID_EDIT_UNDO => emit_edit_command(app, "undo"),
+                MENU_ID_EDIT_REDO => emit_edit_command(app, "redo"),
+                MENU_ID_EDIT_DELETE => emit_edit_command(app, "delete"),
+                MENU_ID_VIEW_FIT => emit_view_command(app, "fit-view"),
+                MENU_ID_VIEW_RESET_ZOOM => emit_view_command(app, "reset-zoom"),
+                MENU_ID_VIEW_ZOOM_IN => emit_view_command(app, "zoom-in"),
+                MENU_ID_VIEW_ZOOM_OUT => emit_view_command(app, "zoom-out"),
+                MENU_ID_THEME_LIGHT => {
+                    update_theme_check_state(app, "light");
+                    emit_theme_command(app, "light");
+                }
+                MENU_ID_THEME_DARK => {
+                    update_theme_check_state(app, "dark");
+                    emit_theme_command(app, "dark");
+                }
+                MENU_ID_THEME_SYSTEM => {
+                    update_theme_check_state(app, "system");
+                    emit_theme_command(app, "system");
+                }
+                MENU_ID_OPEN_DEVTOOLS =>
+                {
+                    #[cfg(debug_assertions)]
+                    if let Some(label) = focused_document_window_label(app) {
+                        if let Some(window) = app.get_webview_window(&label) {
+                            let _ = focus_document_window(app, &label);
+                            window.open_devtools();
+                        }
+                    } else if let Some(label) = app
+                        .windows()
+                        .into_iter()
+                        .find_map(|(label, _)| label.starts_with("document-").then_some(label))
+                    {
+                        if let Some(window) = app.get_webview_window(&label) {
+                            window.open_devtools();
+                        }
+                    }
+                }
+                _ => {}
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            crate::commands::store::document_window::load_window_context,
+            crate::commands::store::macos_tabs::attach_pending_document_tab,
+            crate::commands::store::macos_tabs::new_document_tab,
+            crate::commands::store::document_window::new_document_window,
+            crate::commands::store::document_window::open_document_window,
+            crate::commands::store::document_window::complete_app_exit,
+            crate::commands::store::document_window::abort_app_exit,
+            crate::commands::store::document_window::close_ready,
+            crate::commands::store::file_io::load_project_file,
+            crate::commands::store::file_io::save_project_file,
+            crate::commands::theme::load_theme,
+            crate::commands::theme::set_theme,
+            crate::commands::theme::get_platform_info,
+            crate::commands::webview::bounds::create_page_webview,
+            crate::commands::webview::screenshots::capture_webview_screenshot,
+            crate::commands::webview::navigation::reload_page_webview,
+            crate::commands::webview::navigation::go_back_page_webview,
+            crate::commands::webview::navigation::go_forward_page_webview,
+            crate::commands::webview::navigation::get_navigation_state_page_webview,
+            crate::commands::webview::bounds::update_page_webview_bounds,
+            crate::commands::webview::bounds::set_page_webview_opacity,
+            crate::commands::webview::bounds::batch_update_page_webview_bounds,
+            crate::commands::webview::bounds::batch_update_webview_positions,
+            crate::commands::webview::screenshots::save_webview_screenshot,
+            crate::commands::webview::screenshots::get_existing_screenshot_paths,
+            crate::commands::webview::screenshots::delete_screenshot,
+            crate::commands::dialog::show_unsaved_changes_dialog,
+        ])
+        .build(tauri::generate_context!())
+        .expect("an error occurred while running the Tauri app");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let RunEvent::ExitRequested { api, .. } = event {
+            let exit_state = app_handle.state::<AppExitCoordinatorState>();
+            match exit_state.consume_allow_exit() {
+                Ok(true) => {}
+                Ok(false) => match exit_state.has_pending_quit() {
+                    Ok(true) => api.prevent_exit(),
+                    Ok(false) => {}
+                    Err(error) => {
+                        log::error!("failed to handle ExitRequested: {error}");
+                        api.prevent_exit();
+                    }
+                },
+                Err(error) => {
+                    log::error!("failed to handle ExitRequested: {error}");
+                    api.prevent_exit();
+                }
+            }
+        }
+    });
+}

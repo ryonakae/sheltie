@@ -18,6 +18,7 @@
 | `domain-models.md` | 型・定数・不変条件 | 型変更・store変更時（Undo/Redo 履歴含む） |
 | `tauri-ipc.md` | IPC 契約 | Rust/bridge/イベント変更時 |
 | `siteboard-runtime.md` | Siteboard 表示・操作仕様 | Siteboard/Webview 変更時 |
+| `siteboard-screenshots.md` | スクリーンショット撮影・永続化・ちらつき回避 | スクショ撮影タイミング・保存形式の変更時 |
 | `wkwebview-internals.md` | WKWebView 固有のワークアラウンド | WKWebView private API・macOS 固有問題の変更時 |
 
 ## メンテナンス方針

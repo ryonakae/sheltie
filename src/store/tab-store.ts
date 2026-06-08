@@ -8,21 +8,23 @@ import {
   DEFAULT_TEXT_NODE_HEIGHT,
   DEFAULT_TEXT_NODE_WIDTH,
   DEFAULT_VIEWPORT,
-  MAX_VERTICAL_SEARCH_STEPS,
   MAX_ZOOM,
   MIN_ZOOM,
-  PAGE_GAP,
 } from '@/constants';
 import {
   documentEdgeToBoardEdge,
   documentNodeToBoardNode,
   sanitizeProjectDocument,
 } from '@/lib/project-document';
+import { findNonOverlappingPosition } from '@/lib/siteboard-placement';
 import {
-  getNodeFrameHeight,
-  getNodeFrameRect,
-  getNodeFrameWidth,
-} from '@/lib/siteboard-node-frame';
+  appendCappedSnapshot,
+  cloneEdges,
+  cloneNodes,
+  cloneSnapshot,
+  type ProjectHistory,
+  pushHistory,
+} from '@/store/project-history';
 import type {
   BoardEdge,
   BoardNode,
@@ -34,18 +36,6 @@ import type {
   Viewport,
 } from '@/types';
 import { isWebPageNode } from '@/types';
-
-const HISTORY_LIMIT = 100;
-
-interface ProjectSnapshot {
-  nodes: BoardNode[];
-  edges: BoardEdge[];
-}
-
-interface ProjectHistory {
-  past: ProjectSnapshot[];
-  future: ProjectSnapshot[];
-}
 
 interface ProjectActions {
   initializeProject: (params: {
@@ -134,18 +124,6 @@ function createEmptyProjectWebviewRuntime(): ProjectWebviewRuntime {
   };
 }
 
-function cloneNodes(nodes: BoardNode[]): BoardNode[] {
-  return nodes.map((node) => ({ ...node }));
-}
-
-function cloneEdges(edges: BoardEdge[]): BoardEdge[] {
-  return edges.map((edge) => ({ ...edge }));
-}
-
-function cloneSnapshot(snapshot: { nodes: BoardNode[]; edges: BoardEdge[] }): ProjectSnapshot {
-  return { nodes: cloneNodes(snapshot.nodes), edges: cloneEdges(snapshot.edges) };
-}
-
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
@@ -173,124 +151,66 @@ function createNodeId(): string {
   return crypto.randomUUID();
 }
 
-function isVerticalOverlapping(
-  y: number,
-  h: number,
-  node: Pick<BoardNode, 'y' | 'height'>,
-): boolean {
-  return !(y + h <= node.y || node.y + node.height <= y);
-}
-
-function isHorizontalOverlapping(
-  x: number,
-  w: number,
-  node: Pick<BoardNode, 'x' | 'width'>,
-): boolean {
-  return !(x + w <= node.x || node.x + node.width <= x);
-}
-
-function findNonOverlappingPosition(
+/**
+ * 単一ノードを書き換える共通ヘルパー。
+ * patch は対象ノードを受け取り、変更後ノードを返す。変更不要なら null を返す。
+ * いずれのノードも変わらなければ全体で null を返し、呼び出し側で no-op（履歴を積まない）にできる。
+ */
+export function patchNode(
   nodes: BoardNode[],
-  type: BoardNode['type'],
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  options?: { keepY?: boolean },
-) {
-  const existingRects = nodes.map((node) => getNodeFrameRect(node));
-  const candidateFrameHeight = getNodeFrameHeight({ type, height });
-  const candidateFrameWidth = getNodeFrameWidth({ type, width });
-
-  if (nodes.length === 0) {
-    return { x, y };
-  }
-
-  for (let step = 0; step <= MAX_VERTICAL_SEARCH_STEPS; step++) {
-    const yCandidates = step === 0 ? [0] : [step * PAGE_GAP, -step * PAGE_GAP];
-    for (const yOffset of yCandidates) {
-      const candidateY = y + yOffset;
-      if (options?.keepY) {
-        const sameRowNodes = existingRects.filter((node) =>
-          isVerticalOverlapping(candidateY, candidateFrameHeight, node),
-        );
-        let candidateX = x;
-        while (true) {
-          const overlapNodes = sameRowNodes.filter((node) =>
-            isHorizontalOverlapping(candidateX, candidateFrameWidth, node),
-          );
-          if (overlapNodes.length === 0) {
-            return { x: candidateX, y: candidateY };
-          }
-
-          const rightmost = Math.max(...overlapNodes.map((node) => node.x + node.width));
-          candidateX = rightmost + PAGE_GAP;
-        }
-      }
-
-      const sameRowNodes = existingRects.filter((node) =>
-        isVerticalOverlapping(candidateY, candidateFrameHeight, node),
-      );
-
-      if (sameRowNodes.length === 0) {
-        return { x, y: candidateY };
-      }
-
-      let candidateX = x;
-      while (true) {
-        const overlapNodes = sameRowNodes.filter((node) =>
-          isHorizontalOverlapping(candidateX, candidateFrameWidth, node),
-        );
-        if (overlapNodes.length === 0) {
-          return { x: candidateX, y: candidateY };
-        }
-
-        const rightmost = Math.max(...overlapNodes.map((node) => node.x + node.width));
-        candidateX = rightmost + PAGE_GAP;
-      }
-    }
-  }
-
-  const fallbackY = Math.max(...existingRects.map((node) => node.bottom)) + PAGE_GAP;
-  return { x, y: fallbackY };
+  nodeId: string,
+  patch: (node: BoardNode) => BoardNode | null,
+): BoardNode[] | null {
+  let changed = false;
+  const nextNodes = nodes.map((node) => {
+    if (node.id !== nodeId) return node;
+    const patched = patch(node);
+    if (!patched || patched === node) return node;
+    changed = true;
+    return patched;
+  });
+  return changed ? nextNodes : null;
 }
 
-function pushHistory(
-  history: ProjectHistory,
-  snapshot: { nodes: BoardNode[]; edges: BoardEdge[] },
-): ProjectHistory {
-  const nextPast = [...history.past, cloneSnapshot(snapshot)];
-  if (nextPast.length > HISTORY_LIMIT) {
-    nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
-  }
-  return {
-    past: nextPast,
-    future: [],
-  };
+/** record から指定キー（単一 id または id 集合）を取り除いた新しい record を返す */
+export function omitKeys<T>(
+  record: Record<string, T>,
+  ids: string | ReadonlySet<string>,
+): Record<string, T> {
+  const shouldKeep =
+    typeof ids === 'string' ? (id: string) => id !== ids : (id: string) => !ids.has(id);
+  return Object.fromEntries(Object.entries(record).filter(([id]) => shouldKeep(id)));
 }
 
 function replaceProjectNodes(
   state: ProjectStore,
   updater: (nodes: BoardNode[]) => BoardNode[] | null,
-  historyMode: 'record' | 'skip' = 'record',
 ): ProjectStore | Pick<ProjectStore, 'project' | 'history'> {
   if (!state.project) return state;
 
   const nextNodes = updater(state.project.nodes);
   if (!nextNodes) return state;
 
-  const nextProject = { ...state.project, nodes: nextNodes };
-  if (historyMode === 'skip') {
-    return { project: nextProject, history: state.history };
-  }
-
   return {
-    project: nextProject,
+    project: { ...state.project, nodes: nextNodes },
     history: pushHistory(state.history, {
       nodes: state.project.nodes,
       edges: state.project.edges,
     }),
   };
+}
+
+/** 履歴を積まずにノードを書き換える（自動高さ調整など、Undo 対象にしたくない更新専用） */
+function replaceProjectNodesWithoutHistory(
+  state: ProjectStore,
+  updater: (nodes: BoardNode[]) => BoardNode[] | null,
+): ProjectStore | Pick<ProjectStore, 'project'> {
+  if (!state.project) return state;
+
+  const nextNodes = updater(state.project.nodes);
+  if (!nextNodes) return state;
+
+  return { project: { ...state.project, nodes: nextNodes } };
 }
 
 function replaceProjectEdges(
@@ -427,21 +347,12 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       }
 
       return {
-        ...replaceProjectNodes(state, (nodes) => {
-          return nodes.map((node) => {
-            if (node.id !== nodeId) return node;
-            return { ...node, url, addedUrl: url, title };
-          });
-        }),
+        ...replaceProjectNodes(state, (nodes) =>
+          patchNode(nodes, nodeId, (node) => ({ ...node, url, addedUrl: url, title })),
+        ),
         webviewRuntime: {
-          labelsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
-          ),
-          screenshotUrlsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-              ([id]) => id !== nodeId,
-            ),
-          ),
+          labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, nodeId),
+          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
         },
       };
     }),
@@ -464,14 +375,8 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           edges: state.project.edges,
         }),
         webviewRuntime: {
-          labelsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
-          ),
-          screenshotUrlsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-              ([id]) => id !== nodeId,
-            ),
-          ),
+          labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, nodeId),
+          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
         },
       };
     }),
@@ -496,32 +401,19 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
           edges: state.project.edges,
         }),
         webviewRuntime: {
-          labelsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.labelsByNodeId).filter(
-              ([id]) => !removeSet.has(id),
-            ),
-          ),
-          screenshotUrlsByNodeId: Object.fromEntries(
-            Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-              ([id]) => !removeSet.has(id),
-            ),
-          ),
+          labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, removeSet),
+          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, removeSet),
         },
       };
     }),
 
   updateNodePosition: (nodeId, x, y) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (node.x === x && node.y === y) return node;
-          changed = true;
-          return { ...node, x, y };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.x === x && node.y === y ? null : { ...node, x, y },
+        ),
+      ),
     ),
 
   updateNodePositions: (updates) =>
@@ -544,49 +436,30 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   updateNodeSize: (nodeId, width, height) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (node.width === width && node.height === height) return node;
-          changed = true;
-          return { ...node, width, height };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.width === width && node.height === height ? null : { ...node, width, height },
+        ),
+      ),
     ),
 
   updateNodeBounds: (nodeId, x, y, width, height) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (node.x === x && node.y === y && node.width === width && node.height === height) {
-            return node;
-          }
-          changed = true;
-          return { ...node, x, y, width, height };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.x === x && node.y === y && node.width === width && node.height === height
+            ? null
+            : { ...node, x, y, width, height },
+        ),
+      ),
     ),
 
   updateNodeSizeWithoutHistory: (nodeId, width, height) =>
     set((state) =>
-      replaceProjectNodes(
-        state,
-        (nodes) => {
-          let changed = false;
-          const nextNodes = nodes.map((node) => {
-            if (node.id !== nodeId) return node;
-            if (node.width === width && node.height === height) return node;
-            changed = true;
-            return { ...node, width, height };
-          });
-          return changed ? nextNodes : null;
-        },
-        'skip',
+      replaceProjectNodesWithoutHistory(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.width === width && node.height === height ? null : { ...node, width, height },
+        ),
       ),
     ),
 
@@ -632,95 +505,72 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     })),
 
   bringNodeToFront: (nodeId) =>
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            nodes: (() => {
-              const { nodes } = state.project;
-              const node = nodes.find((n) => n.id === nodeId);
-              if (!node) return nodes;
-              if (nodes[nodes.length - 1]?.id === nodeId) return nodes;
-              return [...nodes.filter((n) => n.id !== nodeId), node];
-            })(),
-          }
-        : null,
-    })),
+    set((state) =>
+      // 重なり順変更は nodes 配列順を変える＝永続状態の変更なので履歴に記録する
+      replaceProjectNodes(state, (nodes) => {
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) return null;
+        if (nodes[nodes.length - 1]?.id === nodeId) return null;
+        return [...nodes.filter((n) => n.id !== nodeId), node];
+      }),
+    ),
 
   sendNodeToBack: (nodeId) =>
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            nodes: (() => {
-              const { nodes } = state.project;
-              const node = nodes.find((n) => n.id === nodeId);
-              if (!node) return nodes;
-              if (nodes[0]?.id === nodeId) return nodes;
-              return [node, ...nodes.filter((n) => n.id !== nodeId)];
-            })(),
-          }
-        : null,
-    })),
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) return null;
+        if (nodes[0]?.id === nodeId) return null;
+        return [node, ...nodes.filter((n) => n.id !== nodeId)];
+      }),
+    ),
 
   bringNodeForward: (nodeId) =>
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            nodes: (() => {
-              const { nodes } = state.project;
-              const idx = nodes.findIndex((n) => n.id === nodeId);
-              if (idx === -1 || idx === nodes.length - 1) return nodes;
-              const node = nodes[idx];
-              if (isWebPageNode(node)) return nodes;
-              // WebPageNode をスキップして次の付箋/テキストを探す
-              let swapIdx = -1;
-              for (let i = idx + 1; i < nodes.length; i++) {
-                if (!isWebPageNode(nodes[i])) {
-                  swapIdx = i;
-                  break;
-                }
-              }
-              if (swapIdx === -1) return nodes;
-              const result = [...nodes];
-              // 対象ノードを取り出し、スワップ先の直後に挿入
-              result.splice(idx, 1);
-              result.splice(swapIdx, 0, node);
-              return result;
-            })(),
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        const idx = nodes.findIndex((n) => n.id === nodeId);
+        if (idx === -1 || idx === nodes.length - 1) return null;
+        const node = nodes[idx];
+        if (isWebPageNode(node)) return null;
+        // WebPageNode をスキップして次の付箋/テキストを探す
+        let swapIdx = -1;
+        for (let i = idx + 1; i < nodes.length; i++) {
+          if (!isWebPageNode(nodes[i])) {
+            swapIdx = i;
+            break;
           }
-        : null,
-    })),
+        }
+        if (swapIdx === -1) return null;
+        const result = [...nodes];
+        // 対象ノードを取り出し、スワップ先の直後に挿入
+        result.splice(idx, 1);
+        result.splice(swapIdx, 0, node);
+        return result;
+      }),
+    ),
 
   sendNodeBackward: (nodeId) =>
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            nodes: (() => {
-              const { nodes } = state.project;
-              const idx = nodes.findIndex((n) => n.id === nodeId);
-              if (idx <= 0) return nodes;
-              const node = nodes[idx];
-              if (isWebPageNode(node)) return nodes;
-              // WebPageNode をスキップして前の付箋/テキストを探す
-              let swapIdx = -1;
-              for (let i = idx - 1; i >= 0; i--) {
-                if (!isWebPageNode(nodes[i])) {
-                  swapIdx = i;
-                  break;
-                }
-              }
-              if (swapIdx === -1) return nodes;
-              const result = [...nodes];
-              result.splice(idx, 1);
-              result.splice(swapIdx, 0, node);
-              return result;
-            })(),
+    set((state) =>
+      replaceProjectNodes(state, (nodes) => {
+        const idx = nodes.findIndex((n) => n.id === nodeId);
+        if (idx <= 0) return null;
+        const node = nodes[idx];
+        if (isWebPageNode(node)) return null;
+        // WebPageNode をスキップして前の付箋/テキストを探す
+        let swapIdx = -1;
+        for (let i = idx - 1; i >= 0; i--) {
+          if (!isWebPageNode(nodes[i])) {
+            swapIdx = i;
+            break;
           }
-        : null,
-    })),
+        }
+        if (swapIdx === -1) return null;
+        const result = [...nodes];
+        result.splice(idx, 1);
+        result.splice(swapIdx, 0, node);
+        return result;
+      }),
+    ),
 
   addStickyNoteNode: (options) => {
     let createdNode: BoardNode | null = null;
@@ -759,29 +609,18 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   updateStickyNoteContent: (nodeId, content) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if ((node.content ?? '') === content) return node;
-          changed = true;
-          return { ...node, content };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          (node.content ?? '') === content ? null : { ...node, content },
+        ),
+      ),
     ),
 
   updateStickyNoteStyle: (nodeId, style) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          changed = true;
-          return { ...node, ...style };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) => ({ ...node, ...style })),
+      ),
     ),
 
   addTextNode: (options) => {
@@ -825,56 +664,34 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
   updateTextNodeContent: (nodeId, tiptapContent) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          changed = true;
-          return { ...node, tiptapContent };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) => ({ ...node, tiptapContent })),
+      ),
     ),
 
   updateTextNodeStyle: (nodeId, style) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          changed = true;
-          return { ...node, ...style };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) => ({ ...node, ...style })),
+      ),
     ),
 
   updateTextNodeWidthMode: (nodeId, widthMode) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (node.widthMode === widthMode) return node;
-          changed = true;
-          return { ...node, widthMode };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          node.widthMode === widthMode ? null : { ...node, widthMode },
+        ),
+      ),
     ),
 
   pinWebNodeUrl: (nodeId) =>
     set((state) =>
-      replaceProjectNodes(state, (nodes) => {
-        let changed = false;
-        const nextNodes = nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          if (!node.url || node.addedUrl === node.url) return node;
-          changed = true;
-          return { ...node, addedUrl: node.url };
-        });
-        return changed ? nextNodes : null;
-      }),
+      replaceProjectNodes(state, (nodes) =>
+        patchNode(nodes, nodeId, (node) =>
+          !node.url || node.addedUrl === node.url ? null : { ...node, addedUrl: node.url },
+        ),
+      ),
     ),
 
   addEdge: (edge) =>
@@ -948,9 +765,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     set((state) => ({
       webviewRuntime: {
         ...state.webviewRuntime,
-        labelsByNodeId: Object.fromEntries(
-          Object.entries(state.webviewRuntime.labelsByNodeId).filter(([id]) => id !== nodeId),
-        ),
+        labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, nodeId),
       },
     })),
 
@@ -980,11 +795,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     set((state) => ({
       webviewRuntime: {
         ...state.webviewRuntime,
-        screenshotUrlsByNodeId: Object.fromEntries(
-          Object.entries(state.webviewRuntime.screenshotUrlsByNodeId).filter(
-            ([id]) => id !== nodeId,
-          ),
-        ),
+        screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
       },
     })),
 
@@ -1014,13 +825,10 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       if (!state.project || state.history.future.length === 0) return state;
 
       const next = state.history.future[state.history.future.length - 1];
-      const nextPast = [
-        ...state.history.past,
-        cloneSnapshot({ nodes: state.project.nodes, edges: state.project.edges }),
-      ];
-      if (nextPast.length > HISTORY_LIMIT) {
-        nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
-      }
+      const nextPast = appendCappedSnapshot(state.history.past, {
+        nodes: state.project.nodes,
+        edges: state.project.edges,
+      });
 
       return {
         project: {

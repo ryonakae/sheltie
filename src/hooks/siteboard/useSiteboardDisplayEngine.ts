@@ -28,6 +28,7 @@ import {
   hasPendingCaptureRetry,
   isContextMenuTarget,
   isDragOrResizeActive,
+  isInOccludedSet,
   isInteractionActive,
   isNativeHiddenByCapture,
   isPanOrZoomActive,
@@ -114,8 +115,7 @@ export function useSiteboardDisplayEngine({
   // 5-5 段階 3: activeInteractions も stateRef に集約
   // 5-5 段階 4d: settlingIds は stateRef.settlingIds に集約
   // ノードツールバーに被られているページ。被り開始の検出（fresh 撮影の 1 回発火）に使う。
-  const toolbarOccludedIdsRef = useRef<Set<string>>(new Set());
-  // 5-5 段階 4a-4b: forceHiddenIds / nativeHiddenByCaptureIds は stateRef に集約
+  // 5-5 段階 4a-4e: 全 per-node セットは stateRef に集約
   // 5-5 段階 4c: captureRetryIds は stateRef.captureRetryIds に集約
   const interactionCaptureRetryTimerRef = useRef<number | null>(null);
   const resizeObserverRafRef = useRef<number | null>(null);
@@ -332,7 +332,7 @@ export function useSiteboardDisplayEngine({
         isToolbarOccluded(page.id, placeholderRect, toolbarRects);
 
       if (occluded) {
-        if (label && !toolbarOccludedIdsRef.current.has(page.id)) {
+        if (label && !isInOccludedSet(stateRef.current, page.id)) {
           void ensureScreenshotReady(page.id, { source: 'interaction-start' });
         }
         nextToolbarOccludedIds.add(page.id);
@@ -416,7 +416,6 @@ export function useSiteboardDisplayEngine({
     }
 
     // 被り状態を更新する。被り開始（前パスで未被り）だけが上の fresh 撮影を発火させる。
-    toolbarOccludedIdsRef.current = nextToolbarOccludedIds;
     dispatch({ type: 'TOOLBAR_OCCLUDED_IDS_SET', ids: nextToolbarOccludedIds });
 
     if (deferredNativeSwaps.length > 0) {
@@ -969,11 +968,9 @@ export function useSiteboardDisplayEngine({
   }, [selectionKey, computeDisplayModes]);
 
   useEffect(() => {
-    const toolbarOccludedNodeIds = toolbarOccludedIdsRef.current;
     return () => {
       cancelInteractionCaptureRetry();
       cancelAllNativeReveals();
-      toolbarOccludedNodeIds.clear();
     };
   }, [cancelAllNativeReveals, cancelInteractionCaptureRetry]);
 

@@ -1,41 +1,58 @@
 # Siteboard ランタイム仕様
 
-この文書は Siteboard の表示制御と Webview ランタイムの正本。
-対象実装は主に以下。
+Siteboard の表示制御と Webview ランタイムの正本。実装の主入口:
 
 - `src/components/Siteboard/Siteboard.tsx`
-- `src/hooks/siteboard/useSiteboardDisplayEngine.ts`（メインフック）
-  - `src/hooks/siteboard/display-engine/dom.ts`（DOM 操作ヘルパー）
-  - `src/hooks/siteboard/display-engine/mode.ts`（DisplayMode 計算ロジック）
+- `src/hooks/siteboard/useSiteboardDisplayEngine.ts`
+  - `display-engine/dom.ts`（DOM 操作）
+  - `display-engine/mode.ts`（DisplayMode 計算）
+  - `display-engine/state-machine.ts`（per-node / mode / dialog 系 state の reducer + selector）
 - `src/hooks/siteboard/useSiteboardNodeRuntime.ts`
 - `src/components/Node/WebPageNode.tsx`
 
-## 表示モード
+## 表示モードと背面スクショ方式
 
-`DisplayMode` は 3 種類。
+`DisplayMode = 'native' | 'screenshot' | 'hidden'`
 
 - `native`: ネイティブ Webview を表示
-- `screenshot`: Webview を隠し、背面に常駐したスクリーンショット画像を表示
+- `screenshot`: Webview を隠し、背面のスクリーンショット画像を表示
 - `hidden`: 両方非表示
 
-## 背面スクショ方式
+ネイティブ Webview は OS レベルで最前面に描画されるため、HTML のスクショは常に Webview の**背面**に置く。`WebPageNode` は `screenshotUrl` がある限り `<img data-screenshot-img>` を常時マウントし、`hidden` のときだけ表示を消す。
 
-- HTML のスクリーンショット画像を Webview の**上**に重ねることはできない。ネイティブ Webview は OS レベルで最前面に描画されるため、スクショは常に Webview の**背面**に置く。
-- `WebPageNode` は `screenshotUrl` がある限り `<img data-screenshot-img>` を常時マウントする。`display:none` を `screenshot` 時だけ切り替えるのではなく、`hidden` の時だけ隠す。
-- `native -> screenshot` は「スクショ準備完了を確認してから Webview を hide」する。`screenshot -> native` は「Webview を先に show してから screenshot を消す」順序を守る。
-- `handleScreenshotPresented(nodeId, url)` が「その URL のスクショが DOM に反映され、描画機会を得た」合図になる。`ensureScreenshotReady()` はこの通知まで待ってから resolve する。
+- `native -> screenshot`: スクショ準備完了を確認してから Webview を hide
+- `screenshot -> native`: Webview を先に show してから screenshot を消す（順序必須）
+- `handleScreenshotPresented(nodeId, url)` が「URL のスクショが DOM に反映され描画機会を得た」合図。`ensureScreenshotReady()` はこの通知まで待ってから resolve
+
+## 状態管理
+
+per-node / mode / dialog 系の状態は `display-engine/state-machine.ts` の `DisplayEngineState` に集約され、`useSiteboardDisplayEngine` が `stateRef + dispatch` 経由で更新する。フィールドと役割:
+
+| フィールド | 役割 |
+|---|---|
+| `activeInteractions` | 同時進行する `InteractionType` のセット |
+| `contextMenuNodeId` | 右クリックメニュー対象 |
+| `unsavedDialogOpen` | 未保存確認ダイアログ表示中 |
+| `resizingNodeId` | リサイズ中ノード |
+| `settlingIds` | 位置補正アニメ中ノード |
+| `toolbarOccludedIds` | 前パスのノードツールバー被り集合 |
+| `forceHiddenIds` | 操作開始直後の強制 hidden ノード |
+| `nativeHiddenByCaptureIds` | snapshot 要求直後に native 側で hide したノード |
+| `captureRetryIds` | 取り損ねた capture の再試行待ち |
+
+read は `hasAnyInteraction` / `isPanOrZoomActive` / `isDragOrResizeActive` / `isContextMenuTarget` / `isSettling` / `isInOccludedSet` / `isForceHidden` / `isNativeHiddenByCapture` / `hasPendingCaptureRetry` の selector を使う。`mode.ts` の `isToolbarOccluded(nodeId, nodeRect, toolbarRects)` は別物（純粋判定）。
 
 ## しきい値・定数
 
-- `NATIVE_SAFE_MARGIN_PX = 25`
-- `NATIVE_SAFE_MARGIN_BOTTOM_PX = 75`
-- `PRE_DISPLAY_MARGIN_PX = 50`
-- `HYSTERESIS_PX = 4`
-- `WEBVIEW_REVEAL_DELAY_MS = 100`
-- `FRESHNESS_CAPTURE_DELAY_MS = { navigation: 1000, load: 0, scroll: 0 }`（鮮度キャプチャの種別別遅延）
-- `SCREENSHOT_CLIPPING_ENABLED`（`useSiteboardDisplayEngine.ts` 内）
+`src/constants.ts` 参照。主要なもの:
 
-近接判定ではヒステリシスを使い、境界振動を防ぐ。
+- `NATIVE_SAFE_MARGIN_PX = 25`、`NATIVE_SAFE_MARGIN_BOTTOM_PX = 75`
+- `PRE_DISPLAY_MARGIN_PX = 50`、`HYSTERESIS_PX = 4`
+- `WEBVIEW_REVEAL_DELAY_MS = 100`
+- `FRESHNESS_CAPTURE_DELAY_MS = { navigation: 1000, load: 0, scroll: 0 }`
+- `SCREENSHOT_CLIPPING_ENABLED`（`useScreenshotCaptureQueue.ts` 内）
+
+近接判定はヒステリシスで境界振動を防ぐ。
 
 ## 操作タイプ
 
@@ -43,283 +60,182 @@
 
 ### 操作中の Webview 表示制御ポリシー
 
-- `pan/zoom` 開始時は、可視 `WebPage` ノードの `native` を即座に降ろし、保存済みスクリーンショットがあれば `screenshot`、なければ `hidden` に切り替える
-- 同時に fresh capture をバックグラウンドで開始し、完了後は操作中でも `stale -> fresh` または `hidden -> fresh` に差し替える
-- fresh capture の開始と native hide は `save_webview_screenshot(label, pageId, ..., hideAfterSnapshotRequest=true)` を 1 回の Rust コマンド内で直列化し、JS の `saveScreenshot()` / `hide()` race を避ける
-- `computeDisplayModes()` は操作中（`activeInteractionsRef.current.size > 0`）に即リターンするため、操作中に誤って `native` へ復帰しない
+- `pan/zoom` 開始時は可視 `WebPage` の `native` を即座に降ろし、保存済みスクショがあれば `screenshot`、なければ `hidden` に切り替える
+- 同時に fresh capture をバックグラウンドで開始し、完了後は操作中でも `stale -> fresh` / `hidden -> fresh` に差し替える
+- fresh capture の開始と native hide は `save_webview_screenshot(label, pageId, ..., hideAfterSnapshotRequest=true)` を 1 Rust コマンド内で直列化し、JS 側の `saveScreenshot()` / `hide()` race を避ける
+- `computeDisplayModes()` は操作中（`hasAnyInteraction(stateRef.current)`）に即リターンする
 
 ### プリキャプチャ戦略
 
-- `pan/zoom/drag/resize` 操作開始時に `prepareInteractionStart(type)` を呼び出す
-- `pan/zoom` は Siteboard.tsx の `handleMoveStart` で fire-and-forget で先行起動し、保存済みスクショの即表示と native-side fresh capture を同じ経路に乗せる
-- 保存済みスクショがあるページは stale を即利用し、fresh capture 完了後に差し替える
-- 保存済みスクショがないページは `hidden` を許容し、fresh capture 完了後に `hidden -> screenshot` へ遷移する
+- `pan/zoom/drag/resize` 開始時に `prepareInteractionStart(type)` を呼ぶ
+- 保存済みスクショがあるページは stale を即利用し、fresh 完了後に差し替える
+- 保存済みスクショがないページは `hidden` を許容し、fresh 完了後に `hidden -> screenshot`
 - interaction-start capture が失敗したページは current interaction 中は `hidden` のまま維持し、終了後の native 復帰後に 1 回だけ retry する
 
-## pan/zoom 判定（Siteboard.tsx）
+## pan/zoom 判定
 
-React Flow の `onMoveStart/onMove/onMoveEnd` は pan と zoom を区別しない。`Siteboard.tsx` の `resolveViewportInteractionType` で event 型から **開始時点で** 操作種別を即時判定する:
+React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。`Siteboard.tsx` の `resolveViewportInteractionType` で event 型から **開始時点で** 操作種別を即時判定する:
 
-- `event == null` → プログラマティック操作（zoom reset、project 切り替え後の viewport 再同期など）→ `'zoom'`
-- `'deltaY' in event && (event.metaKey || event.ctrlKey)` → 修飾キー付き WheelEvent → `'zoom'`
-- `'deltaY' in event` → 修飾なし WheelEvent → `'pan'`
-- `typeof TouchEvent !== 'undefined' && event instanceof TouchEvent && event.touches.length >= 2` → ピンチ → `'zoom'` 【Tauri WKWebView での `TouchEvent` グローバル未定義ガード必須（後述）】
-- その他（ミドルドラッグなどの MouseEvent、1指 TouchEvent） → `'pan'`
+- `event == null` → プログラマティック操作 → `'zoom'`
+- `'deltaY' in event && (event.metaKey || event.ctrlKey)` → `'zoom'`
+- `'deltaY' in event` → `'pan'`
+- ピンチ（`TouchEvent.touches.length >= 2`）→ `'zoom'`（Tauri WKWebView では `TouchEvent` グローバル未定義ガードが必須。詳細は `wkwebview-internals.md`）
+- その他（ミドルドラッグ、1指 TouchEvent 等）→ `'pan'`
 
-`resolveViewportInteractionType` は純粋関数として event 型を判定し、その結果を `beginViewportInteraction` へ渡す。`handleMoveStart` / `handleMove` / `handleMoveEnd` から共通で呼び出される。
+`handleMoveStart` 内で `resolveViewportInteractionType` → `prepareInteractionStart` → `handleInteractionChange` の順で呼ぶ（fire-and-forget。実装は `Siteboard.tsx:handleMoveStart` / `beginViewportInteraction` 参照）。`handleMove` は `onMoveStart` 取りこぼし時のフォールバック。
 
-### pan/zoom 開始時の fire-and-forget プリキャプチャ
+### 操作中カーソル
 
-`Siteboard.tsx` の `handleMoveStart` では `beginViewportInteraction(event)` を呼び出す。この関数内で以下の順序で実行される（fire-and-forget）:
-
-```ts
-const type = resolveViewportInteractionType(event);
-moveInteractionTypeRef.current = type;
-void prepareInteractionStart(type);
-handleInteractionChange(true, type);
-return type;
-```
-
-`prepareInteractionStart` は可視ページに対して stale screenshot の即時利用判定を行い、同時に `save_webview_screenshot(label, pageId, ..., hideAfterSnapshotRequest=true)` で fresh capture を開始する。並行して `applyPreparedInteractionModes()` が走り、その時点で stale screenshot があれば `screenshot`、なければ `hidden` へ切り替える。fresh 完了後は `captureScreenshot()` 成功ハンドラが `screenshotUrl` を更新し、そのまま `fresh` に差し替える。
-
-`handleMove` は `onMoveStart` 取りこぼし時のフォールバックとして機能する。viewport が実際に動いた時のみ発火するため、`moveInteractionTypeRef.current === null` なら `beginViewportInteraction` を呼んで type を確定し、その後 `scheduleInteractionUpdate()` で display mode を更新する。
-
-### 操作中カーソルの扱い
-
-- Siteboard は全画面の cursor overlay を持たない
-- pan / zoom / drag のカーソルは React Flow とブラウザ既定の挙動に委譲する
-- ノードのリサイズカーソルは各 `NodeResizeControl` の class と `src/index.css` で管理する
+全画面 cursor overlay は持たない。pan/zoom/drag のカーソルは React Flow とブラウザ既定に委譲し、リサイズカーソルは各 `NodeResizeControl` の class と `src/index.css` で管理する。
 
 ### zoom 終了後の native 復帰
 
-`handleMoveEnd` で `type = 'zoom'` を渡すと、`handleInteractionChange(false, 'zoom')` 内で自動的に `scheduleZoomRestoreAfterReflow()` が呼ばれ、zoom 後のリフロー完了後に Webview 座標を復帰させる。`type = 'pan'` の場合は呼ばない。
+`handleMoveEnd` で `type='zoom'` を渡すと、`handleInteractionChange(false, 'zoom')` 内で `scheduleZoomRestoreAfterReflow()` が自動で走り、zoom 後リフロー完了後に Webview 座標を復帰させる。`type='pan'` では呼ばない。
 
 ## viewport の store 同期
 
-- `Siteboard.tsx` は `handleViewportChange` で React Flow の現在 viewport を内部 ref と `zoomRef` に同期し、rAF で `uiZoom` も更新する
-- `uiZoom` は `flowNodes` の外枠高さと `WebPageFlowNode` の resize control `minHeight` 制約に使う reactive な layout 用 zoom の正本
-- `zoomRef` は resize 中の content height 逆算や Webview runtime 連携など、イベントハンドラ内の即時計算専用に使う
-- project 切り替え、新規ノード追加後の centering、右下 viewport controls、起動時復元では store 側 `viewport` が先に変わる
-- この時は `reactFlowInstanceRef.current.setViewport(storeViewport, { duration: 0 })` で React Flow 実体へ再同期し、同時に `uiZoom` も store 値へ揃える
-- 既に同じ viewport が反映済みなら差分比較で `setViewport()` をスキップし、無限ループや余計な再描画を避ける
-- これにより WebPage 外枠高さは zoom 操作中の毎 tick で current zoom に追従し、zoom 終了後の display-mode 復帰や viewport 保存 debounce で後追い補正しない
-- `useSiteboardDisplayEngine` の container `ResizeObserver` は `computeDisplayModes()` を同期実行せず、rAF で 1 フレームに 1 回へ集約する。observer callback 内の DOM mutation を避け、zoom 中の `ResizeObserver loop completed with undelivered notifications` warning を抑制する
+- `Siteboard.tsx` の `handleViewportChange` で React Flow の viewport を `zoomRef` に同期し、rAF で `uiZoom` を更新する
+- `uiZoom` は `flowNodes` 外枠高さと resize control `minHeight` に使う reactive な layout 用 zoom の正本。`zoomRef` は resize 中の content height 逆算など即時計算用
+- project 切り替え / 新規ノード追加後 centering / 右下 viewport controls / 起動時復元では store 側 `viewport` が先に変わるため、`reactFlowInstanceRef.current.setViewport(storeViewport, { duration: 0 })` で React Flow に再同期する。差分がなければ `setViewport()` をスキップして無限ループを避ける
+- container `ResizeObserver` は `computeDisplayModes()` を同期実行せず rAF 1 フレームに集約する（observer callback 内 DOM mutation を避け、zoom 中の `ResizeObserver loop completed` warning を抑制）
 
 ## 右下 viewport controls
 
-- 右下 controls は `Siteboard.tsx` が持ち、`全体表示` と `100%` の 2 ボタンを横並びで描画する
-- `全体表示` は `getNodeFrameRect(node, zoom)` を使って全ノード外枠の union を zoom ごとに再計算し、`64px` padding を残したまま最大倍率で収まる viewport を二分探索で求める
-- `100%` は zoom を `1` に固定し、同じ union の中心が viewport 中央に来る pan を計算する。全体が収まらなくても zoom は変えない
-- ノードが 0 件の時は `全体表示` を disabled にし、`100%` だけ `{ x: 0, y: 0, zoom: 1 }` へ戻す
-- どちらも `setViewport()` の duration は通常 `240ms`、reduced motion 時 `0ms` とし、zoom が変わる操作では `cancelZoomRestore()` と `scheduleZoomRestoreAfterReflow()` を既存 reset zoom と同じタイミングで使う
+- `全体表示` / `100%` の 2 ボタンを `Siteboard.tsx` が描画する
+- `全体表示`: `getNodeFrameRect(node, zoom)` で全ノード外枠 union を zoom ごとに再計算し、`64px` padding を残して最大倍率で収まる viewport を二分探索で求める
+- `100%`: zoom を `1` に固定し、同じ union の中心を viewport 中央に置く。全体が収まらなくても zoom は変えない
+- ノード 0 件時は `全体表示` を disabled、`100%` は `{ x: 0, y: 0, zoom: 1 }` に戻す
+- `setViewport()` の duration は通常 `240ms`、reduced motion 時 `0ms`。zoom が変わる操作では `cancelZoomRestore()` と `scheduleZoomRestoreAfterReflow()` を既存 reset zoom と同じタイミングで呼ぶ
 
 ## drag 終了後の重なり補正
 
-- React Flow ネイティブドラッグで `Siteboard.tsx` の `draggingNodePositions` state に一時位置を管理し、`onNodeDragStop` 後にのみ store 座標を確定する
-- ドロップ位置が禁止された重なりを作る場合は、`x` または `y` の単軸だけを動かして再配置する
-- 補正は最短移動を優先し、補正後の余白は `DRAG_REPOSITION_GAP = 20`
-- webpage は他の全ノードとの重なりを禁止し、stickynote は webpage に対してのみ同じ制約を適用する
-- 重なり判定は placeholder / content ではなくノード外枠全体を基準にする。webpage は `top bar + content + bottom bar`、stickynote は `header + content` を 1 つの矩形として扱う
-- top bar / bottom bar / sticky header は `zoomPx` により画面上では固定 px のため、world 座標での外枠高さは current zoom に応じて `screenPx / zoom` で計算する
-- webpage の補正が発生した時は `settling` 扱いにし、`computeDisplayModes()` が `native` 復帰を抑制する
-- `WebPageNode` は drop 座標から補正後座標までを明示的な translate アニメーションで戻し、完了後に settling を解除して `native` 復帰を再判定する
-- Reduced Motion ではアニメーション待ちをせず、次フレームで settling を解除する
+- React Flow ネイティブドラッグで `Siteboard.tsx` の `draggingNodePositions` state に一時位置を持ち、`onNodeDragStop` 後にのみ store 座標を確定する
+- ドロップ位置が禁止された重なりを作る場合、`x` または `y` の単軸だけを動かして再配置する（最短移動優先、補正後の余白 `DRAG_REPOSITION_GAP = 20`）
+- webpage は他の全ノードとの重なりを禁止、stickynote は webpage に対してのみ同じ制約
+- 重なり判定はノード外枠全体を基準にする（webpage は `top bar + content + bottom bar`、stickynote は `header + content`）。`zoomPx` で画面上固定 px の bar/header は world 座標で `screenPx / zoom` で計算する
+- webpage の補正が発生した時は `settling` 扱いにし、`computeDisplayModes()` が `native` 復帰を抑制する。`WebPageNode` は drop 座標から補正後座標までを translate アニメーションで戻し、完了後に settling を解除して `native` 復帰を再判定する。Reduced Motion ではアニメーション待ちをせず次フレームで解除
 
 ## ノード外枠基準の配置計算
 
-- 新規ノード追加時の自動配置も drag 補正と同じ zoom-aware な外枠矩形を使う
-- センタリングや可視判定の fallback 計算も同じ外枠矩形を使い、DOM 実測がない場合でも content だけで過小評価しない
-- 一方でネイティブ Webview の bounds 更新や safe area 判定は従来どおり placeholder 矩形を使う。外枠判定と Webview 実表示判定は責務を分ける
-- WebPage の placeholder はフレーム padding（上下左右 24px world 固定）の内側だけを指す。Webview bounds は placeholder の rect そのもので、フレーム padding 領域には Webview を表示しない
+- 新規ノード追加・センタリング・可視判定 fallback は drag 補正と同じ zoom-aware な外枠矩形を使う
+- 一方で **ネイティブ Webview の bounds 更新や safe area 判定は placeholder 矩形を使う**。外枠判定と Webview 実表示判定は責務を分ける
+- WebPage の placeholder はフレーム padding（上下左右 24px world 固定）の内側だけを指す
 
 ## 遷移ルール
 
 - **操作中（drag/resize を除く）は全ノードを強制的に `screenshot/hidden` へ遷移** — `applyPreparedInteractionModes()` が初期状態を確定
 - `pan/zoom` 中は rAF 単位で `computeInteractionModes()` が `screenshot/hidden` を再判定し、`native` への遷移は許可しない
-- 操作終了（`activeInteractionsRef.current.size === 0`）で `computeDisplayModes()` が最終判定・native 復帰を再開
-- `drag/resize` 中は相対的に少ない display mode 更新を行い、リサイズ終了後に最終的な表示を確定
-- コンテキストメニュー表示中のページは `native` への復帰を抑制（`contextMenuNodeIdRef` が設定されている場合）
-- 未保存確認ダイアログ表示中も、現在表示中 Siteboard の visible webpage node は `native` へ復帰させず `screenshot/hidden` を維持する
-- 選択中ノードのツールバー（HTML）に被る webpage node は `native` へ復帰させない（後述「ノードツールバーと Webview 制御」）
+- 操作終了（`!hasAnyInteraction(stateRef.current)`）で `computeDisplayModes()` が最終判定・native 復帰を再開
+- `drag/resize` 中は display mode 更新を抑え、リサイズ終了後に最終表示を確定
+- コンテキストメニュー表示中（`stateRef.current.contextMenuNodeId` 一致）、未保存確認ダイアログ表示中（visible webpage node 全体）、ノードツールバー被り中の webpage は `native` 復帰を抑制する
 
 ## コンテキストメニューと Webview 制御
 
-コンテキストメニューは `@tauri-apps/api/menu` の `Menu.new()` + `popup()` で macOS ネイティブメニューとして表示する。ネイティブメニューは OS レイヤーで描画されるため Webview との z-index 競合は起きないが、スクリーンショット差し替えは「メニュー表示中に Webview が操作可能になる」のを防ぐために維持する。
+コンテキストメニューは `@tauri-apps/api/menu` の `Menu.new()` + `popup()` で macOS ネイティブメニューとして表示する。Webview との z-index 競合は起きないが、「メニュー表示中に Webview が操作可能になる」のを防ぐためスクショ差し替えは維持する。
 
 **フロー**:
-1. `handleContextMenuOpen(pageId)` — async 関数。まず `cancelNativeReveal` で復帰タイマーを止める。
-2. 保存済みスクショがある場合は、その stale screenshot を即利用しつつ fresh capture をバックグラウンドで要求する。
-3. 保存済みスクショがない場合だけ `ensureScreenshotReady()` で「PNG 保存 + React 反映 + DOM 描画完了」まで待つ。
-4. 準備完了後に `contextMenuPageIdRef` をセットし、`newMode = 'screenshot'`（capture 不能時のみ `hidden`）へ更新してから Webview を hide する。
-5. `Siteboard.tsx` の `handleNodeContextMenu` — webpage ノードは `await handleContextMenuOpen(pageId)` を待ってからメニュー項目を構築し `menu.popup()` を呼ぶ。`popup()` はメニューが閉じるまで await でブロックされる。
-6. `computeDisplayModes()` の override ロジック — `contextMenuPageIdRef` がセットされているページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え。
-7. `popup()` が resolve したら `handleContextMenuCloseDisplay()` で ref をクリアし表示を復帰。
-8. ページ削除ケース — 各メニューアクションの `action` コールバック内で `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除する。
 
-付箋ノードは Webview を持たないため、コンテキストメニュー表示時に `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` の node type 判定で分岐）。
+1. `handleContextMenuOpen(pageId)` — まず `cancelNativeReveal` で復帰タイマーを止める
+2. 保存済みスクショがあれば stale を即利用しつつ fresh capture をバックグラウンドで要求
+3. 保存済みスクショがなければ `ensureScreenshotReady()` で PNG 保存 + DOM 描画完了まで待つ
+4. 準備完了後に `dispatch({ type: 'CONTEXT_MENU_OPEN', nodeId })`、`newMode = 'screenshot'`（capture 不能時は `hidden`）に更新して Webview を hide
+5. `Siteboard.tsx` の `handleNodeContextMenu` が `await handleContextMenuOpen(pageId)` 後に `menu.popup()` を呼ぶ（メニューが閉じるまで await でブロック）
+6. `computeDisplayModes()` の override — `stateRef.current.contextMenuNodeId` 一致ページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え
+7. `popup()` resolve 後に `handleContextMenuCloseDisplay()` が `dispatch({ type: 'CONTEXT_MENU_CLOSE' })` を呼んで表示を復帰
+8. ページ削除時は `action` コールバック内で `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除
+
+付箋ノードは Webview を持たないため `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` で node type 分岐）。
 
 ## ノードツールバーと Webview 制御
 
-ノード選択時のツールバー（付箋/テキスト/Webページの `NodeToolbar position={Position.Top}`、単独選択時のみ表示）は HTML 要素のため、近接する Webpage ノードのネイティブ Webview に被ると OS レイヤーで最前面に描画される Webview の下に潜る。これを防ぐため、ツールバーに被る Webpage は `screenshot` に降格する。
+選択時のツールバー（付箋/テキスト/Webページの `NodeToolbar position={Position.Top}`、単独選択のみ）は HTML 要素のため、近接する Webpage の Webview に被ると OS レイヤー最前面の Webview の下に潜る。これを防ぐためツールバーに被る Webpage は `screenshot` に降格する。
 
-- ツールバー root の `div` に `data-node-toolbar={nodeId}` を付与する（`StickyNoteToolbar` / `TextNodeToolbar` / `WebPageToolbar`）。常時表示のタイトル段は対象外。
-- `computeDisplayModes()` は `getSelectionToolbarRects()` で全ツールバー矩形を取得し、各 placeholder 矩形と `rectsOverlap()` で交差判定する。自ノードのツールバー（`ownerId === page.id`）は除外する。
-- 被られたページが `native` の場合、**被り開始時（前パスで未被り）に webview がまだ native(可視) のうちに** `ensureScreenshotReady()` で fresh 撮影を要求してから `screenshot`/`hidden` に降格する。`handleContextMenuOpen` と同じ「撮影 → hide」順序。hide 後の webview はスナップショットできず古い stale のまま固着するため、この順序が必須。
-- 被り状態は `toolbarOccludedIdsRef`（前パスの被り集合）で管理し、被り開始の 1 回だけ撮影を発火させる（毎パス再撮影しない）。選択し直すたびに被り開始扱いとなり fresh を撮り直す。
-- 選択変化では `selectedNodeIds` 依存 effect が `requestAnimationFrame` 後に `computeDisplayModes()` を呼び、ツールバー DOM 反映後の矩形で再判定する（`centeredNodeId` と同じパターン）。
-- コンテキストメニュー（単一ターゲット・await）と違い、選択は持続・複数同時被りもあり得るため、専用の Set 管理で additive に実装し、既存の pan/zoom・drag/resize・context-menu の経路には手を入れない。
+- ツールバー root に `data-node-toolbar={nodeId}` を付与する（`StickyNoteToolbar` / `TextNodeToolbar` / `WebPageToolbar`）。常時表示のタイトル段は対象外
+- `computeDisplayModes()` は `getSelectionToolbarRects()` で全ツールバー矩形を取得し、各 placeholder 矩形と `rectsOverlap()` で交差判定する（自ノードのツールバーは `ownerId === page.id` で除外）
+- 被られたページが `native` の場合、**被り開始時（前パスで未被り）に webview がまだ native(可視) のうちに** `ensureScreenshotReady()` で fresh 撮影を要求してから降格する（`handleContextMenuOpen` と同じ「撮影 → hide」順序。hide 後の webview はスナップショット不可で stale 固着するため必須）
+- 被り状態は `stateRef.current.toolbarOccludedIds`（前パスの被り集合）で管理し、被り開始の 1 回だけ撮影を発火する
+- 選択変化では `selectedNodeIds` 依存 effect が `requestAnimationFrame` 後に `computeDisplayModes()` を呼び、ツールバー DOM 反映後の矩形で再判定する
 
 ## 未保存確認ダイアログと Webview 制御
 
-未保存確認ダイアログ（タブクローズ / アプリ終了）は `App` 直下の HTML overlay で描画するため、native Webview を背面化しないと dialog/backdrop が下に潜る。
+未保存確認ダイアログ（タブクローズ / アプリ終了）は `App` 直下の HTML overlay のため、native Webview を背面化しないと dialog/backdrop が下に潜る。dialog 表示前に active な Siteboard が coordinator 経由で表示ロックを受け、**閉じる対象 project ではなく「今見えている Siteboard」基準**で visible webpage node を `screenshot/hidden` に切り替える。
 
-このため、dialog 表示前に active な Siteboard が coordinator 経由で表示ロックを受け取り、**閉じる対象 project ではなく「今見えている Siteboard」基準**で visible webpage node を `screenshot/hidden` へ切り替える。
-
-- 保存済み screenshot がある node は stale screenshot を即利用しつつ fresh capture をバックグラウンド更新する
-- 保存済み screenshot が無い node だけ fresh capture 完了を待ち、失敗時は `hidden` fallback を許容する
+- 保存済み screenshot がある node は stale を即利用しつつ fresh をバックグラウンド更新
+- 保存済み screenshot がない node だけ fresh 完了を待ち、失敗時は `hidden` fallback を許容
 - dialog 表示中は `computeDisplayModes()` が `nextMode === 'native'` を `screenshot/hidden` に差し替える
-- dialog close 後は通常の `computeDisplayModes()` に戻して native 復帰を再開する
-- アプリ終了で dirty project が連続して確認される場合は、coordinator が exit を 1 tick 遅延し、次の dialog open が直後に来たら native 復帰を打ち消す
+- dialog close 後は通常の `computeDisplayModes()` に戻して native 復帰を再開
+- アプリ終了で dirty project が連続して確認される場合、coordinator が exit を 1 tick 遅延し、次の dialog open が直後に来たら native 復帰を打ち消す
 
 ### `Cmd+Q` / `Quit` の集約確認
 
-- `Cmd+W` / window close は従来どおり window 単位の未保存確認を行う
-- `Cmd+Q` / メニュー `Quit` は macOS app menu の custom `app.quit` item から renderer に `app-exit-requested` を送る
-- focused document window が coordinator になり、全 document window の dirty 状態を収集して **確認ダイアログは 1 回だけ** 表示する
-- `保存` を選んだ場合は dirty document を順番に保存する。`Save As` が必要な document はその window を focus してダイアログを開く
-- 順次保存の途中で `Save As` をキャンセルするか保存失敗が起きた場合、Quit 全体を中止し、window は 1 枚も閉じない
-- `保存せず終了` を選んだ場合だけ、全 document window をまとめて destroy してアプリを終了する
+- `Cmd+W` / window close は window 単位の未保存確認
+- `Cmd+Q` / メニュー `Quit` は macOS app menu の custom `app.quit` から renderer に `app-exit-requested` を送る
+- focused document window が coordinator となり全 document window の dirty 状態を集約し、**確認ダイアログは 1 回だけ**表示する
+- `保存`: dirty document を順番に保存。`Save As` が必要な document はその window を focus してダイアログを開く。途中で `Save As` キャンセル / 保存失敗が起きたら Quit 全体を中止（window は 1 枚も閉じない）
+- `保存せず終了`: 全 document window をまとめて destroy
 
-## スクリーンショット永続化
+## スクリーンショット
 
-スクリーンショットは PNG ファイルとしてディスクに保存する（macOS のみ）。
-
-**保存先**: `~/Library/Application Support/com.siteboard.app/screenshots/{projectId}/{pageId}.png`
-
-- `projectId` は `.siteboard` に保存される値ではなく、ローカルワークスペース上の `Project.id` を使う
-- `pageId` は node id をそのまま使う。webpage 系 Webview IPC では歴史的理由で `pageId` 命名を維持している
-
-**フロー（撮影時）**:
-1. Rust `save_webview_screenshot(label, pageId, projectId, hideAfterSnapshotRequest?)` → WKWebView スナップショット要求。`hideAfterSnapshotRequest=true` の時は要求直後に同じ Rust コマンド内で Webview を hide
-2. JS: `convertFileSrc(filePath) + '?t=Date.now()'` でアセット URL 生成 → `<img src>` に設定
-3. `Image.decode()` でデコード完了を待つ
-4. 既存 screenshot が表示中でも新 URL が準備できるまで差し替えない
-5. `WebPageNode` の `onScreenshotPresented(pageId, url)` が呼ばれたら、その URL を表示可能なスクショとして扱う
-6. `screenshotReadyRef.current[pageId] = true` をセット
-
-**フロー（起動時復元）**:
-1. `setupProjectPersistence()` が `_restoreState()` の直後、`_setLoaded()` の前に「保存状態で open だった tab」だけ `get_existing_screenshot_paths(projectId, pageIds)` を実行する
-2. 戻り値を `convertFileSrc(filePath) + '?t=restored'` に変換し、`tab-store.webviewRuntime.screenshotUrlsByNodeId` へ preload する
-3. `useSiteboardDisplayEngine` は初回 render の `screenshotUrls` / `screenshotReadyRef` / 仮 `displayModes` をこの runtime cache で seed し、stale screenshot を即表示する
-4. Webview 作成後の `computeDisplayModes()` が既存ルールどおり `screenshot -> native` を最終決定する
-
-**フロー（lazy restore）**:
-1. `useSiteboardDisplayEngine` の `projectId + webpage node ids` 依存 effect は、runtime cache にまだ無い page だけを対象に `get_existing_screenshot_paths(projectId, pageIds)` を実行する
-2. `convertFileSrc(filePath) + '?t=restored'` を local state と `tab-store.webviewRuntime.screenshotUrlsByNodeId` の両方へ反映する
-3. 既に fresh capture などで in-memory URL がある page は上書きしない
-4. `computeDisplayModes()` を再実行し、復元スクショを考慮した正しいモード判定に収束させる
-
-**削除**: ページ削除時に `cleanupPageArtifacts()` → `delete_screenshot(pageId, projectId)` でファイルも削除。
-
-**Tauri 設定**:
-- `tauri.conf.json`: `app.security.assetProtocol.enable = true`, scope `$APPDATA/screenshots/**`
-- `Cargo.toml`: `tauri` feature に `protocol-asset` を追加
-
-## スクリーンショット撮影タイミング
-
-撮影は目的の違う 2 系統に分かれる。
-
-### ① 鮮度キャプチャ（保存スクショを最新に保つ・Webview は native 維持）
-
-`useSiteboardNodeRuntime` の `scheduleFreshnessCapture(nodeId, reason)` に集約する。`reason` 別の遅延は `FRESHNESS_CAPTURE_DELAY_MS` で持ち、node 単位で latest-wins（連続イベントは最新を採用）。
-
-- `navigation`: ナビゲーション後 1000ms（新コンテンツの描画待ち）。SPA URL 変更（`\x01`）とフルページ遷移開始の両方が対象。
-- `load`: 初回ロード相当（最初のタイトル変更）で即時。
-- `scroll`: Webview 内スクロール完了時（`page-scroll-ended-{pageId}`）で即時。
-
-### ② 退避キャプチャ（native→screenshot/hidden に落とす直前の現フレーム押さえ）
-
-- pan/zoom 操作開始時（保存済みがあれば stale を即表示しつつ fresh capture、`hideAfterSnapshotRequest=true` の原子 hide）
-- drag 操作開始時（毎回 fresh capture）
-- リサイズ開始時（毎回 fresh capture）
-- リサイズ終了時（最終サイズの再撮影）
-- 右クリックメニュー表示前（保存済みがなければ待機、あれば stale を表示しつつ fresh capture）
-- ノードツールバーに被られた時（未スクショなら native 維持しつつ撮影を促す。前述「ノードツールバーと Webview 制御」）
+撮影キュー / 永続化 / 撮影タイミング / ちらつき回避の詳細は `siteboard-screenshots.md` を参照。
 
 ## hidden モードの役割
 
-- `hidden` は常用モードではなく、`native` も `screenshot` も安全に使えない瞬間の退避先
-- 主な用途は offscreen ノード、live Webview 未接続かつ screenshot 未準備、capture 失敗時
-- interaction 中は `hidden` を増やさず、可能な限り stale/fresh screenshot を優先する
+`hidden` は常用モードではなく、`native` も `screenshot` も安全に使えない瞬間の退避先（offscreen / live Webview 未接続かつ screenshot 未準備 / capture 失敗時）。interaction 中は `hidden` を増やさず、可能な限り stale/fresh screenshot を優先する。
 
-## ちらつき回避（重要）
+## Webview 生成・破棄
 
-`screenshot -> native` への復帰時は以下を守る。
+- React StrictMode 二重マウント対策として `useWebPageWebviewLifecycle` が作成競合をガードする
+- タブ切替で `ProjectScreen` が再マウントされ Webview の create/destroy が短時間で連続しうる。owner token と pending destroy Promise で直列化し、旧 cleanup が新 Webview を閉じないようにする
+- Webview API は例外時 no-op を許容する前提
+- 空フレーム（`url === ''`）は Webview を作成しない
+- Webview の create/destroy は URL 同期から切り離す（`node.url` 更新では再生成しない）
+- `Siteboard.tsx` は mount 直後の `useLayoutEffect` で `data-siteboard-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提のフレーム枠線太さを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする
+- macOS の child WKWebView は host `contentView` 座標系で配置される一方、renderer の `getBoundingClientRect()` は `contentLayoutRect` 基準。`commands/webview.rs` では `contentLayoutRect` と host view 高さの差分を top inset として求め、`create_page_webview` / `update_page_webview_bounds` / `batch_update_webview_positions` の `y` に加算してから child Webview へ渡す
 
-1. 先に `webviewApi.show()` を呼ぶ。
-2. macOS では必要に応じて `setOpacity(label, 0)` から始める。
-3. `requestAnimationFrame` で 1 フレーム待つ。
-4. `data-display-mode='native'` と state 更新を行う。
+### labelsByNodeId を正本にする
 
-即時に mode を戻すと OS 側描画が追いつかず、ちらつきが出る。
+- `webviewLabel` は `BoardNode` に持たず `tab-store.webviewRuntime.labelsByNodeId` に保持する。「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。label が無いページは `native` に戻さず `screenshot` または `hidden` を使う
+- 既存 Webview への後続操作（`updateBounds`、`setOpacity`、`reload`、`goBack/Forward`、`saveScreenshot`）はすべて `labelsByNodeId` の `label` を正本として呼ぶ。`pageId` から引き直さない
+- 初回 `getNavigationState` も store 反映待ちに依存せず、`onWebviewCreated(nodeId, label)` で受け取った label をそのまま使う
+- Rust コマンド側は `tauri::Window` を host context として受け、child webview 配下から呼ばれても同じ document window 上の Webview を解決する
+- label 登録後の native bounds 再同期は `useSiteboardNodeRuntime` から直接 `computeDisplayModes()` を呼ばず、`useSiteboardDisplayEngine` が `webviewLabelsByNodeId` の安定キー変化を検知して 2 フレーム後に実行する（最新 render の closure で `placeholder` 矩形と label の両方を読み、`updateBounds()` まで確実に到達させる）
 
-`native -> screenshot` 側は逆に「スクショ要求と hide を分離しない」ことが重要。
+### screenshotUrl の runtime cache
 
-1. interaction-start では `save_webview_screenshot(label, pageId, ..., hideAfterSnapshotRequest=true)` を先に投げる。
-2. `applyPreparedInteractionModes()` が stale screenshot または `hidden` を反映する。
-3. fresh 完了後に `screenshotUrl` を差し替える。
+- `screenshotUrl` も `BoardNode` には持たず、`tab-store.webviewRuntime.screenshotUrlsByNodeId` に runtime cache として保持する。タブ再マウントや起動直後の open tab 復元で `useSiteboardDisplayEngine` の初期 state seed に使う
+- `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、更新で `reload` を再発火させない
+- URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview(label, url)` を呼ぶ
 
-## Webview 生成・破棄の注意
+## WKWebView プラットフォーム固有
 
-- React StrictMode 二重マウント対策として、`WebPageNode` では `useWebPageWebviewLifecycle` が作成競合をガードする。
-- タブ切替で `ProjectScreen` が再マウントされるため、同じ `pageId` の Webview は create/destroy が短時間で連続しうる。`useWebPageWebviewLifecycle` は owner token と pending destroy Promise で直列化し、旧 cleanup が新 Webview を閉じないようにする。
-- Webview API は例外時 no-op を許容する前提。
-- 空フレーム（`url === ''`）は Webview を作成しない。
-- Webview の create/destroy は URL 同期から切り離し、`node.url` 更新では再生成しない。
-- `Siteboard.tsx` は mount 直後の `useLayoutEffect` で `data-siteboard-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提のフレーム枠線太さなどを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする。
-- `webviewLabel` は `BoardNode` に持たず、`tab-store` の `webviewRuntime.labelsByNodeId` に保持する。「ライブな Webview が接続中」の印として扱い、アンマウント開始時に store から解除する。label が無いページは `native` に戻さず `screenshot` または `hidden` を使う。
-- 既存 Webview への後続操作は `pageId` から引き直さず、この `labelsByNodeId` の `label` を正本として使う。`updateBounds`、`setOpacity`、`reload`、`goBack/Forward`、`saveScreenshot` はすべて `label` ベースで呼ぶ。
-- label 登録後の native bounds 再同期は `useSiteboardNodeRuntime` から直接 `computeDisplayModes()` を呼ばず、`useSiteboardDisplayEngine` が `webviewLabelsByNodeId` の安定キー変化を検知して 2 フレーム後に実行する。これにより最新 render の closure で `placeholder` 矩形と label の両方を読み、`updateBounds()` まで確実に到達させる。
-- macOS の child WKWebView は host `contentView` 座標系で配置される一方、renderer の `getBoundingClientRect()` は `contentLayoutRect` 基準になる。そのため Rust `commands/webview.rs` では `contentLayoutRect` と host view 高さの差分を top inset として求め、`create_page_webview` / `update_page_webview_bounds` / `batch_update_webview_positions` の `y` に加算してから child Webview へ渡す。
-- `screenshotUrl` も `BoardNode` には持たず、`tab-store` の `webviewRuntime.screenshotUrlsByNodeId` に runtime cache として保持する。タブ再マウントや起動直後の open tab 復元では、この cache を `useSiteboardDisplayEngine` の初期 state seed に使う。
-- `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、その更新で `reload` を再発火させない。
-- 既存 Webview への URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview(label, url)` を呼ぶ。
-- Webview 初回配置で使う矩形の正本は引き続き `placeholder` であり、今回の注意点は「どの矩形を使うか」ではなく「`--canvas-zoom` と label 反映後の最新 DOM でいつ読むか」にある。
-
-## WKWebView プラットフォーム固有の注意
-
-スクロール完了通知チャネル、CSS Viewport Units（svh/lvh）の補正、TouchEvent 未定義ガード、handleMoveEnd 取りこぼし対応の詳細は `wkwebview-internals.md` を参照。
+スクロール完了通知、CSS Viewport Units（svh/lvh）の補正、TouchEvent 未定義ガード、handleMoveEnd 取りこぼし対応は `wkwebview-internals.md` を参照。
 
 ## ナビゲーション状態管理（`useSiteboardNodeRuntime`）
 
-canGoBack / canGoForward は `nodeId` 単位の runtime model で管理する。
+`canGoBack` / `canGoForward` は `nodeId` 単位の runtime model で管理する。
 
-### 背景
+**背景**:
 
-- `get_navigation_state_page_webview`（WKBackForwardList）は SPA では常に `false` を返す（`history.pushState` が WKBackForwardList に反映されないため）
+- `get_navigation_state_page_webview`（WKBackForwardList）は SPA では常に `false`（`history.pushState` が WKBackForwardList に反映されないため）
 - `on_navigation` コールバックはナビゲーション**開始前**（`decidePolicyForNavigationAction`）に発火するため、このタイミングで問い合わせても WKBackForwardList は未更新
 
-### 実装方針
+**実装方針**:
 
-- `refreshNavigationState`: ネイティブ API の結果はそのまま `nativeState` に保存し、表示用 state は `nativeState || history depth` で再計算する
-- `handleGoBack`: `pendingAction[nodeId]='back'` を立て、`forwardDepth` を楽観的に +1 してから実行。300ms 後に action をクリアして再問い合わせする
-- `handleGoForward`: `pendingAction[nodeId]='forward'` を立て、`backDepth` を楽観的に +1 してから実行。300ms 後に action をクリアして再問い合わせする
-- `handleNavigated`: `currentUrl` と `pendingAction[nodeId]` を見て `backDepth / forwardDepth` を調整する。通常遷移は `backDepth + 1, forwardDepth = 0`、戻る/進むはそれぞれ深度を増減させる
-- スクリーンショット撮影待ち (`1000ms`) と nav 再問い合わせ待ち (`300ms`) はどちらも `nodeId` 単位で timer を管理し、削除・unmount 時に必ず clear する
+- `refreshNavigationState`: ネイティブ API 結果は `nativeState` に保存し、表示用 state は `nativeState || history depth` で再計算
+- `handleGoBack`: `pendingAction[nodeId]='back'` を立て `forwardDepth` を楽観的に +1、300ms 後に action クリアして再問い合わせ
+- `handleGoForward`: 同様に `pendingAction[nodeId]='forward'`、`backDepth` を楽観的に +1
+- `handleNavigated`: `currentUrl` と `pendingAction[nodeId]` から `backDepth / forwardDepth` を調整（通常遷移は `backDepth + 1, forwardDepth = 0`、戻る/進むは深度を増減）
+- スクショ撮影待ち（`1000ms`）と nav 再問い合わせ待ち（`300ms`）はどちらも `nodeId` 単位で timer 管理し、削除・unmount 時に必ず clear
 
 ## 変更時チェックリスト
 
-- 表示モード変更時: `computeDisplayModes`・`computeInteractionModes`・`applyPreparedInteractionModes` の 3 関数の役割分担を確認（操作外・操作中・準備フェーズ）。
-- 操作中の表示制御を変更した時: `activeInteractionsRef.current.size > 0` で guard してる部分が想定どおり機能してるか確認。特に `computeDisplayModes` が操作中に呼ばれても即リターンすること。
-- プリキャプチャ戦略を変更した時: `prepareInteractionStart` が `pan/zoom/drag/resize` 各タイプで正しく呼ばれ、完了後に `forceHiddenInteractionNodeIdsRef` の状態が正しく遷移することを確認。
-- スクショ切替を変更した時: `ensureScreenshotReady` と `handleScreenshotPresented` の待機条件が崩れていないことを確認。
-- `webviewLabel` の扱いを変えた時: 再マウント直後に `native` が選ばれず、保存済みスクリーンショットなら `screenshot`、未保存なら `hidden` へ落ちることを確認。
-- しきい値変更時: pan/zoom 中と終了時で振動・ちらつきがないか確認。
-- イベント変更時: Rust emit と JS listener の名前一致を確認。
-- viewport insets を変更する場合: zoom 変化後の svh/lvh/vh/dvh の各単位が論理サイズと一致することを確認。
-- HTML 要素をネイティブ Webview の上に重ねる場合: 対象ページを screenshot/hidden モードに切り替えてから表示する（`handleContextMenuOpen` パターンを参照）。
-## Multiwebview command context
-
-- 作成後の native Webview への後続操作はすべて `labelsByNodeId` の label を正本にする。
-- 初回 `getNavigationState` は store 反映待ちに依存せず、`onWebviewCreated(nodeId, label)` で受け取った label をそのまま使って取得する。
-- Rust command 側は `tauri::Window` を host context として受け、child webview 配下から呼ばれても pan / zoom / drag / resize / screenshot 更新で同じ document window 上の Webview を解決する。
+- 表示モード変更時: `computeDisplayModes`・`computeInteractionModes`・`applyPreparedInteractionModes` の役割分担（操作外・操作中・準備フェーズ）を確認
+- 操作中の表示制御を変更した時: `hasAnyInteraction(stateRef.current)` で guard してる部分が機能してるか確認。`computeDisplayModes` が操作中に呼ばれても即リターンすること
+- プリキャプチャ戦略を変更した時: `prepareInteractionStart` が各タイプで正しく呼ばれ、完了後に `stateRef.current.forceHiddenIds` の遷移が正しいか確認
+- スクショ切替を変更した時: `ensureScreenshotReady` と `handleScreenshotPresented` の待機条件が崩れていないか確認
+- `webviewLabel` の扱いを変えた時: 再マウント直後に `native` が選ばれず、保存済みなら `screenshot`、未保存なら `hidden` に落ちるか確認
+- しきい値変更時: pan/zoom 中と終了時で振動・ちらつきがないか確認
+- イベント変更時: Rust emit と JS listener の名前一致を確認
+- viewport insets を変更する場合: zoom 変化後の svh/lvh/vh/dvh の各単位が論理サイズと一致するか確認
+- HTML 要素をネイティブ Webview の上に重ねる場合: 対象ページを screenshot/hidden に切り替えてから表示する（`handleContextMenuOpen` パターン参照）
+- per-node / mode / dialog 系の新フラグを追加する時: `display-engine/state-machine.ts` の reducer + selector に追加し、`stateRef + dispatch` 経由で読み書きする

@@ -45,6 +45,7 @@ npm run test         # Vitest（純ロジックの単体テスト）
 - `docs/agents/domain-models.md`: 主要型・定数・不変条件
 - `docs/agents/tauri-ipc.md`: Tauri IPC コマンドとイベント契約
 - `docs/agents/siteboard-runtime.md`: Siteboard の表示モードと Webview ランタイム仕様
+- `docs/agents/siteboard-screenshots.md`: スクリーンショット撮影・永続化・ちらつき回避
 - `docs/agents/wkwebview-internals.md`: WKWebView プラットフォーム固有のワークアラウンド
 
 ## 更新ポリシー

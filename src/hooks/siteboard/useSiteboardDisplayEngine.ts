@@ -245,6 +245,10 @@ export function useSiteboardDisplayEngine({
       const nodeIds = getInteractionPreparationNodeIds(type, targetNodeId);
       if (nodeIds.length === 0) return true;
       const useNativeHideAfterSnapshot = type === 'pan' || type === 'zoom';
+      // drag/resize は ensureScreenshotReady の fire-and-forget 経路の直後に
+      // active 化されるため、forceDuringInteraction を付けないと
+      // captureScreenshot の post-await チェックで URL 差し替えが破棄される。
+      const forceDuringInteraction = type === 'drag' || type === 'resize';
 
       const results = await Promise.all(
         nodeIds.map(async (nodeId) => {
@@ -255,6 +259,7 @@ export function useSiteboardDisplayEngine({
 
           const ready = await ensureScreenshotReady(nodeId, {
             hideAfterSnapshotRequest: useNativeHideAfterSnapshot,
+            forceDuringInteraction,
             source: 'interaction-start',
           });
 

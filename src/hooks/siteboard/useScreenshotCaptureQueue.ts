@@ -23,10 +23,9 @@ export interface CaptureScreenshotOptions {
 }
 
 export interface ScreenshotCaptureSharedRefs {
-  // 5-5 段階 2-4b: state machine への移行が進むにつれ、ref は徐々に dispatch に置換される。
+  // 5-5 段階 4c: 全 ref が state machine に集約され、サブフックは { stateRef, dispatch } 経由のみ
   stateRef: React.MutableRefObject<DisplayEngineState>;
   dispatch: (action: DisplayEngineAction) => void;
-  interactionCaptureRetryNodeIdsRef: React.MutableRefObject<Set<string>>;
 }
 
 interface UseScreenshotCaptureQueueParams {
@@ -233,7 +232,7 @@ export function useScreenshotCaptureQueue({
             });
             if (!filePath) {
               if (nextOptions?.source === 'interaction-start' && hideAfterSnapshotRequest) {
-                sharedRefs.interactionCaptureRetryNodeIdsRef.current.add(nodeId);
+                sharedRefs.dispatch({ type: 'CAPTURE_RETRY_ADD', nodeId });
               }
               lastResult = false;
             } else if (
@@ -255,7 +254,7 @@ export function useScreenshotCaptureQueue({
               screenshotReadyRef.current[nodeId] = true;
               delete presentedScreenshotUrlRef.current[nodeId];
               sharedRefs.dispatch({ type: 'FORCE_HIDDEN_REMOVE', nodeId });
-              sharedRefs.interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
+              sharedRefs.dispatch({ type: 'CAPTURE_RETRY_REMOVE', nodeId });
               setCachedScreenshotUrl(projectId, nodeId, assetUrl);
 
               setScreenshotUrls((prev) => {

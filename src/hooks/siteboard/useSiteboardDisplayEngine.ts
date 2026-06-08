@@ -25,6 +25,7 @@ import {
 import {
   INITIAL_DISPLAY_ENGINE_STATE,
   hasAnyInteraction,
+  hasPendingCaptureRetry,
   isContextMenuTarget,
   isDragOrResizeActive,
   isInteractionActive,
@@ -114,7 +115,7 @@ export function useSiteboardDisplayEngine({
   // ノードツールバーに被られているページ。被り開始の検出（fresh 撮影の 1 回発火）に使う。
   const toolbarOccludedIdsRef = useRef<Set<string>>(new Set());
   // 5-5 段階 4a-4b: forceHiddenIds / nativeHiddenByCaptureIds は stateRef に集約
-  const interactionCaptureRetryNodeIdsRef = useRef<Set<string>>(new Set());
+  // 5-5 段階 4c: captureRetryIds は stateRef.captureRetryIds に集約
   const interactionCaptureRetryTimerRef = useRef<number | null>(null);
   const resizeObserverRafRef = useRef<number | null>(null);
 
@@ -156,7 +157,6 @@ export function useSiteboardDisplayEngine({
     () => ({
       stateRef,
       dispatch,
-      interactionCaptureRetryNodeIdsRef,
     }),
     [dispatch],
   );
@@ -259,14 +259,12 @@ export function useSiteboardDisplayEngine({
 
           if (ready || hasDisplayableScreenshot(nodeId)) {
             dispatch({ type: 'FORCE_HIDDEN_REMOVE', nodeId });
-            interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
             dispatch({ type: 'CAPTURE_RETRY_REMOVE', nodeId });
             return true;
           }
 
           dispatch({ type: 'FORCE_HIDDEN_ADD', nodeId });
           if (useNativeHideAfterSnapshot) {
-            interactionCaptureRetryNodeIdsRef.current.add(nodeId);
             dispatch({ type: 'CAPTURE_RETRY_ADD', nodeId });
           }
           return false;
@@ -539,14 +537,13 @@ export function useSiteboardDisplayEngine({
 
   const scheduleInteractionCaptureRetry = useCallback(() => {
     cancelInteractionCaptureRetry();
-    if (interactionCaptureRetryNodeIdsRef.current.size === 0) return;
+    if (!hasPendingCaptureRetry(stateRef.current)) return;
 
     interactionCaptureRetryTimerRef.current = window.setTimeout(() => {
       interactionCaptureRetryTimerRef.current = null;
       if (hasAnyInteraction(stateRef.current) || !containerRef.current) return;
 
-      const retryNodeIds = Array.from(interactionCaptureRetryNodeIdsRef.current);
-      interactionCaptureRetryNodeIdsRef.current.clear();
+      const retryNodeIds = Array.from(stateRef.current.captureRetryIds);
       dispatch({ type: 'CAPTURE_RETRY_CLEAR_ALL' });
 
       for (const nodeId of retryNodeIds) {
@@ -834,7 +831,6 @@ export function useSiteboardDisplayEngine({
         return next;
       });
       cleanupScreenshot(nodeId);
-      interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
       settlingNodeIdsRef.current.delete(nodeId);
       clearCachedScreenshotUrl(projectId, nodeId);
       dispatch({ type: 'CLEANUP_NODE', nodeId });
@@ -934,7 +930,6 @@ export function useSiteboardDisplayEngine({
       cancelInteractionCaptureRetry();
       cancelZoomRestore();
       cancelAllNativeReveals();
-      interactionCaptureRetryNodeIdsRef.current.clear();
       settlingNodeIdsRef.current.clear();
       dispatch({ type: 'INTERACTION_CLEAR_ALL' });
       computeDisplayModes();
@@ -977,12 +972,10 @@ export function useSiteboardDisplayEngine({
 
   useEffect(() => {
     const settlingNodeIds = settlingNodeIdsRef.current;
-    const interactionCaptureRetryNodeIds = interactionCaptureRetryNodeIdsRef.current;
     const toolbarOccludedNodeIds = toolbarOccludedIdsRef.current;
     return () => {
       cancelInteractionCaptureRetry();
       cancelAllNativeReveals();
-      interactionCaptureRetryNodeIds.clear();
       settlingNodeIds.clear();
       toolbarOccludedNodeIds.clear();
     };

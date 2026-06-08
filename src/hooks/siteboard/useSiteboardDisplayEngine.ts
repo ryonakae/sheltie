@@ -977,9 +977,6 @@ export function useSiteboardDisplayEngine({
   return {
     captureScreenshot,
     cancelZoomRestore,
-    cleanupPageArtifacts,
-    computeDisplayModes,
-    computeInteractionModes,
     displayModes,
     handleContextMenuClose,
     handleContextMenuOpen,

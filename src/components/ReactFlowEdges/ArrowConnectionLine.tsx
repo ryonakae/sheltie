@@ -8,6 +8,7 @@ import {
 import {
   ARROW_HALF_WIDTH,
   ARROW_LENGTH,
+  EDGE_DEFAULT_COLOR,
   EDGE_STROKE_WIDTH,
   ROTATION_BY_POSITION,
   SOURCE_DOT_RADIUS,
@@ -34,7 +35,7 @@ function shiftOuter(x: number, y: number, position: Position, magnitude: number)
 
 /**
  * ドラッグ中の接続線。完成後の ArrowEdge と同じ見た目（始点ドット + ベジェ + 終点矢じり）。
- * 色は未選択エッジと同じ var(--border) を使い、吸着後にエッジへ置き換わっても見た目が連続する。
+ * 色は未選択エッジと同じテーマ変数を使い、吸着後にエッジへ置き換わっても見た目が連続する。
  */
 export function ArrowConnectionLine({
   fromX,
@@ -61,7 +62,7 @@ export function ArrowConnectionLine({
     targetPosition: toPosition,
   });
 
-  const color = 'var(--border)';
+  const color = EDGE_DEFAULT_COLOR;
   const rotation = ROTATION_BY_POSITION[toPosition];
 
   return (

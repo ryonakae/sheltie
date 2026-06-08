@@ -8,6 +8,8 @@ export const ARROW_LENGTH = 16;
 export const ARROW_HALF_WIDTH = 10;
 export const SOURCE_DOT_RADIUS = 6;
 export const EDGE_STROKE_WIDTH = 3;
+export const EDGE_DEFAULT_COLOR = 'var(--color-separator-tertiary)';
+export const EDGE_SELECTED_COLOR = 'var(--accent)';
 
 /**
  * WebPageFlowNode の Handle 形状（ズーム非依存の CSS px）。

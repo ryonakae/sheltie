@@ -4,6 +4,8 @@ import { memo } from 'react';
 import {
   ARROW_HALF_WIDTH,
   ARROW_LENGTH,
+  EDGE_DEFAULT_COLOR,
+  EDGE_SELECTED_COLOR,
   ROTATION_BY_POSITION,
   SOURCE_DOT_RADIUS,
 } from './arrowGeometry';
@@ -34,7 +36,7 @@ export const ArrowEdge = memo(function ArrowEdge({
   });
 
   // HeroUI v3 のテーマ変数を直接参照することで light/dark モードに自動追従する
-  const color = selected ? 'var(--accent)' : 'var(--color-separator-tertiary)';
+  const color = selected ? EDGE_SELECTED_COLOR : EDGE_DEFAULT_COLOR;
   const rotation = ROTATION_BY_POSITION[targetPosition];
 
   return (

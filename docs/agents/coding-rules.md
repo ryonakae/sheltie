@@ -107,7 +107,7 @@
 - 4 方向（top, right, bottom, left）に `type="source"` の Handle を常時レンダリング。`pointerEvents` は無効化しない（接続ドラッグの target 検出に必要）
 - 丸（子要素）の表示条件: `selected` または「接続ドラッグ中かつこのノードに pointer がある」。前者は React Flow の `selected` prop、後者は `useConnection` の `inProgress` + 自前の `onPointerEnter/Leave` で判定する。`useConnection` の `toNode` は handle 近接時しか更新されないため、ノード本体ホバー検出には使えない
 - `connectionMode="loose"` で source 同士の接続を許可、`isValidConnection` で自己接続を禁止
-- エッジは `components/ReactFlowEdges/ArrowEdge.tsx` のカスタムエッジ。ベジェ path（`BaseEdge`）+ 始点ドット + 終端矢じり（SVG）を自前で描画。色は `selected` で `var(--accent)` / `var(--border)` を出し分け（HeroUI v3 テーマ追従）
+- エッジは `components/ReactFlowEdges/ArrowEdge.tsx` のカスタムエッジ。ベジェ path（`BaseEdge`）+ 始点ドット + 終端矢じり（SVG）を自前で描画。色は `selected` で `var(--accent)` / `var(--color-separator-tertiary)` を出し分け（HeroUI v3 テーマ追従）
 - ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。完成エッジと同じ見た目で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `(WEBPAGE_HANDLE_HIT_SIZE / 2) / zoom` シフトして ArrowEdge の端点（handle 外側の辺 = 視覚的な丸の中心）と一致させる。矢印形状と Handle サイズの定数は `arrowGeometry.ts` で共有
 - WebPageFlowNode の Handle は当たり判定（`WEBPAGE_HANDLE_HIT_SIZE`、透明）と視覚の丸（`WEBPAGE_HANDLE_VISUAL_DOT_SIZE`、青）を分離する。ヒット領域を視覚より大きく取り、ドラッグ開始と吸着のクリック判定を広げる。両者ともズーム非依存（`--canvas-zoom` で割る）。Handle 中心から外側の辺（=丸の中心）までの距離は `HIT_SIZE / 2` の前提で `ArrowConnectionLine` のオフセットを揃える
 - 吸着スナップ範囲は ReactFlow の `connectionRadius`（既定 20）で調整する。Handle のヒット領域より広めに取って近接時の吸着を出やすくする

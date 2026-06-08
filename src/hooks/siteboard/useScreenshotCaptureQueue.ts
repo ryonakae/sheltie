@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { webviewApi } from '@/lib/tauri-bridge';
 import type { DisplayMode, WebPageNode } from '@/types';
 
+import { type DisplayEngineState, isContextMenuTarget } from './display-engine/state-machine';
+
 import type { InteractionType } from './types';
 
 /** 検証用フラグ: false にするとスクリーンショットクリッピング機能を完全に無効化する */
@@ -17,9 +19,9 @@ export interface CaptureScreenshotOptions {
 }
 
 export interface ScreenshotCaptureSharedRefs {
+  // 5-5 段階 2: unsavedDialog / contextMenu の read 系は stateRef 経由に統一
+  stateRef: React.MutableRefObject<DisplayEngineState>;
   activeInteractionsRef: React.MutableRefObject<Set<InteractionType>>;
-  unsavedChangesDialogOpenRef: React.MutableRefObject<boolean>;
-  contextMenuNodeIdRef: React.MutableRefObject<string | null>;
   forceHiddenInteractionNodeIdsRef: React.MutableRefObject<Set<string>>;
   interactionCaptureRetryNodeIdsRef: React.MutableRefObject<Set<string>>;
   nativeHiddenByInteractionCaptureRef: React.MutableRefObject<Set<string>>;
@@ -270,8 +272,8 @@ export function useScreenshotCaptureQueue({
               }
 
               const shouldUseScreenshotNow =
-                sharedRefs.unsavedChangesDialogOpenRef.current ||
-                sharedRefs.contextMenuNodeIdRef.current === nodeId ||
+                sharedRefs.stateRef.current.unsavedDialogOpen ||
+                isContextMenuTarget(sharedRefs.stateRef.current, nodeId) ||
                 sharedRefs.activeInteractionsRef.current.size > 0;
 
               if (shouldUseScreenshotNow) {

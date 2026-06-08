@@ -24,6 +24,7 @@ import {
 } from './display-engine/mode';
 import {
   INITIAL_DISPLAY_ENGINE_STATE,
+  isContextMenuTarget,
   type DisplayEngineAction,
   type DisplayEngineState,
   displayEngineReducer,
@@ -103,9 +104,7 @@ export function useSiteboardDisplayEngine({
   const interactionRafRef = useRef<number | null>(null);
   const containerRectRef = useRef<DOMRect | null>(null);
   const activeInteractionsRef = useRef<Set<InteractionType>>(new Set());
-  const resizingNodeIdRef = useRef<string | null>(null);
-  const contextMenuNodeIdRef = useRef<string | null>(null);
-  const unsavedChangesDialogOpenRef = useRef(false);
+  // 5-5 段階 2: resizingNodeId / contextMenuNodeId / unsavedDialogOpen は stateRef に集約
   const settlingNodeIdsRef = useRef<Set<string>>(new Set());
   // ノードツールバーに被られているページ。被り開始の検出（fresh 撮影の 1 回発火）に使う。
   const toolbarOccludedIdsRef = useRef<Set<string>>(new Set());
@@ -151,9 +150,8 @@ export function useSiteboardDisplayEngine({
 
   const sharedRefs = useMemo(
     () => ({
+      stateRef,
       activeInteractionsRef,
-      unsavedChangesDialogOpenRef,
-      contextMenuNodeIdRef,
       forceHiddenInteractionNodeIdsRef,
       interactionCaptureRetryNodeIdsRef,
       nativeHiddenByInteractionCaptureRef,
@@ -322,8 +320,8 @@ export function useSiteboardDisplayEngine({
       // 副作用（fresh 撮影トリガと occluded 登録）はスキップする（元実装の順序を維持）。
       const preToolbarDemoted =
         initialMode === 'native' &&
-        (unsavedChangesDialogOpenRef.current ||
-          contextMenuNodeIdRef.current === page.id ||
+        (stateRef.current.unsavedDialogOpen ||
+          isContextMenuTarget(stateRef.current, page.id) ||
           settlingNodeIdsRef.current.has(page.id));
 
       // ノードツールバー（HTML）が被るページは native に復帰させない。
@@ -342,8 +340,8 @@ export function useSiteboardDisplayEngine({
       }
 
       let nextMode = applyDisplayModeDemotions(initialMode, hasScreenshot, {
-        unsavedChangesDialogOpen: unsavedChangesDialogOpenRef.current,
-        isContextMenuTarget: contextMenuNodeIdRef.current === page.id,
+        unsavedChangesDialogOpen: stateRef.current.unsavedDialogOpen,
+        isContextMenuTarget: isContextMenuTarget(stateRef.current, page.id),
         isSettling: settlingNodeIdsRef.current.has(page.id),
         isToolbarOccluded: occluded,
       });
@@ -591,7 +589,6 @@ export function useSiteboardDisplayEngine({
 
   const handlePageResizeStart = useCallback(
     (nodeId: string) => {
-      resizingNodeIdRef.current = nodeId;
       dispatch({ type: 'RESIZE_START', nodeId });
       const label = getWebviewLabel(nodeId);
       if (!label) return;
@@ -624,9 +621,6 @@ export function useSiteboardDisplayEngine({
 
   const handlePageResizeEnd = useCallback(
     (nodeId: string) => {
-      if (resizingNodeIdRef.current === nodeId) {
-        resizingNodeIdRef.current = null;
-      }
       dispatch({ type: 'RESIZE_END', nodeId });
 
       const label = getWebviewLabel(nodeId);
@@ -760,7 +754,6 @@ export function useSiteboardDisplayEngine({
         });
       }
 
-      contextMenuNodeIdRef.current = nodeId;
       dispatch({ type: 'CONTEXT_MENU_OPEN', nodeId });
 
       const { wrapper } = getWebPageElements(containerRef.current, nodeId);
@@ -785,17 +778,15 @@ export function useSiteboardDisplayEngine({
   );
 
   const handleContextMenuClose = useCallback(() => {
-    contextMenuNodeIdRef.current = null;
     dispatch({ type: 'CONTEXT_MENU_CLOSE' });
     computeDisplayModes();
   }, [computeDisplayModes, dispatch]);
 
   const handleUnsavedChangesDialogOpen = useCallback(async () => {
-    if (unsavedChangesDialogOpenRef.current) return;
+    if (stateRef.current.unsavedDialogOpen) return;
     cancelInteractionCaptureRetry();
     cancelAllNativeReveals();
     await prepareInteractionStart('unsaved-changes-dialog');
-    unsavedChangesDialogOpenRef.current = true;
     dispatch({ type: 'UNSAVED_DIALOG_OPEN' });
     computeDisplayModes();
 
@@ -811,8 +802,7 @@ export function useSiteboardDisplayEngine({
   ]);
 
   const handleUnsavedChangesDialogClose = useCallback(() => {
-    if (!unsavedChangesDialogOpenRef.current) return;
-    unsavedChangesDialogOpenRef.current = false;
+    if (!stateRef.current.unsavedDialogOpen) return;
     dispatch({ type: 'UNSAVED_DIALOG_CLOSE' });
     if (activeInteractionsRef.current.size === 0) {
       computeDisplayModes();
@@ -854,9 +844,6 @@ export function useSiteboardDisplayEngine({
       interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
       settlingNodeIdsRef.current.delete(nodeId);
       clearCachedScreenshotUrl(projectId, nodeId);
-      if (resizingNodeIdRef.current === nodeId) {
-        resizingNodeIdRef.current = null;
-      }
       dispatch({ type: 'CLEANUP_NODE', nodeId });
       // スクリーンショットファイルをクリーンアップ
       void webviewApi.deleteScreenshot(nodeId, projectId);
@@ -959,7 +946,6 @@ export function useSiteboardDisplayEngine({
       nativeHiddenByInteractionCaptureRef.current.clear();
       interactionCaptureRetryNodeIdsRef.current.clear();
       settlingNodeIdsRef.current.clear();
-      resizingNodeIdRef.current = null;
       dispatch({ type: 'INTERACTION_CLEAR_ALL' });
       computeDisplayModes();
     };
@@ -1011,7 +997,6 @@ export function useSiteboardDisplayEngine({
       interactionCaptureRetryNodeIds.clear();
       settlingNodeIds.clear();
       toolbarOccludedNodeIds.clear();
-      resizingNodeIdRef.current = null;
     };
   }, [cancelAllNativeReveals, cancelInteractionCaptureRetry]);
 

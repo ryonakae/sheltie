@@ -5,6 +5,7 @@ import { webviewApi } from '@/lib/tauri-bridge';
 import type { DisplayMode, WebPageNode } from '@/types';
 
 import {
+  type DisplayEngineAction,
   type DisplayEngineState,
   hasAnyInteraction,
   isContextMenuTarget,
@@ -22,9 +23,9 @@ export interface CaptureScreenshotOptions {
 }
 
 export interface ScreenshotCaptureSharedRefs {
-  // 5-5 段階 2-3: unsavedDialog / contextMenu / activeInteractions の read 系は stateRef 経由に統一
+  // 5-5 段階 2-4a: state machine への移行が進むにつれ、ref は徐々に dispatch に置換される。
   stateRef: React.MutableRefObject<DisplayEngineState>;
-  forceHiddenInteractionNodeIdsRef: React.MutableRefObject<Set<string>>;
+  dispatch: (action: DisplayEngineAction) => void;
   interactionCaptureRetryNodeIdsRef: React.MutableRefObject<Set<string>>;
   nativeHiddenByInteractionCaptureRef: React.MutableRefObject<Set<string>>;
 }
@@ -254,7 +255,7 @@ export function useScreenshotCaptureQueue({
 
               screenshotReadyRef.current[nodeId] = true;
               delete presentedScreenshotUrlRef.current[nodeId];
-              sharedRefs.forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
+              sharedRefs.dispatch({ type: 'FORCE_HIDDEN_REMOVE', nodeId });
               sharedRefs.interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
               setCachedScreenshotUrl(projectId, nodeId, assetUrl);
 

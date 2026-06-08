@@ -204,7 +204,7 @@ src-tauri/src/
 ### 検証ログ
 - 0-1〜1-2（commit 9cf112e）: test 8 / typecheck / lint / format すべて OK。push 済み。
 - 1-3（未コミット）: test 15 / typecheck / lint / format すべて OK。
-- ⚠️ 手動シナリオ（0-3 チェックリスト）は未実施。`npm run dev` でのビルド系挙動確認が必要。
+- ✅ 手動シナリオ（0-3 チェックリスト）実機確認済み（2026-06-08）。概ね問題なし。
 - 📝 ブランチ: `refactor/siteboard-cleanup`
 - [x] 2-1 Rust top_inset ヘルパー ✅ platform_top_inset に集約（4箇所の cfg 分岐 + adjusted_y 分岐を解消）。cargo check OK
 - [x] 3-1 useSiteboardViewportController ✅ viewport 管理を抽出。Siteboard.tsx 1634→1395行。typecheck/lint/test/format OK（要実機確認: pan/zoom/fit/reset）

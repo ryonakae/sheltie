@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { WEBVIEW_REVEAL_DELAY_MS } from '@/constants';
+import { snapRectToDevicePixels } from '@/lib/device-pixel-snap';
 import { webviewApi } from '@/lib/tauri-bridge';
 import {
   createScopedLogger,
@@ -377,12 +378,26 @@ export function useSiteboardDisplayEngine({
 
       if (label) {
         if (nextMode === 'native') {
+          // WKWebView の NSView frame は最終的に device pixel grid に snap される。
+          // CSS placeholder の subpixel な rect をそのまま渡すと WKWebView 側と
+          // <img> 側で snap 基準がずれ、native ↔ screenshot 切替時に位置/サイズが
+          // 1 device px ぶん見えてしまう。両者を同じ snap 値で揃えるため、
+          // ここで明示的に device pixel grid に丸めてから渡す。
+          const snapped = snapRectToDevicePixels(
+            {
+              x: placeholderRect.left,
+              y: placeholderRect.top,
+              width: placeholderRect.width,
+              height: placeholderRect.height,
+            },
+            window.devicePixelRatio || 1,
+          );
           void webviewApi.updateBounds(
             label,
-            placeholderRect.left,
-            placeholderRect.top,
-            placeholderRect.width,
-            placeholderRect.height,
+            snapped.x,
+            snapped.y,
+            snapped.width,
+            snapped.height,
             zoomRef.current,
           );
 
@@ -646,12 +661,21 @@ export function useSiteboardDisplayEngine({
         const placeholderRect = placeholder.getBoundingClientRect();
         setNodeDisplayMode(nodeId, 'native', wrapper);
 
+        const snapped = snapRectToDevicePixels(
+          {
+            x: placeholderRect.left,
+            y: placeholderRect.top,
+            width: placeholderRect.width,
+            height: placeholderRect.height,
+          },
+          window.devicePixelRatio || 1,
+        );
         void webviewApi.updateBounds(
           label,
-          placeholderRect.left,
-          placeholderRect.top,
-          placeholderRect.width,
-          placeholderRect.height,
+          snapped.x,
+          snapped.y,
+          snapped.width,
+          snapped.height,
           zoomRef.current,
         );
         void webviewApi.show(label);

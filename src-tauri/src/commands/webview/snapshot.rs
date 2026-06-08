@@ -86,7 +86,8 @@ fn take_wkwebview_snapshot(
     >,
 ) {
     use block2::RcBlock;
-    use objc2::runtime::AnyObject;
+    use objc2::runtime::{AnyClass, AnyObject};
+    use objc2_foundation::NSRect;
 
     let block = RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
         let result = if image.is_null() {
@@ -102,12 +103,36 @@ fn take_wkwebview_snapshot(
     });
 
     unsafe {
-        let nil: *mut AnyObject = std::ptr::null_mut();
+        // takeSnapshotWithConfiguration: nil の場合、WebKit がデフォルト rect
+        // (visible content rect) を使うため scrollbar inset 等で frame より 1pt
+        // 小さい PNG が返り、CSS placeholder と 1 device px ずれる。
+        // WKSnapshotConfiguration を明示作成し rect = webview.bounds を指定する
+        // ことで、PNG サイズを WebView frame と完全一致させる。
+        let bounds: NSRect = objc2::msg_send![raw_ptr, bounds];
+
+        let config: *mut AnyObject = match AnyClass::get(c"WKSnapshotConfiguration") {
+            Some(cls) => {
+                let c: *mut AnyObject = objc2::msg_send![cls, new];
+                if !c.is_null() {
+                    let _: () = objc2::msg_send![c, setRect: bounds];
+                }
+                c
+            }
+            None => std::ptr::null_mut(),
+        };
+
         let _: () = objc2::msg_send![
             raw_ptr,
-            takeSnapshotWithConfiguration: nil,
+            takeSnapshotWithConfiguration: config,
             completionHandler: &*block
         ];
+
+        // -[WKWebView new] と同じく WKSnapshotConfiguration も new で +1 retain。
+        // takeSnapshotWithConfiguration: は内部で copy/retain するため、ここで
+        // 即 release してリークを防ぐ。
+        if !config.is_null() {
+            let _: () = objc2::msg_send![config, release];
+        }
     }
 }
 

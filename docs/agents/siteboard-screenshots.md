@@ -50,6 +50,18 @@ PNG ファイルとして保存する（macOS のみ）。保存先 `~/Library/A
 - 右クリックメニュー表示前（保存済みがなければ待機、あれば stale を表示しつつ fresh）
 - ノードツールバーに被られた時（未スクショなら native 維持しつつ撮影を促す）
 
+## スナップショット rect
+
+- `take_wkwebview_snapshot`（`src-tauri/src/commands/webview/snapshot.rs`）では `takeSnapshotWithConfiguration: nil` ではなく `WKSnapshotConfiguration` を明示作成し `rect = webview.bounds` を指定する
+- `nil` 指定だと WebKit がデフォルト rect（visible content rect）を使い、scrollbar inset 等で frame より 1pt 小さい PNG が返って CSS placeholder と 1 device px ずれる
+- `WKSnapshotConfiguration` は `new` で +1 retain されるため、`takeSnapshotWithConfiguration:` 呼び出し後に明示 release する
+
+## スクショ `<img>` の描画
+
+- `WebPageNode.tsx` の `<img data-screenshot-img>` は `object-fill` で placeholder 全域に引き伸ばす（`object-cover` は使わない）
+- 撮影 PNG のサイズは「撮った瞬間の WKWebView frame」と一致する一方、表示時の placeholder は zoom/resize の途中で異なるアスペクト比になりうる。`object-cover` だとアスペクト比差分で片軸クロップが起き、native ↔ screenshot 切替時のずれとして見える
+- `object-fill` で揃えることで、撮影直後はピクセル一致、zoom/resize 中は若干歪むが crop ずれより目立たない。WKWebView 側 frame の device-pixel snap（`siteboard-runtime.md` の Webview 生成・破棄 参照）と合わせて初めて両者が同じ矩形を共有する
+
 ## ちらつき回避
 
 `screenshot -> native`:

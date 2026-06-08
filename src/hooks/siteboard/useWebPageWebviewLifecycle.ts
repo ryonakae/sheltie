@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
+import { snapRectToDevicePixels } from '@/lib/device-pixel-snap';
 import { webviewApi } from '@/lib/tauri-bridge';
 import {
   createScopedLogger,
@@ -106,13 +107,20 @@ export function useWebPageWebviewLifecycle({
             )?.getBoundingClientRect() ?? null,
           ),
         });
+        // WKWebView の NSView frame と CSS placeholder の描画位置を同じ device-pixel
+        // グリッドに揃え、native ↔ screenshot 切替時の 1 device px ぶんの位置/サイズ
+        // ずれを防ぐ。詳細は snapRectToDevicePixels の定義を参照。
+        const snappedRect = snapRectToDevicePixels(
+          { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+          window.devicePixelRatio || 1,
+        );
         const label = await webviewApi.create(
           nodeId,
           initialUrl,
-          rect.left,
-          rect.top,
-          rect.width,
-          rect.height,
+          snappedRect.x,
+          snappedRect.y,
+          snappedRect.width,
+          snappedRect.height,
           getZoom(),
         );
 
@@ -148,12 +156,21 @@ export function useWebPageWebviewLifecycle({
             )?.getBoundingClientRect() ?? null,
           ),
         });
+        const snappedCurrentRect = snapRectToDevicePixels(
+          {
+            x: currentRect.left,
+            y: currentRect.top,
+            width: currentRect.width,
+            height: currentRect.height,
+          },
+          window.devicePixelRatio || 1,
+        );
         void webviewApi.updateBounds(
           label,
-          currentRect.left,
-          currentRect.top,
-          currentRect.width,
-          currentRect.height,
+          snappedCurrentRect.x,
+          snappedCurrentRect.y,
+          snappedCurrentRect.width,
+          snappedCurrentRect.height,
           getZoom(),
         );
         onWebviewCreated(nodeId, label);

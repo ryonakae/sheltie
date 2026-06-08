@@ -191,6 +191,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - Webview の create/destroy は URL 同期から切り離す（`node.url` 更新では再生成しない）
 - `Siteboard.tsx` は mount 直後の `useLayoutEffect` で `data-siteboard-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提のフレーム枠線太さを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする
 - macOS の child WKWebView は host `contentView` 座標系で配置される一方、renderer の `getBoundingClientRect()` は `contentLayoutRect` 基準。`commands/webview.rs` では `contentLayoutRect` と host view 高さの差分を top inset として求め、`create_page_webview` / `update_page_webview_bounds` / `batch_update_webview_positions` の `y` に加算してから child Webview へ渡す
+- `webviewApi.create` / `webviewApi.updateBounds` に渡す `(x, y, width, height)` は呼び出し直前に `snapRectToDevicePixels(rect, window.devicePixelRatio || 1)`（`src/lib/device-pixel-snap.ts`）で device pixel grid に snap する。WKWebView の `NSView.frame` は最終的に backingAlignedRect に snap されるため、subpixel な値をそのまま渡すと CSS placeholder の subpixel rendering 結果と 1 device px ずれて、native ↔ screenshot 切替時の位置/サイズずれとして見える。`width` のみ snap だと right edge がずれるため、left/top と right/bottom を独立に snap してから差分で width/height を再計算する
 
 ### labelsByNodeId を正本にする
 

@@ -191,11 +191,15 @@ export const WebPageNode = memo(function WebPageNode({
           </div>
         ) : (
           screenshotUrl && (
+            // object-fill: 撮影サイズと placeholder サイズが微妙に違っても
+            // アスペクト比由来のクロップ（object-cover）や余白を出さず、
+            // 領域全体に引き伸ばす。撮影直後はサイズがほぼ一致するので歪みは
+            // 視認不能、zoom/resize 中の若干の歪みは crop ずれより目立たない。
             <img
               ref={screenshotImgRef}
               src={screenshotUrl}
               alt=""
-              className="pointer-events-none absolute inset-0 size-full object-cover object-top-left"
+              className="pointer-events-none absolute inset-0 size-full object-fill"
               data-screenshot-img
               draggable={false}
             />

@@ -22,6 +22,12 @@ import {
   resolveViewportDisplayMode,
   shouldUseOpacityReveal,
 } from './display-engine/mode';
+import {
+  INITIAL_DISPLAY_ENGINE_STATE,
+  type DisplayEngineAction,
+  type DisplayEngineState,
+  displayEngineReducer,
+} from './display-engine/state-machine';
 import { useNativeRevealController } from './useNativeRevealController';
 import { useScreenshotCaptureQueue } from './useScreenshotCaptureQueue';
 
@@ -80,6 +86,14 @@ export function useSiteboardDisplayEngine({
   const [displayModes, setDisplayModes] = useState<Record<string, DisplayMode>>(() =>
     buildInitialDisplayModes(webPageNodes, cachedScreenshotUrlsByNodeId),
   );
+
+  // 5-5 段階 1: state machine の枠を導入。既存 ref が真実の状態のままで、
+  // dispatch は既存 ref の書き換えと並走させて stateRef を同期させる（読み手はまだ無し）。
+  // 以降の段階で各 ref を消し、dispatch / stateRef 経由の読み書きへ移行する。
+  const stateRef = useRef<DisplayEngineState>(INITIAL_DISPLAY_ENGINE_STATE);
+  const dispatch = useCallback((action: DisplayEngineAction) => {
+    stateRef.current = displayEngineReducer(stateRef.current, action);
+  }, []);
 
   const computeDisplayModesRef = useRef<(() => void) | null>(null);
   const setNodeDisplayModeRef = useRef<
@@ -246,12 +260,16 @@ export function useSiteboardDisplayEngine({
           if (ready || hasDisplayableScreenshot(nodeId)) {
             forceHiddenInteractionNodeIdsRef.current.delete(nodeId);
             interactionCaptureRetryNodeIdsRef.current.delete(nodeId);
+            dispatch({ type: 'FORCE_HIDDEN_REMOVE', nodeId });
+            dispatch({ type: 'CAPTURE_RETRY_REMOVE', nodeId });
             return true;
           }
 
           forceHiddenInteractionNodeIdsRef.current.add(nodeId);
+          dispatch({ type: 'FORCE_HIDDEN_ADD', nodeId });
           if (useNativeHideAfterSnapshot) {
             interactionCaptureRetryNodeIdsRef.current.add(nodeId);
+            dispatch({ type: 'CAPTURE_RETRY_ADD', nodeId });
           }
           return false;
         }),
@@ -264,6 +282,7 @@ export function useSiteboardDisplayEngine({
       return true;
     },
     [
+      dispatch,
       ensureScreenshotReady,
       getInteractionPreparationNodeIds,
       getWebviewLabel,
@@ -401,6 +420,7 @@ export function useSiteboardDisplayEngine({
 
     // 被り状態を更新する。被り開始（前パスで未被り）だけが上の fresh 撮影を発火させる。
     toolbarOccludedIdsRef.current = nextToolbarOccludedIds;
+    dispatch({ type: 'TOOLBAR_OCCLUDED_IDS_SET', ids: nextToolbarOccludedIds });
 
     if (deferredNativeSwaps.length > 0) {
       // WebView が OS レベルで描画されるのを 1 フレーム待ってからスクリーンショットを非表示にする
@@ -417,6 +437,7 @@ export function useSiteboardDisplayEngine({
     beginNativeRevealFade,
     cancelNativeReveal,
     containerRef,
+    dispatch,
     ensureScreenshotReady,
     getFallbackDisplayMode,
     getWebviewLabel,
@@ -528,6 +549,7 @@ export function useSiteboardDisplayEngine({
 
       const retryNodeIds = Array.from(interactionCaptureRetryNodeIdsRef.current);
       interactionCaptureRetryNodeIdsRef.current.clear();
+      dispatch({ type: 'CAPTURE_RETRY_CLEAR_ALL' });
 
       for (const nodeId of retryNodeIds) {
         const label = getWebviewLabel(nodeId);
@@ -540,7 +562,7 @@ export function useSiteboardDisplayEngine({
         });
       }
     }, WEBVIEW_REVEAL_DELAY_MS + 32);
-  }, [cancelInteractionCaptureRetry, captureScreenshot, containerRef, getWebviewLabel]);
+  }, [cancelInteractionCaptureRetry, captureScreenshot, containerRef, dispatch, getWebviewLabel]);
 
   const scheduleInteractionUpdate = useCallback(() => {
     if (activeInteractionsRef.current.has('drag') || activeInteractionsRef.current.has('resize'))
@@ -570,6 +592,7 @@ export function useSiteboardDisplayEngine({
   const handlePageResizeStart = useCallback(
     (nodeId: string) => {
       resizingNodeIdRef.current = nodeId;
+      dispatch({ type: 'RESIZE_START', nodeId });
       const label = getWebviewLabel(nodeId);
       if (!label) return;
 
@@ -591,6 +614,7 @@ export function useSiteboardDisplayEngine({
       containerRef,
       cancelNativeReveal,
       captureScreenshot,
+      dispatch,
       getWebviewLabel,
       hasDisplayableScreenshot,
       hideNodeWebview,
@@ -603,6 +627,7 @@ export function useSiteboardDisplayEngine({
       if (resizingNodeIdRef.current === nodeId) {
         resizingNodeIdRef.current = null;
       }
+      dispatch({ type: 'RESIZE_END', nodeId });
 
       const label = getWebviewLabel(nodeId);
       if (!label) {
@@ -661,6 +686,7 @@ export function useSiteboardDisplayEngine({
       containerRef,
       captureScreenshot,
       computeDisplayModes,
+      dispatch,
       getWebviewLabel,
       isMacOsRef,
       setNodeDisplayMode,
@@ -676,6 +702,7 @@ export function useSiteboardDisplayEngine({
         cancelZoomRestore();
         cancelAllNativeReveals();
         activeInteractionsRef.current.add(type);
+        dispatch({ type: 'INTERACTION_START', interactionType: type });
 
         applyPreparedInteractionModes();
 
@@ -687,6 +714,7 @@ export function useSiteboardDisplayEngine({
       }
 
       activeInteractionsRef.current.delete(type);
+      dispatch({ type: 'INTERACTION_END', interactionType: type });
       if (activeInteractionsRef.current.size === 0) {
         if (interactionRafRef.current !== null) {
           cancelAnimationFrame(interactionRafRef.current);
@@ -715,6 +743,7 @@ export function useSiteboardDisplayEngine({
       computeDisplayModes,
       computeInteractionModes,
       containerRef,
+      dispatch,
       scheduleInteractionCaptureRetry,
       scheduleZoomRestoreAfterReflow,
     ],
@@ -732,6 +761,7 @@ export function useSiteboardDisplayEngine({
       }
 
       contextMenuNodeIdRef.current = nodeId;
+      dispatch({ type: 'CONTEXT_MENU_OPEN', nodeId });
 
       const { wrapper } = getWebPageElements(containerRef.current, nodeId);
 
@@ -745,6 +775,7 @@ export function useSiteboardDisplayEngine({
     [
       containerRef,
       cancelNativeReveal,
+      dispatch,
       ensureScreenshotReady,
       getWebviewLabel,
       hasDisplayableScreenshot,
@@ -755,8 +786,9 @@ export function useSiteboardDisplayEngine({
 
   const handleContextMenuClose = useCallback(() => {
     contextMenuNodeIdRef.current = null;
+    dispatch({ type: 'CONTEXT_MENU_CLOSE' });
     computeDisplayModes();
-  }, [computeDisplayModes]);
+  }, [computeDisplayModes, dispatch]);
 
   const handleUnsavedChangesDialogOpen = useCallback(async () => {
     if (unsavedChangesDialogOpenRef.current) return;
@@ -764,6 +796,7 @@ export function useSiteboardDisplayEngine({
     cancelAllNativeReveals();
     await prepareInteractionStart('unsaved-changes-dialog');
     unsavedChangesDialogOpenRef.current = true;
+    dispatch({ type: 'UNSAVED_DIALOG_OPEN' });
     computeDisplayModes();
 
     await new Promise<void>((resolve) => {
@@ -773,33 +806,37 @@ export function useSiteboardDisplayEngine({
     cancelAllNativeReveals,
     cancelInteractionCaptureRetry,
     computeDisplayModes,
+    dispatch,
     prepareInteractionStart,
   ]);
 
   const handleUnsavedChangesDialogClose = useCallback(() => {
     if (!unsavedChangesDialogOpenRef.current) return;
     unsavedChangesDialogOpenRef.current = false;
+    dispatch({ type: 'UNSAVED_DIALOG_CLOSE' });
     if (activeInteractionsRef.current.size === 0) {
       computeDisplayModes();
     }
-  }, [computeDisplayModes]);
+  }, [computeDisplayModes, dispatch]);
 
   const holdNodeDuringPositionSettle = useCallback(
     (nodeId: string) => {
       settlingNodeIdsRef.current.add(nodeId);
+      dispatch({ type: 'SETTLE_NODE', nodeId });
       cancelNativeReveal(nodeId);
     },
-    [cancelNativeReveal],
+    [cancelNativeReveal, dispatch],
   );
 
   const releaseNodeAfterPositionSettle = useCallback(
     (nodeId: string) => {
       if (!settlingNodeIdsRef.current.delete(nodeId)) return;
+      dispatch({ type: 'RELEASE_NODE', nodeId });
       if (activeInteractionsRef.current.size === 0) {
         computeDisplayModes();
       }
     },
-    [computeDisplayModes],
+    [computeDisplayModes, dispatch],
   );
 
   const cleanupPageArtifacts = useCallback(
@@ -820,10 +857,11 @@ export function useSiteboardDisplayEngine({
       if (resizingNodeIdRef.current === nodeId) {
         resizingNodeIdRef.current = null;
       }
+      dispatch({ type: 'CLEANUP_NODE', nodeId });
       // スクリーンショットファイルをクリーンアップ
       void webviewApi.deleteScreenshot(nodeId, projectId);
     },
-    [cancelNativeReveal, cleanupScreenshot, clearCachedScreenshotUrl, projectId],
+    [cancelNativeReveal, cleanupScreenshot, clearCachedScreenshotUrl, dispatch, projectId],
   );
 
   useEffect(() => {
@@ -922,6 +960,7 @@ export function useSiteboardDisplayEngine({
       interactionCaptureRetryNodeIdsRef.current.clear();
       settlingNodeIdsRef.current.clear();
       resizingNodeIdRef.current = null;
+      dispatch({ type: 'INTERACTION_CLEAR_ALL' });
       computeDisplayModes();
     };
 
@@ -932,6 +971,7 @@ export function useSiteboardDisplayEngine({
     cancelInteractionCaptureRetry,
     cancelZoomRestore,
     computeDisplayModes,
+    dispatch,
     hasPendingReveals,
   ]);
 

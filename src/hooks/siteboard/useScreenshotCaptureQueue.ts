@@ -4,9 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { webviewApi } from '@/lib/tauri-bridge';
 import type { DisplayMode, WebPageNode } from '@/types';
 
-import { type DisplayEngineState, isContextMenuTarget } from './display-engine/state-machine';
-
-import type { InteractionType } from './types';
+import {
+  type DisplayEngineState,
+  hasAnyInteraction,
+  isContextMenuTarget,
+  isDragOrResizeActive,
+} from './display-engine/state-machine';
 
 /** 検証用フラグ: false にするとスクリーンショットクリッピング機能を完全に無効化する */
 const SCREENSHOT_CLIPPING_ENABLED = true;
@@ -19,9 +22,8 @@ export interface CaptureScreenshotOptions {
 }
 
 export interface ScreenshotCaptureSharedRefs {
-  // 5-5 段階 2: unsavedDialog / contextMenu の read 系は stateRef 経由に統一
+  // 5-5 段階 2-3: unsavedDialog / contextMenu / activeInteractions の read 系は stateRef 経由に統一
   stateRef: React.MutableRefObject<DisplayEngineState>;
-  activeInteractionsRef: React.MutableRefObject<Set<InteractionType>>;
   forceHiddenInteractionNodeIdsRef: React.MutableRefObject<Set<string>>;
   interactionCaptureRetryNodeIdsRef: React.MutableRefObject<Set<string>>;
   nativeHiddenByInteractionCaptureRef: React.MutableRefObject<Set<string>>;
@@ -219,11 +221,7 @@ export function useScreenshotCaptureQueue({
 
           const forceDuringInteraction = nextOptions?.forceDuringInteraction ?? false;
           const hideAfterSnapshotRequest = nextOptions?.hideAfterSnapshotRequest ?? false;
-          if (
-            !forceDuringInteraction &&
-            (sharedRefs.activeInteractionsRef.current.has('drag') ||
-              sharedRefs.activeInteractionsRef.current.has('resize'))
-          ) {
+          if (!forceDuringInteraction && isDragOrResizeActive(sharedRefs.stateRef.current)) {
             lastResult = false;
           } else {
             if (hideAfterSnapshotRequest) {
@@ -240,8 +238,7 @@ export function useScreenshotCaptureQueue({
               lastResult = false;
             } else if (
               !forceDuringInteraction &&
-              (sharedRefs.activeInteractionsRef.current.has('drag') ||
-                sharedRefs.activeInteractionsRef.current.has('resize'))
+              isDragOrResizeActive(sharedRefs.stateRef.current)
             ) {
               lastResult = false;
             } else {
@@ -274,7 +271,7 @@ export function useScreenshotCaptureQueue({
               const shouldUseScreenshotNow =
                 sharedRefs.stateRef.current.unsavedDialogOpen ||
                 isContextMenuTarget(sharedRefs.stateRef.current, nodeId) ||
-                sharedRefs.activeInteractionsRef.current.size > 0;
+                hasAnyInteraction(sharedRefs.stateRef.current);
 
               if (shouldUseScreenshotNow) {
                 setNodeDisplayModeRef.current?.(nodeId, 'screenshot');
@@ -283,7 +280,7 @@ export function useScreenshotCaptureQueue({
                 }
               }
 
-              if (sharedRefs.activeInteractionsRef.current.size === 0) {
+              if (!hasAnyInteraction(sharedRefs.stateRef.current)) {
                 computeDisplayModesRef.current?.();
               }
 
@@ -336,7 +333,7 @@ export function useScreenshotCaptureQueue({
         }
       }
 
-      if (sharedRefs.activeInteractionsRef.current.size === 0) {
+      if (!hasAnyInteraction(sharedRefs.stateRef.current)) {
         computeDisplayModesRef.current?.();
       }
     },

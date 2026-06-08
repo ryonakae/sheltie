@@ -24,7 +24,11 @@ import {
 } from './display-engine/mode';
 import {
   INITIAL_DISPLAY_ENGINE_STATE,
+  hasAnyInteraction,
   isContextMenuTarget,
+  isDragOrResizeActive,
+  isInteractionActive,
+  isPanOrZoomActive,
   type DisplayEngineAction,
   type DisplayEngineState,
   displayEngineReducer,
@@ -103,8 +107,8 @@ export function useSiteboardDisplayEngine({
   const hideNodeWebviewRef = useRef<((label: string) => void) | null>(null);
   const interactionRafRef = useRef<number | null>(null);
   const containerRectRef = useRef<DOMRect | null>(null);
-  const activeInteractionsRef = useRef<Set<InteractionType>>(new Set());
   // 5-5 段階 2: resizingNodeId / contextMenuNodeId / unsavedDialogOpen は stateRef に集約
+  // 5-5 段階 3: activeInteractions も stateRef に集約
   const settlingNodeIdsRef = useRef<Set<string>>(new Set());
   // ノードツールバーに被られているページ。被り開始の検出（fresh 撮影の 1 回発火）に使う。
   const toolbarOccludedIdsRef = useRef<Set<string>>(new Set());
@@ -151,7 +155,6 @@ export function useSiteboardDisplayEngine({
   const sharedRefs = useMemo(
     () => ({
       stateRef,
-      activeInteractionsRef,
       forceHiddenInteractionNodeIdsRef,
       interactionCaptureRetryNodeIdsRef,
       nativeHiddenByInteractionCaptureRef,
@@ -187,7 +190,7 @@ export function useSiteboardDisplayEngine({
   }, []);
 
   const isPanOrZoomInteractionActive = useCallback(() => {
-    return activeInteractionsRef.current.has('pan') || activeInteractionsRef.current.has('zoom');
+    return isPanOrZoomActive(stateRef.current);
   }, []);
 
   const getFallbackDisplayMode = useCallback(
@@ -291,7 +294,7 @@ export function useSiteboardDisplayEngine({
   const computeDisplayModes = useCallback(() => {
     // 操作中は applyPreparedInteractionModes + computeInteractionModes が表示を管理する。
     // ここで走ると native に復帰して webview が表示されてしまう。
-    if (activeInteractionsRef.current.size > 0) return;
+    if (hasAnyInteraction(stateRef.current)) return;
     if (!containerRef.current || !containerRef.current) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
@@ -455,7 +458,7 @@ export function useSiteboardDisplayEngine({
   const scheduleZoomRestoreAfterReflow = useCallback(() => {
     // pageZoom を使わないため即座に computeDisplayModes を呼ぶだけで良い
     requestAnimationFrame(() => {
-      if (activeInteractionsRef.current.size > 0) return;
+      if (hasAnyInteraction(stateRef.current)) return;
       computeDisplayModes();
     });
   }, [computeDisplayModes]);
@@ -469,7 +472,7 @@ export function useSiteboardDisplayEngine({
       // zoom は native 側の snapshot 要求直後 hide に任せた方が安定している。
       // pan は drag 開始直後に JS 側からも hide しないと visible のまま残るケースがあるため、
       // skip せず applyPreparedInteractionModes / computeInteractionModes 側で即 hide させる。
-      return activeInteractionsRef.current.has('zoom') && isPanOrZoomInteractionActive();
+      return isInteractionActive(stateRef.current, 'zoom') && isPanOrZoomInteractionActive();
     },
     [isPanOrZoomInteractionActive],
   );
@@ -543,7 +546,7 @@ export function useSiteboardDisplayEngine({
 
     interactionCaptureRetryTimerRef.current = window.setTimeout(() => {
       interactionCaptureRetryTimerRef.current = null;
-      if (activeInteractionsRef.current.size > 0 || !containerRef.current) return;
+      if (hasAnyInteraction(stateRef.current) || !containerRef.current) return;
 
       const retryNodeIds = Array.from(interactionCaptureRetryNodeIdsRef.current);
       interactionCaptureRetryNodeIdsRef.current.clear();
@@ -563,8 +566,7 @@ export function useSiteboardDisplayEngine({
   }, [cancelInteractionCaptureRetry, captureScreenshot, containerRef, dispatch, getWebviewLabel]);
 
   const scheduleInteractionUpdate = useCallback(() => {
-    if (activeInteractionsRef.current.has('drag') || activeInteractionsRef.current.has('resize'))
-      return;
+    if (isDragOrResizeActive(stateRef.current)) return;
     if (interactionRafRef.current !== null) return;
 
     interactionRafRef.current = requestAnimationFrame(() => {
@@ -625,18 +627,18 @@ export function useSiteboardDisplayEngine({
 
       const label = getWebviewLabel(nodeId);
       if (!label) {
-        if (activeInteractionsRef.current.size === 0) {
+        if (!hasAnyInteraction(stateRef.current)) {
           computeDisplayModes();
         }
         return;
       }
 
       requestAnimationFrame(() => {
-        if (activeInteractionsRef.current.has('resize')) return;
+        if (isInteractionActive(stateRef.current, 'resize')) return;
 
         const { wrapper, placeholder } = getWebPageElements(containerRef.current, nodeId);
         if (!wrapper || !placeholder) {
-          if (activeInteractionsRef.current.size === 0) {
+          if (!hasAnyInteraction(stateRef.current)) {
             computeDisplayModes();
           }
           return;
@@ -660,7 +662,7 @@ export function useSiteboardDisplayEngine({
 
         void (async () => {
           await waitForWebviewResizeRelayout();
-          if (activeInteractionsRef.current.has('resize')) return;
+          if (isInteractionActive(stateRef.current, 'resize')) return;
 
           await captureScreenshot(nodeId, {
             forceDuringInteraction: true,
@@ -670,7 +672,7 @@ export function useSiteboardDisplayEngine({
           if (isMacOsRef.current) {
             void webviewApi.setOpacity(label, 1);
           }
-          if (activeInteractionsRef.current.size === 0) {
+          if (!hasAnyInteraction(stateRef.current)) {
             computeDisplayModes();
           }
         })();
@@ -695,7 +697,6 @@ export function useSiteboardDisplayEngine({
         cancelInteractionCaptureRetry();
         cancelZoomRestore();
         cancelAllNativeReveals();
-        activeInteractionsRef.current.add(type);
         dispatch({ type: 'INTERACTION_START', interactionType: type });
 
         applyPreparedInteractionModes();
@@ -707,9 +708,8 @@ export function useSiteboardDisplayEngine({
         return;
       }
 
-      activeInteractionsRef.current.delete(type);
       dispatch({ type: 'INTERACTION_END', interactionType: type });
-      if (activeInteractionsRef.current.size === 0) {
+      if (!hasAnyInteraction(stateRef.current)) {
         if (interactionRafRef.current !== null) {
           cancelAnimationFrame(interactionRafRef.current);
           interactionRafRef.current = null;
@@ -804,7 +804,7 @@ export function useSiteboardDisplayEngine({
   const handleUnsavedChangesDialogClose = useCallback(() => {
     if (!stateRef.current.unsavedDialogOpen) return;
     dispatch({ type: 'UNSAVED_DIALOG_CLOSE' });
-    if (activeInteractionsRef.current.size === 0) {
+    if (!hasAnyInteraction(stateRef.current)) {
       computeDisplayModes();
     }
   }, [computeDisplayModes, dispatch]);
@@ -822,7 +822,7 @@ export function useSiteboardDisplayEngine({
     (nodeId: string) => {
       if (!settlingNodeIdsRef.current.delete(nodeId)) return;
       dispatch({ type: 'RELEASE_NODE', nodeId });
-      if (activeInteractionsRef.current.size === 0) {
+      if (!hasAnyInteraction(stateRef.current)) {
         computeDisplayModes();
       }
     },
@@ -900,14 +900,14 @@ export function useSiteboardDisplayEngine({
       labelsByNodeId: Object.fromEntries(
         webPageNodes.map((page) => [page.id, webviewLabelsByNodeId[page.id] ?? null]),
       ),
-      activeInteractions: Array.from(activeInteractionsRef.current),
+      activeInteractions: Array.from(stateRef.current.activeInteractions),
     });
     let secondFrameId: number | null = null;
     let firstFrameId: number | null = requestAnimationFrame(() => {
       firstFrameId = null;
       secondFrameId = requestAnimationFrame(() => {
         secondFrameId = null;
-        if (activeInteractionsRef.current.size > 0) return;
+        if (hasAnyInteraction(stateRef.current)) return;
         logDisplayEngineDebug('label-sync:run', {
           webviewLabelSyncKey,
           labelsByNodeId: Object.fromEntries(
@@ -930,8 +930,7 @@ export function useSiteboardDisplayEngine({
 
   useEffect(() => {
     const handleBlur = () => {
-      if (activeInteractionsRef.current.size === 0 && !hasPendingReveals()) return;
-      activeInteractionsRef.current.clear();
+      if (!hasAnyInteraction(stateRef.current) && !hasPendingReveals()) return;
 
       if (interactionRafRef.current !== null) {
         cancelAnimationFrame(interactionRafRef.current);
@@ -1001,7 +1000,6 @@ export function useSiteboardDisplayEngine({
   }, [cancelAllNativeReveals, cancelInteractionCaptureRetry]);
 
   return {
-    activeInteractionsRef,
     captureScreenshot,
     cancelZoomRestore,
     cleanupPageArtifacts,

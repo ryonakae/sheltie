@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  HYSTERESIS_PX,
+  NATIVE_SAFE_MARGIN_BOTTOM_PX,
+  NATIVE_SAFE_MARGIN_PX,
+  WEB_PAGE_FRAME_PADDING,
+} from '@/constants';
 import type { BoardNode } from '@/types';
 
 import { getNodeBounds, resolveCenteredViewport, resolveFitViewport } from './siteboard-viewport';
 
 function text(x: number, y: number, width: number, height: number): BoardNode {
   return { type: 'text', x, y, width, height } as BoardNode;
+}
+
+function webpage(x: number, y: number, width: number, height: number): BoardNode {
+  return { type: 'webpage', x, y, width, height } as BoardNode;
 }
 
 describe('getNodeBounds', () => {
@@ -98,5 +108,97 @@ describe('resolveFitViewport', () => {
     const tight = resolveFitViewport([text(0, 0, 700, 300)], 1000, 800, { paddingPx: 0 });
     const loose = resolveFitViewport([text(0, 0, 700, 300)], 1000, 800, { paddingPx: 200 });
     expect(tight?.zoom ?? 0).toBeGreaterThan(loose?.zoom ?? 0);
+  });
+});
+
+describe('resolveFitViewport - padding object', () => {
+  it('padding を全方向同値の object で渡しても数値指定と同じ結果', () => {
+    const byNumber = resolveFitViewport([text(0, 0, 700, 300)], 1000, 800, { paddingPx: 100 });
+    const byObject = resolveFitViewport([text(0, 0, 700, 300)], 1000, 800, {
+      padding: { top: 100, right: 100, bottom: 100, left: 100 },
+    });
+    expect(byObject).toEqual(byNumber);
+  });
+
+  it('非対称 padding では center が available 領域の中央に来る', () => {
+    // bottom だけ厚い padding → 縦方向の available 中心が viewport 中央より上
+    // text(0,0,100,50) は十分小さいので maxZoom=1.5 まで拡大される
+    // available 中心 Y = top + (vh - top - bottom)/2 = 0 + (800 - 0 - 200)/2 = 300
+    // bounds.centerY = 25, zoom = 1.5 → y = 300 - 25*1.5 = 262.5
+    const target = resolveFitViewport([text(0, 0, 100, 50)], 1000, 800, {
+      padding: { top: 0, right: 0, bottom: 200, left: 0 },
+    });
+    expect(target?.zoom).toBe(1.5);
+    expect(target?.y).toBeCloseTo(262.5, 5);
+  });
+
+  it('object padding の未指定方向は 0 として扱う', () => {
+    // bottom のみ指定、他は 0 → top:0, right:0, left:0, bottom:200
+    const explicit = resolveFitViewport([text(0, 0, 100, 50)], 1000, 800, {
+      padding: { top: 0, right: 0, bottom: 200, left: 0 },
+    });
+    const partial = resolveFitViewport([text(0, 0, 100, 50)], 1000, 800, {
+      padding: { bottom: 200 },
+    });
+    expect(partial).toEqual(explicit);
+  });
+});
+
+describe('resolveFitViewport - webpage native safe area', () => {
+  // webpage を含むと padding を NATIVE_SAFE_MARGIN_(BOTTOM_)PX + HYSTERESIS_PX 以上に底上げする。
+  // これにより display-engine の isFullyInsideNativeSafeArea を満たし、fit 直後に native のまま。
+
+  it('webpage 単体では bottom 余白が NATIVE_SAFE_MARGIN_BOTTOM_PX で律速される', () => {
+    // 縦長 webpage を狭い高さの viewport で fit
+    // frame = 393 + WEB_PAGE_FRAME_PADDING*2 = 425, 852 + 32 = 884
+    // 自動底上げ: top/left/right = max(64, 29) = 64、bottom = max(64, 100) = 100
+    // available height = 900 - 64 - 100 = 736 → zoom = 736 / 884 ≒ 0.832
+    const target = resolveFitViewport([webpage(0, 0, 393, 852)], 1400, 900);
+    expect(target).not.toBeNull();
+    const expectedZoom = 736 / 884;
+    expect(target?.zoom).toBeCloseTo(expectedZoom, 3);
+  });
+
+  it('fit 結果で placeholder の画面矩形が display-engine の safe area を満たす', () => {
+    // resolveFitViewport の出力を使って placeholder（webview 部分）の画面矩形を計算し、
+    // isFullyInsideNativeSafeArea の条件（>= 21, bottom <= 808）を満たすことを確認する。
+    const VW = 1400;
+    const VH = 900;
+    const node = webpage(0, 0, 393, 852);
+    const target = resolveFitViewport([node], VW, VH);
+    expect(target).not.toBeNull();
+    const { x, y, zoom } = target!;
+    const padding = WEB_PAGE_FRAME_PADDING;
+    // placeholder world rect = node.{x,y,w,h}（frame の中の内側 padding 分内側）
+    // 画面 rect = pan + world * zoom
+    const placeholderLeft = x + (node.x + padding) * zoom;
+    const placeholderRight = x + (node.x + padding + node.width) * zoom;
+    const placeholderTop = y + (node.y + padding) * zoom;
+    const placeholderBottom = y + (node.y + padding + node.height) * zoom;
+    // isFullyInsideNativeSafeArea の境界（hysteresis 込み）を上書き再現
+    expect(placeholderLeft).toBeGreaterThanOrEqual(NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX);
+    expect(placeholderRight).toBeLessThanOrEqual(VW - NATIVE_SAFE_MARGIN_PX + HYSTERESIS_PX);
+    expect(placeholderTop).toBeGreaterThanOrEqual(NATIVE_SAFE_MARGIN_PX - HYSTERESIS_PX);
+    expect(placeholderBottom).toBeLessThanOrEqual(
+      VH - NATIVE_SAFE_MARGIN_BOTTOM_PX + HYSTERESIS_PX,
+    );
+  });
+
+  it('webpage と text の混在でも底上げが発動する', () => {
+    // text のみと比べて webpage 混在では padding が広がるので zoom は同等以下
+    const mixedZoom =
+      resolveFitViewport([webpage(0, 0, 393, 852), text(0, 0, 100, 50)], 1400, 900)?.zoom ?? 0;
+    const textOnlyZoom =
+      resolveFitViewport([text(0, 0, 393, 852), text(0, 0, 100, 50)], 1400, 900)?.zoom ?? 0;
+    expect(mixedZoom).toBeLessThan(textOnlyZoom);
+  });
+
+  it('text/sticky のみでは底上げが発動しない（従来挙動）', () => {
+    // text 393x852（webpage と同じ寸法）+ paddingPx 0 → frame は素のサイズ
+    // 自動底上げが効いた場合は available height = 900 - 100 = 800 で zoom = 800/852 ≒ 0.939 に
+    // 落ちるはずなので、ここで >1 が観測できれば底上げが無効化されていることを示せる
+    const target = resolveFitViewport([text(0, 0, 393, 852)], 1400, 900, { paddingPx: 0 });
+    expect(target?.zoom).toBeCloseTo(900 / 852, 3);
+    expect(target?.zoom ?? 0).toBeGreaterThan(1);
   });
 });

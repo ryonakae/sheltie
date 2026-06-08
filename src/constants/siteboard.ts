@@ -21,7 +21,7 @@ export const ZOOM_STEPS = [0.25, 0.5, 1.0, 1.5] as const;
 // スクショ切替の判定しきい値
 export const HYSTERESIS_PX = 4;
 export const NATIVE_SAFE_MARGIN_PX = 25;
-export const NATIVE_SAFE_MARGIN_BOTTOM_PX = 75;
+export const NATIVE_SAFE_MARGIN_BOTTOM_PX = 96;
 export const PRE_DISPLAY_MARGIN_PX = 50;
 export const WEBVIEW_REVEAL_DELAY_MS = 100;
 

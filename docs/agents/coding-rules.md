@@ -36,6 +36,7 @@
 - **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` のフレーム div（24px world 固定 padding 帯）に付ける。タイトル段は `NodeToolbar` 内（ノード DOM サブツリー外に portal 配置されるため `dragHandle` が効かない）なので、`Siteboard.tsx` の `handleTitlePointerDown` が pointer 系イベントを直接処理し `draggingNodePositions` を更新する。右クリックも同じタイトル段の `onContextMenu` で `handleNodeContextMenu` を発火する
 - **NodeToolbar 2 段構成**: WebPage のツールバーは `NodeToolbar` を 2 つ使う。ツールバー段（`align="center" isVisible={selected && isActive}`）と、タイトル段（`align="start" isVisible offset={8}`）。タイトル段は常時表示で `[Moved] Title` を Webview+フレーム幅で `truncate`
 - **ツールバーの固定サイズ**: canvas zoom 中も文字・ボタン・アイコンの画面上サイズを固定したい UI は `zoomPx()` と `AppButton scaleWithCanvasZoom` を使う。高さ、padding、gap、font-size、icon size、border 幅を world 座標へ直接ハードコードしない
+- **WebPageToolbar のモード切替時も高さ固定**: 通常モード（戻る/進む/リロード）と URL 入力モード（HeroUI `InputGroup`）で全体高さを揃える。`InputGroup` の `min-h` と内側 Input の `py` を className で打ち消し、submit ボタンも縮めて行高に収める。配色はツールバー本体（`bg-zinc-800`）に乗るためテーマ非依存で常に dark 系（`InputGroup` 背景 / 文字 / アイコン / placeholder すべて zinc 系・white 系で固定）。`resolveFitViewport` が確保する safe area top（`NATIVE_SAFE_MARGIN_PX = 25`）に収めるための前提
 - **付箋のドラッグ起点**: 付箋はノード本体をドラッグ可能にし、textarea などの操作要素だけを `nodrag` で保護する。スタイル変更は選択時に `NodeToolbar` で表示する
 - **付箋本文の編集開始**: 付箋本文は未選択時のクリックで選択だけ行い、選択済みの本文エリアを再度クリックした時だけ編集を開始する。リサイズ操作やツールバー操作からは編集開始しない
 - **新規追加時は編集モードから開始**: FloatingToolbar から作成した直後は親 (`ProjectScreen`) が `autoEditStickyNoteId` を Siteboard に渡し、`StickyNoteNode` の `autoStartEditing` prop 経由でマウント時に編集モードで起動する

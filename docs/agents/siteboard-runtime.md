@@ -46,7 +46,7 @@ read は `hasAnyInteraction` / `isPanOrZoomActive` / `isDragOrResizeActive` / `i
 
 `src/constants.ts` 参照。主要なもの:
 
-- `NATIVE_SAFE_MARGIN_PX = 25`、`NATIVE_SAFE_MARGIN_BOTTOM_PX = 75`
+- `NATIVE_SAFE_MARGIN_PX = 25`、`NATIVE_SAFE_MARGIN_BOTTOM_PX = 96`（フローティングツールバー + ツールチップ分）。`src/lib/siteboard-viewport.ts:resolveFitViewport` でも、対象ノードに `webpage` が含まれていれば padding の下限としてこの定数（+ `HYSTERESIS_PX`）が適用され、Zoom to Fit／ノード追加直後の表示が screenshot に降格しないようになっている
 - `PRE_DISPLAY_MARGIN_PX = 50`、`HYSTERESIS_PX = 4`
 - `WEBVIEW_REVEAL_DELAY_MS = 100`
 - `FRESHNESS_CAPTURE_DELAY_MS = { navigation: 1000, load: 0, scroll: 0 }`

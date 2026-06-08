@@ -182,12 +182,8 @@ export const WebPageNode = memo(function WebPageNode({
         }}
       >
         {isNodeEmpty(node) ? (
-          <div
-            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-muted"
-            style={{ gap: zoomPx(8) }}
-          >
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted">
             <Globe style={{ width: zoomPx(28), height: zoomPx(28) }} />
-            <span style={{ fontSize: zoomPx(12) }}>Enter URL above</span>
           </div>
         ) : (
           screenshotUrl && (

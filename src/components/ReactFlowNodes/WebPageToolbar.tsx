@@ -7,7 +7,15 @@ import Globe from '@gravity-ui/icons/Globe';
 import Pin from '@gravity-ui/icons/Pin';
 import Smartphone from '@gravity-ui/icons/Smartphone';
 import { Button, InputGroup, TextField } from '@heroui/react';
-import { memo, useEffect, useMemo, useState, type ComponentType, type SVGProps } from 'react';
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from 'react';
 import { twMerge } from 'tailwind-merge';
 
 import { NodeTabletIcon } from '@/components/Node/NodeTabletIcon';
@@ -167,11 +175,22 @@ function WebPageToolbarUrlInput({ initialUrl, onSubmit }: WebPageToolbarUrlInput
   const [value, setValue] = useState(initialUrl);
   const normalizedUrl = useMemo(() => normalizeUrl(value), [value]);
   const isValid = normalizedUrl !== null;
+  const formRef = useRef<HTMLFormElement>(null);
 
   // 編集対象の URL が外部から差し替わったら入力値を同期する
   useEffect(() => {
     setValue(initialUrl);
   }, [initialUrl]);
+
+  // タイトル段クリック経由でツールバーが新規マウントされたとき、pointer/click イベントの後に
+  // ブラウザ側で焦点が移ることがあるため、autoFocus だけでは取りこぼす。次フレームで明示的に focus する
+  useEffect(() => {
+    const handle = requestAnimationFrame(() => {
+      const input = formRef.current?.querySelector<HTMLInputElement>('input');
+      input?.focus();
+    });
+    return () => cancelAnimationFrame(handle);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,11 +199,16 @@ function WebPageToolbarUrlInput({ initialUrl, onSubmit }: WebPageToolbarUrlInput
   };
 
   return (
-    <form onSubmit={handleSubmit} className="nodrag flex items-center">
+    <form ref={formRef} onSubmit={handleSubmit} className="nodrag flex items-center">
       <TextField value={value} onChange={setValue} aria-label="URL to Open">
-        <InputGroup variant="primary" className="-ml-0.5 rounded-lg">
-          <InputGroup.Prefix>
-            <Globe className="size-4 text-muted" />
+        {/* 通常モードのナビボタン群（h-7）に対し h-6 = 24px に縮め、ツールバー全体の高さ揺れを抑える。
+            ツールバー本体（bg-zinc-800）に乗るためテーマに依らず常に dark 系の配色で固定する */}
+        <InputGroup
+          variant="secondary"
+          className="min-h-6 rounded-sm border-zinc-700 bg-zinc-900 hover:bg-zinc-900"
+        >
+          <InputGroup.Prefix className="border-zinc-700 bg-transparent px-1.5">
+            <Globe className="size-3 text-white/60" />
           </InputGroup.Prefix>
           <InputGroup.Input
             autoFocus
@@ -192,13 +216,14 @@ function WebPageToolbarUrlInput({ initialUrl, onSubmit }: WebPageToolbarUrlInput
             spellCheck={false}
             autoCorrect="off"
             autoCapitalize="off"
+            className="py-0 text-xs text-white placeholder:text-white/40 sm:text-xs"
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 (e.target as HTMLInputElement).blur();
               }
             }}
           />
-          <InputGroup.Suffix className="pr-1">
+          <InputGroup.Suffix className="pr-0.5">
             <Button
               isIconOnly
               type="submit"
@@ -206,9 +231,9 @@ function WebPageToolbarUrlInput({ initialUrl, onSubmit }: WebPageToolbarUrlInput
               variant="primary"
               isDisabled={!isValid}
               aria-label="Open"
-              className="size-6 rounded-full"
+              className="size-5 rounded-full"
             >
-              <ArrowRight className="size-3.5" />
+              <ArrowRight className="size-3" />
             </Button>
           </InputGroup.Suffix>
         </InputGroup>

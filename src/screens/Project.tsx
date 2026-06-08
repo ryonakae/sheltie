@@ -11,13 +11,9 @@ import {
   DEFAULT_TEXT_NODE_WIDTH,
   CANVAS_CENTER_ANIMATION_DURATION_SEC,
   CANVAS_CENTER_ANIMATION_EASE,
-  MIN_ZOOM,
 } from '@/constants';
-import {
-  getNodeFrameHeight,
-  getNodeFrameRect,
-  getNodeFrameWidth,
-} from '@/lib/siteboard-node-frame';
+import { getNodeFrameHeight, getNodeFrameWidth } from '@/lib/siteboard-node-frame';
+import { resolveFitViewport } from '@/lib/siteboard-viewport';
 import { selectProject, useProjectStore } from '@/store/tab-store';
 import { type BoardNode } from '@/types';
 
@@ -88,6 +84,9 @@ export function ProjectScreen() {
   /**
    * ページ追加後にビューポートをアニメーションしてページを中央・フィット表示する。
    * ズームとパンを同時にアニメーションし、常にアニメーションが発火する（isFullyVisible チェックなし）。
+   *
+   * Zoom to Fit と同じ resolveFitViewport を使うことで、Webサイトノードでは
+   * native safe area（下方ツールバー領域）が自動的に確保され、追加直後の screenshot 降格を防ぐ。
    */
   const centerOnNewNode = useCallback(
     (
@@ -99,15 +98,9 @@ export function ProjectScreen() {
       const rect = siteboard.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
-      const frameRect = getNodeFrameRect(node);
-      // フレーム全体（=ノード矩形）がビューポートに 80% フィットするズームを計算（最大 1 倍）
-      const targetZoom = Math.max(
-        MIN_ZOOM,
-        Math.min((rect.width * 0.8) / frameRect.width, (rect.height * 0.8) / frameRect.height, 1),
-      );
-      // フレーム中心がビューポート中心に来るパンを計算
-      const targetPanX = rect.width / 2 - (frameRect.x + frameRect.width / 2) * targetZoom;
-      const targetPanY = rect.height / 2 - (frameRect.y + frameRect.height / 2) * targetZoom;
+      const target = resolveFitViewport([node], rect.width, rect.height, { maxZoom: 1 });
+      if (!target) return;
+      const { x: targetPanX, y: targetPanY, zoom: targetZoom } = target;
 
       cancelCentering();
       if (prefersReducedMotion) {

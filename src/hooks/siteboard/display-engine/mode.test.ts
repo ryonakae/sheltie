@@ -72,8 +72,8 @@ describe('rectsOverlap', () => {
 });
 
 describe('isFullyInsideNativeSafeArea', () => {
-  // NATIVE_SAFE_MARGIN_PX = 25, NATIVE_SAFE_MARGIN_BOTTOM_PX = 75, HYSTERESIS_PX = 4
-  // → 有効な内側境界: left>=21, right<=979, top>=21, bottom<=529
+  // NATIVE_SAFE_MARGIN_PX = 25, NATIVE_SAFE_MARGIN_BOTTOM_PX = 96, HYSTERESIS_PX = 4
+  // → 有効な内側境界: left>=21, right<=979, top>=21, bottom<=508
 
   it('中央に十分小さいノードは安全領域内', () => {
     expect(isFullyInsideNativeSafeArea(rect(100, 100, 200, 200), CONTAINER)).toBe(true);
@@ -87,9 +87,9 @@ describe('isFullyInsideNativeSafeArea', () => {
     expect(isFullyInsideNativeSafeArea(rect(21, 100, 200, 200), CONTAINER)).toBe(true);
   });
 
-  it('下マージンが厚い（75px）のは hysteresis 込みで bottom<=529', () => {
-    expect(isFullyInsideNativeSafeArea(rect(100, 100, 200, 429), CONTAINER)).toBe(true);
-    expect(isFullyInsideNativeSafeArea(rect(100, 100, 200, 430), CONTAINER)).toBe(false);
+  it('下マージンが厚い（96px）のは hysteresis 込みで bottom<=508', () => {
+    expect(isFullyInsideNativeSafeArea(rect(100, 100, 200, 408), CONTAINER)).toBe(true);
+    expect(isFullyInsideNativeSafeArea(rect(100, 100, 200, 409), CONTAINER)).toBe(false);
   });
 
   it('右辺が右マージンを超えると外側', () => {

@@ -1,15 +1,61 @@
 import { Position } from '@xyflow/react';
 
+import { DEFAULT_EDGE_STYLE } from '@/constants';
+import type { EdgeColorPreset, EdgeLineStyle, EdgeStrokeWidth } from '@/types';
+
 /**
  * ArrowEdge / ArrowConnectionLine 共通の矢印形状定数。
  * 完成エッジとドラッグ中の接続線で同じ見た目を保つために集約する。
  */
-export const ARROW_LENGTH = 16;
-export const ARROW_HALF_WIDTH = 10;
-export const SOURCE_DOT_RADIUS = 6;
-export const EDGE_STROKE_WIDTH = 3;
-export const EDGE_DEFAULT_COLOR = 'var(--color-separator-tertiary)';
-export const EDGE_SELECTED_COLOR = 'var(--accent)';
+const ARROW_GEOMETRY_BY_STROKE_WIDTH: Record<
+  EdgeStrokeWidth,
+  { sourceDotRadius: number; arrowLength: number; arrowHalfWidth: number }
+> = {
+  3: { sourceDotRadius: 6, arrowLength: 16, arrowHalfWidth: 10 },
+  6: { sourceDotRadius: 8, arrowLength: 20, arrowHalfWidth: 12 },
+};
+
+export function getArrowGeometry(strokeWidth: EdgeStrokeWidth) {
+  return ARROW_GEOMETRY_BY_STROKE_WIDTH[strokeWidth];
+}
+
+const defaultArrowGeometry = getArrowGeometry(DEFAULT_EDGE_STYLE.strokeWidth);
+export const ARROW_LENGTH = defaultArrowGeometry.arrowLength;
+export const ARROW_HALF_WIDTH = defaultArrowGeometry.arrowHalfWidth;
+export const SOURCE_DOT_RADIUS = defaultArrowGeometry.sourceDotRadius;
+export const EDGE_STROKE_WIDTH = DEFAULT_EDGE_STYLE.strokeWidth;
+
+const EDGE_DASH_ARRAY_BY_STROKE_WIDTH: Record<EdgeStrokeWidth, string> = {
+  3: '8 6',
+  6: '12 8',
+};
+
+export function getEdgeDashArray(
+  strokeWidth: EdgeStrokeWidth,
+  lineStyle: EdgeLineStyle,
+): string | undefined {
+  return lineStyle === 'dashed' ? EDGE_DASH_ARRAY_BY_STROKE_WIDTH[strokeWidth] : undefined;
+}
+
+const EDGE_COLOR_BY_PRESET: Record<EdgeColorPreset, string> = {
+  default: 'var(--color-separator-tertiary)',
+  foreground: 'var(--foreground)',
+  muted: 'var(--muted)',
+  accent: 'var(--accent)',
+  success: 'var(--success)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)',
+};
+
+export function getEdgeColor(colorPreset: EdgeColorPreset): string {
+  return EDGE_COLOR_BY_PRESET[colorPreset];
+}
+
+export const EDGE_DEFAULT_COLOR = getEdgeColor(DEFAULT_EDGE_STYLE.colorPreset);
+export const EDGE_SELECTION_COLOR = 'var(--accent)';
+export const EDGE_SELECTION_HALO_EXTRA_WIDTH = 6;
+export const EDGE_SELECTION_HALO_OPACITY = 0.35;
+export const EDGE_TOOLBAR_OFFSET_PX = 8;
 
 /**
  * WebPageFlowNode の Handle 形状（ズーム非依存の CSS px）。

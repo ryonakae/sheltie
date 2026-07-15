@@ -5,14 +5,13 @@ import {
   type ConnectionLineComponentProps,
 } from '@xyflow/react';
 
+import { DEFAULT_EDGE_STYLE } from '@/constants';
+
 import {
-  ARROW_HALF_WIDTH,
-  ARROW_LENGTH,
-  EDGE_DEFAULT_COLOR,
-  EDGE_STROKE_WIDTH,
   ROTATION_BY_POSITION,
-  SOURCE_DOT_RADIUS,
   WEBPAGE_HANDLE_HIT_SIZE,
+  getArrowGeometry,
+  getEdgeColor,
 } from './arrowGeometry';
 
 // React Flow がドラッグ中に渡す座標は「handle の幾何中心」だが、完成後の ArrowEdge は
@@ -62,15 +61,17 @@ export function ArrowConnectionLine({
     targetPosition: toPosition,
   });
 
-  const color = EDGE_DEFAULT_COLOR;
+  const color = getEdgeColor(DEFAULT_EDGE_STYLE.colorPreset);
+  const { strokeWidth } = DEFAULT_EDGE_STYLE;
+  const { sourceDotRadius, arrowLength, arrowHalfWidth } = getArrowGeometry(strokeWidth);
   const rotation = ROTATION_BY_POSITION[toPosition];
 
   return (
     <g>
-      <path d={edgePath} fill="none" style={{ stroke: color, strokeWidth: EDGE_STROKE_WIDTH }} />
-      <circle cx={fromPoint.x} cy={fromPoint.y} r={SOURCE_DOT_RADIUS} style={{ fill: color }} />
+      <path d={edgePath} fill="none" style={{ stroke: color, strokeWidth }} />
+      <circle cx={fromPoint.x} cy={fromPoint.y} r={sourceDotRadius} style={{ fill: color }} />
       <polygon
-        points={`0,0 ${-ARROW_LENGTH},${-ARROW_HALF_WIDTH} ${-ARROW_LENGTH},${ARROW_HALF_WIDTH}`}
+        points={`0,0 ${-arrowLength},${-arrowHalfWidth} ${-arrowLength},${arrowHalfWidth}`}
         transform={`translate(${toPoint.x} ${toPoint.y}) rotate(${rotation})`}
         strokeLinejoin="round"
         style={{ fill: color, stroke: color }}

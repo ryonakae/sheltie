@@ -1,12 +1,32 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { BoardNode } from '@/types';
+import { DEFAULT_EDGE_STYLE } from '@/constants';
+import type { BoardEdge, BoardNode } from '@/types';
 
-import { omitKeys, patchNode } from './tab-store';
+import { omitKeys, patchNode, useProjectStore } from './tab-store';
 
 function sticky(id: string, x = 0): BoardNode {
   return { id, type: 'stickynote', x, y: 0, width: 100, height: 100 } as BoardNode;
 }
+
+function edge(overrides: Partial<BoardEdge> = {}): BoardEdge {
+  return {
+    ...DEFAULT_EDGE_STYLE,
+    id: 'edge-a-b',
+    source: 'a',
+    sourceHandle: 'right',
+    target: 'b',
+    targetHandle: 'left',
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  useProjectStore.getState().initializeProject({
+    untitledIndex: 1,
+    document: { schemaVersion: 2, nodes: [], edges: [edge()] },
+  });
+});
 
 describe('patchNode', () => {
   it('対象ノードだけ patch を適用した新配列を返す', () => {
@@ -31,6 +51,91 @@ describe('patchNode', () => {
   it('patch が同一参照を返したら no-op（null）になる', () => {
     const nodes = [sticky('a')];
     expect(patchNode(nodes, 'a', (node) => node)).toBeNull();
+  });
+});
+
+describe('edge actions', () => {
+  it('スタイル変更を1履歴に記録しUndoで戻す', () => {
+    const store = useProjectStore.getState();
+
+    store.updateEdgeStyle('edge-a-b', { strokeWidth: 6 });
+
+    expect(useProjectStore.getState().project?.edges[0].strokeWidth).toBe(6);
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+
+    useProjectStore.getState().undoProject();
+    expect(useProjectStore.getState().project?.edges[0].strokeWidth).toBe(3);
+  });
+
+  it('逆向きの同一接続点を1履歴で置換しUndoで元の向きへ戻す', () => {
+    const original = edge({
+      id: 'old',
+      strokeWidth: 6,
+      lineStyle: 'dashed',
+      colorPreset: 'danger',
+    });
+    useProjectStore.getState().initializeProject({
+      untitledIndex: 1,
+      document: { schemaVersion: 2, nodes: [], edges: [original] },
+    });
+
+    const incoming = edge({
+      id: 'new',
+      source: 'b',
+      sourceHandle: 'left',
+      target: 'a',
+      targetHandle: 'right',
+    });
+    useProjectStore.getState().addEdge(incoming);
+
+    expect(useProjectStore.getState().project?.edges).toEqual([
+      { ...incoming, strokeWidth: 6, lineStyle: 'dashed', colorPreset: 'danger' },
+    ]);
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+
+    useProjectStore.getState().undoProject();
+    expect(useProjectStore.getState().project?.edges).toEqual([original]);
+  });
+
+  it('同じスタイルへの更新は履歴を追加しない', () => {
+    useProjectStore.getState().updateEdgeStyle('edge-a-b', { strokeWidth: 3 });
+
+    expect(useProjectStore.getState().history.past).toHaveLength(0);
+  });
+
+  it('方向反転を1履歴に記録しスタイルを維持してUndoする', () => {
+    useProjectStore.getState().initializeProject({
+      untitledIndex: 1,
+      document: {
+        schemaVersion: 2,
+        nodes: [],
+        edges: [edge({ strokeWidth: 6, lineStyle: 'dashed', colorPreset: 'warning' })],
+      },
+    });
+
+    useProjectStore.getState().reverseEdge('edge-a-b');
+
+    expect(useProjectStore.getState().project?.edges[0]).toMatchObject({
+      source: 'b',
+      sourceHandle: 'left',
+      target: 'a',
+      targetHandle: 'right',
+      strokeWidth: 6,
+      lineStyle: 'dashed',
+      colorPreset: 'warning',
+    });
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+
+    useProjectStore.getState().undoProject();
+    expect(useProjectStore.getState().project?.edges[0]).toMatchObject({
+      source: 'a',
+      sourceHandle: 'right',
+      target: 'b',
+      targetHandle: 'left',
+      strokeWidth: 6,
+      lineStyle: 'dashed',
+      colorPreset: 'warning',
+    });
   });
 });
 

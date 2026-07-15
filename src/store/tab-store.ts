@@ -16,6 +16,11 @@ import {
   documentNodeToBoardNode,
   sanitizeProjectDocument,
 } from '@/lib/project-document';
+import {
+  addOrReplaceBoardEdge,
+  reverseBoardEdge,
+  updateBoardEdgeStyle,
+} from '@/lib/siteboard-edge';
 import { findNonOverlappingPosition } from '@/lib/siteboard-placement';
 import {
   appendCappedSnapshot,
@@ -27,6 +32,7 @@ import {
 } from '@/store/project-history';
 import type {
   BoardEdge,
+  BoardEdgeStyle,
   BoardNode,
   Project,
   ProjectState,
@@ -98,6 +104,7 @@ interface ProjectActions {
   ) => void;
   updateTextNodeWidthMode: (nodeId: string, widthMode: 'auto' | 'fixed') => void;
   addEdge: (edge: BoardEdge) => void;
+  updateEdgeStyle: (edgeId: string, style: Partial<BoardEdgeStyle>) => void;
   removeEdges: (edgeIds: string[]) => void;
   reverseEdge: (edgeId: string) => void;
   pinWebNodeUrl: (nodeId: string) => void;
@@ -695,18 +702,11 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     ),
 
   addEdge: (edge) =>
+    set((state) => replaceProjectEdges(state, (edges) => addOrReplaceBoardEdge(edges, edge))),
+
+  updateEdgeStyle: (edgeId, style) =>
     set((state) =>
-      replaceProjectEdges(state, (edges) => {
-        const exists = edges.some(
-          (e) =>
-            e.source === edge.source &&
-            e.sourceHandle === edge.sourceHandle &&
-            e.target === edge.target &&
-            e.targetHandle === edge.targetHandle,
-        );
-        if (exists) return null;
-        return [...edges, edge];
-      }),
+      replaceProjectEdges(state, (edges) => updateBoardEdgeStyle(edges, edgeId, style)),
     ),
 
   removeEdges: (edgeIds) =>
@@ -719,33 +719,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
     ),
 
   reverseEdge: (edgeId) =>
-    set((state) =>
-      replaceProjectEdges(state, (edges) => {
-        const target = edges.find((e) => e.id === edgeId);
-        if (!target) return null;
-        // 反転後と同じ向きのエッジが既に存在する場合は重複を避けるため何もしない
-        const reversedExists = edges.some(
-          (e) =>
-            e.id !== edgeId &&
-            e.source === target.target &&
-            e.sourceHandle === target.targetHandle &&
-            e.target === target.source &&
-            e.targetHandle === target.sourceHandle,
-        );
-        if (reversedExists) return null;
-        return edges.map((e) =>
-          e.id === edgeId
-            ? {
-                ...e,
-                source: e.target,
-                sourceHandle: e.targetHandle,
-                target: e.source,
-                targetHandle: e.sourceHandle,
-              }
-            : e,
-        );
-      }),
-    ),
+    set((state) => replaceProjectEdges(state, (edges) => reverseBoardEdge(edges, edgeId))),
 
   setWebNodeWebviewLabel: (nodeId, label) =>
     set((state) => ({

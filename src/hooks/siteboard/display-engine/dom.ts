@@ -25,15 +25,15 @@ export interface SelectionToolbarRect {
   rect: DOMRect;
 }
 
-// 単独選択時に表示されるノードツールバー（data-node-toolbar）の矩形を集める。
+// 単独選択時に表示されるノード／エッジツールバーの矩形を集める。
 // ネイティブ Webview の上に重なるとツールバーが下に潜るため、降格判定の入力に使う。
 export function getSelectionToolbarRects(canvasEl: HTMLElement | null): SelectionToolbarRect[] {
   if (!canvasEl) return [];
-  const elements = canvasEl.querySelectorAll<HTMLElement>('[data-node-toolbar]');
+  const elements = canvasEl.querySelectorAll<HTMLElement>('[data-selection-toolbar]');
   const rects: SelectionToolbarRect[] = [];
   elements.forEach((element) => {
     rects.push({
-      ownerId: element.getAttribute('data-node-toolbar') ?? '',
+      ownerId: element.getAttribute('data-selection-toolbar') ?? '',
       rect: element.getBoundingClientRect(),
     });
   });

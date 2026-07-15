@@ -209,10 +209,10 @@ describe('isToolbarOccluded', () => {
     ).toBe(false);
   });
 
-  it('他ノードのツールバーが重なれば true', () => {
+  it('エッジを含む他要素の選択ツールバーが重なれば true', () => {
     expect(
       isToolbarOccluded('node-a', nodeRect, [
-        { ownerId: 'node-b', rect: rect(150, 150, 100, 30) }, // 重なる
+        { ownerId: 'edge-a-b', rect: rect(150, 150, 100, 30) }, // 重なる
       ]),
     ).toBe(true);
   });

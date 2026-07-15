@@ -21,11 +21,15 @@
   - `BoardNode` を拡張したテキストノード専用補助型
   - `type` は `'text'`
   - `tiptapContent?: object`（Tiptap JSON ドキュメント）、`fontSizePreset?: TextNodeFontSizePreset`（0=S, 1=M, 2=L, 3=XL）、`fontWeight`、`italic`、`strikethrough`、`textColorIndex`、`widthMode`（`'auto' | 'fixed'`）
+- `EdgeStrokeWidth = 3 | 6`
+- `EdgeLineStyle = 'solid' | 'dashed'`
+- `EdgeColorPreset = 'default' | 'foreground' | 'muted' | 'accent' | 'success' | 'warning' | 'danger'`
+- `BoardEdgeStyle`: `strokeWidth`, `lineStyle`, `colorPreset`
 - `BoardEdge`
-  - `id`, `source`, `sourceHandle`, `target`, `targetHandle`
+  - `id`, `source`, `sourceHandle`, `target`, `targetHandle` + `BoardEdgeStyle`
   - WebPageNode 同士の接続を表現する。他のノード種別は接続対象外
 - `SiteboardDocumentEdge`
-  - `.siteboard` に保存されるエッジ形式。`BoardEdge` と同じフィールド
+  - `.siteboard` に保存されるエッジ形式。`BoardEdge` と同じフィールドを必須で保存する
 - `TextNodeFontSizePreset = 0 | 1 | 2 | 3`
 - `ProjectWebviewRuntime`
   - document ごとの runtime-only state
@@ -53,7 +57,7 @@
   - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `removeNodes`, `addStickyNoteNode`, `addTextNode`
   - ノード更新: `updateNodePosition`, `updateNodePositions`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `updateStickyNoteStyle`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
   - 複数操作の集約: `removeNodes` / `updateNodePositions` は複数ノードの削除・位置更新を 1 つの履歴エントリにまとめる。複数選択の一括削除・一括ドラッグ移動はこの経路を通し、Cmd+Z 1 回で全ての変更を巻き戻せるようにする
-  - エッジ: `addEdge`, `removeEdges`, `reverseEdge`（`removeNode` 時に関連エッジも自動削除。`reverseEdge` は同方向の重複が既にあれば no-op）
+  - エッジ: `addEdge`, `updateEdgeStyle`, `removeEdges`, `reverseEdge`（`removeNode` 時に関連エッジも自動削除。スタイル更新・反転・同じ2接続点の置換は各1履歴として記録）
   - 順序/選択: `bringNodeToFront`, `sendNodeToBack`, `bringNodeForward`, `sendNodeBackward`, `pinWebNodeUrl`, `updateViewport`
   - 履歴: `undoProject`, `redoProject`
   - runtime: `setWebNodeWebviewLabel`, `clearWebNodeWebviewLabel`, `hydrateProjectScreenshotUrls`, `setProjectScreenshotUrl`, `clearProjectScreenshotUrl`
@@ -122,6 +126,7 @@
 - しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 25`
 - ドラッグ補正: `DRAG_REPOSITION_GAP = 20`
 - テキストノード: `TEXT_NODE_MIN_WIDTH = 40`, `TEXT_NODE_FONT_SIZE_PRESETS = [12, 16, 24, 36]`, `TEXT_NODE_COLORS`（HeroUI セマンティックカラー: foreground / muted / accent / success / warning / danger の 6 色を `var(--...)` で参照し、light/dark テーマに追従）
+- エッジ: `EDGE_STROKE_WIDTHS = [3, 6]`, `EDGE_LINE_STYLES = ['solid', 'dashed']`, `EDGE_COLOR_PRESETS`（Default + HeroUI セマンティックカラー 6色）、`DEFAULT_EDGE_STYLE = { strokeWidth: 3, lineStyle: 'solid', colorPreset: 'default' }`
 
 `src/store/tab-store.ts`
 
@@ -139,10 +144,14 @@
 - `webviewRuntime` はランタイム専用で永続化しない
 - Undo/Redo は現在の document window にのみ適用する
 - node / edge 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
+- エッジの接続点は `(nodeId, handleId)` で識別し、同じ2接続点を順不同で比較したペアは1本だけ保持する。後から追加したエッジのID/向きへ置換し、既存の太さ・線種・色を継承する。置換全体は1履歴とする
+- `reverseEdge` はIDとスタイルを維持し、source/targetのnode IDとhandle IDを入れ替える
+- schema version 2 のエッジスタイル3項目は必須で、未リリース版の旧edge形式向けfallbackは持たない
 - 重なり順変更（`bringNodeToFront` / `sendNodeToBack` / `bringNodeForward` / `sendNodeBackward`）は nodes 配列順＝永続状態を変えるため履歴へ記録し、Undo/Redo で元の順序に戻せる。順序が変わらない場合（端のノードなど）は no-op で履歴を積まない
 - ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
 - 重なり補正・新規ノード自動配置・センタリング fallback は、content サイズではなくノード外枠（フレーム外周）を基準にする。WebPage のフレーム padding は world 固定 24px なので、外枠サイズは zoom に依存しない
 - WebPage / StickyNote / Text のいずれもツールバーは `NodeToolbar` を使い、ノード外枠の上部に配置する。WebPage はさらに常時表示のタイトル段（`[Moved] Title`、左寄せ）を追加で `NodeToolbar` で重ねる
+- エッジツールバーは `EdgeToolbar` を使い、ノード/エッジを合わせて1要素だけが選択された場合にベジェ曲線中央の上部へ表示する
 - 同一 `filePath` の `.siteboard` を複数のローカル document に関連付けない
 - `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない

@@ -11,6 +11,8 @@ import {
 import { registerViewCommandHandlers } from '@/lib/view-commands';
 import type { BoardNode, Viewport } from '@/types';
 
+type ViewportFlowInstance = Pick<ReactFlowInstance, 'setViewport'>;
+
 const VIEWPORT_SYNC_EPSILON = 0.001;
 
 function isSameViewport(a: FlowViewport | null, b: FlowViewport): boolean {
@@ -61,8 +63,8 @@ export function useSiteboardViewportController({
   const viewportUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const zoomRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiZoomRafRef = useRef<number | null>(null);
-  // setViewport のみ使用するため広い型で保持
-  const reactFlowInstanceRef = useRef<Pick<ReactFlowInstance, 'setViewport'> | null>(null);
+  // edge/node の型に依存せず、実際に使う setViewport だけを保持する
+  const reactFlowInstanceRef = useRef<ViewportFlowInstance | null>(null);
   const flowViewportRef = useRef<FlowViewport | null>(null);
   const moveInteractionTypeRef = useRef<'pan' | 'zoom' | null>(null);
   const prefersReducedMotion = useReducedMotion();
@@ -297,7 +299,7 @@ export function useSiteboardViewportController({
 
   // React Flow の onInit。インスタンス参照を保持し、store viewport を初回同期する
   const handleInit = useCallback(
-    (instance: ReactFlowInstance) => {
+    (instance: ViewportFlowInstance) => {
       reactFlowInstanceRef.current = instance;
       syncViewportFromStore(instance);
     },

@@ -45,7 +45,7 @@ export const StickyNoteToolbar = memo(function StickyNoteToolbar({
 
   return (
     <div
-      data-node-toolbar={node.id}
+      data-selection-toolbar={node.id}
       className="flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg"
     >
       {FONT_SIZE_LABELS.map((label, index) => (

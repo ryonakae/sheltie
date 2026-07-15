@@ -63,7 +63,7 @@
   - Framer Motion `layout` prop は使用しない（React Flow 位置管理との競合）
   - ノード内部コンテンツが fixed width/height を持つと width リサイズ後の折り返しと自動高さが破綻するため、`flex` で内部を伸縮可能にする
 - **React Flow controlled mode 必須設定**:
-  - `flowNodes` 構築時に `selected: selectedNodeIdSet.has(node.id)` を必ず明示的に設定（無いと選択連動の枠表示や複数選択ドラッグが動かない）。リサイズハンドルなど単独選択時のみ表示したい UI は、`selected` ではなく `isActive`（`selectedNodeIds.length === 1` の場合のみ true）でゲートする
+  - `flowNodes` 構築時に `selected: selectedNodeIdSet.has(node.id)` を必ず明示的に設定（無いと選択連動の枠表示や複数選択ドラッグが動かない）。リサイズハンドルやスタイルツールバーなど単独選択時のみ表示したい UI は、`selected` ではなく `isActive` でゲートする。`isActive` は選択ノードと選択エッジを合わせて1要素だけの場合に限る
   - `onNodesChange` の `dimensions` 変更を追跡して `rfMeasured` state に保存し、`flowNodes` の `measured` プロパティに付与（未初期化状態の防止）
   - `onNodesChange` の `select` 変更は複数同時に届くため、Set でまとめて反映してから配列に戻す。React Flow の Shift+クリック / ドラッグ範囲選択も全てこの経路で多選択になる
 - **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizeControl` を 8 個明示配置する。リサイズ枠とハンドルはフレーム外周（=ノード矩形）基準。可視の選択枠は共通 `SelectionFrameOverlay` で描き、line 4 本は上下左右リサイズ用の不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準に置く。`NodeResizeControl` から渡される `params.width / params.height` はフレーム外周のサイズなので、`getNodeChromeWidth / getNodeChromeHeight` を引いて Webview の content サイズに戻して保存する。タイトル / 操作 UI は `WebPageFlowNode` の `NodeToolbar` 2 段に分けて描く。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
@@ -107,13 +107,17 @@
 - 4 方向（top, right, bottom, left）に `type="source"` の Handle を常時レンダリング。`pointerEvents` は無効化しない（接続ドラッグの target 検出に必要）
 - 丸（子要素）の表示条件: `selected` または「接続ドラッグ中かつこのノードに pointer がある」。前者は React Flow の `selected` prop、後者は `useConnection` の `inProgress` + 自前の `onPointerEnter/Leave` で判定する。`useConnection` の `toNode` は handle 近接時しか更新されないため、ノード本体ホバー検出には使えない
 - `connectionMode="loose"` で source 同士の接続を許可、`isValidConnection` で自己接続を禁止
-- エッジは `components/ReactFlowEdges/ArrowEdge.tsx` のカスタムエッジ。ベジェ path（`BaseEdge`）+ 始点ドット + 終端矢じり（SVG）を自前で描画。色は `selected` で `var(--accent)` / `var(--color-separator-tertiary)` を出し分け（HeroUI v3 テーマ追従）
-- ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。完成エッジと同じ見た目で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `(WEBPAGE_HANDLE_HIT_SIZE / 2) / zoom` シフトして ArrowEdge の端点（handle 外側の辺 = 視覚的な丸の中心）と一致させる。矢印形状と Handle サイズの定数は `arrowGeometry.ts` で共有
+- エッジは `components/ReactFlowEdges/ArrowEdge.tsx` のカスタムエッジ。ベジェ path（`BaseEdge`）+ 始点ドット + 終端矢じり（SVG）を自前で描画し、永続化した太さ（3/6）・線種（solid/dashed）・色（Default/Foreground/Muted/Accent/Success/Warning/Danger）を反映する
+- 3px は始点半径6・矢じり長16/全幅20、6px は始点半径8・矢じり長20/全幅24。破線は3pxで `8 6`、6pxで `12 8` とし、始点ドットと矢じりは塗りつぶしのままにする
+- 選択中も設定色を維持し、その背面に同じ線種の `var(--accent)` halo（opacity 0.35）を描く
+- エッジ単独選択時は `EdgeToolbar` をベジェ中央の8px上へズーム非依存で表示する。`ArrowToolbar` は既存ノードツールバーと同じ28pxボタン/余白/背景/active表示を使い、太さ → 線種 → 方向反転 → 7色を一列に並べる。見本/アイコンのみで、TooltipとHTML `title`は付けず`aria-label`を付ける
+- ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。標準3px/実線/Default色で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `(WEBPAGE_HANDLE_HIT_SIZE / 2) / zoom` シフトして ArrowEdge の端点（handle 外側の辺 = 視覚的な丸の中心）と一致させる。矢印形状と Handle サイズの定数は `arrowGeometry.ts` で共有
 - WebPageFlowNode の Handle は当たり判定（`WEBPAGE_HANDLE_HIT_SIZE`、透明）と視覚の丸（`WEBPAGE_HANDLE_VISUAL_DOT_SIZE`、青）を分離する。ヒット領域を視覚より大きく取り、ドラッグ開始と吸着のクリック判定を広げる。両者ともズーム非依存（`--canvas-zoom` で割る）。Handle 中心から外側の辺（=丸の中心）までの距離は `HIT_SIZE / 2` の前提で `ArrowConnectionLine` のオフセットを揃える
 - 吸着スナップ範囲は ReactFlow の `connectionRadius`（既定 20）で調整する。Handle のヒット領域より広めに取って近接時の吸着を出やすくする
-- エッジの選択状態は controlled mode のため Siteboard 側で自前同期する（`selectedEdgeIds` Set を `onEdgesChange` の `select` 変更で更新し、`flowEdges` に `selected` を反映）。これを行わないと選択時のスタイル変化が出ない
+- エッジの選択状態は controlled mode のため Siteboard 側で自前同期する（`selectedEdgeIds` Set を `onEdgesChange` の `select` 変更で更新し、`flowEdges` に `selected` を反映）。削除・ノードcascade削除・同一点置換・Undo/Redoで消えたIDはlive edge IDとの積集合へ非同期で整理する。Shiftなしのノードactivate・ノード追加・ノード右クリックではエッジ選択を明示的に解除し、Shift操作だけ混在選択を許可する
+- 同じ2接続点 `(nodeId, handleId)` を順不同で比較したエッジは1本だけ保持する。逆向きから追加した場合は後から追加したID/向きへ置換し、旧エッジの太さ・線種・色を継承する。接続ハンドルの組が異なれば共存できる
 - エッジの削除は選択 + `Backspace` / `Delete` キー（`onEdgesChange` で `remove` タイプを処理）
-- エッジの永続化は `Project.edges` / `SiteboardDocumentV2.edges` に保存。Undo/Redo はノードと統合スナップショットで管理
+- エッジの永続化は `Project.edges` / `SiteboardDocumentV2.edges` に保存。スタイル変更・方向反転・同一点置換はそれぞれ1つの統合スナップショットとしてUndo/Redoする
 
 ## Siteboard/Webview 変更時の必読
 
@@ -164,7 +168,7 @@
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `@tauri-apps/api/menu` の `Menu.new()` + `popup()` で macOS ネイティブメニューとして表示する。
 - node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
-- エッジ（矢印）の右クリック → コンテキストメニュー「Reverse Arrow Direction / Delete Arrow」。`onEdgeContextMenu` でそのエッジを選択状態にしてからネイティブメニューを表示する。Webview 表示制御（`handleContextMenuOpen`）はノード向けの仕組みなので呼ばない。
+- エッジ（矢印）の右クリック → コンテキストメニューは「Delete Arrow」のみ。`onEdgeContextMenu` でノード選択を解除し、そのエッジだけを選択してからネイティブメニューを表示する。方向反転はツールバーで行い、エッジの重なり順変更は未対応。Webview 表示制御（`handleContextMenuOpen`）はノード向けの仕組みなので呼ばない。
 - エッジの Delete / Backspace 削除は `useSiteboardKeyboard` で扱う（選択中ノードがあればノード削除を優先、なければ選択中エッジを削除）。React Flow の `deleteKeyCode` は `null` で無効化する。組み込みの delete を有効にすると、ノード削除時に「connected edges の remove イベント → `store.removeEdges`」と「キーハンドラ → `store.removeNode`（edges を cascade 削除）」が二重に履歴へ積まれ、Cmd+Z 1 回で edges が復元されない。
 - File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
 - View メニューの `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out` 処理は `lib/view-commands.ts` に集約する。ハンドラの登録は `Siteboard.tsx` 内の `registerViewCommandHandlers` で行う。

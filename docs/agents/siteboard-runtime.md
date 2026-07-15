@@ -35,7 +35,7 @@ per-node / mode / dialog 系の状態は `display-engine/state-machine.ts` の `
 | `unsavedDialogOpen` | 未保存確認ダイアログ表示中 |
 | `resizingNodeId` | リサイズ中ノード |
 | `settlingIds` | 位置補正アニメ中ノード |
-| `toolbarOccludedIds` | 前パスのノードツールバー被り集合 |
+| `toolbarOccludedIds` | 前パスの選択ツールバー（ノード/エッジ）被り集合 |
 | `forceHiddenIds` | 操作開始直後の強制 hidden ノード |
 | `nativeHiddenByCaptureIds` | snapshot 要求直後に native 側で hide したノード |
 | `captureRetryIds` | 取り損ねた capture の再試行待ち |
@@ -127,7 +127,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - `pan/zoom` 中は rAF 単位で `computeInteractionModes()` が `screenshot/hidden` を再判定し、`native` への遷移は許可しない
 - 操作終了（`!hasAnyInteraction(stateRef.current)`）で `computeDisplayModes()` が最終判定・native 復帰を再開
 - `drag/resize` 中は display mode 更新を抑え、リサイズ終了後に最終表示を確定
-- コンテキストメニュー表示中（`stateRef.current.contextMenuNodeId` 一致）、未保存確認ダイアログ表示中（visible webpage node 全体）、ノードツールバー被り中の webpage は `native` 復帰を抑制する
+- コンテキストメニュー表示中（`stateRef.current.contextMenuNodeId` 一致）、未保存確認ダイアログ表示中（visible webpage node 全体）、選択ツールバー被り中の webpage は `native` 復帰を抑制する
 
 ## コンテキストメニューと Webview 制御
 
@@ -146,15 +146,16 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 
 付箋ノードは Webview を持たないため `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` で node type 分岐）。
 
-## ノードツールバーと Webview 制御
+## 選択ツールバーと Webview 制御
 
-選択時のツールバー（付箋/テキスト/Webページの `NodeToolbar position={Position.Top}`、単独選択のみ）は HTML 要素のため、近接する Webpage の Webview に被ると OS レイヤー最前面の Webview の下に潜る。これを防ぐためツールバーに被る Webpage は `screenshot` に降格する。
+選択時のノードツールバー（`NodeToolbar`）とエッジツールバー（`EdgeToolbar`）は HTML 要素のため、近接する Webpage の Webview に被ると OS レイヤー最前面の Webview の下に潜る。これを防ぐためツールバーに被る Webpage は `screenshot` に降格する。
 
-- ツールバー root に `data-node-toolbar={nodeId}` を付与する（`StickyNoteToolbar` / `TextNodeToolbar` / `WebPageToolbar`）。常時表示のタイトル段は対象外
-- `computeDisplayModes()` は `getSelectionToolbarRects()` で全ツールバー矩形を取得し、各 placeholder 矩形と `rectsOverlap()` で交差判定する（自ノードのツールバーは `ownerId === page.id` で除外）
+- ツールバー root に `data-selection-toolbar={ownerId}` を付与する（`StickyNoteToolbar` / `TextNodeToolbar` / `WebPageToolbar` / `ArrowToolbar`）。常時表示のタイトル段は対象外
+- ノード/エッジを合わせて1要素だけが選択された場合に、その要素のツールバーだけを表示する
+- `computeDisplayModes()` は `getSelectionToolbarRects()` で全ツールバー矩形を取得し、各 placeholder 矩形と `rectsOverlap()` で交差判定する（自ノードのツールバーは `ownerId === page.id` で除外。エッジIDはページIDと異なるため重なれば降格対象）
 - 被られたページが `native` の場合、**被り開始時（前パスで未被り）に webview がまだ native(可視) のうちに** `ensureScreenshotReady()` で fresh 撮影を要求してから降格する（`handleContextMenuOpen` と同じ「撮影 → hide」順序。hide 後の webview はスナップショット不可で stale 固着するため必須）
 - 被り状態は `stateRef.current.toolbarOccludedIds`（前パスの被り集合）で管理し、被り開始の 1 回だけ撮影を発火する
-- 選択変化では `selectedNodeIds` 依存 effect が `requestAnimationFrame` 後に `computeDisplayModes()` を呼び、ツールバー DOM 反映後の矩形で再判定する
+- `selectedElementIds`（選択ノードID + 選択エッジID）が変わると、`requestAnimationFrame` 後に `computeDisplayModes()` を呼び、ツールバー DOM 反映後の矩形で再判定する
 
 ## 未保存確認ダイアログと Webview 制御
 

@@ -76,7 +76,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
 
   return (
     <div
-      data-node-toolbar={nodeId}
+      data-selection-toolbar={nodeId}
       className="flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg"
     >
       {showUrlInput ? (

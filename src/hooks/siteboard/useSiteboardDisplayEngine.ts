@@ -52,7 +52,7 @@ interface UseSiteboardDisplayEngineParams {
   zoomRef: React.RefObject<number>;
   centeredNodeId?: string | null;
   onCenteredNodeHandled?: () => void;
-  selectedNodeIds?: string[];
+  selectedElementIds?: string[];
   hydrateCachedScreenshotUrls: (
     projectId: string,
     screenshotUrlsByNodeId: Record<string, string>,
@@ -88,7 +88,7 @@ export function useSiteboardDisplayEngine({
   zoomRef,
   centeredNodeId = null,
   onCenteredNodeHandled,
-  selectedNodeIds = EMPTY_SELECTION,
+  selectedElementIds = EMPTY_SELECTION,
   hydrateCachedScreenshotUrls,
   setCachedScreenshotUrl,
   clearCachedScreenshotUrl,
@@ -989,8 +989,8 @@ export function useSiteboardDisplayEngine({
     return () => cancelAnimationFrame(frameId);
   }, [centeredNodeId, computeDisplayModes, onCenteredNodeHandled, webPageNodes]);
 
-  // 選択変化でノードツールバーの表示/位置が変わるため、描画反映後に表示モードを再判定する。
-  const selectionKey = selectedNodeIds.join(' ');
+  // 選択変化でノード／エッジツールバーの表示・位置が変わるため、描画反映後に再判定する。
+  const selectionKey = selectedElementIds.join(' ');
   useEffect(() => {
     const frameId = requestAnimationFrame(() => computeDisplayModes());
     return () => cancelAnimationFrame(frameId);

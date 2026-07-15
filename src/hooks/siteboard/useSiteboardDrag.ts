@@ -20,6 +20,7 @@ interface UseSiteboardDragParams {
   webPageNodes: WebPageNode[];
   selectedNodeIds: string[];
   setSelection: (idsOrUpdater: string[] | ((prev: string[]) => string[])) => void;
+  clearEdgeSelection: () => void;
   zoomRef: React.RefObject<number>;
   // display engine 連携
   prepareInteractionStart: (type: 'drag', nodeId: string) => void | Promise<unknown>;
@@ -42,6 +43,7 @@ export function useSiteboardDrag({
   webPageNodes,
   selectedNodeIds,
   setSelection,
+  clearEdgeSelection,
   zoomRef,
   prepareInteractionStart,
   handleInteractionChange,
@@ -172,6 +174,7 @@ export function useSiteboardDrag({
   // 既に複数選択メンバーをクリックした場合は選択を維持し、その後の drag で全選択を一括移動できるようにする
   const handleNodeActivate = useCallback(
     (nodeId: string, addToSelection: boolean) => {
+      if (!addToSelection) clearEdgeSelection();
       setSelection((prev) => {
         if (addToSelection) {
           return prev.includes(nodeId) ? prev : [...prev, nodeId];
@@ -180,7 +183,7 @@ export function useSiteboardDrag({
         return [nodeId];
       });
     },
-    [setSelection],
+    [clearEdgeSelection, setSelection],
   );
 
   // タイトル段ドラッグ。React Flow の NodeToolbar はノード DOM サブツリー外に portal 配置されるため

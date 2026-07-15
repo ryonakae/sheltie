@@ -17,7 +17,6 @@ interface UseSiteboardContextMenusParams {
   // ノード削除（settle リセット込み）
   onRemoveNode: (nodeId: string) => void;
   // store アクション
-  reverseEdge: (edgeId: string) => void;
   removeEdges: (edgeIds: string[]) => void;
   bringNodeToFront: (nodeId: string) => void;
   sendNodeToBack: (nodeId: string) => void;
@@ -37,7 +36,6 @@ export function useSiteboardContextMenus({
   handleContextMenuOpen,
   handleContextMenuClose,
   onRemoveNode,
-  reverseEdge,
   removeEdges,
   bringNodeToFront,
   sendNodeToBack,
@@ -47,42 +45,30 @@ export function useSiteboardContextMenus({
   const handleEdgeContextMenu = useCallback(
     (e: React.MouseEvent, edge: Edge) => {
       e.preventDefault();
+      setSelection([]);
       setSelectedEdgeIds(new Set([edge.id]));
 
       const showMenu = async () => {
-        const menuItems: (MenuItem | PredefinedMenuItem)[] = [];
-
-        menuItems.push(
-          await MenuItem.new({
-            text: 'Reverse Arrow Direction',
-            action: () => {
-              reverseEdge(edge.id);
-            },
-          }),
-        );
-        menuItems.push(await PredefinedMenuItem.new({ item: 'Separator' }));
-        menuItems.push(
-          await MenuItem.new({
-            text: 'Delete Arrow',
-            accelerator: 'Backspace',
-            action: () => {
-              removeEdges([edge.id]);
-            },
-          }),
-        );
-
-        const menu = await Menu.new({ items: menuItems });
+        const deleteItem = await MenuItem.new({
+          text: 'Delete Arrow',
+          accelerator: 'Backspace',
+          action: () => {
+            removeEdges([edge.id]);
+          },
+        });
+        const menu = await Menu.new({ items: [deleteItem] });
         await menu.popup();
       };
 
       void showMenu();
     },
-    [reverseEdge, removeEdges, setSelectedEdgeIds],
+    [removeEdges, setSelectedEdgeIds, setSelection],
   );
 
   const handleNodeContextMenu = useCallback(
     (e: React.MouseEvent, nodeId: string) => {
       e.preventDefault();
+      setSelectedEdgeIds(new Set());
       // 複数選択中の右クリック対象が選択メンバーなら選択を保持し、そうでなければ単独選択に切り替える
       setSelection((prev) => (prev.includes(nodeId) ? prev : [nodeId]));
 
@@ -182,6 +168,7 @@ export function useSiteboardContextMenus({
       handleContextMenuClose,
       onRemoveNode,
       setSelection,
+      setSelectedEdgeIds,
       setEditingUrlNodeId,
       nodes,
       bringNodeToFront,

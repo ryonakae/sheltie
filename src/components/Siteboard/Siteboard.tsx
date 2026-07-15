@@ -20,8 +20,8 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { AppButton } from '@/components/Common/AppButton';
 import { ArrowConnectionLine } from '@/components/ReactFlowEdges/ArrowConnectionLine';
-import { EDGE_STROKE_WIDTH } from '@/components/ReactFlowEdges/arrowGeometry';
 import { edgeTypes } from '@/components/ReactFlowEdges/edgeTypes';
+import type { ArrowFlowEdge } from '@/components/ReactFlowEdges/types';
 import { nodeTypes } from '@/components/ReactFlowNodes/nodeTypes';
 import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
@@ -36,6 +36,7 @@ import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRunti
 import { useSiteboardResize } from '@/hooks/siteboard/useSiteboardResize';
 import { useSiteboardTextEditing } from '@/hooks/siteboard/useSiteboardTextEditing';
 import { useSiteboardViewportController } from '@/hooks/siteboard/useSiteboardViewportController';
+import { resolveActiveSelection, retainLiveSelectedIds } from '@/lib/siteboard-selection';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
@@ -68,8 +69,10 @@ export function Siteboard({
   onAddStickyNote,
   onAddTextNode,
 }: SiteboardProps) {
-  // 単独選択時のみ「active」(リサイズハンドルや URL 編集など、単一ノード前提の UI を有効化する判定)
-  const activeNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] : null;
+  // controlled mode では flowEdges.selected を自前で同期する
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(() => new Set());
+  // ノードとエッジを合わせて単独選択のときだけ、対象固有のツールバーを有効にする
+  const { activeNodeId, activeEdgeId } = resolveActiveSelection(selectedNodeIds, selectedEdgeIds);
   const selectedNodeIdSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
   const project = useProjectStore(selectProject);
   const projectWebviewRuntime = useProjectStore(selectProjectWebviewRuntime);
@@ -101,6 +104,7 @@ export function Siteboard({
     setProjectScreenshotUrl,
     clearProjectScreenshotUrl,
     addEdge: addEdgeToStore,
+    updateEdgeStyle,
     removeEdges,
     reverseEdge,
     bringNodeToFront,
@@ -110,6 +114,7 @@ export function Siteboard({
   } = useProjectStore(
     useShallow((s) => ({
       addEdge: s.addEdge,
+      updateEdgeStyle: s.updateEdgeStyle,
       removeEdges: s.removeEdges,
       reverseEdge: s.reverseEdge,
       clearProjectScreenshotUrl: s.clearProjectScreenshotUrl,
@@ -145,7 +150,28 @@ export function Siteboard({
 
   const nodes = useMemo(() => project?.nodes ?? [], [project?.nodes]);
   const edges = useMemo(() => project?.edges ?? [], [project?.edges]);
+  const liveEdgeIds = useMemo(() => new Set(edges.map((edge) => edge.id)), [edges]);
+  const selectedElementIds = useMemo(
+    () => [...selectedNodeIds, ...selectedEdgeIds],
+    [selectedEdgeIds, selectedNodeIds],
+  );
   const webPageNodes = useMemo(() => nodes.filter(isWebPageNode), [nodes]);
+  const clearEdgeSelection = useCallback(() => {
+    setSelectedEdgeIds((current) => (current.size === 0 ? current : new Set()));
+  }, []);
+
+  useEffect(() => {
+    if (selectedEdgeIds.size === 0) return;
+    const filtered = retainLiveSelectedIds(selectedEdgeIds, liveEdgeIds);
+    if (filtered.size === selectedEdgeIds.size) return;
+
+    queueMicrotask(() => {
+      setSelectedEdgeIds((current) => {
+        const next = retainLiveSelectedIds(current, liveEdgeIds);
+        return next.size === current.size ? current : next;
+      });
+    });
+  }, [liveEdgeIds, selectedEdgeIds]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(project?.viewport.zoom ?? 1);
@@ -154,9 +180,6 @@ export function Siteboard({
   const [rfMeasured, setRfMeasured] = useState<Record<string, { width: number; height: number }>>(
     {},
   );
-  // 選択中のエッジ ID。controlled mode では flowEdges.selected を自前で同期しないと
-  // React Flow の選択スタイル（CSS class や custom edge への selected prop）が反映されない
-  const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(() => new Set());
   const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
   const hydrateCachedScreenshotUrls = useCallback(
     (_projectId: string, screenshotUrlsByNodeId: Record<string, string>) => {
@@ -203,7 +226,7 @@ export function Siteboard({
     zoomRef,
     centeredNodeId,
     onCenteredNodeHandled,
-    selectedNodeIds,
+    selectedElementIds,
     hydrateCachedScreenshotUrls,
     setCachedScreenshotUrl,
     clearCachedScreenshotUrl,
@@ -275,6 +298,7 @@ export function Siteboard({
     webPageNodes,
     selectedNodeIds,
     setSelection,
+    clearEdgeSelection,
     zoomRef,
     prepareInteractionStart,
     handleInteractionChange,
@@ -369,27 +393,28 @@ export function Siteboard({
     return connection.source !== connection.target;
   }, []);
 
-  // エッジのデフォルト設定: ArrowEdge（edgeTypes.default）が矢じりを自前で描くため markerEnd は持たない
-  const defaultEdgeOptions = useMemo(
-    () => ({
-      type: 'default' as const,
-      style: { strokeWidth: EDGE_STROKE_WIDTH },
-    }),
-    [],
-  );
+  // ArrowEdge が矢じりと見た目を自前描画するため marker/style は持たない
+  const defaultEdgeOptions = useMemo(() => ({ type: 'default' as const }), []);
 
   // React Flow の flowEdges 配列を構築する
   const flowEdges = useMemo(
-    (): Edge[] =>
+    (): ArrowFlowEdge[] =>
       edges.map((edge) => ({
         id: edge.id,
+        type: 'default',
         source: edge.source,
         sourceHandle: edge.sourceHandle,
         target: edge.target,
         targetHandle: edge.targetHandle,
         selected: selectedEdgeIds.has(edge.id),
+        data: {
+          edge,
+          isActive: edge.id === activeEdgeId,
+          onStyleChange: updateEdgeStyle,
+          onReverse: reverseEdge,
+        },
       })),
-    [edges, selectedEdgeIds],
+    [activeEdgeId, edges, reverseEdge, selectedEdgeIds, updateEdgeStyle],
   );
 
   // ノード変更を処理: ドラッグ中の位置追跡 + dimension 測定結果の保持（ノード初期化に必要）
@@ -507,13 +532,25 @@ export function Siteboard({
     handleContextMenuOpen,
     handleContextMenuClose: handleContextMenuCloseDisplay,
     onRemoveNode: handleRemoveNodeWithSettleReset,
-    reverseEdge,
     removeEdges,
     bringNodeToFront,
     sendNodeToBack,
     bringNodeForward,
     sendNodeBackward,
   });
+
+  const handleAddWebNode = useCallback(() => {
+    clearEdgeSelection();
+    onAddWebNode();
+  }, [clearEdgeSelection, onAddWebNode]);
+  const handleAddStickyNote = useCallback(() => {
+    clearEdgeSelection();
+    onAddStickyNote();
+  }, [clearEdgeSelection, onAddStickyNote]);
+  const handleAddTextNode = useCallback(() => {
+    clearEdgeSelection();
+    onAddTextNode();
+  }, [clearEdgeSelection, onAddTextNode]);
 
   // ペイン（空白エリア）クリックで選択解除（Shift 押下時は複数選択操作の途中とみなして維持）
   const handlePaneClick = useCallback(
@@ -648,9 +685,9 @@ export function Siteboard({
             bgColor={isDark ? '#18181b' : '#f9fafb'}
           />
           <FloatingToolbar
-            onAddWebNode={onAddWebNode}
-            onAddStickyNote={onAddStickyNote}
-            onAddTextNode={onAddTextNode}
+            onAddWebNode={handleAddWebNode}
+            onAddStickyNote={handleAddStickyNote}
+            onAddTextNode={handleAddTextNode}
           />
           <div className="pointer-events-none absolute right-4 bottom-4 z-20 flex items-center gap-2">
             <div className="pointer-events-auto">

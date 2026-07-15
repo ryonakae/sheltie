@@ -36,12 +36,13 @@ src/
 - `components/ReactFlowNodes/TextNodeToolbar.tsx`: テキストノードの書式設定ツールバー（フォントサイズ/Bold/Italic/取り消し線/色）
 - `components/ReactFlowNodes/types.ts`: React Flow ノード型定義（`WebPageFlowNodeData`, `StickyNoteFlowNodeData`, `TextFlowNodeData`）
 - `components/ReactFlowNodes/nodeTypes.ts`: React Flow `nodeTypes` 定数（循環依存防止のため types.ts から分離）
-- `components/ReactFlowEdges/ArrowEdge.tsx`: カスタムエッジ。ベジェ path + 始点ドット + 終端矢じり（SVG）を自前で描き、`selected` から色を React 側で出し分ける（HeroUI v3 `--accent` / `--color-separator-tertiary`）
-- `components/ReactFlowEdges/ArrowConnectionLine.tsx`: ドラッグ中の接続線。ArrowEdge と同じ見た目で、`fromX/fromY` を `Position` 方向に `handle 半径 / zoom` シフトして完成エッジと位置を揃える
-- `components/ReactFlowEdges/arrowGeometry.ts`: 矢印形状と Handle サイズの共通定数（`ARROW_LENGTH` / `SOURCE_DOT_RADIUS` / `EDGE_STROKE_WIDTH` / `ROTATION_BY_POSITION` / `WEBPAGE_HANDLE_HIT_SIZE` / `WEBPAGE_HANDLE_VISUAL_DOT_SIZE`）
+- `components/ReactFlowEdges/ArrowEdge.tsx`: カスタムエッジ。永続化した太さ・実線/破線・テーマ追従色でベジェ path + 始点ドット + 終端矢じりを描き、選択時は設定色を維持したまま accent halo と中央上部の `EdgeToolbar` を表示する
+- `components/ReactFlowEdges/ArrowToolbar.tsx`: エッジ単独選択時のスタイルツールバー（太さ 3/6、実線/破線、方向反転、7色）。既存ノードツールバーと同じ外観でツールチップは持たない
+- `components/ReactFlowEdges/ArrowConnectionLine.tsx`: ドラッグ中の接続線。標準 3px / 実線 / Default 色で、`fromX/fromY` を `Position` 方向に `handle 半径 / zoom` シフトして完成エッジと位置を揃える
+- `components/ReactFlowEdges/arrowGeometry.ts`: 太さ別の矢印形状・破線パターン・色・選択 halo と Handle サイズの共通定数/純関数
 - `components/ReactFlowEdges/edgeTypes.ts`: React Flow `edgeTypes` 定数。既定の `default` を `ArrowEdge` で上書き
 - `hooks/siteboard/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
-- `store/tab-store.ts`: 単一 document window の node・edge・ビューポート状態と統合履歴（Undo/Redo）を管理
+- `store/tab-store.ts`: 単一 document window の node・edge・ビューポート状態と統合履歴（Undo/Redo）を管理。同じ2接続点のエッジ追加は後勝ちで向きを置換して旧スタイルを継承し、`updateEdgeStyle` / `reverseEdge` も履歴へ記録する
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
 - `lib/file-commands.ts`: File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` を処理し、`.siteboard` の入出力と window-local な store 連携を担当する

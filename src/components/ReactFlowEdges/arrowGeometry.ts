@@ -19,12 +19,6 @@ export function getArrowGeometry(strokeWidth: EdgeStrokeWidth) {
   return ARROW_GEOMETRY_BY_STROKE_WIDTH[strokeWidth];
 }
 
-const defaultArrowGeometry = getArrowGeometry(DEFAULT_EDGE_STYLE.strokeWidth);
-export const ARROW_LENGTH = defaultArrowGeometry.arrowLength;
-export const ARROW_HALF_WIDTH = defaultArrowGeometry.arrowHalfWidth;
-export const SOURCE_DOT_RADIUS = defaultArrowGeometry.sourceDotRadius;
-export const EDGE_STROKE_WIDTH = DEFAULT_EDGE_STYLE.strokeWidth;
-
 const EDGE_DASH_ARRAY_BY_STROKE_WIDTH: Record<EdgeStrokeWidth, string> = {
   3: '8 6',
   6: '12 8',
@@ -60,7 +54,7 @@ export const EDGE_TOOLBAR_OFFSET_PX = 8;
 /**
  * WebPageFlowNode の Handle 形状（ズーム非依存の CSS px）。
  * - HIT_SIZE: 透明な当たり判定の一辺。ドラッグ開始のヒット領域を広くするため visual より大きく取る。
- * - VISUAL_DOT_SIZE: 視覚的な丸の直径。完成エッジの SOURCE_DOT_RADIUS と見た目を揃える。
+ * - VISUAL_DOT_SIZE: 視覚的な丸の直径。標準 3px エッジの始点ドットと見た目を揃える。
  * Handle の幾何中心から「外側の辺（= 丸の中心）」までの距離は HIT_SIZE / 2 になる前提で
  * ArrowConnectionLine のドラッグ中接続線も同じオフセットでシフトする。
  */

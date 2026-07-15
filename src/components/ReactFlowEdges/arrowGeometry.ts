@@ -138,7 +138,7 @@ export const EDGE_DEFAULT_COLOR = getEdgeColor(DEFAULT_EDGE_STYLE.colorPreset);
 export const EDGE_SELECTION_ENDPOINT_COLOR = '#3b82f6';
 export const EDGE_SELECTION_ENDPOINT_RADIUS_PX = 7;
 export const EDGE_SELECTION_ENDPOINT_STROKE_WIDTH_PX = 2;
-export const EDGE_TOOLBAR_OFFSET_PX = 8;
+export const EDGE_TOOLBAR_OFFSET_PX = 16;
 
 /**
  * WebPageFlowNode の Handle 形状（ズーム非依存の CSS px）。

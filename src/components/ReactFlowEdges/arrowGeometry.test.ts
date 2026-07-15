@@ -105,6 +105,6 @@ describe('edge selection and color constants', () => {
     expect(EDGE_SELECTION_ENDPOINT_COLOR).toBe('#3b82f6');
     expect(EDGE_SELECTION_ENDPOINT_RADIUS_PX).toBe(7);
     expect(EDGE_SELECTION_ENDPOINT_STROKE_WIDTH_PX).toBe(2);
-    expect(EDGE_TOOLBAR_OFFSET_PX).toBe(8);
+    expect(EDGE_TOOLBAR_OFFSET_PX).toBe(16);
   });
 });

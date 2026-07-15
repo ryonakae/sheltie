@@ -110,7 +110,7 @@
 - エッジは `components/ReactFlowEdges/ArrowEdge.tsx` のカスタムエッジ。ベジェ path（`BaseEdge`）+ 始点ドット + 終端矢じり（SVG）を自前で描画し、永続化した太さ（3/6）・線種（solid/dashed）・色（Default/Foreground/Muted/Accent/Success/Warning/Danger）を反映する
 - 3px は始点半径6・矢じり長16/全幅20、6px は始点半径8・矢じり長20/全幅24。破線は3pxで `8 6`、6pxで `12 8` とし、始点ドットと矢じりは塗りつぶしのままにする
 - 選択中もpath・始点ドット・終端矢じりの見た目は変えない。代わりに始点/終点へ画面サイズ固定の白地＋青枠リング（外径16px相当）を重ねる
-- エッジ単独選択時はベジェpathの実境界を計算し、`EdgeToolbar` を左右境界の中央X・上端Yから画面上8px上へズーム非依存で表示する。`ArrowToolbar` は既存ノードツールバーと同じ28pxボタン/余白/背景/active表示を使い、太さ → 線種 → 方向反転 → 7色を一列に並べる。見本/アイコンのみで、TooltipとHTML `title`は付けず`aria-label`を付ける
+- エッジ単独選択時はベジェpathの実境界を計算し、`EdgeToolbar` を左右境界の中央X・上端Yから画面上16px上へズーム非依存で表示する。`ArrowToolbar` は既存ノードツールバーと同じ28pxボタン/余白/背景/active表示を使い、太さ → 線種 → 方向反転 → 7色を一列に並べる。見本/アイコンのみで、TooltipとHTML `title`は付けず`aria-label`を付ける
 - ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。標準3px/実線/Default色で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `(WEBPAGE_HANDLE_HIT_SIZE / 2) / zoom` シフトして ArrowEdge の端点（handle 外側の辺 = 視覚的な丸の中心）と一致させる。矢印形状と Handle サイズの定数は `arrowGeometry.ts` で共有
 - WebPageFlowNode の Handle は当たり判定（`WEBPAGE_HANDLE_HIT_SIZE`、透明）と視覚の丸（`WEBPAGE_HANDLE_VISUAL_DOT_SIZE`、青）を分離する。ヒット領域を視覚より大きく取り、ドラッグ開始と吸着のクリック判定を広げる。両者ともズーム非依存（`--canvas-zoom` で割る）。Handle 中心から外側の辺（=丸の中心）までの距離は `HIT_SIZE / 2` の前提で `ArrowConnectionLine` のオフセットを揃える
 - 吸着スナップ範囲は ReactFlow の `connectionRadius`（既定 20）で調整する。Handle のヒット領域より広めに取って近接時の吸着を出やすくする

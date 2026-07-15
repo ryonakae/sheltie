@@ -1,24 +1,66 @@
-import { BaseEdge, EdgeToolbar, getBezierPath, type EdgeProps } from '@xyflow/react';
+import { BaseEdge, EdgeToolbar, getBezierPath, useStore, type EdgeProps } from '@xyflow/react';
 import { memo } from 'react';
 
 import { DEFAULT_EDGE_STYLE } from '@/constants';
 
 import {
-  EDGE_SELECTION_COLOR,
-  EDGE_SELECTION_HALO_EXTRA_WIDTH,
-  EDGE_SELECTION_HALO_OPACITY,
+  EDGE_SELECTION_ENDPOINT_COLOR,
   ROTATION_BY_POSITION,
   getArrowGeometry,
   getEdgeColor,
   getEdgeDashArray,
+  getEdgeToolbarAnchor,
+  getSelectionEndpointGeometry,
 } from './arrowGeometry';
 import { ArrowToolbar } from './ArrowToolbar';
 
 import type { ArrowFlowEdge } from './types';
 
+interface EdgeSelectionEndpointsProps {
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+}
+
+const EdgeSelectionEndpoints = memo(function EdgeSelectionEndpoints({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+}: EdgeSelectionEndpointsProps) {
+  const zoom = useStore((state) => state.transform[2]);
+  const { radius, strokeWidth } = getSelectionEndpointGeometry(zoom);
+
+  return (
+    <>
+      <circle
+        data-edge-selection-endpoint="source"
+        cx={sourceX}
+        cy={sourceY}
+        r={radius}
+        fill="#fff"
+        stroke={EDGE_SELECTION_ENDPOINT_COLOR}
+        strokeWidth={strokeWidth}
+        pointerEvents="none"
+      />
+      <circle
+        data-edge-selection-endpoint="target"
+        cx={targetX}
+        cy={targetY}
+        r={radius}
+        fill="#fff"
+        stroke={EDGE_SELECTION_ENDPOINT_COLOR}
+        strokeWidth={strokeWidth}
+        pointerEvents="none"
+      />
+    </>
+  );
+});
+
 /**
  * 終端矢じりを SVG polygon として自前で描くベジェエッジ。
- * 色を React 側で解決し、選択中も設定色を保ったまま背面の halo で選択を示す。
+ * 選択中も線の見た目は変えず、始点・終点リングと上部ツールバーだけを追加する。
  */
 export const ArrowEdge = memo(function ArrowEdge({
   id,
@@ -36,13 +78,17 @@ export const ArrowEdge = memo(function ArrowEdge({
   style,
   data,
 }: EdgeProps<ArrowFlowEdge>) {
-  const [edgePath, centerX, centerY] = getBezierPath({
+  const [edgePath, centerX] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
+  });
+  const toolbarAnchor = getEdgeToolbarAnchor(edgePath, {
+    x: centerX,
+    y: Math.min(sourceY, targetY),
   });
   const edge = data?.edge ?? {
     ...DEFAULT_EDGE_STYLE,
@@ -62,38 +108,6 @@ export const ArrowEdge = memo(function ArrowEdge({
 
   return (
     <>
-      {selected ? (
-        <>
-          <path
-            d={edgePath}
-            fill="none"
-            stroke={EDGE_SELECTION_COLOR}
-            strokeWidth={strokeWidth + EDGE_SELECTION_HALO_EXTRA_WIDTH}
-            strokeDasharray={strokeDasharray}
-            opacity={EDGE_SELECTION_HALO_OPACITY}
-            pointerEvents="none"
-          />
-          <circle
-            cx={sourceX}
-            cy={sourceY}
-            r={sourceDotRadius + EDGE_SELECTION_HALO_EXTRA_WIDTH / 2}
-            fill={EDGE_SELECTION_COLOR}
-            opacity={EDGE_SELECTION_HALO_OPACITY}
-            pointerEvents="none"
-          />
-          <polygon
-            points={arrowPoints}
-            transform={`translate(${targetX} ${targetY}) rotate(${rotation})`}
-            fill={EDGE_SELECTION_COLOR}
-            stroke={EDGE_SELECTION_COLOR}
-            strokeWidth={EDGE_SELECTION_HALO_EXTRA_WIDTH}
-            strokeLinejoin="round"
-            opacity={EDGE_SELECTION_HALO_OPACITY}
-            pointerEvents="none"
-          />
-        </>
-      ) : null}
-
       <BaseEdge
         id={id}
         path={edgePath}
@@ -113,11 +127,20 @@ export const ArrowEdge = memo(function ArrowEdge({
         style={{ fill: color, stroke: color, pointerEvents: 'none' }}
       />
 
+      {selected ? (
+        <EdgeSelectionEndpoints
+          sourceX={sourceX}
+          sourceY={sourceY}
+          targetX={targetX}
+          targetY={targetY}
+        />
+      ) : null}
+
       {data ? (
         <EdgeToolbar
           edgeId={id}
-          x={centerX}
-          y={centerY}
+          x={toolbarAnchor.x}
+          y={toolbarAnchor.y}
           alignX="center"
           alignY="bottom"
           isVisible={canShowToolbar}

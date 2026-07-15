@@ -151,7 +151,7 @@
 - ドラッグ終了時の重なり補正は webpage 優先で行う。webpage は他ノードと `20px` 未満まで近づけず、stickynote は webpage にだけ同じ制約を適用する
 - 重なり補正・新規ノード自動配置・センタリング fallback は、content サイズではなくノード外枠（フレーム外周）を基準にする。WebPage のフレーム padding は world 固定 24px なので、外枠サイズは zoom に依存しない
 - WebPage / StickyNote / Text のいずれもツールバーは `NodeToolbar` を使い、ノード外枠の上部に配置する。WebPage はさらに常時表示のタイトル段（`[Moved] Title`、左寄せ）を追加で `NodeToolbar` で重ねる
-- エッジツールバーは `EdgeToolbar` を使い、ノード/エッジを合わせて1要素だけが選択された場合にベジェ曲線中央の上部へ表示する
+- エッジツールバーは `EdgeToolbar` を使い、ノード/エッジを合わせて1要素だけが選択された場合にベジェpath境界の左右中央・上端上部へ表示する。選択中の線自体は変えず、始点/終点リングだけを追加する
 - 同一 `filePath` の `.siteboard` を複数のローカル document に関連付けない
 - `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない

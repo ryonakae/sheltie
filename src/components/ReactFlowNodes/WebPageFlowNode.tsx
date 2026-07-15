@@ -13,6 +13,7 @@ import { memo, useCallback, useState } from 'react';
 
 import { WebPageNode } from '@/components/Node/WebPageNode';
 import {
+  WEBPAGE_HANDLE_DRAG_TARGET_SIZE,
   WEBPAGE_HANDLE_HIT_SIZE,
   WEBPAGE_HANDLE_VISUAL_DOT_SIZE,
 } from '@/components/ReactFlowEdges/arrowGeometry';
@@ -44,6 +45,8 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
   const [isPointerOver, setIsPointerOver] = useState(false);
   // 複数選択中は接続ハンドル・リサイズハンドルを出さない（単独選択時のみ表示）
   const showHandles = nodeProps.isActive || (connectionInProgress && isPointerOver);
+  // 接続中は React Flow の elementFromPoint が親 Handle を直接検出できるようにする。
+  const enableDragTarget = nodeProps.isActive && !connectionInProgress;
 
   const handlePointerEnter = useCallback(() => setIsPointerOver(true), []);
   const handlePointerLeave = useCallback(() => setIsPointerOver(false), []);
@@ -116,6 +119,7 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
   ];
 
   const handleHitSize = `calc(${WEBPAGE_HANDLE_HIT_SIZE}px / var(--canvas-zoom, 1))`;
+  const handleDragTargetSize = `calc(${WEBPAGE_HANDLE_DRAG_TARGET_SIZE}px / var(--canvas-zoom, 1))`;
   const handleVisualDotSize = `calc(${WEBPAGE_HANDLE_VISUAL_DOT_SIZE}px / var(--canvas-zoom, 1))`;
   const handleHitStyleBase = {
     width: handleHitSize,
@@ -125,12 +129,46 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
     borderRadius: 0,
     minWidth: 0,
     minHeight: 0,
+    pointerEvents: connectionInProgress ? 'auto' : 'none',
   } satisfies React.CSSProperties;
   const handleHitStyleByPosition: Record<Position, React.CSSProperties> = {
     [Position.Top]: handleHitStyleBase,
     [Position.Right]: handleHitStyleBase,
     [Position.Bottom]: handleHitStyleBase,
     [Position.Left]: handleHitStyleBase,
+  };
+  const dragTargetStyleBase = {
+    position: 'absolute',
+    width: handleDragTargetSize,
+    height: handleDragTargetSize,
+    background: 'transparent',
+    pointerEvents: enableDragTarget ? 'auto' : 'none',
+  } satisfies React.CSSProperties;
+  const dragTargetStyleByPosition: Record<Position, React.CSSProperties> = {
+    [Position.Top]: {
+      ...dragTargetStyleBase,
+      top: 0,
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+    },
+    [Position.Right]: {
+      ...dragTargetStyleBase,
+      top: '50%',
+      right: 0,
+      transform: 'translate(50%, -50%)',
+    },
+    [Position.Bottom]: {
+      ...dragTargetStyleBase,
+      bottom: 0,
+      left: '50%',
+      transform: 'translate(-50%, 50%)',
+    },
+    [Position.Left]: {
+      ...dragTargetStyleBase,
+      top: '50%',
+      left: 0,
+      transform: 'translate(-50%, -50%)',
+    },
   };
   const dotVisualStyleBase = {
     position: 'absolute',
@@ -225,32 +263,52 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
         type="source"
         position={Position.Top}
         id="top"
+        isConnectableStart={enableDragTarget}
         style={handleHitStyleByPosition[Position.Top]}
       >
+        <div
+          data-connection-handle-drag-target="top"
+          style={dragTargetStyleByPosition[Position.Top]}
+        />
         <div style={dotVisualStyleByPosition[Position.Top]} />
       </Handle>
       <Handle
         type="source"
         position={Position.Right}
         id="right"
+        isConnectableStart={enableDragTarget}
         style={handleHitStyleByPosition[Position.Right]}
       >
+        <div
+          data-connection-handle-drag-target="right"
+          style={dragTargetStyleByPosition[Position.Right]}
+        />
         <div style={dotVisualStyleByPosition[Position.Right]} />
       </Handle>
       <Handle
         type="source"
         position={Position.Bottom}
         id="bottom"
+        isConnectableStart={enableDragTarget}
         style={handleHitStyleByPosition[Position.Bottom]}
       >
+        <div
+          data-connection-handle-drag-target="bottom"
+          style={dragTargetStyleByPosition[Position.Bottom]}
+        />
         <div style={dotVisualStyleByPosition[Position.Bottom]} />
       </Handle>
       <Handle
         type="source"
         position={Position.Left}
         id="left"
+        isConnectableStart={enableDragTarget}
         style={handleHitStyleByPosition[Position.Left]}
       >
+        <div
+          data-connection-handle-drag-target="left"
+          style={dragTargetStyleByPosition[Position.Left]}
+        />
         <div style={dotVisualStyleByPosition[Position.Left]} />
       </Handle>
 

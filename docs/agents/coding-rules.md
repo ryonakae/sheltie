@@ -103,16 +103,16 @@
 ### エッジ接続
 
 - **Handle は WebPageFlowNode のみ**に配置。StickyNote / TextNode には Handle を追加しない
-- Handle 自身は透明な 16px のヒット領域。視覚的な丸は Handle の子として「外側の辺の中点」に絶対配置する。React Flow の端点計算（非 center モード）は handle の外側の辺を使うため、ここに丸の中心を揃えることで「線の始点 = 丸の中心」が一致する
-- 4 方向（top, right, bottom, left）に `type="source"` の Handle を常時レンダリング。`pointerEvents` は無効化しない（接続ドラッグの target 検出に必要）
+- React Flow が計測する Handle は透明な32pxでノード境界中央に置き、視覚的な16pxの青丸はHandleの子として「外側の辺の中点」に絶対配置する。React Flow の端点計算（非 center モード）はHandleの外側の辺を使うため、ここに丸の中心を揃えることで「線の始点 = 丸の中心」が一致する
+- 4方向（top, right, bottom, left）に`type="source"`のHandleを常時レンダリングする。`isConnectableStart`は単独選択中かつ接続開始前だけ有効にし、`isConnectableEnd`は接続先検出のため維持する。接続開始前は計測Handle自体をpointer-inertにし、青丸中心へ重ねた透明な32px接続開始領域だけを`pointerEvents: auto`にする。接続中は追加領域を無効化して計測Handleを有効化し、React Flowの`elementFromPoint`が親Handleを直接検出できるようにする
 - 丸（子要素）の表示条件: `selected` または「接続ドラッグ中かつこのノードに pointer がある」。前者は React Flow の `selected` prop、後者は `useConnection` の `inProgress` + 自前の `onPointerEnter/Leave` で判定する。`useConnection` の `toNode` は handle 近接時しか更新されないため、ノード本体ホバー検出には使えない
-- `connectionMode="loose"` で source 同士の接続を許可、`isValidConnection` で自己接続を禁止
+- `connectionMode="loose"`でsource同士の接続を許可し、`isValidConnection`で自己接続を禁止する。接続操作はドラッグだけを使い、React Flowのクリック接続は`connectOnClick={false}`で無効化する
 - エッジは `components/ReactFlowEdges/ArrowEdge.tsx` のカスタムエッジ。ベジェ path（`BaseEdge`）+ 始点ドット + 終端矢じり（SVG）を自前で描画し、永続化した太さ（3/6）・線種（solid/dashed）・色（Default/Foreground/Muted/Accent/Success/Warning/Danger）を反映する
 - 3px は始点半径6・矢じり長16/全幅20、6px は始点半径8・矢じり長20/全幅24。破線は3pxで `8 6`、6pxで `12 8` とし、始点ドットと矢じりは塗りつぶしのままにする
 - 選択中もpath・始点ドット・終端矢じりの見た目は変えない。代わりに始点/終点へ画面サイズ固定の白地＋青枠リング（外径16px相当）を重ねる
 - エッジ単独選択時はベジェpathの実境界を計算し、`EdgeToolbar` を左右境界の中央X・上端Yから画面上16px上へズーム非依存で表示する。`ArrowToolbar` は既存ノードツールバーと同じ28pxボタン/余白/背景/active表示を使い、太さ → 線種 → 方向反転 → 7色を一列に並べる。見本/アイコンのみで、TooltipとHTML `title`は付けず`aria-label`を付ける
 - ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。標準3px/実線/Default色で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `(WEBPAGE_HANDLE_HIT_SIZE / 2) / zoom` シフトして ArrowEdge の端点（handle 外側の辺 = 視覚的な丸の中心）と一致させる。矢印形状と Handle サイズの定数は `arrowGeometry.ts` で共有
-- WebPageFlowNode の Handle は当たり判定（`WEBPAGE_HANDLE_HIT_SIZE`、透明）と視覚の丸（`WEBPAGE_HANDLE_VISUAL_DOT_SIZE`、青）を分離する。ヒット領域を視覚より大きく取り、ドラッグ開始と吸着のクリック判定を広げる。両者ともズーム非依存（`--canvas-zoom` で割る）。Handle 中心から外側の辺（=丸の中心）までの距離は `HIT_SIZE / 2` の前提で `ArrowConnectionLine` のオフセットを揃える
+- WebPageFlowNode は計測Handle（`WEBPAGE_HANDLE_HIT_SIZE`）、青丸中心の接続開始領域（`WEBPAGE_HANDLE_DRAG_TARGET_SIZE`）、視覚の丸（`WEBPAGE_HANDLE_VISUAL_DOT_SIZE`）を分離する。すべてズーム非依存（`--canvas-zoom`で割る）。Handle中心から外側の辺（=丸の中心）までの距離は`HIT_SIZE / 2`の前提で`ArrowConnectionLine`のオフセットを揃え、接続開始領域のサイズ変更では線端点を動かさない
 - 吸着スナップ範囲は ReactFlow の `connectionRadius`（既定 20）で調整する。Handle のヒット領域より広めに取って近接時の吸着を出やすくする
 - エッジの選択状態は controlled mode のため Siteboard 側で自前同期する（`selectedEdgeIds` Set を `onEdgesChange` の `select` 変更で更新し、`flowEdges` に `selected` を反映）。削除・ノードcascade削除・同一点置換・Undo/Redoで消えたIDはlive edge IDとの積集合へ非同期で整理する。Shiftなしのノードactivate・ノード追加・ノード右クリックではエッジ選択を明示的に解除し、Shift操作だけ混在選択を許可する
 - 同じ2接続点 `(nodeId, handleId)` を順不同で比較したエッジは1本だけ保持する。逆向きから追加した場合は後から追加したID/向きへ置換し、旧エッジの太さ・線種・色を継承する。接続ハンドルの組が異なれば共存できる

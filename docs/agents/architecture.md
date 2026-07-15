@@ -28,7 +28,7 @@ src/
 - `components/Node/WebPageNode.tsx`: webpage ノード本体 UI（フレーム（`bg-default` + `WEB_PAGE_FRAME_PADDING` 24px world 固定 + 角丸 16px world 固定 + 枠線 1px zoomPx）+ 内側に Webview placeholder。空のときは Globe アイコン + "Enter URL above" ヒントを表示。props インターフェース export）
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（角丸 16px world 固定、props インターフェース export）
 - `components/Node/TextNode.tsx`: テキストノード専用 UI。Tiptap エディタ内蔵、編集/選択モード切り替え、透明背景
-- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`NodeToolbar` 2 段（ツールバー段=単独選択時のみ中央寄せ、タイトル段=常時左寄せ・`[Moved] Title` を truncate）+ フレーム padding 帯（24px world 固定）を `.node-drag-handle` として活用 + 8 方向 `NodeResizeControl`（フレーム外周基準）+ 上下左右 `Handle`（フレーム外周基準、selected 時のみ表示））
+- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`NodeToolbar` 2 段（ツールバー段=単独選択時のみ中央寄せ、タイトル段=常時左寄せ・`[Moved] Title` を truncate）+ フレーム padding 帯（24px world 固定）を `.node-drag-handle` として活用 + 8 方向 `NodeResizeControl`（フレーム外周基準）+ 上下左右 `Handle`（フレーム外周基準、青丸は単独選択時または接続中のpointer hover時に表示し、青丸中心の接続開始領域は単独選択中かつ接続開始前だけ有効））
 - `components/ReactFlowNodes/WebPageToolbar.tsx`: WebPage のツールバー段 UI（`bg-zinc-800` の pill。通常は 戻る/進む/リロード、空ノード/URL 編集モード時は URL 入力欄+Open ボタンに差し替え | プリセット(Mobile/Tablet/PC) | サイズ表示 | Pin（isMoved 時のみ））
 - `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + `NodeToolbar` でスタイル UI、`NodeResizeControl` で幅リサイズ）
 - `components/ReactFlowNodes/StickyNoteToolbar.tsx`: 付箋ノードのスタイルツールバー（フォントサイズ/色）

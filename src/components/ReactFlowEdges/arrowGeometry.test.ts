@@ -6,6 +6,7 @@ import {
   EDGE_SELECTION_ENDPOINT_RADIUS_PX,
   EDGE_SELECTION_ENDPOINT_STROKE_WIDTH_PX,
   EDGE_TOOLBAR_OFFSET_PX,
+  WEBPAGE_HANDLE_DRAG_TARGET_SIZE,
   getArrowGeometry,
   getBezierPathBounds,
   getEdgeColor,
@@ -106,5 +107,6 @@ describe('edge selection and color constants', () => {
     expect(EDGE_SELECTION_ENDPOINT_RADIUS_PX).toBe(7);
     expect(EDGE_SELECTION_ENDPOINT_STROKE_WIDTH_PX).toBe(2);
     expect(EDGE_TOOLBAR_OFFSET_PX).toBe(16);
+    expect(WEBPAGE_HANDLE_DRAG_TARGET_SIZE).toBe(32);
   });
 });

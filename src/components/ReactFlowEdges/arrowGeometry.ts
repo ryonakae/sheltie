@@ -142,12 +142,14 @@ export const EDGE_TOOLBAR_OFFSET_PX = 16;
 
 /**
  * WebPageFlowNode の Handle 形状（ズーム非依存の CSS px）。
- * - HIT_SIZE: 透明な当たり判定の一辺。ドラッグ開始のヒット領域を広くするため visual より大きく取る。
+ * - HIT_SIZE: React Flow が計測する Handle の一辺。外側の辺を線端点として使う。
+ * - DRAG_TARGET_SIZE: 青丸を中心とする接続開始領域の一辺。Handle の計測形状とは分離する。
  * - VISUAL_DOT_SIZE: 視覚的な丸の直径。標準 3px エッジの始点ドットと見た目を揃える。
  * Handle の幾何中心から「外側の辺（= 丸の中心）」までの距離は HIT_SIZE / 2 になる前提で
  * ArrowConnectionLine のドラッグ中接続線も同じオフセットでシフトする。
  */
 export const WEBPAGE_HANDLE_HIT_SIZE = 32;
+export const WEBPAGE_HANDLE_DRAG_TARGET_SIZE = 32;
 export const WEBPAGE_HANDLE_VISUAL_DOT_SIZE = 16;
 
 // 矢じり回転角（target の面から内側へ向ける）

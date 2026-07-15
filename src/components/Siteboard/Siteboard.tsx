@@ -639,6 +639,7 @@ export function Siteboard({
           onEdgeContextMenu={handleEdgeContextMenu}
           onConnect={handleConnect}
           connectionMode={ConnectionMode.Loose}
+          connectOnClick={false}
           // 吸着スナップ範囲。Handle のヒット領域より少し広めに取って、近接時の吸着を出やすくする
           connectionRadius={40}
           isValidConnection={isValidConnection}

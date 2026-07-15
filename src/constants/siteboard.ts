@@ -1,3 +1,5 @@
+import type { BoardEdgeStyle, EdgeColorPreset } from '@/types';
+
 // リサイズとドラッグの操作上限
 export const PAGE_MIN_WIDTH = 320;
 export const PAGE_MIN_HEIGHT = 200;
@@ -38,6 +40,25 @@ export const TEXT_NODE_MIN_WIDTH = 40;
 
 // テキストノードのフォントサイズプリセット (S / M / L / XL)
 export const TEXT_NODE_FONT_SIZE_PRESETS = [12, 16, 24, 36] as const;
+
+export const EDGE_STROKE_WIDTHS = [3, 6] as const;
+export const EDGE_LINE_STYLES = ['solid', 'dashed'] as const;
+
+export const EDGE_COLOR_PRESETS = [
+  { key: 'default', value: 'var(--color-separator-tertiary)' },
+  { key: 'foreground', value: 'var(--foreground)' },
+  { key: 'muted', value: 'var(--muted)' },
+  { key: 'accent', value: 'var(--accent)' },
+  { key: 'success', value: 'var(--success)' },
+  { key: 'warning', value: 'var(--warning)' },
+  { key: 'danger', value: 'var(--danger)' },
+] as const satisfies ReadonlyArray<{ key: EdgeColorPreset; value: string }>;
+
+export const DEFAULT_EDGE_STYLE = {
+  strokeWidth: 3,
+  lineStyle: 'solid',
+  colorPreset: 'default',
+} as const satisfies BoardEdgeStyle;
 
 // テキストノードの文字色プリセット（HeroUI セマンティックカラーに連動）
 // value は HeroUI v3 の CSS 変数で、light/dark テーマに自動追従する

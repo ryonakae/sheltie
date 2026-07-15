@@ -26,7 +26,7 @@ import { nodeTypes } from '@/components/ReactFlowNodes/nodeTypes';
 import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
 import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
 import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
-import { MIN_ZOOM, MAX_ZOOM } from '@/constants';
+import { DEFAULT_EDGE_STYLE, MIN_ZOOM, MAX_ZOOM } from '@/constants';
 import { useSiteboardContextMenus } from '@/hooks/siteboard/useSiteboardContextMenus';
 import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
 import { useSiteboardDrag } from '@/hooks/siteboard/useSiteboardDrag';
@@ -330,6 +330,7 @@ export function Siteboard({
   const handleConnect = useCallback(
     (connection: Connection) => {
       addEdgeToStore({
+        ...DEFAULT_EDGE_STYLE,
         id: `e-${connection.source}-${connection.sourceHandle ?? 'null'}-${connection.target}-${connection.targetHandle ?? 'null'}`,
         source: connection.source,
         sourceHandle: connection.sourceHandle,

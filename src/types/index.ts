@@ -73,8 +73,25 @@ export interface SiteboardDocumentV1 {
   nodes: SiteboardDocumentNode[];
 }
 
+export type EdgeStrokeWidth = 3 | 6;
+export type EdgeLineStyle = 'solid' | 'dashed';
+export type EdgeColorPreset =
+  | 'default'
+  | 'foreground'
+  | 'muted'
+  | 'accent'
+  | 'success'
+  | 'warning'
+  | 'danger';
+
+export interface BoardEdgeStyle {
+  strokeWidth: EdgeStrokeWidth;
+  lineStyle: EdgeLineStyle;
+  colorPreset: EdgeColorPreset;
+}
+
 /** ボード上のエッジ（ノード間接続） */
-export interface BoardEdge {
+export interface BoardEdge extends BoardEdgeStyle {
   id: string;
   source: string;
   sourceHandle: string | null;
@@ -82,7 +99,7 @@ export interface BoardEdge {
   targetHandle: string | null;
 }
 
-export interface SiteboardDocumentEdge {
+export interface SiteboardDocumentEdge extends BoardEdgeStyle {
   id: string;
   source: string;
   sourceHandle: string | null;

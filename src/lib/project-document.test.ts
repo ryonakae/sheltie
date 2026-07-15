@@ -12,6 +12,7 @@ import {
   boardEdgeToDocumentEdge,
   boardNodeToDocumentNode,
   createProjectDocument,
+  documentEdgeToBoardEdge,
   documentNodeToBoardNode,
   isProjectDirty,
   parseProjectDocument,
@@ -151,15 +152,20 @@ describe('documentNodeToBoardNode (round-trip)', () => {
 });
 
 describe('boardEdgeToDocumentEdge', () => {
-  it('全フィールドをそのまま写像する', () => {
+  it('スタイルを含む全フィールドを board/document 間で往復する', () => {
     const edge: BoardEdge = {
       id: 'e1',
       source: 's',
       sourceHandle: 'sh',
       target: 't',
       targetHandle: null,
+      strokeWidth: 6,
+      lineStyle: 'dashed',
+      colorPreset: 'danger',
     };
-    expect(boardEdgeToDocumentEdge(edge)).toEqual(edge);
+    const documentEdge = boardEdgeToDocumentEdge(edge);
+    expect(documentEdge).toEqual(edge);
+    expect(documentEdgeToBoardEdge(documentEdge)).toEqual(edge);
   });
 });
 
@@ -168,7 +174,16 @@ describe('createProjectDocument', () => {
     const project = {
       nodes: [webpageNode(), stickyNode()],
       edges: [
-        { id: 'e1', source: 'w1', sourceHandle: null, target: 's1', targetHandle: null },
+        {
+          id: 'e1',
+          source: 'w1',
+          sourceHandle: null,
+          target: 's1',
+          targetHandle: null,
+          strokeWidth: 3,
+          lineStyle: 'solid',
+          colorPreset: 'default',
+        },
       ] as BoardEdge[],
     };
     const doc = createProjectDocument(project);
@@ -179,6 +194,58 @@ describe('createProjectDocument', () => {
 });
 
 describe('parseProjectDocument', () => {
+  it('schemaVersion 2 の edge style を読み込む', () => {
+    const edge = {
+      id: 'e1',
+      source: 'w1',
+      sourceHandle: 'right',
+      target: 'w2',
+      targetHandle: 'left',
+      strokeWidth: 6,
+      lineStyle: 'dashed',
+      colorPreset: 'danger',
+    };
+    const json = JSON.stringify({ schemaVersion: 2, nodes: [], edges: [edge] });
+    expect(parseProjectDocument(json).edges).toEqual([edge]);
+  });
+
+  it.each([
+    ['strokeWidth', 4],
+    ['lineStyle', 'dotted'],
+    ['colorPreset', 'purple'],
+  ])('不正な edge %s を拒否する', (field, value) => {
+    const edge = {
+      id: 'e1',
+      source: 'w1',
+      sourceHandle: 'right',
+      target: 'w2',
+      targetHandle: 'left',
+      strokeWidth: 3,
+      lineStyle: 'solid',
+      colorPreset: 'default',
+      [field]: value,
+    };
+    const json = JSON.stringify({ schemaVersion: 2, nodes: [], edges: [edge] });
+    expect(() => parseProjectDocument(json)).toThrow(new RegExp(`edges\\[0\\]\\.${field}`));
+  });
+
+  it('edge style が欠落した schemaVersion 2 を拒否する', () => {
+    const json = JSON.stringify({
+      schemaVersion: 2,
+      nodes: [],
+      edges: [
+        {
+          id: 'e1',
+          source: 'w1',
+          sourceHandle: 'right',
+          target: 'w2',
+          targetHandle: 'left',
+        },
+      ],
+    });
+    expect(() => parseProjectDocument(json)).toThrow(/edges\[0\]\.strokeWidth/);
+  });
+
   it('schemaVersion 2 のドキュメントを読み込める', () => {
     const json = JSON.stringify({
       schemaVersion: 2,

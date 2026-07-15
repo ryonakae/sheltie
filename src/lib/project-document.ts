@@ -1,8 +1,12 @@
+import { EDGE_COLOR_PRESETS } from '@/constants';
 import {
   isStickyNoteNode,
   isTextNode,
   type BoardEdge,
   type BoardNode,
+  type EdgeColorPreset,
+  type EdgeLineStyle,
+  type EdgeStrokeWidth,
   type Project,
   type SiteboardDocument,
   type SiteboardDocumentEdge,
@@ -124,6 +128,27 @@ function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
   throw new Error(`nodes[${index}].type is not supported: ${type}`);
 }
 
+function parseEdgeStrokeWidth(value: unknown, field: string): EdgeStrokeWidth {
+  if (value !== 3 && value !== 6) {
+    throw new Error(`${field} must be 3 or 6`);
+  }
+  return value;
+}
+
+function parseEdgeLineStyle(value: unknown, field: string): EdgeLineStyle {
+  if (value !== 'solid' && value !== 'dashed') {
+    throw new Error(`${field} must be solid or dashed`);
+  }
+  return value;
+}
+
+function parseEdgeColorPreset(value: unknown, field: string): EdgeColorPreset {
+  if (!EDGE_COLOR_PRESETS.some((preset) => preset.key === value)) {
+    throw new Error(`${field} is not supported`);
+  }
+  return value as EdgeColorPreset;
+}
+
 function parseEdge(rawEdge: unknown, index: number): SiteboardDocumentEdge {
   if (!isRecord(rawEdge)) {
     throw new Error(`edges[${index}] must be an object`);
@@ -141,6 +166,9 @@ function parseEdge(rawEdge: unknown, index: number): SiteboardDocumentEdge {
       rawEdge.targetHandle === null || rawEdge.targetHandle === undefined
         ? null
         : parseString(rawEdge.targetHandle, `edges[${index}].targetHandle`),
+    strokeWidth: parseEdgeStrokeWidth(rawEdge.strokeWidth, `edges[${index}].strokeWidth`),
+    lineStyle: parseEdgeLineStyle(rawEdge.lineStyle, `edges[${index}].lineStyle`),
+    colorPreset: parseEdgeColorPreset(rawEdge.colorPreset, `edges[${index}].colorPreset`),
   };
 }
 
@@ -240,6 +268,9 @@ export function boardEdgeToDocumentEdge(edge: BoardEdge): SiteboardDocumentEdge 
     sourceHandle: edge.sourceHandle,
     target: edge.target,
     targetHandle: edge.targetHandle,
+    strokeWidth: edge.strokeWidth,
+    lineStyle: edge.lineStyle,
+    colorPreset: edge.colorPreset,
   };
 }
 
@@ -250,6 +281,9 @@ export function documentEdgeToBoardEdge(edge: SiteboardDocumentEdge): BoardEdge 
     sourceHandle: edge.sourceHandle,
     target: edge.target,
     targetHandle: edge.targetHandle,
+    strokeWidth: edge.strokeWidth,
+    lineStyle: edge.lineStyle,
+    colorPreset: edge.colorPreset,
   };
 }
 

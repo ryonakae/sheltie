@@ -1,8 +1,4 @@
-import {
-  getNodeFrameHeight,
-  getNodeFrameRect,
-  getNodeFrameWidth,
-} from '@/lib/siteboard-node-frame';
+import { getNodeFrameHeight, getNodeFrameRect, getNodeFrameWidth } from '@/lib/sheltie-node-frame';
 import { type BoardNode, isWebPageNode } from '@/types';
 
 type Axis = 'x' | 'y';

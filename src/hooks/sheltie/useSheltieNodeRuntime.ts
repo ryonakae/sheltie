@@ -6,7 +6,7 @@ import type { NavigationState } from '@/lib/tauri-bridge';
 import { webviewApi } from '@/lib/tauri-bridge';
 import type { BoardNode, TextNodeFontSizePreset } from '@/types';
 
-interface UseSiteboardNodeRuntimeParams {
+interface UseSheltieNodeRuntimeParams {
   nodes: BoardNode[];
   webviewLabelsByNodeId: Record<string, string>;
   selectedNodeIds: string[];
@@ -37,7 +37,7 @@ interface NavigationRuntimeEntry {
   forwardDepth: number;
 }
 
-export function useSiteboardNodeRuntime({
+export function useSheltieNodeRuntime({
   nodes,
   webviewLabelsByNodeId,
   selectedNodeIds,
@@ -55,7 +55,7 @@ export function useSiteboardNodeRuntime({
   updateStickyNoteContent,
   updateStickyNoteStyle,
   captureScreenshot,
-}: UseSiteboardNodeRuntimeParams) {
+}: UseSheltieNodeRuntimeParams) {
   const [navStates, setNavStates] = useState<Record<string, NavigationState>>({});
 
   const navigationRuntimeRef = useRef<Record<string, NavigationRuntimeEntry>>({});
@@ -68,7 +68,7 @@ export function useSiteboardNodeRuntime({
     (nodeId: string, command: string, labelOverride?: string): string | null => {
       const label = labelOverride ?? webviewLabelsByNodeId[nodeId];
       if (!label && import.meta.env.DEV) {
-        console.warn(`[useSiteboardNodeRuntime] ${command}: WebView label missing`, {
+        console.warn(`[useSheltieNodeRuntime] ${command}: WebView label missing`, {
           nodeId,
         });
       }

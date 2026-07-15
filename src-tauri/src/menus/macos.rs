@@ -8,7 +8,7 @@ pub fn replace_default_about_and_hide<R: tauri::Runtime>(
     product_name: &str,
 ) -> tauri::Result<()> {
     // PredefinedMenuItem の About / Hide は package_info().name を参照するため、
-    // lower-case の crate 名がそのまま「About siteboard」「Hide siteboard」と出てしまう。
+    // lower-case の crate 名がそのまま「About sheltie」「Hide sheltie」と出てしまう。
     // 既存項目を index 位置で差し替え、productName に揃えたラベルを明示する。
     let items = submenu.items()?;
     let mut about_index = None;
@@ -68,7 +68,7 @@ pub fn apply_settings_theme_section_header() -> Result<(), String> {
             return Err("NSApplication.mainMenu is null".to_string());
         }
 
-        // mainMenu の index 0 がアプリ submenu（Siteboard）
+        // mainMenu の index 0 がアプリ submenu（Sheltie）
         let app_item: *mut AnyObject = objc2::msg_send![main_menu, itemAtIndex: 0isize];
         if app_item.is_null() {
             return Err("App submenu item not found".to_string());

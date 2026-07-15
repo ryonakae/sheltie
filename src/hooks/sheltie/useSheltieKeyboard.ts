@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { hasEditableFocus, registerEditCommandHandlers, runEditCommand } from '@/lib/edit-commands';
 import { runViewCommand } from '@/lib/view-commands';
 
-interface UseSiteboardKeyboardParams {
+interface UseSheltieKeyboardParams {
   selectedNodeIds: string[];
   selectedEdgeIds: Set<string>;
   onRemoveNode: (nodeId: string) => void;
@@ -18,7 +18,7 @@ interface UseSiteboardKeyboardParams {
 }
 
 /**
- * Siteboard の編集・ビューショートカットを処理する。
+ * Sheltie の編集・ビューショートカットを処理する。
  * - Delete / Backspace: 選択中ノード削除 / 選択中エッジ削除
  * - Cmd/Ctrl + Z: Undo
  * - Cmd/Ctrl + Shift + Z: Redo
@@ -28,7 +28,7 @@ interface UseSiteboardKeyboardParams {
  * - Cmd/Ctrl + Alt + ]: 最前面へ
  * - Cmd/Ctrl + Alt + [: 最背面へ
  */
-export function useSiteboardKeyboard({
+export function useSheltieKeyboard({
   selectedNodeIds,
   selectedEdgeIds,
   onRemoveNode,
@@ -40,7 +40,7 @@ export function useSiteboardKeyboard({
   onSendNodeToBack,
   onBringNodeForward,
   onSendNodeBackward,
-}: UseSiteboardKeyboardParams) {
+}: UseSheltieKeyboardParams) {
   // 重なり順ショートカットは単独選択時のみ有効
   const soloSelectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] : null;
 

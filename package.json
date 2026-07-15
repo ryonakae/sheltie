@@ -1,5 +1,5 @@
 {
-  "name": "siteboard",
+  "name": "sheltie",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -75,5 +75,5 @@
   "engines": {
     "node": "22.14.0"
   },
-  "productName": "Siteboard"
+  "productName": "Sheltie"
 }

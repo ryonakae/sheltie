@@ -51,29 +51,29 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
   );
 
   const resizeLineConfigs = [
-    { key: 'left', position: 'left' as const, className: 'siteboard-sticky-resize-line' },
-    { key: 'right', position: 'right' as const, className: 'siteboard-sticky-resize-line' },
+    { key: 'left', position: 'left' as const, className: 'sheltie-sticky-resize-line' },
+    { key: 'right', position: 'right' as const, className: 'sheltie-sticky-resize-line' },
   ];
   const resizeHandleConfigs = [
     {
       key: 'top-left',
       position: 'top-left' as const,
-      className: 'siteboard-sticky-resize-handle',
+      className: 'sheltie-sticky-resize-handle',
     },
     {
       key: 'bottom-left',
       position: 'bottom-left' as const,
-      className: 'siteboard-sticky-resize-handle',
+      className: 'sheltie-sticky-resize-handle',
     },
     {
       key: 'top-right',
       position: 'top-right' as const,
-      className: 'siteboard-sticky-resize-handle',
+      className: 'sheltie-sticky-resize-handle',
     },
     {
       key: 'bottom-right',
       position: 'bottom-right' as const,
-      className: 'siteboard-sticky-resize-handle',
+      className: 'sheltie-sticky-resize-handle',
     },
   ];
 

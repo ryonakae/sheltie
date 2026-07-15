@@ -6,7 +6,7 @@ import { isNodeEmpty, isStickyNoteNode, isTextNode, isWebPageNode } from '@/type
 
 import type { Edge } from '@xyflow/react';
 
-interface UseSiteboardContextMenusParams {
+interface UseSheltieContextMenusParams {
   nodes: BoardNode[];
   setSelection: (idsOrUpdater: string[] | ((prev: string[]) => string[])) => void;
   setSelectedEdgeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -25,10 +25,10 @@ interface UseSiteboardContextMenusParams {
 }
 
 /**
- * ノード／エッジの右クリックメニュー（macOS ネイティブメニュー）を Siteboard から切り出したフック。
+ * ノード／エッジの右クリックメニュー（macOS ネイティブメニュー）を Sheltie から切り出したフック。
  * Webview 表示制御はノード向けの仕組みなので、エッジメニューでは handleContextMenuOpen を呼ばない。
  */
-export function useSiteboardContextMenus({
+export function useSheltieContextMenus({
   nodes,
   setSelection,
   setSelectedEdgeIds,
@@ -41,7 +41,7 @@ export function useSiteboardContextMenus({
   sendNodeToBack,
   bringNodeForward,
   sendNodeBackward,
-}: UseSiteboardContextMenusParams) {
+}: UseSheltieContextMenusParams) {
   const handleEdgeContextMenu = useCallback(
     (e: React.MouseEvent, edge: Edge) => {
       e.preventDefault();

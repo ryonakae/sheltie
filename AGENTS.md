@@ -2,7 +2,7 @@
 
 ## プロジェクト概要
 
-Siteboard は Web ページを並べてボード上で俯瞰・比較できるデスクトップアプリケーションです。
+Sheltie は Web ページを並べてボード上で俯瞰・比較できるデスクトップアプリケーションです。
 Tauri v2 + React + TypeScript + Tailwind CSS v4 で構築されています。
 
 ## このファイルの役割
@@ -44,8 +44,8 @@ npm run test         # Vitest（純ロジックの単体テスト）
 - `docs/agents/architecture.md`: 全体構成と責務分割
 - `docs/agents/domain-models.md`: 主要型・定数・不変条件
 - `docs/agents/tauri-ipc.md`: Tauri IPC コマンドとイベント契約
-- `docs/agents/siteboard-runtime.md`: Siteboard の表示モードと Webview ランタイム仕様
-- `docs/agents/siteboard-screenshots.md`: スクリーンショット撮影・永続化・ちらつき回避
+- `docs/agents/sheltie-runtime.md`: Sheltie の表示モードと Webview ランタイム仕様
+- `docs/agents/sheltie-screenshots.md`: スクリーンショット撮影・永続化・ちらつき回避
 - `docs/agents/wkwebview-internals.md`: WKWebView プラットフォーム固有のワークアラウンド
 
 ## 更新ポリシー

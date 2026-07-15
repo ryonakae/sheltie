@@ -4,8 +4,8 @@ import type {
   BoardEdge,
   BoardNode,
   Project,
-  SiteboardDocumentNode,
-  SiteboardDocumentV2,
+  SheltieDocumentNode,
+  SheltieDocumentV2,
 } from '@/types';
 
 import {
@@ -72,7 +72,7 @@ function textNode(overrides: Partial<BoardNode> = {}): BoardNode {
   } as BoardNode;
 }
 
-function emptyDocument(): SiteboardDocumentV2 {
+function emptyDocument(): SheltieDocumentV2 {
   return { schemaVersion: 2, nodes: [], edges: [] };
 }
 
@@ -308,8 +308,8 @@ describe('sanitizeProjectDocument', () => {
     const valid = {
       schemaVersion: 2,
       nodes: [
-        boardNodeToDocumentNode(stickyNode()) as SiteboardDocumentNode,
-        boardNodeToDocumentNode(textNode()) as SiteboardDocumentNode,
+        boardNodeToDocumentNode(stickyNode()) as SheltieDocumentNode,
+        boardNodeToDocumentNode(textNode()) as SheltieDocumentNode,
       ],
       edges: [],
     };

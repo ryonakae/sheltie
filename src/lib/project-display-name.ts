@@ -1,7 +1,7 @@
 import type { Project } from '@/types';
 
 const UNTITLED_PREFIX = 'Untitled';
-const SITEBOARD_EXTENSION = '.siteboard';
+const SHELTIE_EXTENSION = '.sheltie';
 
 export function getUntitledDisplayName(index: number): string {
   return index <= 1 ? UNTITLED_PREFIX : `${UNTITLED_PREFIX} ${index}`;
@@ -11,8 +11,8 @@ export function getDisplayNameFromFilePath(filePath: string): string {
   const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
   const baseName = lastSlash >= 0 ? filePath.slice(lastSlash + 1) : filePath;
   if (!baseName) return UNTITLED_PREFIX;
-  return baseName.endsWith(SITEBOARD_EXTENSION)
-    ? baseName.slice(0, -SITEBOARD_EXTENSION.length) || UNTITLED_PREFIX
+  return baseName.endsWith(SHELTIE_EXTENSION)
+    ? baseName.slice(0, -SHELTIE_EXTENSION.length) || UNTITLED_PREFIX
     : baseName;
 }
 

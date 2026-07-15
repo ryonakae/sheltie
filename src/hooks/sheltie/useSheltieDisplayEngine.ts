@@ -43,7 +43,7 @@ import { useScreenshotCaptureQueue } from './useScreenshotCaptureQueue';
 
 import type { InteractionType } from './types';
 
-interface UseSiteboardDisplayEngineParams {
+interface UseSheltieDisplayEngineParams {
   webPageNodes: WebPageNode[];
   webviewLabelsByNodeId: Record<string, string>;
   cachedScreenshotUrlsByNodeId: Record<string, string>;
@@ -79,7 +79,7 @@ function buildInitialDisplayModes(
 
 const EMPTY_SELECTION: string[] = [];
 
-export function useSiteboardDisplayEngine({
+export function useSheltieDisplayEngine({
   webPageNodes,
   webviewLabelsByNodeId,
   cachedScreenshotUrlsByNodeId,
@@ -92,7 +92,7 @@ export function useSiteboardDisplayEngine({
   hydrateCachedScreenshotUrls,
   setCachedScreenshotUrl,
   clearCachedScreenshotUrl,
-}: UseSiteboardDisplayEngineParams) {
+}: UseSheltieDisplayEngineParams) {
   const [displayModes, setDisplayModes] = useState<Record<string, DisplayMode>>(() =>
     buildInitialDisplayModes(webPageNodes, cachedScreenshotUrlsByNodeId),
   );
@@ -136,7 +136,7 @@ export function useSiteboardDisplayEngine({
   );
   const warnMissingWebviewLabel = useCallback((nodeId: string, command: string) => {
     if (!import.meta.env.DEV) return;
-    console.warn(`[useSiteboardDisplayEngine] ${command}: WebView label missing`, {
+    console.warn(`[useSheltieDisplayEngine] ${command}: WebView label missing`, {
       nodeId,
     });
   }, []);

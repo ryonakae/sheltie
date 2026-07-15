@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { PAGE_MIN_HEIGHT, PAGE_MIN_WIDTH } from '@/constants';
-import { getNodeChromeHeight, getNodeChromeWidth } from '@/lib/siteboard-node-frame';
+import { getNodeChromeHeight, getNodeChromeWidth } from '@/lib/sheltie-node-frame';
 import { useProjectStore } from '@/store/tab-store';
 
 interface ResizingState {
@@ -19,7 +19,7 @@ interface ResizeParams {
   height: number;
 }
 
-interface UseSiteboardResizeParams {
+interface UseSheltieResizeParams {
   prepareInteractionStart: (type: 'resize', nodeId: string) => void | Promise<unknown>;
   handleInteractionChange: (active: boolean, type: 'resize') => void;
   handlePageResizeStart: (nodeId: string) => void;
@@ -30,16 +30,16 @@ interface UseSiteboardResizeParams {
 
 /**
  * WebPage / 付箋 / テキストノードの React Flow リサイズ中間状態とコールバックを
- * Siteboard から切り出したフック。controlled mode のリアルタイム追従用に各 resizing state を返す。
+ * Sheltie から切り出したフック。controlled mode のリアルタイム追従用に各 resizing state を返す。
  */
-export function useSiteboardResize({
+export function useSheltieResize({
   prepareInteractionStart,
   handleInteractionChange,
   handlePageResizeStart,
   handlePageResizeEnd,
   updateNodeSize,
   updateTextNodeWidthMode,
-}: UseSiteboardResizeParams) {
+}: UseSheltieResizeParams) {
   // 付箋リサイズ中の中間サイズ（height は本文高さ。sticky header 除く）
   const [stickyResizing, setStickyResizing] = useState<ResizingState | null>(null);
   // WebPage リサイズ中の中間サイズ（height はコンテンツ高さ。chrome 除く）

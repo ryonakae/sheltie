@@ -67,10 +67,10 @@ export interface TextNode extends BoardNode {
   widthMode?: 'auto' | 'fixed';
 }
 
-export interface SiteboardDocumentV1 {
+export interface SheltieDocumentV1 {
   schemaVersion: 1;
   title: string;
-  nodes: SiteboardDocumentNode[];
+  nodes: SheltieDocumentNode[];
 }
 
 export type EdgeStrokeWidth = 3 | 6;
@@ -99,7 +99,7 @@ export interface BoardEdge extends BoardEdgeStyle {
   targetHandle: string | null;
 }
 
-export interface SiteboardDocumentEdge extends BoardEdgeStyle {
+export interface SheltieDocumentEdge extends BoardEdgeStyle {
   id: string;
   source: string;
   sourceHandle: string | null;
@@ -107,15 +107,15 @@ export interface SiteboardDocumentEdge extends BoardEdgeStyle {
   targetHandle: string | null;
 }
 
-export interface SiteboardDocumentV2 {
+export interface SheltieDocumentV2 {
   schemaVersion: 2;
-  nodes: SiteboardDocumentNode[];
-  edges?: SiteboardDocumentEdge[];
+  nodes: SheltieDocumentNode[];
+  edges?: SheltieDocumentEdge[];
 }
 
-export type SiteboardDocument = SiteboardDocumentV1 | SiteboardDocumentV2;
+export type SheltieDocument = SheltieDocumentV1 | SheltieDocumentV2;
 
-export type SiteboardDocumentNode =
+export type SheltieDocumentNode =
   | {
       id: string;
       type: 'webpage';
@@ -175,7 +175,7 @@ export interface Project {
   nodes: BoardNode[];
   edges: BoardEdge[];
   viewport: Viewport;
-  lastSavedDocument: SiteboardDocumentV2;
+  lastSavedDocument: SheltieDocumentV2;
 }
 
 /** URL 未設定の空フレームかどうか */

@@ -4,20 +4,20 @@
 @import '@xyflow/react/dist/style.css';
 
 /* アートボードのドットパターン背景。ダークモードは CSS 変数でテーマを切り替える */
-@utility siteboard-bg {
-  --siteboard-dot-scale: 1;
-  --siteboard-bg-x: 0px;
-  --siteboard-bg-y: 0px;
-  --siteboard-dot-size: 1px;
+@utility sheltie-bg {
+  --sheltie-dot-scale: 1;
+  --sheltie-bg-x: 0px;
+  --sheltie-bg-y: 0px;
+  --sheltie-dot-size: 1px;
   background-color: #f9fafb;
   background-image: radial-gradient(
     circle,
-    #d1d5db calc(var(--siteboard-dot-size) * var(--siteboard-dot-scale)),
-    transparent calc(var(--siteboard-dot-size) * var(--siteboard-dot-scale))
+    #d1d5db calc(var(--sheltie-dot-size) * var(--sheltie-dot-scale)),
+    transparent calc(var(--sheltie-dot-size) * var(--sheltie-dot-scale))
   );
   background-repeat: repeat;
-  background-size: calc(24px * var(--siteboard-dot-scale)) calc(24px * var(--siteboard-dot-scale));
-  background-position: var(--siteboard-bg-x) var(--siteboard-bg-y);
+  background-size: calc(24px * var(--sheltie-dot-scale)) calc(24px * var(--sheltie-dot-scale));
+  background-position: var(--sheltie-bg-x) var(--sheltie-bg-y);
 
   @variant dark {
     background-color: #18181b;
@@ -34,7 +34,7 @@
  * Tiptap Placeholder Extension の表示。`showOnlyWhenEditable: false` と組み合わせ、
  * 編集モードでも非編集モードでも、空のときだけプレースホルダ文字列を表示する。
  */
-.siteboard-text-node-editor p.is-editor-empty:first-child::before {
+.sheltie-text-node-editor p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: #aaa;
   float: left;

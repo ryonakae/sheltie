@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Theme, Window};
 use tauri_plugin_store::StoreExt;
 
-pub const STORE_PATH: &str = "siteboard.json";
+pub const STORE_PATH: &str = "sheltie.json";
 pub const THEME_KEY: &str = "theme";
 
 pub const MENU_ID_THEME_LIGHT: &str = "theme.light";

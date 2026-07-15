@@ -1,9 +1,5 @@
 import { MAX_VERTICAL_SEARCH_STEPS, PAGE_GAP } from '@/constants';
-import {
-  getNodeFrameHeight,
-  getNodeFrameRect,
-  getNodeFrameWidth,
-} from '@/lib/siteboard-node-frame';
+import { getNodeFrameHeight, getNodeFrameRect, getNodeFrameWidth } from '@/lib/sheltie-node-frame';
 import type { BoardNode } from '@/types';
 
 export function isVerticalOverlapping(

@@ -8,7 +8,7 @@ import {
 } from '@/constants';
 import type { BoardNode } from '@/types';
 
-import { getNodeBounds, resolveCenteredViewport, resolveFitViewport } from './siteboard-viewport';
+import { getNodeBounds, resolveCenteredViewport, resolveFitViewport } from './sheltie-viewport';
 
 function text(x: number, y: number, width: number, height: number): BoardNode {
   return { type: 'text', x, y, width, height } as BoardNode;

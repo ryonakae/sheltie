@@ -61,7 +61,7 @@ export const TextNode = memo(function TextNode({
     editable: isEditing,
     editorProps: {
       attributes: {
-        class: 'outline-none bg-transparent siteboard-text-node-editor',
+        class: 'outline-none bg-transparent sheltie-text-node-editor',
       },
     },
   });

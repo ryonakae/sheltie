@@ -5,7 +5,7 @@ import {
   NATIVE_SAFE_MARGIN_BOTTOM_PX,
   NATIVE_SAFE_MARGIN_PX,
 } from '@/constants';
-import { getNodeFrameRect } from '@/lib/siteboard-node-frame';
+import { getNodeFrameRect } from '@/lib/sheltie-node-frame';
 import type { BoardNode } from '@/types';
 
 const FIT_VIEW_PADDING_PX = 64;
@@ -33,7 +33,7 @@ interface Bounds {
   centerY: number;
 }
 
-export interface SiteboardViewportTarget {
+export interface SheltieViewportTarget {
   x: number;
   y: number;
   zoom: number;
@@ -80,7 +80,7 @@ function getCenteredViewport(
   viewportWidth: number,
   viewportHeight: number,
   zoom: number,
-): SiteboardViewportTarget {
+): SheltieViewportTarget {
   return {
     x: viewportWidth / 2 - bounds.centerX * zoom,
     y: viewportHeight / 2 - bounds.centerY * zoom,
@@ -94,7 +94,7 @@ function getCenteredViewportWithPadding(
   viewportHeight: number,
   zoom: number,
   padding: ResolvedPadding,
-): SiteboardViewportTarget {
+): SheltieViewportTarget {
   const availableCenterX = padding.left + (viewportWidth - padding.left - padding.right) / 2;
   const availableCenterY = padding.top + (viewportHeight - padding.top - padding.bottom) / 2;
   return {
@@ -109,7 +109,7 @@ export function resolveCenteredViewport(
   viewportWidth: number,
   viewportHeight: number,
   zoom = 1,
-): SiteboardViewportTarget {
+): SheltieViewportTarget {
   const bounds = getNodeBounds(nodes);
   if (!bounds) {
     return { x: 0, y: 0, zoom };
@@ -182,7 +182,7 @@ export function resolveFitViewport(
     paddingPx?: number;
     padding?: FitViewportPadding;
   },
-): SiteboardViewportTarget | null {
+): SheltieViewportTarget | null {
   if (nodes.length === 0) return null;
 
   const minZoom = options?.minZoom ?? MIN_ZOOM;

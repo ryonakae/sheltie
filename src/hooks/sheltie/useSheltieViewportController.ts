@@ -6,8 +6,8 @@ import { ZOOM_END_DEBOUNCE_MS, ZOOM_RESET_TARGET, ZOOM_STEPS } from '@/constants
 import {
   resolveCenteredViewport,
   resolveFitViewport,
-  type SiteboardViewportTarget,
-} from '@/lib/siteboard-viewport';
+  type SheltieViewportTarget,
+} from '@/lib/sheltie-viewport';
 import { registerViewCommandHandlers } from '@/lib/view-commands';
 import type { BoardNode, Viewport } from '@/types';
 
@@ -25,14 +25,14 @@ function isSameViewport(a: FlowViewport | null, b: FlowViewport): boolean {
   );
 }
 
-interface UseSiteboardViewportControllerParams {
+interface UseSheltieViewportControllerParams {
   containerRef: React.RefObject<HTMLDivElement | null>;
   zoomRef: React.RefObject<number>;
   nodes: BoardNode[];
   /** store の viewport（panX/panY/zoom）。project 切り替え・centering・復元の同期元 */
   storeViewport: FlowViewport;
   updateViewport: (viewport: Partial<Viewport>) => void;
-  // useSiteboardDisplayEngine と連携する操作種別ハンドラ
+  // useSheltieDisplayEngine と連携する操作種別ハンドラ
   cancelZoomRestore: () => void;
   scheduleZoomRestoreAfterReflow: () => void;
   prepareInteractionStart: (type: 'pan' | 'zoom') => void | Promise<unknown>;
@@ -41,13 +41,13 @@ interface UseSiteboardViewportControllerParams {
 }
 
 /**
- * React Flow のビューポート（pan/zoom）管理を Siteboard から切り出したフック。
+ * React Flow のビューポート（pan/zoom）管理を Sheltie から切り出したフック。
  * - viewport 変更の zoomRef / uiZoom / --canvas-zoom 同期と store への debounce 反映
  * - store 側 viewport 変化時の setViewport 再同期
  * - fit / reset / zoom-in / zoom-out（View メニュー連携含む）
  * zoomRef と containerRef は display engine・ドラッグ・flowNodes と共有するため呼び出し側が保持する。
  */
-export function useSiteboardViewportController({
+export function useSheltieViewportController({
   containerRef,
   zoomRef,
   nodes,
@@ -58,7 +58,7 @@ export function useSiteboardViewportController({
   prepareInteractionStart,
   handleInteractionChange,
   scheduleInteractionUpdate,
-}: UseSiteboardViewportControllerParams) {
+}: UseSheltieViewportControllerParams) {
   const [uiZoom, setUiZoom] = useState(() => storeViewport.zoom);
   const viewportUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const zoomRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -191,7 +191,7 @@ export function useSiteboardViewportController({
   );
 
   const applyViewportTarget = useCallback(
-    (target: SiteboardViewportTarget) => {
+    (target: SheltieViewportTarget) => {
       const instance = reactFlowInstanceRef.current;
       if (!instance) return;
 

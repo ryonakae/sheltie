@@ -13,7 +13,7 @@ interface TextNodeStyle {
   textColorIndex?: number;
 }
 
-interface UseSiteboardTextEditingParams {
+interface UseSheltieTextEditingParams {
   nodes: BoardNode[];
   selectedNodeIds: string[];
   autoEditTextNodeId: string | null;
@@ -31,9 +31,9 @@ interface UseSiteboardTextEditingParams {
 
 /**
  * テキストノードの編集状態（Tiptap 編集モード）と、WebPage の URL 編集モードを
- * Siteboard から切り出したフック。新規作成時の自動編集開始・空テキストノードの自動削除も担う。
+ * Sheltie から切り出したフック。新規作成時の自動編集開始・空テキストノードの自動削除も担う。
  */
-export function useSiteboardTextEditing({
+export function useSheltieTextEditing({
   nodes,
   selectedNodeIds,
   autoEditTextNodeId,
@@ -47,7 +47,7 @@ export function useSiteboardTextEditing({
   changeWebNodeUrl,
   removeNode,
   removeNodes,
-}: UseSiteboardTextEditingParams) {
+}: UseSheltieTextEditingParams) {
   const [editingUrlNodeId, setEditingUrlNodeId] = useState<string | null>(null);
   const [editingTextNodeId, setEditingTextNodeId] = useState<string | null>(null);
 

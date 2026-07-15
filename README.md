@@ -1,4 +1,4 @@
-# Siteboard
+# Sheltie
 
 Tauri v2 で構築されたデスクトップアプリケーション。複数の Web ページをキャンバス上に配置して、インタラクティブにデザイン・プレビューできるツールです。
 
@@ -14,7 +14,7 @@ Tauri v2 で構築されたデスクトップアプリケーション。複数�
 
 ```bash
 git clone <repository>
-cd siteboard
+cd sheltie
 npm install
 mise exec -- cargo fetch  # Rust 依存関係をダウンロード
 ```

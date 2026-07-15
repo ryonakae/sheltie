@@ -1,2 +1,2 @@
 export * from '@/constants/project';
-export * from '@/constants/siteboard';
+export * from '@/constants/sheltie';

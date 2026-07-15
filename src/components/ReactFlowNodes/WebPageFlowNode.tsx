@@ -21,7 +21,7 @@ import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionC
 import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
 import { WebPageToolbar } from '@/components/ReactFlowNodes/WebPageToolbar';
 import { PAGE_MIN_HEIGHT, PAGE_MIN_WIDTH } from '@/constants';
-import { getNodeChromeHeight, getNodeChromeWidth } from '@/lib/siteboard-node-frame';
+import { getNodeChromeHeight, getNodeChromeWidth } from '@/lib/sheltie-node-frame';
 
 import type { WebPageFlowNodeData } from './types';
 
@@ -78,43 +78,43 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
       key: 'top',
       position: 'top' as const,
       resizeDirection: 'vertical' as const,
-      className: 'siteboard-web-resize-line',
+      className: 'sheltie-web-resize-line',
     },
     {
       key: 'right',
       position: 'right' as const,
       resizeDirection: 'horizontal' as const,
-      className: 'siteboard-web-resize-line',
+      className: 'sheltie-web-resize-line',
     },
     {
       key: 'bottom',
       position: 'bottom' as const,
       resizeDirection: 'vertical' as const,
-      className: 'siteboard-web-resize-line',
+      className: 'sheltie-web-resize-line',
     },
     {
       key: 'left',
       position: 'left' as const,
       resizeDirection: 'horizontal' as const,
-      className: 'siteboard-web-resize-line',
+      className: 'sheltie-web-resize-line',
     },
   ];
   const resizeHandleConfigs = [
-    { key: 'top-left', position: 'top-left' as const, className: 'siteboard-web-resize-handle' },
+    { key: 'top-left', position: 'top-left' as const, className: 'sheltie-web-resize-handle' },
     {
       key: 'top-right',
       position: 'top-right' as const,
-      className: 'siteboard-web-resize-handle',
+      className: 'sheltie-web-resize-handle',
     },
     {
       key: 'bottom-left',
       position: 'bottom-left' as const,
-      className: 'siteboard-web-resize-handle',
+      className: 'sheltie-web-resize-handle',
     },
     {
       key: 'bottom-right',
       position: 'bottom-right' as const,
-      className: 'siteboard-web-resize-handle',
+      className: 'sheltie-web-resize-handle',
     },
   ];
 

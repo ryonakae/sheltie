@@ -28,20 +28,20 @@
 - `BoardEdge`
   - `id`, `source`, `sourceHandle`, `target`, `targetHandle` + `BoardEdgeStyle`
   - WebPageNode 同士の接続を表現する。他のノード種別は接続対象外
-- `SiteboardDocumentEdge`
-  - `.siteboard` に保存されるエッジ形式。`BoardEdge` と同じフィールドを必須で保存する
+- `SheltieDocumentEdge`
+  - `.sheltie` に保存されるエッジ形式。`BoardEdge` と同じフィールドを必須で保存する
 - `TextNodeFontSizePreset = 0 | 1 | 2 | 3`
 - `ProjectWebviewRuntime`
   - document ごとの runtime-only state
   - `labelsByNodeId: Record<string, string>`
   - `screenshotUrlsByNodeId: Record<string, string>`
 - `Viewport`: `zoom`, `panX`, `panY`
-- `SiteboardDocumentNode`
-  - `.siteboard` に保存される node の union 型
+- `SheltieDocumentNode`
+  - `.sheltie` に保存される node の union 型
   - `webpage` は `id`, `type`, `title`, `url`, `addedUrl?`, `x`, `y`, `width`, `height`
   - `stickynote` は `id`, `type`, `title`, `content`, `colorIndex`, `fontSizePreset`, `x`, `y`, `width`, `height`
   - `text` は `id`, `type`, `title`, `tiptapContent?`, `fontSizePreset`, `fontWeight`, `italic`, `strikethrough`, `textColorIndex`, `widthMode`, `x`, `y`, `width`, `height`
-- `SiteboardDocumentV2`
+- `SheltieDocumentV2`
   - `schemaVersion: 2`
   - `nodes`, `edges?`（後方互換: `edges` が無い場合は空配列として扱う）
 - `Project`
@@ -66,22 +66,22 @@
   - `future`: Redo 用の `ProjectSnapshot` 配列
   - ノードとエッジを統合スナップショットとして管理し、Undo/Redo で両方が同時に復元される
 
-## `.siteboard` とローカル状態の境界
+## `.sheltie` とローカル状態の境界
 
-- `.siteboard` は共有用ドキュメント形式
+- `.sheltie` は共有用ドキュメント形式
 - 保存する: `schemaVersion`, `nodes`, `edges`
   - `title` は保存しない
   - `schemaVersion: 1` は読み込み互換用に受けるが、書き出しは `schemaVersion: 2` に統一する
-  - 保存名は `.siteboard` の外側、つまりファイル名で表現する
+  - 保存名は `.sheltie` の外側、つまりファイル名で表現する
 - ローカル状態は document window の再起動復元用
   - `Project` は renderer のメモリ上で `nodes`, `filePath`, `viewport`, `untitledIndex`, `lastSavedDocument` を保持する
   - backend から受ける window context は `filePath` と `untitledIndex` のみ
-  - 起動時は filePath があれば `.siteboard` を読み、無ければ空 document を作る
+  - 起動時は filePath があれば `.sheltie` を読み、無ければ空 document を作る
   - `webviewRuntime` と `nodeHistory` は runtime-only のため永続化しない
 
 ## 未保存変更の判定
 
-- 未保存判定は current document の `.siteboard` 相当内容（`nodes`, `edges`）と `lastSavedDocument` の差分で行う
+- 未保存判定は current document の `.sheltie` 相当内容（`nodes`, `edges`）と `lastSavedDocument` の差分で行う
 - `viewport`, `filePath`, `untitledIndex` の差分は未保存確認の対象に含めない
 - 新規未保存 document は作成時点の空 document を `lastSavedDocument` として持つ
 - `restoreProjectFromLastSaved` は `nodes` と `edges` を `lastSavedDocument` に戻し、対応する `history` も破棄する
@@ -102,7 +102,7 @@
 - `WebPageFlowNodeData = { nodeProps: WebPageNodeProps; layoutZoom; onResizeStart; onResize; onResizeEnd; getZoom }`
 - `StickyNoteFlowNodeData = { nodeProps: StickyNoteNodeProps & { onStyleChange }; onResize; onResizeEnd }`
 - `TextFlowNodeData = { nodeProps: TextNodeProps & { onStyleChange; onWidthModeChange }; onResize; onResizeEnd }`
-- `BoardNode[]` から React Flow `Node[]` を作る正本は `Siteboard.tsx` の `flowNodes` `useMemo`
+- `BoardNode[]` から React Flow `Node[]` を作る正本は `Sheltie.tsx` の `flowNodes` `useMemo`
 
 実装規約（position / width / height の渡し方、インタラクション制御）は `coding-rules.md` の「React Flow」セクションを参照。
 
@@ -120,7 +120,7 @@
 - `DEFAULT_TEXT_NODE_HEIGHT = 32`
 - `SIZE_PRESETS = [Mobile, Tablet, PC]`
 
-`src/constants/siteboard.ts`
+`src/constants/sheltie.ts`
 
 - ズーム: `MIN_ZOOM = 0.25`, `MAX_ZOOM = 1.5`, `ZOOM_STEPS = [0.25, 0.5, 1.0, 1.5]`（キーボードショートカットのステップ値）
 - しきい値: `HYSTERESIS_PX = 4`, `NATIVE_SAFE_MARGIN_PX = 25`
@@ -152,7 +152,7 @@
 - 重なり補正・新規ノード自動配置・センタリング fallback は、content サイズではなくノード外枠（フレーム外周）を基準にする。WebPage のフレーム padding は world 固定 24px なので、外枠サイズは zoom に依存しない
 - WebPage / StickyNote / Text のいずれもツールバーは `NodeToolbar` を使い、ノード外枠の上部に配置する。WebPage はさらに常時表示のタイトル段（`[Moved] Title`、左寄せ）を追加で `NodeToolbar` で重ねる
 - エッジツールバーは `EdgeToolbar` を使い、ノード/エッジを合わせて1要素だけが選択された場合にベジェpath境界の左右中央・上端上部へ表示する。選択中の線自体は変えず、始点/終点リングだけを追加する
-- 同一 `filePath` の `.siteboard` を複数のローカル document に関連付けない
-- `.siteboard` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
-- `lastSavedDocument` はローカル state 専用であり、`.siteboard` へは書き出さない
+- 同一 `filePath` の `.sheltie` を複数のローカル document に関連付けない
+- `.sheltie` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
+- `lastSavedDocument` はローカル state 専用であり、`.sheltie` へは書き出さない
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { DRAG_REPOSITION_GAP } from '@/constants';
-import { resolveDraggedNodePosition } from '@/lib/siteboard-node-placement';
+import { resolveDraggedNodePosition } from '@/lib/sheltie-node-placement';
 import type { BoardNode, WebPageNode } from '@/types';
 import { isWebPageNode } from '@/types';
 
@@ -15,7 +15,7 @@ export interface PositionCorrectionAnimation {
   toY: number;
 }
 
-interface UseSiteboardDragParams {
+interface UseSheltieDragParams {
   nodes: BoardNode[];
   webPageNodes: WebPageNode[];
   selectedNodeIds: string[];
@@ -33,12 +33,12 @@ interface UseSiteboardDragParams {
 }
 
 /**
- * ノードのドラッグ移動を Siteboard から切り出したフック。
+ * ノードのドラッグ移動を Sheltie から切り出したフック。
  * - React Flow ネイティブドラッグ（onNodeDragStart/Stop）と、NodeToolbar タイトル段の自前 pointer ドラッグ
  * - ドラッグ中の一時位置（draggingNodePositions）と、重なり補正アニメーション（positionCorrectionAnimations）
  * draggingNodePositions / positionCorrectionAnimations は flowNodes 構築で参照するため呼び出し側へ返す。
  */
-export function useSiteboardDrag({
+export function useSheltieDrag({
   nodes,
   webPageNodes,
   selectedNodeIds,
@@ -51,7 +51,7 @@ export function useSiteboardDrag({
   releaseNodeAfterPositionSettle,
   updateNodePosition,
   updateNodePositions,
-}: UseSiteboardDragParams) {
+}: UseSheltieDragParams) {
   // React Flow ネイティブドラッグ中のノード位置（ストアへの反映は dragStop 時のみ）
   const [draggingNodePositions, setDraggingNodePositions] = useState<
     Record<string, { x: number; y: number }>

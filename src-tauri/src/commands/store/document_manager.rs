@@ -5,7 +5,7 @@ use std::{
 };
 
 pub(super) const DOCUMENT_WINDOW_LABEL_PREFIX: &str = "document-";
-pub(super) const DOCUMENT_WINDOW_TABBING_IDENTIFIER: &str = "siteboard-document";
+pub(super) const DOCUMENT_WINDOW_TABBING_IDENTIFIER: &str = "sheltie-document";
 
 #[derive(Clone)]
 pub(super) enum DocumentWindowDisposition {
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn reserve_with_file_path_uses_untitled_index_zero() {
         let state = DocumentManagerState::default();
-        let path = PathBuf::from("/tmp/test.siteboard");
+        let path = PathBuf::from("/tmp/test.sheltie");
         let (_label, record) = state
             .reserve_window(Some(path.clone()), &standalone())
             .unwrap();
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn reserving_same_file_path_twice_fails() {
         let state = DocumentManagerState::default();
-        let path = PathBuf::from("/tmp/test.siteboard");
+        let path = PathBuf::from("/tmp/test.sheltie");
         let _ = state
             .reserve_window(Some(path.clone()), &standalone())
             .unwrap();
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn rollback_releases_file_path_so_it_can_be_reserved_again() {
         let state = DocumentManagerState::default();
-        let path = PathBuf::from("/tmp/test.siteboard");
+        let path = PathBuf::from("/tmp/test.sheltie");
         let (label, _) = state
             .reserve_window(Some(path.clone()), &standalone())
             .unwrap();
@@ -341,13 +341,13 @@ mod tests {
     #[test]
     fn existing_window_label_for_path_returns_label_when_tracked() {
         let state = DocumentManagerState::default();
-        let path = PathBuf::from("/tmp/test.siteboard");
+        let path = PathBuf::from("/tmp/test.sheltie");
         let (label, _) = state
             .reserve_window(Some(path.clone()), &standalone())
             .unwrap();
         assert_eq!(state.existing_window_label_for_path(&path), Some(label));
         assert_eq!(
-            state.existing_window_label_for_path(Path::new("/tmp/other.siteboard")),
+            state.existing_window_label_for_path(Path::new("/tmp/other.sheltie")),
             None
         );
     }
@@ -355,8 +355,8 @@ mod tests {
     #[test]
     fn update_window_file_path_releases_old_and_registers_new() {
         let state = DocumentManagerState::default();
-        let old_path = PathBuf::from("/tmp/old.siteboard");
-        let new_path = PathBuf::from("/tmp/new.siteboard");
+        let old_path = PathBuf::from("/tmp/old.sheltie");
+        let new_path = PathBuf::from("/tmp/new.sheltie");
         let (label, _) = state
             .reserve_window(Some(old_path.clone()), &standalone())
             .unwrap();
@@ -372,8 +372,8 @@ mod tests {
     #[test]
     fn update_window_file_path_fails_when_path_belongs_to_another_window() {
         let state = DocumentManagerState::default();
-        let path_a = PathBuf::from("/tmp/a.siteboard");
-        let path_b = PathBuf::from("/tmp/b.siteboard");
+        let path_a = PathBuf::from("/tmp/a.sheltie");
+        let path_b = PathBuf::from("/tmp/b.sheltie");
         let (label_a, _) = state.reserve_window(Some(path_a), &standalone()).unwrap();
         let _ = state
             .reserve_window(Some(path_b.clone()), &standalone())
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn ensure_window_can_use_file_path_allows_same_window_to_keep_path() {
         let state = DocumentManagerState::default();
-        let path = PathBuf::from("/tmp/test.siteboard");
+        let path = PathBuf::from("/tmp/test.sheltie");
         let (label, _) = state
             .reserve_window(Some(path.clone()), &standalone())
             .unwrap();
@@ -411,7 +411,7 @@ mod tests {
     #[test]
     fn window_context_returns_serialized_form() {
         let state = DocumentManagerState::default();
-        let path = PathBuf::from("/tmp/test.siteboard");
+        let path = PathBuf::from("/tmp/test.sheltie");
         let (label, _) = state
             .reserve_window(Some(path.clone()), &standalone())
             .unwrap();

@@ -28,7 +28,7 @@ export function serializeRect(rect: DOMRect | null): SerializedRect | null {
 
 export function readCanvasZoomDebugValue(element: HTMLElement | null): string | null {
   if (!element) return null;
-  const container = element.closest('[data-siteboard-container]') as HTMLElement | null;
+  const container = element.closest('[data-sheltie-container]') as HTMLElement | null;
   if (!container) return null;
   const computedValue = window.getComputedStyle(container).getPropertyValue('--canvas-zoom').trim();
   return computedValue || container.style.getPropertyValue('--canvas-zoom') || null;

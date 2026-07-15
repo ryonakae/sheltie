@@ -19,12 +19,12 @@
 - `present_document_window` - renderer 初期化完了後（最初の paint 後）に呼び出され、`visible(false)` で生成された document window をユーザーに見せる。pending な macOS `New Tab` child の場合は host document window へ attach し、それ以外は `show` + `setFocus` する
 - `new_document_tab` - 現在の macOS document window が解決できた時だけ、その native tab group と同じ `tabbingIdentifier` を継承した untitled document を host 限定の explicit attach で追加する。standalone window へはフォールバックしない
 - `new_document_window` - 新しい untitled standalone document window を開く
-- `open_document_window(path)` - 対象 `.siteboard` 用の document window を開く。既に開いていればその window を前面化する
+- `open_document_window(path)` - 対象 `.sheltie` 用の document window を開く。既に開いていればその window を前面化する
 - `complete_app_exit(windowLabels)` - 集約済み app quit を確定し、対象 document window をまとめて destroy した後にアプリ終了を再開する
 - `abort_app_exit` - 集約中の app quit を中止し、次の `Cmd+Q` / `Quit` を再度受け付ける
 - `close_ready` - 現在の document window を破棄する
-- `load_project_file(path)` - `.siteboard` ファイルを UTF-8 文字列として読む
-- `save_project_file(path, contents)` - `.siteboard` ファイルを書き込み、実際の保存パスを返す
+- `load_project_file(path)` - `.sheltie` ファイルを UTF-8 文字列として読む
+- `save_project_file(path, contents)` - `.sheltie` ファイルを書き込み、実際の保存パスを返す
 
 ### ダイアログ
 
@@ -36,7 +36,7 @@
 - `set_theme`
 - `get_platform_info`
 
-テーマ切り替え UI はアプリメニュー `Siteboard > Settings > Theme` で提供する（CheckMenuItem ベース）。選択時に `theme-command` イベントを emit する。
+テーマ切り替え UI はアプリメニュー `Sheltie > Settings > Theme` で提供する（CheckMenuItem ベース）。選択時に `theme-command` イベントを emit する。
 
 ### Webview
 
@@ -114,9 +114,9 @@
 - `View` メニューは `src/lib/view-commands.ts` と `src/main.tsx` を経由して renderer に流す。`fit-view`（Shift+1）はテキスト編集中に editable フォーカスをチェックしてスキップする
 - macOS の `File > New Tab` は現在 window の native tab group に untitled document を追加する
 - macOS の document window は native tab group ごとに `tabbingIdentifier` を共有する。`File > New Window` は新しい standalone document window / group を作り、既存 window の tab bar 状態は変更しない
-- `File > Open` は既存 window を置き換えず、対象 `.siteboard` 用の document window を開く
+- `File > Open` は既存 window を置き換えず、対象 `.sheltie` 用の document window を開く
 - `Save` は保存先 `filePath` 未設定時に `Save As` へフォールバックする
-- `save_project_file` は常に拡張子を `.siteboard` に正規化する
+- `save_project_file` は常に拡張子を `.sheltie` に正規化する
 - window-local な IPC では `main` のような固定 label を前提にしない
 - `Cmd+Q` / `Quit` は macOS app menu の既定 `Quit` を custom `app.quit` item に差し替え、その menu event から renderer 側 coordinator を起動する
 

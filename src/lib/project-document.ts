@@ -8,10 +8,10 @@ import {
   type EdgeLineStyle,
   type EdgeStrokeWidth,
   type Project,
-  type SiteboardDocument,
-  type SiteboardDocumentEdge,
-  type SiteboardDocumentNode,
-  type SiteboardDocumentV2,
+  type SheltieDocument,
+  type SheltieDocumentEdge,
+  type SheltieDocumentNode,
+  type SheltieDocumentV2,
   type TextNodeFontSizePreset,
 } from '@/types';
 
@@ -33,7 +33,7 @@ function parseString(value: unknown, field: string): string {
   return value;
 }
 
-function parseNode(rawNode: unknown, index: number): SiteboardDocumentNode {
+function parseNode(rawNode: unknown, index: number): SheltieDocumentNode {
   if (!isRecord(rawNode)) {
     throw new Error(`nodes[${index}] must be an object`);
   }
@@ -149,7 +149,7 @@ function parseEdgeColorPreset(value: unknown, field: string): EdgeColorPreset {
   return value as EdgeColorPreset;
 }
 
-function parseEdge(rawEdge: unknown, index: number): SiteboardDocumentEdge {
+function parseEdge(rawEdge: unknown, index: number): SheltieDocumentEdge {
   if (!isRecord(rawEdge)) {
     throw new Error(`edges[${index}] must be an object`);
   }
@@ -172,7 +172,7 @@ function parseEdge(rawEdge: unknown, index: number): SiteboardDocumentEdge {
   };
 }
 
-function parseProjectDocumentValue(value: unknown): SiteboardDocumentV2 {
+function parseProjectDocumentValue(value: unknown): SheltieDocumentV2 {
   if (!isRecord(value)) {
     throw new Error('root must be an object');
   }
@@ -213,7 +213,7 @@ function parseProjectDocumentValue(value: unknown): SiteboardDocumentV2 {
   };
 }
 
-export function boardNodeToDocumentNode(node: BoardNode): SiteboardDocumentNode {
+export function boardNodeToDocumentNode(node: BoardNode): SheltieDocumentNode {
   if (isStickyNoteNode(node)) {
     return {
       id: node.id,
@@ -261,7 +261,7 @@ export function boardNodeToDocumentNode(node: BoardNode): SiteboardDocumentNode 
   };
 }
 
-export function boardEdgeToDocumentEdge(edge: BoardEdge): SiteboardDocumentEdge {
+export function boardEdgeToDocumentEdge(edge: BoardEdge): SheltieDocumentEdge {
   return {
     id: edge.id,
     source: edge.source,
@@ -274,7 +274,7 @@ export function boardEdgeToDocumentEdge(edge: BoardEdge): SiteboardDocumentEdge 
   };
 }
 
-export function documentEdgeToBoardEdge(edge: SiteboardDocumentEdge): BoardEdge {
+export function documentEdgeToBoardEdge(edge: SheltieDocumentEdge): BoardEdge {
   return {
     id: edge.id,
     source: edge.source,
@@ -287,7 +287,7 @@ export function documentEdgeToBoardEdge(edge: SiteboardDocumentEdge): BoardEdge 
   };
 }
 
-export function documentNodeToBoardNode(node: SiteboardDocumentNode): BoardNode {
+export function documentNodeToBoardNode(node: SheltieDocumentNode): BoardNode {
   if (node.type === 'stickynote') {
     return {
       id: node.id,
@@ -339,7 +339,7 @@ export function documentNodeToBoardNode(node: SiteboardDocumentNode): BoardNode 
 
 export function createProjectDocument(
   project: Pick<Project, 'nodes' | 'edges'>,
-): SiteboardDocumentV2 {
+): SheltieDocumentV2 {
   return {
     schemaVersion: 2,
     nodes: project.nodes.map(boardNodeToDocumentNode),
@@ -347,11 +347,11 @@ export function createProjectDocument(
   };
 }
 
-export function serializeProjectDocument(document: SiteboardDocument): string {
+export function serializeProjectDocument(document: SheltieDocument): string {
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 
-export function parseProjectDocument(contents: string): SiteboardDocumentV2 {
+export function parseProjectDocument(contents: string): SheltieDocumentV2 {
   let parsed: unknown;
 
   try {
@@ -366,7 +366,7 @@ export function parseProjectDocument(contents: string): SiteboardDocumentV2 {
 export function sanitizeProjectDocument(
   rawDocument: unknown,
   fallbackProject: Pick<Project, 'nodes' | 'edges'>,
-): SiteboardDocumentV2 {
+): SheltieDocumentV2 {
   if (rawDocument === undefined) {
     return createProjectDocument(fallbackProject);
   }

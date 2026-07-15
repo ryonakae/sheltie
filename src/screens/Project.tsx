@@ -1,7 +1,7 @@
 import { animate, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Siteboard } from '@/components/Siteboard/Siteboard';
+import { Sheltie } from '@/components/Sheltie/Sheltie';
 import {
   DEFAULT_PAGE_HEIGHT,
   DEFAULT_PAGE_WIDTH,
@@ -12,8 +12,8 @@ import {
   CANVAS_CENTER_ANIMATION_DURATION_SEC,
   CANVAS_CENTER_ANIMATION_EASE,
 } from '@/constants';
-import { getNodeFrameHeight, getNodeFrameWidth } from '@/lib/siteboard-node-frame';
-import { resolveFitViewport } from '@/lib/siteboard-viewport';
+import { getNodeFrameHeight, getNodeFrameWidth } from '@/lib/sheltie-node-frame';
+import { resolveFitViewport } from '@/lib/sheltie-viewport';
 import { selectProject, useProjectStore } from '@/store/tab-store';
 import { type BoardNode } from '@/types';
 
@@ -25,10 +25,10 @@ function getViewportCenterPos(
   targetWidth: number,
   targetHeight: number,
 ): { x: number; y: number } | null {
-  const siteboard = document.querySelector<HTMLElement>('[data-siteboard-container]');
-  if (!siteboard) return null;
+  const sheltie = document.querySelector<HTMLElement>('[data-sheltie-container]');
+  if (!sheltie) return null;
 
-  const rect = siteboard.getBoundingClientRect();
+  const rect = sheltie.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0 || viewportZoom <= 0) return null;
 
   // ビューポート中央のワールド座標（要素左上を起点とするため半サイズ分ずらす）
@@ -93,9 +93,9 @@ export function ProjectScreen() {
       node: Pick<BoardNode, 'id' | 'type' | 'x' | 'y' | 'width' | 'height'>,
       onComplete?: () => void,
     ) => {
-      const siteboard = document.querySelector<HTMLElement>('[data-siteboard-container]');
-      if (!siteboard || !viewport) return;
-      const rect = siteboard.getBoundingClientRect();
+      const sheltie = document.querySelector<HTMLElement>('[data-sheltie-container]');
+      if (!sheltie || !viewport) return;
+      const rect = sheltie.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
       const target = resolveFitViewport([node], rect.width, rect.height, { maxZoom: 1 });
@@ -244,7 +244,7 @@ export function ProjectScreen() {
 
   return (
     <div className="relative flex flex-1 overflow-hidden">
-      <Siteboard
+      <Sheltie
         selectedNodeIds={selectedNodeIds}
         setSelection={setSelection}
         centeredNodeId={centeredNodeId}

@@ -9,8 +9,8 @@ import type {
   WebPageFlowNodeData,
 } from '@/components/ReactFlowNodes/types';
 import { STICKY_NOTE_MIN_HEIGHT, STICKY_NOTE_MIN_WIDTH } from '@/constants';
-import type { PositionCorrectionAnimation } from '@/hooks/siteboard/useSiteboardDrag';
-import { getNodeFrameHeight, getNodeFrameWidth } from '@/lib/siteboard-node-frame';
+import type { PositionCorrectionAnimation } from '@/hooks/sheltie/useSheltieDrag';
+import { getNodeFrameHeight, getNodeFrameWidth } from '@/lib/sheltie-node-frame';
 import type { NavigationState } from '@/lib/tauri-bridge/types';
 import { isNodeEmpty, isNodeMoved, isStickyNoteNode, isTextNode } from '@/types';
 import type { BoardNode, DisplayMode, TextNode, WebPageNode } from '@/types';
@@ -25,7 +25,7 @@ interface ResizingState {
   height: number;
 }
 
-interface UseSiteboardFlowNodesParams {
+interface UseSheltieFlowNodesParams {
   nodes: BoardNode[];
   draggingNodePositions: Record<string, { x: number; y: number }>;
   rfMeasured: Record<string, { width: number; height: number }>;
@@ -89,7 +89,7 @@ interface UseSiteboardFlowNodesParams {
  * React Flow の controlled mode 用ノード配列を構築するフック。
  * displayModes/screenshotUrls/navStates/resizingSize の変化に追従するため useMemo 依存に含める。
  */
-export function useSiteboardFlowNodes({
+export function useSheltieFlowNodes({
   nodes,
   draggingNodePositions,
   rfMeasured,
@@ -141,7 +141,7 @@ export function useSiteboardFlowNodes({
   handleUrlSubmit,
   handleChangeUrlSubmit,
   handleTitlePointerDown,
-}: UseSiteboardFlowNodesParams): Node[] {
+}: UseSheltieFlowNodesParams): Node[] {
   return useMemo((): Node[] => {
     return nodes.map((node): Node => {
       // ドラッグ中は一時位置を使用。dragStop 時にストアへ反映する

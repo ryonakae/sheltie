@@ -12,7 +12,7 @@
 ## SHOULD
 
 - グローバル共有状態は Zustand、ローカル状態は `useState` を優先する。
-- Siteboard 内 UI のスケーリングは `--canvas-zoom` を使った CSS 計算で対応し、不要な再レンダーを避ける。
+- Sheltie 内 UI のスケーリングは `--canvas-zoom` を使った CSS 計算で対応し、不要な再レンダーを避ける。
 - コメントは「なぜ必要か」がコードだけで伝わらない箇所に限定する。
 
 ## Document App
@@ -33,13 +33,13 @@
 - **位置は React Flow が管理**: React Flow ノードの `position: {x, y}` には常に node の座標を設定。React Flow が `.react-flow__node` の CSS transform で絶対配置を制御
 - **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
 - **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化する
-- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` のフレーム div（24px world 固定 padding 帯）に付ける。タイトル段は `NodeToolbar` 内（ノード DOM サブツリー外に portal 配置されるため `dragHandle` が効かない）なので、`Siteboard.tsx` の `handleTitlePointerDown` が pointer 系イベントを直接処理し `draggingNodePositions` を更新する。右クリックも同じタイトル段の `onContextMenu` で `handleNodeContextMenu` を発火する
+- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` のフレーム div（24px world 固定 padding 帯）に付ける。タイトル段は `NodeToolbar` 内（ノード DOM サブツリー外に portal 配置されるため `dragHandle` が効かない）なので、`Sheltie.tsx` の `handleTitlePointerDown` が pointer 系イベントを直接処理し `draggingNodePositions` を更新する。右クリックも同じタイトル段の `onContextMenu` で `handleNodeContextMenu` を発火する
 - **NodeToolbar 2 段構成**: WebPage のツールバーは `NodeToolbar` を 2 つ使う。ツールバー段（`align="center" isVisible={selected && isActive}`）と、タイトル段（`align="start" isVisible offset={8}`）。タイトル段は常時表示で `[Moved] Title` を Webview+フレーム幅で `truncate`
 - **ツールバーの固定サイズ**: canvas zoom 中も文字・ボタン・アイコンの画面上サイズを固定したい UI は `zoomPx()` と `AppButton scaleWithCanvasZoom` を使う。高さ、padding、gap、font-size、icon size、border 幅を world 座標へ直接ハードコードしない
 - **WebPageToolbar のモード切替時も高さ固定**: 通常モード（戻る/進む/リロード）と URL 入力モード（HeroUI `InputGroup`）で全体高さを揃える。`InputGroup` の `min-h` と内側 Input の `py` を className で打ち消し、submit ボタンも縮めて行高に収める。配色はツールバー本体（`bg-zinc-800`）に乗るためテーマ非依存で常に dark 系（`InputGroup` 背景 / 文字 / アイコン / placeholder すべて zinc 系・white 系で固定）。`resolveFitViewport` が確保する safe area top（`NATIVE_SAFE_MARGIN_PX = 25`）に収めるための前提
 - **付箋のドラッグ起点**: 付箋はノード本体をドラッグ可能にし、textarea などの操作要素だけを `nodrag` で保護する。スタイル変更は選択時に `NodeToolbar` で表示する
 - **付箋本文の編集開始**: 付箋本文は未選択時のクリックで選択だけ行い、選択済みの本文エリアを再度クリックした時だけ編集を開始する。リサイズ操作やツールバー操作からは編集開始しない
-- **新規追加時は編集モードから開始**: FloatingToolbar から作成した直後は親 (`ProjectScreen`) が `autoEditStickyNoteId` を Siteboard に渡し、`StickyNoteNode` の `autoStartEditing` prop 経由でマウント時に編集モードで起動する
+- **新規追加時は編集モードから開始**: FloatingToolbar から作成した直後は親 (`ProjectScreen`) が `autoEditStickyNoteId` を Sheltie に渡し、`StickyNoteNode` の `autoStartEditing` prop 経由でマウント時に編集モードで起動する
 - **プレースホルダ**: 本文が空のときは編集モード/非編集モードどちらでも `'Type anything'` を表示する。テキストノードと文言を揃える。編集モードでは textarea の `placeholder` 属性、非編集モードでは本文 div の代替表示を使う
 - **自前ドラッグ実装の廃止**: 従来の `usePageDrag` 相当の自前実装は廃止。React Flow の `onNodeDragStart`/`onNodeDragStop`/`onNodesChange` を使用する。自前の `frameEl.style.left/top` 操作では React Flow の `transform: translate()` 座標系と不一致になり、ドラッグ後にノードが消える罠
 - **Framer Motion との競合**: ノードコンポーネント内で `motion.div layout="position"` を使用しない。React Flow が CSS transform で位置を管理しているため、`layout="position"` のスプリングアニメーション（レイアウトシフト補正）がドラッグ方向を反転させる。Canvas や外側 UI の `motion.div` には使用可（ノード外）
@@ -48,10 +48,10 @@
 
 ### ドラッグ機能
 
-- **ドラッグ中の位置管理**: `Siteboard.tsx` の `draggingNodePositions` state（React state）でドラッグ中の一時位置を管理。ストアへの書き込みは `onNodeDragStop` 完了時のみ（Undo/Redo 履歴の汚染防止）
+- **ドラッグ中の位置管理**: `Sheltie.tsx` の `draggingNodePositions` state（React state）でドラッグ中の一時位置を管理。ストアへの書き込みは `onNodeDragStop` 完了時のみ（Undo/Redo 履歴の汚染防止）
 - **ハンドル指定**: WebPage はフレーム padding 帯（24px world 固定）に `dragHandle: '.node-drag-handle'` を使う。付箋はノード本体をドラッグ起点にする
-- **DisplayEngine 連携**: `onNodeDragStart` で `prepareInteractionStart('drag', nodeId)` を呼び出してスクリーンショット準備（`useSiteboardDisplayEngine` 統合）
-- **重なり補正**: `onNodeDragStop` で `handleRepositionOnDragEnd` を呼び出し、禁止された重なりを単軸補正（`siteboard-runtime.md` 参照）
+- **DisplayEngine 連携**: `onNodeDragStart` で `prepareInteractionStart('drag', nodeId)` を呼び出してスクリーンショット準備（`useSheltieDisplayEngine` 統合）
+- **重なり補正**: `onNodeDragStop` で `handleRepositionOnDragEnd` を呼び出し、禁止された重なりを単軸補正（`sheltie-runtime.md` 参照）
 
 ### リサイズ機能（フェーズ 3 以降）
 
@@ -66,7 +66,7 @@
   - `flowNodes` 構築時に `selected: selectedNodeIdSet.has(node.id)` を必ず明示的に設定（無いと選択連動の枠表示や複数選択ドラッグが動かない）。リサイズハンドルやスタイルツールバーなど単独選択時のみ表示したい UI は、`selected` ではなく `isActive` でゲートする。`isActive` は選択ノードと選択エッジを合わせて1要素だけの場合に限る
   - `onNodesChange` の `dimensions` 変更を追跡して `rfMeasured` state に保存し、`flowNodes` の `measured` プロパティに付与（未初期化状態の防止）
   - `onNodesChange` の `select` 変更は複数同時に届くため、Set でまとめて反映してから配列に戻す。React Flow の Shift+クリック / ドラッグ範囲選択も全てこの経路で多選択になる
-- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizeControl` を 8 個明示配置する。リサイズ枠とハンドルはフレーム外周（=ノード矩形）基準。可視の選択枠は共通 `SelectionFrameOverlay` で描き、line 4 本は上下左右リサイズ用の不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準に置く。`NodeResizeControl` から渡される `params.width / params.height` はフレーム外周のサイズなので、`getNodeChromeWidth / getNodeChromeHeight` を引いて Webview の content サイズに戻して保存する。タイトル / 操作 UI は `WebPageFlowNode` の `NodeToolbar` 2 段に分けて描く。Siteboard.tsx の `handleWebPageResize*` コールバックで状態管理。
+- **WebPageNode リサイズ**（フェーズ 5）: React Flow の `NodeResizeControl` を 8 個明示配置する。リサイズ枠とハンドルはフレーム外周（=ノード矩形）基準。可視の選択枠は共通 `SelectionFrameOverlay` で描き、line 4 本は上下左右リサイズ用の不可視 hit area、corner handle 4 個は付箋ノードと同じく選択線の交点基準に置く。`NodeResizeControl` から渡される `params.width / params.height` はフレーム外周のサイズなので、`getNodeChromeWidth / getNodeChromeHeight` を引いて Webview の content サイズに戻して保存する。タイトル / 操作 UI は `WebPageFlowNode` の `NodeToolbar` 2 段に分けて描く。Sheltie.tsx の `handleWebPageResize*` コールバックで状態管理。
   - リサイズ開始時に `onResizeStart` で `prepareInteractionStart('resize', nodeId)` を fire-and-forget で実行し、Webview スクリーンショット準備とスクリーンショット表示を非同期で開始
   - `onResize` で毎フレームの寸法を `webPageResizing` state に保持し、`flowNodes` useMemo で優先適用（スナップバック防止）
   - `onResizeEnd` でストア更新と `webPageResizing` クリア、DisplayEngine 復帰
@@ -76,10 +76,10 @@
 
 - **透明背景**: テキストノードはフレーム padding なし（`getNodeChromeHeight` / `getNodeChromeWidth` が 0 を返す）。選択枠は付箋と同じく `SelectionFrameOverlay` で外側に描く（編集中も表示する）
 - **ダブルクリックで編集モード**: シングルクリックで選択+ドラッグ可能、ダブルクリックで Tiptap エディタが `editable` になりテキスト入力可能。編集中は `nodrag` で移動を抑制
-- **新規追加時は編集モードから開始**: FloatingToolbar から作成した直後は親 (`ProjectScreen`) が `autoEditTextNodeId` を Siteboard に渡し、`editingTextNodeId` に反映してそのまま編集を開始する
-- **プレースホルダ**: 本文が空のときは編集モード/非編集モードどちらでも `'Type anything'` を表示する。付箋ノードと文言を揃える。Tiptap Placeholder Extension を `showOnlyWhenEditable: false` / `showOnlyCurrent: false` で設定し、`siteboard-text-node-editor` クラスを介して `index.css` の `p.is-editor-empty::before` ルールで描画する
+- **新規追加時は編集モードから開始**: FloatingToolbar から作成した直後は親 (`ProjectScreen`) が `autoEditTextNodeId` を Sheltie に渡し、`editingTextNodeId` に反映してそのまま編集を開始する
+- **プレースホルダ**: 本文が空のときは編集モード/非編集モードどちらでも `'Type anything'` を表示する。付箋ノードと文言を揃える。Tiptap Placeholder Extension を `showOnlyWhenEditable: false` / `showOnlyCurrent: false` で設定し、`sheltie-text-node-editor` クラスを介して `index.css` の `p.is-editor-empty::before` ルールで描画する
 - **編集モード終了**: Escape キーまたはノード外クリック（blur）で終了。終了時に Tiptap JSON を store に保存し、Undo/Redo 用のスナップショットが積まれる
-- **空ノードの自動削除**: 選択解除のタイミングで `isTextNodeEmpty(node)` が true ならノードを自動削除する（Siteboard.tsx の useEffect 経路）
+- **空ノードの自動削除**: 選択解除のタイミングで `isTextNodeEmpty(node)` が true ならノードを自動削除する（Sheltie.tsx の useEffect 経路）
 - **NodeToolbar**: React Flow の `<NodeToolbar>` を使用して書式設定 UI を表示（選択時のみ）。ツールバー内のインタラクティブ要素には `nodrag` クラスを付与。付箋の `NodeToolbar` も同じ方針
 - **幅モード**: 初期は `'auto'`（テキスト幅に追従、本文ラッパーが `display: inline-block; width: max-content; min-width: TEXT_NODE_MIN_WIDTH` で natural width を取る）。`NodeResizeControl` でドラッグすると `'fixed'` に切り替わり、ボックス幅で折り返す。リサイズハンドルは常に表示（左右辺の line 2 個 + 四隅の handle 4 個、付箋と同じ構成）し、いずれかをダブルクリックで `'auto'` に戻す
 - **幅自動調整**: `widthMode === 'auto'` の間、本文ラッパーの `offsetWidth` を ResizeObserver + Tiptap `update` イベントで監視し、`onAutoWidthChange` 経由で `updateNodeSizeWithoutHistory` に反映する
@@ -114,14 +114,14 @@
 - ドラッグ中の接続線は `ArrowConnectionLine` を `connectionLineComponent` に登録。標準3px/実線/Default色で描き、`fromX/fromY`（React Flow が返す handle 幾何中心）を `Position` 方向に `(WEBPAGE_HANDLE_HIT_SIZE / 2) / zoom` シフトして ArrowEdge の端点（handle 外側の辺 = 視覚的な丸の中心）と一致させる。矢印形状と Handle サイズの定数は `arrowGeometry.ts` で共有
 - WebPageFlowNode は計測Handle（`WEBPAGE_HANDLE_HIT_SIZE`）、青丸中心の接続開始領域（`WEBPAGE_HANDLE_DRAG_TARGET_SIZE`）、視覚の丸（`WEBPAGE_HANDLE_VISUAL_DOT_SIZE`）を分離する。すべてズーム非依存（`--canvas-zoom`で割る）。Handle中心から外側の辺（=丸の中心）までの距離は`HIT_SIZE / 2`の前提で`ArrowConnectionLine`のオフセットを揃え、接続開始領域のサイズ変更では線端点を動かさない
 - 吸着スナップ範囲は ReactFlow の `connectionRadius`（既定 20）で調整する。Handle のヒット領域より広めに取って近接時の吸着を出やすくする
-- エッジの選択状態は controlled mode のため Siteboard 側で自前同期する（`selectedEdgeIds` Set を `onEdgesChange` の `select` 変更で更新し、`flowEdges` に `selected` を反映）。削除・ノードcascade削除・同一点置換・Undo/Redoで消えたIDはlive edge IDとの積集合へ非同期で整理する。Shiftなしのノードactivate・ノード追加・ノード右クリックではエッジ選択を明示的に解除し、Shift操作だけ混在選択を許可する
+- エッジの選択状態は controlled mode のため Sheltie 側で自前同期する（`selectedEdgeIds` Set を `onEdgesChange` の `select` 変更で更新し、`flowEdges` に `selected` を反映）。削除・ノードcascade削除・同一点置換・Undo/Redoで消えたIDはlive edge IDとの積集合へ非同期で整理する。Shiftなしのノードactivate・ノード追加・ノード右クリックではエッジ選択を明示的に解除し、Shift操作だけ混在選択を許可する
 - 同じ2接続点 `(nodeId, handleId)` を順不同で比較したエッジは1本だけ保持する。逆向きから追加した場合は後から追加したID/向きへ置換し、旧エッジの太さ・線種・色を継承する。接続ハンドルの組が異なれば共存できる
 - エッジの削除は選択 + `Backspace` / `Delete` キー（`onEdgesChange` で `remove` タイプを処理）
-- エッジの永続化は `Project.edges` / `SiteboardDocumentV2.edges` に保存。スタイル変更・方向反転・同一点置換はそれぞれ1つの統合スナップショットとしてUndo/Redoする
+- エッジの永続化は `Project.edges` / `SheltieDocumentV2.edges` に保存。スタイル変更・方向反転・同一点置換はそれぞれ1つの統合スナップショットとしてUndo/Redoする
 
-## Siteboard/Webview 変更時の必読
+## Sheltie/Webview 変更時の必読
 
-- 表示モード遷移・スクリーンショット切替・操作中の制約は `siteboard-runtime.md` を正本とする。
+- 表示モード遷移・スクリーンショット切替・操作中の制約は `sheltie-runtime.md` を正本とする。
 - IPC の追加・変更は `tauri-ipc.md` と実装を同時に更新する。
 
 ## ファイルシステム / アセットプロトコル
@@ -151,14 +151,14 @@
 
 ## テーマ切り替え
 
-- ウィンドウ内にテーマボタンは置かない。テーマ切り替えはアプリメニュー `Siteboard > Settings > Theme` の Light / Dark / System から行う（macOS のみ。`lib.rs` の `insert_settings_submenu`）。
+- ウィンドウ内にテーマボタンは置かない。テーマ切り替えはアプリメニュー `Sheltie > Settings > Theme` の Light / Dark / System から行う（macOS のみ。`lib.rs` の `insert_settings_submenu`）。
 - 各項目は `CheckMenuItem` で、現在モードにチェックを付ける。クリック時は `update_theme_check_state` で他項目のチェックを外し、`theme-command` イベントを focused window へ emit する。
 - フロント側は `setupThemeListener` で `theme-command` を受信し、`useThemeStore.setMode` を呼ぶ（`src/store/theme-store.ts`）。
 
 ## ノード操作 UI
 
 - ノード右上の閉じるボタン（インライン Xmark）は設けない。削除は以下の 3 経路に統一する:
-  1. Delete / Backspace キー（`useSiteboardKeyboard` で処理。テキスト入力フォーカス中はスキップ）
+  1. Delete / Backspace キー（`useSheltieKeyboard` で処理。テキスト入力フォーカス中はスキップ）
   2. メニューバー `Edit -> Delete`（Tauri メニューイベントを `edit-command` として受信）
   3. ノードの右クリック → コンテキストメニュー「Delete Node」
 - ノードの重なり順変更は付箋・テキストノードのみ対象（WebPageNode は重なれないため除外）。配列順で管理し、WebPageNode をスキップして付箋/テキスト同士の順序を操作する。操作経路:
@@ -167,12 +167,12 @@
 - Undo/Redo は `CmdOrCtrl+Z` / `CmdOrCtrl+Shift+Z` とメニューバー `Edit -> Undo / Redo` を同じ `edit-command` 経路で処理する。
 - キーボードショートカットとメニューイベントは `lib/edit-commands.ts` に集約し、各画面コンポーネントへ分散実装しない。
 - コンテキストメニューは `@tauri-apps/api/menu` の `Menu.new()` + `popup()` で macOS ネイティブメニューとして表示する。
-- node 削除の呼び出しは `screens/Project.tsx` に集約し、`Siteboard` には `onRemoveNode` 相当の handler として渡す。
+- node 削除の呼び出しは `screens/Project.tsx` に集約し、`Sheltie` には `onRemoveNode` 相当の handler として渡す。
 - エッジ（矢印）の右クリック → コンテキストメニューは「Delete Arrow」のみ。`onEdgeContextMenu` でノード選択を解除し、そのエッジだけを選択してからネイティブメニューを表示する。方向反転はツールバーで行い、エッジの重なり順変更は未対応。Webview 表示制御（`handleContextMenuOpen`）はノード向けの仕組みなので呼ばない。
-- エッジの Delete / Backspace 削除は `useSiteboardKeyboard` で扱う（選択中ノードがあればノード削除を優先、なければ選択中エッジを削除）。React Flow の `deleteKeyCode` は `null` で無効化する。組み込みの delete を有効にすると、ノード削除時に「connected edges の remove イベント → `store.removeEdges`」と「キーハンドラ → `store.removeNode`（edges を cascade 削除）」が二重に履歴へ積まれ、Cmd+Z 1 回で edges が復元されない。
+- エッジの Delete / Backspace 削除は `useSheltieKeyboard` で扱う（選択中ノードがあればノード削除を優先、なければ選択中エッジを削除）。React Flow の `deleteKeyCode` は `null` で無効化する。組み込みの delete を有効にすると、ノード削除時に「connected edges の remove イベント → `store.removeEdges`」と「キーハンドラ → `store.removeNode`（edges を cascade 削除）」が二重に履歴へ積まれ、Cmd+Z 1 回で edges が復元されない。
 - File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` 処理は `lib/file-commands.ts` に集約し、画面コンポーネントへ分散実装しない。
-- View メニューの `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out` 処理は `lib/view-commands.ts` に集約する。ハンドラの登録は `Siteboard.tsx` 内の `registerViewCommandHandlers` で行う。
-- `Cmd+=` は macOS が `Cmd+Shift+=` として解釈するためネイティブメニューショートカットでは拾えない。`useSiteboardKeyboard` 内で `e.key === '='` を検出して `runViewCommand('zoom-in')` を直接呼ぶことで補完する。
+- View メニューの `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out` 処理は `lib/view-commands.ts` に集約する。ハンドラの登録は `Sheltie.tsx` 内の `registerViewCommandHandlers` で行う。
+- `Cmd+=` は macOS が `Cmd+Shift+=` として解釈するためネイティブメニューショートカットでは拾えない。`useSheltieKeyboard` 内で `e.key === '='` を検出して `runViewCommand('zoom-in')` を直接呼ぶことで補完する。
 - **Edit / File / View コマンドのリスナー登録時は `api.onEditCommand()` / `api.onFileCommand()` / `api.onViewCommand()` を使う**（内部で `getCurrentWebviewWindow().listen()` を使用）。グローバル `listen()` を直接使うと、複数の document window が存在する場合に各ウィンドウで重複実行される
 - document window 関連のコマンドや IPC は window-local に閉じ、`main` 固定の参照を増やさない。
 - child webview の label は `page-{windowLabel}-{pageId}` のように親 document window を含めて一意化する。
@@ -214,7 +214,7 @@
 
 - React 18 は Promise の `.then()` 内の `setState` を自動バッチングし、同一レンダーサイクルに合流させる。
 - 「DOM 状態 A の React レンダー → ブラウザ描画 → DOM 状態 B の React レンダー」という順序が必要な場合は、A の `setState` の後に `requestAnimationFrame` を挟んでから B の `setState` を呼ぶ。
-- 具体例: コンテキストメニュー表示フローで `setDisplayModes`（スクリーンショット差し替え）完了後に `requestAnimationFrame(() => setContextMenu(...))` でメニューを表示（`siteboard-runtime.md` 参照）。
+- 具体例: コンテキストメニュー表示フローで `setDisplayModes`（スクリーンショット差し替え）完了後に `requestAnimationFrame(() => setContextMenu(...))` でメニューを表示（`sheltie-runtime.md` 参照）。
 
 ### rAF スロットリングで高頻度 setState を抑制
 
@@ -222,7 +222,7 @@
 - 高頻度更新のうち「フレームごとに1回の更新で十分」な場合は、`useRef<number | null>` で rAF ID を保持し、既に進行中なら呼び出しをスキップする。
   - パターン: ref が `null` なら `requestAnimationFrame` で callback 登録（ref に ID 保存）、callback 内で `ref = null` にリセットしてから `setState` 実行
   - **重要**: クリーンアップ effect で `cancelAnimationFrame()` を忘れずに（コンポーネント unmount 時にメモリリーク防止）
-  - 具体例: `Siteboard.tsx` の `uiZoomRafRef`（パン/ズーム中の `setUiZoom` スロットリング）
+  - 具体例: `Sheltie.tsx` の `uiZoomRafRef`（パン/ズーム中の `setUiZoom` スロットリング）
 - ref パターンで 1-2 フレーム遅延が許容される用途（インジケーター更新等）に適用。即座の反映が必須な場合（ドラッグ追従等）は state 直更新が必要。
 
 ### React Flow ノードには top-level `width`/`height` を必ず指定する
@@ -233,5 +233,5 @@
 - **対策**: `flowNodes` の各 Node オブジェクトに必ず top-level `width` と `height` を指定する。`style.width/height` ではなく Node 直下のプロパティ。
   - WebPage ノード: `width: getNodeFrameWidth({ type: 'webpage', width: contentWidth }), height: getNodeFrameHeight({ type: 'webpage', height: contentHeight })`
   - StickyNote ノード: `width: node.width, height: getNodeFrameHeight({ type: 'stickynote', height: node.height })`
-  - `getNodeFrameWidth / getNodeFrameHeight` は WebPage では `WEB_PAGE_FRAME_PADDING * 2` を加えた world 固定のフレーム外周サイズを返す（`src/lib/siteboard-node-frame.ts`）。StickyNote / Text は padding 0 で本文サイズそのもの
+  - `getNodeFrameWidth / getNodeFrameHeight` は WebPage では `WEB_PAGE_FRAME_PADDING * 2` を加えた world 固定のフレーム外周サイズを返す（`src/lib/sheltie-node-frame.ts`）。StickyNote / Text は padding 0 で本文サイズそのもの
   - `uiZoom` は layout 用の reactive 値、`zoomRef.current` はイベント中の即時計算用として役割を分ける

@@ -1,13 +1,13 @@
-# Siteboard ランタイム仕様
+# Sheltie ランタイム仕様
 
-Siteboard の表示制御と Webview ランタイムの正本。実装の主入口:
+Sheltie の表示制御と Webview ランタイムの正本。実装の主入口:
 
-- `src/components/Siteboard/Siteboard.tsx`
-- `src/hooks/siteboard/useSiteboardDisplayEngine.ts`
+- `src/components/Sheltie/Sheltie.tsx`
+- `src/hooks/sheltie/useSheltieDisplayEngine.ts`
   - `display-engine/dom.ts`（DOM 操作）
   - `display-engine/mode.ts`（DisplayMode 計算）
   - `display-engine/state-machine.ts`（per-node / mode / dialog 系 state の reducer + selector）
-- `src/hooks/siteboard/useSiteboardNodeRuntime.ts`
+- `src/hooks/sheltie/useSheltieNodeRuntime.ts`
 - `src/components/Node/WebPageNode.tsx`
 
 ## 表示モードと背面スクショ方式
@@ -26,7 +26,7 @@ Siteboard の表示制御と Webview ランタイムの正本。実装の主入�
 
 ## 状態管理
 
-per-node / mode / dialog 系の状態は `display-engine/state-machine.ts` の `DisplayEngineState` に集約され、`useSiteboardDisplayEngine` が `stateRef + dispatch` 経由で更新する。フィールドと役割:
+per-node / mode / dialog 系の状態は `display-engine/state-machine.ts` の `DisplayEngineState` に集約され、`useSheltieDisplayEngine` が `stateRef + dispatch` 経由で更新する。フィールドと役割:
 
 | フィールド | 役割 |
 |---|---|
@@ -46,7 +46,7 @@ read は `hasAnyInteraction` / `isPanOrZoomActive` / `isDragOrResizeActive` / `i
 
 `src/constants.ts` 参照。主要なもの:
 
-- `NATIVE_SAFE_MARGIN_PX = 25`、`NATIVE_SAFE_MARGIN_BOTTOM_PX = 96`（フローティングツールバー + ツールチップ分）。`src/lib/siteboard-viewport.ts:resolveFitViewport` でも、対象ノードに `webpage` が含まれていれば padding の下限としてこの定数（+ `HYSTERESIS_PX`）が適用され、Zoom to Fit／ノード追加直後の表示が screenshot に降格しないようになっている
+- `NATIVE_SAFE_MARGIN_PX = 25`、`NATIVE_SAFE_MARGIN_BOTTOM_PX = 96`（フローティングツールバー + ツールチップ分）。`src/lib/sheltie-viewport.ts:resolveFitViewport` でも、対象ノードに `webpage` が含まれていれば padding の下限としてこの定数（+ `HYSTERESIS_PX`）が適用され、Zoom to Fit／ノード追加直後の表示が screenshot に降格しないようになっている
 - `PRE_DISPLAY_MARGIN_PX = 50`、`HYSTERESIS_PX = 4`
 - `WEBVIEW_REVEAL_DELAY_MS = 100`
 - `FRESHNESS_CAPTURE_DELAY_MS = { navigation: 1000, load: 0, scroll: 0 }`
@@ -74,7 +74,7 @@ read は `hasAnyInteraction` / `isPanOrZoomActive` / `isDragOrResizeActive` / `i
 
 ## pan/zoom 判定
 
-React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。`Siteboard.tsx` の `resolveViewportInteractionType` で event 型から **開始時点で** 操作種別を即時判定する:
+React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。`Sheltie.tsx` の `resolveViewportInteractionType` で event 型から **開始時点で** 操作種別を即時判定する:
 
 - `event == null` → プログラマティック操作 → `'zoom'`
 - `'deltaY' in event && (event.metaKey || event.ctrlKey)` → `'zoom'`
@@ -82,7 +82,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - ピンチ（`TouchEvent.touches.length >= 2`）→ `'zoom'`（Tauri WKWebView では `TouchEvent` グローバル未定義ガードが必須。詳細は `wkwebview-internals.md`）
 - その他（ミドルドラッグ、1指 TouchEvent 等）→ `'pan'`
 
-`handleMoveStart` 内で `resolveViewportInteractionType` → `prepareInteractionStart` → `handleInteractionChange` の順で呼ぶ（fire-and-forget。実装は `Siteboard.tsx:handleMoveStart` / `beginViewportInteraction` 参照）。`handleMove` は `onMoveStart` 取りこぼし時のフォールバック。
+`handleMoveStart` 内で `resolveViewportInteractionType` → `prepareInteractionStart` → `handleInteractionChange` の順で呼ぶ（fire-and-forget。実装は `Sheltie.tsx:handleMoveStart` / `beginViewportInteraction` 参照）。`handleMove` は `onMoveStart` 取りこぼし時のフォールバック。
 
 ### 操作中カーソル
 
@@ -94,14 +94,14 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 
 ## viewport の store 同期
 
-- `Siteboard.tsx` の `handleViewportChange` で React Flow の viewport を `zoomRef` に同期し、rAF で `uiZoom` を更新する
+- `Sheltie.tsx` の `handleViewportChange` で React Flow の viewport を `zoomRef` に同期し、rAF で `uiZoom` を更新する
 - `uiZoom` は `flowNodes` 外枠高さと resize control `minHeight` に使う reactive な layout 用 zoom の正本。`zoomRef` は resize 中の content height 逆算など即時計算用
 - project 切り替え / 新規ノード追加後 centering / 右下 viewport controls / 起動時復元では store 側 `viewport` が先に変わるため、`reactFlowInstanceRef.current.setViewport(storeViewport, { duration: 0 })` で React Flow に再同期する。差分がなければ `setViewport()` をスキップして無限ループを避ける
 - container `ResizeObserver` は `computeDisplayModes()` を同期実行せず rAF 1 フレームに集約する（observer callback 内 DOM mutation を避け、zoom 中の `ResizeObserver loop completed` warning を抑制）
 
 ## 右下 viewport controls
 
-- `全体表示` / `100%` の 2 ボタンを `Siteboard.tsx` が描画する
+- `全体表示` / `100%` の 2 ボタンを `Sheltie.tsx` が描画する
 - `全体表示`: `getNodeFrameRect(node, zoom)` で全ノード外枠 union を zoom ごとに再計算し、`64px` padding を残して最大倍率で収まる viewport を二分探索で求める
 - `100%`: zoom を `1` に固定し、同じ union の中心を viewport 中央に置く。全体が収まらなくても zoom は変えない
 - ノード 0 件時は `全体表示` を disabled、`100%` は `{ x: 0, y: 0, zoom: 1 }` に戻す
@@ -109,7 +109,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 
 ## drag 終了後の重なり補正
 
-- React Flow ネイティブドラッグで `Siteboard.tsx` の `draggingNodePositions` state に一時位置を持ち、`onNodeDragStop` 後にのみ store 座標を確定する
+- React Flow ネイティブドラッグで `Sheltie.tsx` の `draggingNodePositions` state に一時位置を持ち、`onNodeDragStop` 後にのみ store 座標を確定する
 - ドロップ位置が禁止された重なりを作る場合、`x` または `y` の単軸だけを動かして再配置する（最短移動優先、補正後の余白 `DRAG_REPOSITION_GAP = 20`）
 - webpage は他の全ノードとの重なりを禁止、stickynote は webpage に対してのみ同じ制約
 - 重なり判定はノード外枠全体を基準にする（webpage は `top bar + content + bottom bar`、stickynote は `header + content`）。`zoomPx` で画面上固定 px の bar/header は world 座標で `screenPx / zoom` で計算する
@@ -139,12 +139,12 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 2. 保存済みスクショがあれば stale を即利用しつつ fresh capture をバックグラウンドで要求
 3. 保存済みスクショがなければ `ensureScreenshotReady()` で PNG 保存 + DOM 描画完了まで待つ
 4. 準備完了後に `dispatch({ type: 'CONTEXT_MENU_OPEN', nodeId })`、`newMode = 'screenshot'`（capture 不能時は `hidden`）に更新して Webview を hide
-5. `Siteboard.tsx` の `handleNodeContextMenu` が `await handleContextMenuOpen(pageId)` 後に `menu.popup()` を呼ぶ（メニューが閉じるまで await でブロック）
+5. `Sheltie.tsx` の `handleNodeContextMenu` が `await handleContextMenuOpen(pageId)` 後に `menu.popup()` を呼ぶ（メニューが閉じるまで await でブロック）
 6. `computeDisplayModes()` の override — `stateRef.current.contextMenuNodeId` 一致ページの `nextMode === 'native'` を `screenshot`/`hidden` に差し替え
 7. `popup()` resolve 後に `handleContextMenuCloseDisplay()` が `dispatch({ type: 'CONTEXT_MENU_CLOSE' })` を呼んで表示を復帰
 8. ページ削除時は `action` コールバック内で `handleContextMenuCloseDisplay()` を先に呼んでロックを解除してから削除
 
-付箋ノードは Webview を持たないため `handleContextMenuOpen` は呼ばない（`Siteboard.tsx` で node type 分岐）。
+付箋ノードは Webview を持たないため `handleContextMenuOpen` は呼ばない（`Sheltie.tsx` で node type 分岐）。
 
 ## 選択ツールバーと Webview 制御
 
@@ -159,7 +159,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 
 ## 未保存確認ダイアログと Webview 制御
 
-未保存確認ダイアログ（タブクローズ / アプリ終了）は `App` 直下の HTML overlay のため、native Webview を背面化しないと dialog/backdrop が下に潜る。dialog 表示前に active な Siteboard が coordinator 経由で表示ロックを受け、**閉じる対象 project ではなく「今見えている Siteboard」基準**で visible webpage node を `screenshot/hidden` に切り替える。
+未保存確認ダイアログ（タブクローズ / アプリ終了）は `App` 直下の HTML overlay のため、native Webview を背面化しないと dialog/backdrop が下に潜る。dialog 表示前に active な Sheltie が coordinator 経由で表示ロックを受け、**閉じる対象 project ではなく「今見えている Sheltie」基準**で visible webpage node を `screenshot/hidden` に切り替える。
 
 - 保存済み screenshot がある node は stale を即利用しつつ fresh をバックグラウンド更新
 - 保存済み screenshot がない node だけ fresh 完了を待ち、失敗時は `hidden` fallback を許容
@@ -177,7 +177,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 
 ## スクリーンショット
 
-撮影キュー / 永続化 / 撮影タイミング / ちらつき回避の詳細は `siteboard-screenshots.md` を参照。
+撮影キュー / 永続化 / 撮影タイミング / ちらつき回避の詳細は `sheltie-screenshots.md` を参照。
 
 ## hidden モードの役割
 
@@ -190,7 +190,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - Webview API は例外時 no-op を許容する前提
 - 空フレーム（`url === ''`）は Webview を作成しない
 - Webview の create/destroy は URL 同期から切り離す（`node.url` 更新では再生成しない）
-- `Siteboard.tsx` は mount 直後の `useLayoutEffect` で `data-siteboard-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提のフレーム枠線太さを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする
+- `Sheltie.tsx` は mount 直後の `useLayoutEffect` で `data-sheltie-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提のフレーム枠線太さを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする
 - macOS の child WKWebView は host `contentView` 座標系で配置される一方、renderer の `getBoundingClientRect()` は `contentLayoutRect` 基準。`commands/webview.rs` では `contentLayoutRect` と host view 高さの差分を top inset として求め、`create_page_webview` / `update_page_webview_bounds` / `batch_update_webview_positions` の `y` に加算してから child Webview へ渡す
 - `webviewApi.create` / `webviewApi.updateBounds` に渡す `(x, y, width, height)` は呼び出し直前に `snapRectToDevicePixels(rect, window.devicePixelRatio || 1)`（`src/lib/device-pixel-snap.ts`）で device pixel grid に snap する。WKWebView の `NSView.frame` は最終的に backingAlignedRect に snap されるため、subpixel な値をそのまま渡すと CSS placeholder の subpixel rendering 結果と 1 device px ずれて、native ↔ screenshot 切替時の位置/サイズずれとして見える。`width` のみ snap だと right edge がずれるため、left/top と right/bottom を独立に snap してから差分で width/height を再計算する
 
@@ -200,11 +200,11 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - 既存 Webview への後続操作（`updateBounds`、`setOpacity`、`reload`、`goBack/Forward`、`saveScreenshot`）はすべて `labelsByNodeId` の `label` を正本として呼ぶ。`pageId` から引き直さない
 - 初回 `getNavigationState` も store 反映待ちに依存せず、`onWebviewCreated(nodeId, label)` で受け取った label をそのまま使う
 - Rust コマンド側は `tauri::Window` を host context として受け、child webview 配下から呼ばれても同じ document window 上の Webview を解決する
-- label 登録後の native bounds 再同期は `useSiteboardNodeRuntime` から直接 `computeDisplayModes()` を呼ばず、`useSiteboardDisplayEngine` が `webviewLabelsByNodeId` の安定キー変化を検知して 2 フレーム後に実行する（最新 render の closure で `placeholder` 矩形と label の両方を読み、`updateBounds()` まで確実に到達させる）
+- label 登録後の native bounds 再同期は `useSheltieNodeRuntime` から直接 `computeDisplayModes()` を呼ばず、`useSheltieDisplayEngine` が `webviewLabelsByNodeId` の安定キー変化を検知して 2 フレーム後に実行する（最新 render の closure で `placeholder` 矩形と label の両方を読み、`updateBounds()` まで確実に到達させる）
 
 ### screenshotUrl の runtime cache
 
-- `screenshotUrl` も `BoardNode` には持たず、`tab-store.webviewRuntime.screenshotUrlsByNodeId` に runtime cache として保持する。タブ再マウントや起動直後の open tab 復元で `useSiteboardDisplayEngine` の初期 state seed に使う
+- `screenshotUrl` も `BoardNode` には持たず、`tab-store.webviewRuntime.screenshotUrlsByNodeId` に runtime cache として保持する。タブ再マウントや起動直後の open tab 復元で `useSheltieDisplayEngine` の初期 state seed に使う
 - `page-navigated-{pageId}` を受けたら `runtimeUrlRef` と store の `url` を同期し、更新で `reload` を再発火させない
 - URL 変更は `WebPageNode` の navigate effect が `runtimeUrlRef !== node.url` の時だけ `reload_page_webview(label, url)` を呼ぶ
 
@@ -212,7 +212,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 
 スクロール完了通知、CSS Viewport Units（svh/lvh）の補正、TouchEvent 未定義ガード、handleMoveEnd 取りこぼし対応は `wkwebview-internals.md` を参照。
 
-## ナビゲーション状態管理（`useSiteboardNodeRuntime`）
+## ナビゲーション状態管理（`useSheltieNodeRuntime`）
 
 `canGoBack` / `canGoForward` は `nodeId` 単位の runtime model で管理する。
 

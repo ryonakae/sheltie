@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BoardNode } from '@/types';
 
-import { resolveDraggedNodePosition } from './siteboard-node-placement';
+import { resolveDraggedNodePosition } from './sheltie-node-placement';
 
 function webpage(id: string, x: number, y: number, width: number, height: number): BoardNode {
   return { id, type: 'webpage', x, y, width, height } as BoardNode;

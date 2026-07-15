@@ -137,12 +137,12 @@ fn launch_paths_from_args(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
 
     for arg in args {
         let candidate = PathBuf::from(arg);
-        let is_siteboard = candidate
+        let is_sheltie = candidate
             .extension()
             .and_then(OsStr::to_str)
-            .map(|ext| ext.eq_ignore_ascii_case("siteboard"))
+            .map(|ext| ext.eq_ignore_ascii_case("sheltie"))
             .unwrap_or(false);
-        if !is_siteboard {
+        if !is_sheltie {
             continue;
         }
 

@@ -1,16 +1,16 @@
 # スクリーンショットシステム
 
-Siteboard の Webview スクリーンショット撮影・永続化・差し替えタイミングの正本。表示モードや状態管理は `siteboard-runtime.md` を参照。
+Sheltie の Webview スクリーンショット撮影・永続化・差し替えタイミングの正本。表示モードや状態管理は `sheltie-runtime.md` を参照。
 
 実装の主入口:
 
-- `src/hooks/siteboard/useScreenshotCaptureQueue.ts`（撮影キュー・永続化）
-- `src/hooks/siteboard/useNativeRevealController.ts`（macOS の opacity フェード）
+- `src/hooks/sheltie/useScreenshotCaptureQueue.ts`（撮影キュー・永続化）
+- `src/hooks/sheltie/useNativeRevealController.ts`（macOS の opacity フェード）
 - `src-tauri/src/commands/webview/screenshots.rs`（Rust 側）
 
 ## 永続化
 
-PNG ファイルとして保存する（macOS のみ）。保存先 `~/Library/Application Support/com.siteboard.app/screenshots/{projectId}/{pageId}.png`。`projectId` はローカルワークスペース上の `Project.id`、`pageId` は node id（webpage 系 Webview IPC では歴史的に `pageId` 命名）。
+PNG ファイルとして保存する（macOS のみ）。保存先 `~/Library/Application Support/com.sheltie.app/screenshots/{projectId}/{pageId}.png`。`projectId` はローカルワークスペース上の `Project.id`、`pageId` は node id（webpage 系 Webview IPC では歴史的に `pageId` 命名）。
 
 **撮影時**:
 
@@ -22,7 +22,7 @@ PNG ファイルとして保存する（macOS のみ）。保存先 `~/Library/A
 **起動時復元 / lazy restore**:
 
 - 起動時: `setupProjectPersistence()` が `_restoreState()` 直後・`_setLoaded()` 前に「保存状態で open だった tab」だけ `get_existing_screenshot_paths(projectId, pageIds)` を実行し、`tab-store.webviewRuntime.screenshotUrlsByNodeId` へ preload
-- lazy: `useSiteboardDisplayEngine` の `projectId + webpage node ids` 依存 effect が、runtime cache にまだ無い page を対象に同じコマンドを実行し、local state と store の両方へ反映
+- lazy: `useSheltieDisplayEngine` の `projectId + webpage node ids` 依存 effect が、runtime cache にまだ無い page を対象に同じコマンドを実行し、local state と store の両方へ反映
 - 復元 URL は `convertFileSrc(filePath) + '?t=restored'`。in-memory に既に URL がある page は上書きしない
 - いずれも完了後に `computeDisplayModes()` を再実行して正しいモード判定に収束させる
 
@@ -36,7 +36,7 @@ PNG ファイルとして保存する（macOS のみ）。保存先 `~/Library/A
 
 ### ① 鮮度キャプチャ（保存スクショを最新に保つ・Webview は native 維持）
 
-`useSiteboardNodeRuntime.scheduleFreshnessCapture(nodeId, reason)` に集約。`reason` 別の遅延は `FRESHNESS_CAPTURE_DELAY_MS`、node 単位で latest-wins。
+`useSheltieNodeRuntime.scheduleFreshnessCapture(nodeId, reason)` に集約。`reason` 別の遅延は `FRESHNESS_CAPTURE_DELAY_MS`、node 単位で latest-wins。
 
 - `navigation`: 1000ms（新コンテンツ描画待ち）。SPA URL 変更（`\x01`）とフルページ遷移開始の両方が対象
 - `load`: 初回ロード相当（最初のタイトル変更）で即時
@@ -60,7 +60,7 @@ PNG ファイルとして保存する（macOS のみ）。保存先 `~/Library/A
 
 - `WebPageNode.tsx` の `<img data-screenshot-img>` は `object-fill` で placeholder 全域に引き伸ばす（`object-cover` は使わない）
 - 撮影 PNG のサイズは「撮った瞬間の WKWebView frame」と一致する一方、表示時の placeholder は zoom/resize の途中で異なるアスペクト比になりうる。`object-cover` だとアスペクト比差分で片軸クロップが起き、native ↔ screenshot 切替時のずれとして見える
-- `object-fill` で揃えることで、撮影直後はピクセル一致、zoom/resize 中は若干歪むが crop ずれより目立たない。WKWebView 側 frame の device-pixel snap（`siteboard-runtime.md` の Webview 生成・破棄 参照）と合わせて初めて両者が同じ矩形を共有する
+- `object-fill` で揃えることで、撮影直後はピクセル一致、zoom/resize 中は若干歪むが crop ずれより目立たない。WKWebView 側 frame の device-pixel snap（`sheltie-runtime.md` の Webview 生成・破棄 参照）と合わせて初めて両者が同じ矩形を共有する
 
 ## ちらつき回避
 

@@ -6,7 +6,7 @@ import { api, type FileCommand, type SaveProjectStatus } from '@/lib/tauri-bridg
 import { useProjectStore } from '@/store/tab-store';
 import type { Project } from '@/types';
 
-const SITEBOARD_EXTENSION = '.siteboard';
+const SHELTIE_EXTENSION = '.sheltie';
 let inFlightCommand: Promise<void> = Promise.resolve();
 
 export type SaveProjectResult =
@@ -17,15 +17,13 @@ function getProject(): Project | null {
   return useProjectStore.getState().project;
 }
 
-function normalizeSiteboardPath(path: string): string {
+function normalizeSheltiePath(path: string): string {
   const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
   const dir = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : '';
   const base = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
   const lastDot = base.lastIndexOf('.');
   const normalizedBase =
-    lastDot > 0
-      ? `${base.slice(0, lastDot)}${SITEBOARD_EXTENSION}`
-      : `${base}${SITEBOARD_EXTENSION}`;
+    lastDot > 0 ? `${base.slice(0, lastDot)}${SHELTIE_EXTENSION}` : `${base}${SHELTIE_EXTENSION}`;
   return `${dir}${normalizedBase}`;
 }
 
@@ -50,29 +48,29 @@ function enqueueFileOperation<T>(operation: () => Promise<T>): Promise<T> {
 
 async function showInfo(messageText: string): Promise<void> {
   await message(messageText, {
-    title: 'Siteboard',
+    title: 'Sheltie',
     kind: 'info',
   });
 }
 
 async function showError(messageText: string): Promise<void> {
   await message(messageText, {
-    title: 'Siteboard',
+    title: 'Sheltie',
     kind: 'error',
   });
 }
 
 async function runOpenProjectFromDialog(): Promise<void> {
   const selected = await open({
-    title: 'Open Siteboard Project',
+    title: 'Open Sheltie Project',
     multiple: false,
-    filters: [{ name: 'Siteboard Project', extensions: ['siteboard'] }],
+    filters: [{ name: 'Sheltie Project', extensions: ['sheltie'] }],
   });
 
   if (!selected || Array.isArray(selected)) return;
 
   try {
-    await api.openDocumentWindow(normalizeSiteboardPath(selected));
+    await api.openDocumentWindow(normalizeSheltiePath(selected));
   } catch (error) {
     await showError(error instanceof Error ? error.message : 'Could not open the file');
   }
@@ -105,10 +103,10 @@ async function runSaveCurrentProject(
   let targetPath = project.filePath;
   if (options.saveAs || !targetPath) {
     const selectedPath = await save({
-      title: options.saveAs ? 'Save Siteboard Project As' : 'Save Siteboard Project',
+      title: options.saveAs ? 'Save Sheltie Project As' : 'Save Sheltie Project',
       defaultPath:
-        targetPath ?? `${sanitizeFileName(getProjectDisplayName(project))}${SITEBOARD_EXTENSION}`,
-      filters: [{ name: 'Siteboard Project', extensions: ['siteboard'] }],
+        targetPath ?? `${sanitizeFileName(getProjectDisplayName(project))}${SHELTIE_EXTENSION}`,
+      filters: [{ name: 'Sheltie Project', extensions: ['sheltie'] }],
     });
 
     if (!selectedPath) {
@@ -118,7 +116,7 @@ async function runSaveCurrentProject(
     targetPath = selectedPath;
   }
 
-  const normalizedTargetPath = normalizeSiteboardPath(targetPath);
+  const normalizedTargetPath = normalizeSheltiePath(targetPath);
   const latestProject = getProject();
   if (!latestProject) {
     return { status: 'error' };

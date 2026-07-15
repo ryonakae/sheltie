@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_EDGE_STYLE } from '@/constants';
 import type { BoardEdge } from '@/types';
 
-import { addOrReplaceBoardEdge, reverseBoardEdge, updateBoardEdgeStyle } from './siteboard-edge';
+import { addOrReplaceBoardEdge, reverseBoardEdge, updateBoardEdgeStyle } from './sheltie-edge';
 
 function edge(overrides: Partial<BoardEdge> = {}): BoardEdge {
   return {

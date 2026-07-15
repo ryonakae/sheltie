@@ -8,7 +8,7 @@ import {
   getNodeFrameHeight,
   getNodeFrameRect,
   getNodeFrameWidth,
-} from './siteboard-node-frame';
+} from './sheltie-node-frame';
 
 // WEB_PAGE_FRAME_PADDING = 16 → webpage は左右上下 16px ずつ chrome を持つ
 const WEBPAGE_CHROME = 32;

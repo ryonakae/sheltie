@@ -7,7 +7,7 @@ import { AppButton } from '@/components/Common/AppButton';
 import {
   FLOATING_CONTROL_BUTTON_CLASSNAME,
   FLOATING_CONTROL_PANEL_CLASSNAME,
-} from '@/components/Siteboard/floatingControlStyles';
+} from '@/components/Sheltie/floatingControlStyles';
 
 interface FloatingToolbarProps {
   onAddWebNode: () => void;
@@ -21,7 +21,7 @@ export function FloatingToolbar({
   onAddTextNode,
 }: FloatingToolbarProps) {
   return (
-    /* ツールバー全体の配置レイヤー: pointer-events-none で Siteboard の操作を妨げない */
+    /* ツールバー全体の配置レイヤー: pointer-events-none で Sheltie の操作を妨げない */
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-40 flex justify-center">
       <div className="pointer-events-auto">
         <Surface

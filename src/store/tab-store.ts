@@ -16,12 +16,8 @@ import {
   documentNodeToBoardNode,
   sanitizeProjectDocument,
 } from '@/lib/project-document';
-import {
-  addOrReplaceBoardEdge,
-  reverseBoardEdge,
-  updateBoardEdgeStyle,
-} from '@/lib/siteboard-edge';
-import { findNonOverlappingPosition } from '@/lib/siteboard-placement';
+import { addOrReplaceBoardEdge, reverseBoardEdge, updateBoardEdgeStyle } from '@/lib/sheltie-edge';
+import { findNonOverlappingPosition } from '@/lib/sheltie-placement';
 import {
   appendCappedSnapshot,
   cloneEdges,
@@ -37,7 +33,7 @@ import type {
   Project,
   ProjectState,
   ProjectWebviewRuntime,
-  SiteboardDocumentV2,
+  SheltieDocumentV2,
   TextNodeFontSizePreset,
   Viewport,
 } from '@/types';
@@ -47,9 +43,9 @@ interface ProjectActions {
   initializeProject: (params: {
     filePath?: string;
     untitledIndex: number;
-    document?: SiteboardDocumentV2;
+    document?: SheltieDocumentV2;
   }) => void;
-  markProjectSaved: (filePath: string, document: SiteboardDocumentV2) => void;
+  markProjectSaved: (filePath: string, document: SheltieDocumentV2) => void;
   restoreProjectFromLastSaved: () => void;
   addWebNode: (
     url?: string,
@@ -138,7 +134,7 @@ function clampZoom(zoom: number): number {
 function createProject(params: {
   filePath?: string;
   untitledIndex: number;
-  document?: SiteboardDocumentV2;
+  document?: SheltieDocumentV2;
 }): Project {
   const nodes = params.document?.nodes.map(documentNodeToBoardNode) ?? [];
   const edges = params.document?.edges?.map(documentEdgeToBoardEdge) ?? [];

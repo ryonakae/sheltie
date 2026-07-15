@@ -70,7 +70,7 @@ npm run test
 ## ドキュメント更新ルール
 
 - IPC 変更: `tauri-ipc.md` を更新する。
-- Siteboard 表示ロジック変更: `siteboard-runtime.md` を更新する。
+- Sheltie 表示ロジック変更: `sheltie-runtime.md` を更新する。
 - 型や定数の変更: `domain-models.md` を更新する。
 - `tab-store` の履歴管理（Undo/Redo・`nodeHistories`）変更: `domain-models.md` を更新する。
 - Edit メニュー/ショートカット連携（`edit-command` 経路）変更: `coding-rules.md` と `tauri-ipc.md` を更新する。

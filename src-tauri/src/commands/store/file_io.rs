@@ -23,7 +23,7 @@ pub(super) fn normalize_project_file_path(
         normalized = base_dir.join(normalized);
     }
 
-    normalized.set_extension("siteboard");
+    normalized.set_extension("sheltie");
 
     if let Some(parent) = normalized.parent() {
         if let Some(file_name) = normalized.file_name().map(|name| name.to_os_string()) {
@@ -101,24 +101,24 @@ mod tests {
     }
 
     #[test]
-    fn appends_siteboard_extension_when_missing() {
+    fn appends_sheltie_extension_when_missing() {
         let base = temp_base();
         let result = normalize_project_file_path("my-project", Some(&base)).unwrap();
-        assert_eq!(result, base.join("my-project.siteboard"));
+        assert_eq!(result, base.join("my-project.sheltie"));
     }
 
     #[test]
-    fn replaces_non_siteboard_extension() {
+    fn replaces_non_sheltie_extension() {
         let base = temp_base();
         let result = normalize_project_file_path("my-project.txt", Some(&base)).unwrap();
-        assert_eq!(result, base.join("my-project.siteboard"));
+        assert_eq!(result, base.join("my-project.sheltie"));
     }
 
     #[test]
-    fn keeps_existing_siteboard_extension() {
+    fn keeps_existing_sheltie_extension() {
         let base = temp_base();
-        let result = normalize_project_file_path("my-project.siteboard", Some(&base)).unwrap();
-        assert_eq!(result, base.join("my-project.siteboard"));
+        let result = normalize_project_file_path("my-project.sheltie", Some(&base)).unwrap();
+        assert_eq!(result, base.join("my-project.sheltie"));
     }
 
     #[test]
@@ -126,7 +126,7 @@ mod tests {
         let base = temp_base();
         let abs = base.join("foo");
         let result = normalize_project_file_path(abs.to_str().unwrap(), None).unwrap();
-        assert_eq!(result, base.join("foo.siteboard"));
+        assert_eq!(result, base.join("foo.sheltie"));
     }
 
     #[test]
@@ -134,6 +134,6 @@ mod tests {
         let base = temp_base();
         // parent "sub" は存在しないので canonicalize は fallback して base/sub のまま
         let result = normalize_project_file_path("sub/project", Some(&base)).unwrap();
-        assert_eq!(result, base.join("sub").join("project.siteboard"));
+        assert_eq!(result, base.join("sub").join("project.sheltie"));
     }
 }

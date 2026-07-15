@@ -23,26 +23,26 @@ import { ArrowConnectionLine } from '@/components/ReactFlowEdges/ArrowConnection
 import { edgeTypes } from '@/components/ReactFlowEdges/edgeTypes';
 import type { ArrowFlowEdge } from '@/components/ReactFlowEdges/types';
 import { nodeTypes } from '@/components/ReactFlowNodes/nodeTypes';
-import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
-import { FloatingToolbar } from '@/components/Siteboard/FloatingToolbar';
-import { ZoomIndicator } from '@/components/Siteboard/ZoomIndicator';
+import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Sheltie/floatingControlStyles';
+import { FloatingToolbar } from '@/components/Sheltie/FloatingToolbar';
+import { ZoomIndicator } from '@/components/Sheltie/ZoomIndicator';
 import { DEFAULT_EDGE_STYLE, MIN_ZOOM, MAX_ZOOM } from '@/constants';
-import { useSiteboardContextMenus } from '@/hooks/siteboard/useSiteboardContextMenus';
-import { useSiteboardDisplayEngine } from '@/hooks/siteboard/useSiteboardDisplayEngine';
-import { useSiteboardDrag } from '@/hooks/siteboard/useSiteboardDrag';
-import { useSiteboardFlowNodes } from '@/hooks/siteboard/useSiteboardFlowNodes';
-import { useSiteboardKeyboard } from '@/hooks/siteboard/useSiteboardKeyboard';
-import { useSiteboardNodeRuntime } from '@/hooks/siteboard/useSiteboardNodeRuntime';
-import { useSiteboardResize } from '@/hooks/siteboard/useSiteboardResize';
-import { useSiteboardTextEditing } from '@/hooks/siteboard/useSiteboardTextEditing';
-import { useSiteboardViewportController } from '@/hooks/siteboard/useSiteboardViewportController';
-import { resolveActiveSelection, retainLiveSelectedIds } from '@/lib/siteboard-selection';
+import { useSheltieContextMenus } from '@/hooks/sheltie/useSheltieContextMenus';
+import { useSheltieDisplayEngine } from '@/hooks/sheltie/useSheltieDisplayEngine';
+import { useSheltieDrag } from '@/hooks/sheltie/useSheltieDrag';
+import { useSheltieFlowNodes } from '@/hooks/sheltie/useSheltieFlowNodes';
+import { useSheltieKeyboard } from '@/hooks/sheltie/useSheltieKeyboard';
+import { useSheltieNodeRuntime } from '@/hooks/sheltie/useSheltieNodeRuntime';
+import { useSheltieResize } from '@/hooks/sheltie/useSheltieResize';
+import { useSheltieTextEditing } from '@/hooks/sheltie/useSheltieTextEditing';
+import { useSheltieViewportController } from '@/hooks/sheltie/useSheltieViewportController';
+import { resolveActiveSelection, retainLiveSelectedIds } from '@/lib/sheltie-selection';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
 import { isWebPageNode } from '@/types';
 
-interface SiteboardProps {
+interface SheltieProps {
   selectedNodeIds: string[];
   setSelection: (idsOrUpdater: string[] | ((prev: string[]) => string[])) => void;
   centeredNodeId?: string | null;
@@ -56,7 +56,7 @@ interface SiteboardProps {
   onAddTextNode: () => void;
 }
 
-export function Siteboard({
+export function Sheltie({
   selectedNodeIds,
   setSelection,
   centeredNodeId = null,
@@ -68,7 +68,7 @@ export function Siteboard({
   onAddWebNode,
   onAddStickyNote,
   onAddTextNode,
-}: SiteboardProps) {
+}: SheltieProps) {
   // controlled mode では flowEdges.selected を自前で同期する
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(() => new Set());
   // ノードとエッジを合わせて単独選択のときだけ、対象固有のツールバーを有効にする
@@ -217,7 +217,7 @@ export function Siteboard({
     scheduleZoomRestoreAfterReflow,
     releaseNodeAfterPositionSettle,
     screenshotUrls,
-  } = useSiteboardDisplayEngine({
+  } = useSheltieDisplayEngine({
     webPageNodes,
     webviewLabelsByNodeId: projectWebviewRuntime.labelsByNodeId,
     cachedScreenshotUrlsByNodeId: projectWebviewRuntime.screenshotUrlsByNodeId,
@@ -250,7 +250,7 @@ export function Siteboard({
     handleMoveEnd,
     handleFitAllNodes,
     handleResetViewport,
-  } = useSiteboardViewportController({
+  } = useSheltieViewportController({
     containerRef,
     zoomRef,
     nodes,
@@ -274,7 +274,7 @@ export function Siteboard({
     handleStickyNoteResizeEnd,
     handleTextNodeResize,
     handleTextNodeResizeEnd,
-  } = useSiteboardResize({
+  } = useSheltieResize({
     prepareInteractionStart,
     handleInteractionChange,
     handlePageResizeStart,
@@ -293,7 +293,7 @@ export function Siteboard({
     handleNodeActivate,
     handleTitlePointerDown,
     trackDraggingPositions,
-  } = useSiteboardDrag({
+  } = useSheltieDrag({
     nodes,
     webPageNodes,
     selectedNodeIds,
@@ -327,7 +327,7 @@ export function Siteboard({
     handleWebviewDestroyed,
     handleWebviewLoaded,
     navStates,
-  } = useSiteboardNodeRuntime({
+  } = useSheltieNodeRuntime({
     nodes,
     webviewLabelsByNodeId: projectWebviewRuntime.labelsByNodeId,
     selectedNodeIds,
@@ -483,7 +483,7 @@ export function Siteboard({
     [clearPositionCorrectionAnimation, handleRemoveNodes],
   );
 
-  useSiteboardKeyboard({
+  useSheltieKeyboard({
     selectedNodeIds,
     selectedEdgeIds,
     onRemoveNode: handleRemoveNodeWithSettleReset,
@@ -508,7 +508,7 @@ export function Siteboard({
     handleTextNodeWidthModeChange,
     handleTextNodeStyleChange,
     handleChangeUrlSubmit,
-  } = useSiteboardTextEditing({
+  } = useSheltieTextEditing({
     nodes,
     selectedNodeIds,
     autoEditTextNodeId,
@@ -524,7 +524,7 @@ export function Siteboard({
     removeNodes,
   });
 
-  const { handleNodeContextMenu, handleEdgeContextMenu } = useSiteboardContextMenus({
+  const { handleNodeContextMenu, handleEdgeContextMenu } = useSheltieContextMenus({
     nodes,
     setSelection,
     setSelectedEdgeIds,
@@ -571,7 +571,7 @@ export function Siteboard({
   }, [handleUnsavedChangesDialogClose, handleUnsavedChangesDialogOpen]);
 
   // React Flow の flowNodes 配列を構築する
-  const flowNodes = useSiteboardFlowNodes({
+  const flowNodes = useSheltieFlowNodes({
     nodes,
     draggingNodePositions,
     rfMeasured,
@@ -627,7 +627,7 @@ export function Siteboard({
 
   return (
     <ReactFlowProvider>
-      <div ref={containerRef} data-siteboard-container className="relative flex-1 overflow-hidden">
+      <div ref={containerRef} data-sheltie-container className="relative flex-1 overflow-hidden">
         <ReactFlow
           nodes={flowNodes}
           edges={flowEdges}
@@ -644,7 +644,7 @@ export function Siteboard({
           connectionRadius={40}
           isValidConnection={isValidConnection}
           defaultEdgeOptions={defaultEdgeOptions}
-          // 自前のキーボードハンドラ（useSiteboardKeyboard）で削除を一元化するため、
+          // 自前のキーボードハンドラ（useSheltieKeyboard）で削除を一元化するため、
           // React Flow の組み込み delete は無効化する。
           // 組み込み経由だと「edges 削除イベント → handleEdgesChange → store.removeEdges」と
           // 「キーハンドラ → store.removeNode（edges を cascade 削除）」が二重に発火し、

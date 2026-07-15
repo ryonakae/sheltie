@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Siteboard",
+  "productName": "Sheltie",
   "version": "1.0.0",
-  "identifier": "com.siteboard.app",
+  "identifier": "com.sheltie.app",
   "build": {
     "beforeDevCommand": "vite",
     "beforeBuildCommand": "vite build",
@@ -25,9 +25,9 @@
     "targets": "all",
     "fileAssociations": [
       {
-        "ext": ["siteboard"],
-        "name": "Siteboard Document",
-        "mimeType": "application/x-siteboard"
+        "ext": ["sheltie"],
+        "name": "Sheltie Document",
+        "mimeType": "application/x-sheltie"
       }
     ],
     "icon": [

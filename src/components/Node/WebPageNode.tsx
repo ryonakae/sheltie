@@ -3,7 +3,7 @@ import { useReducedMotion } from 'motion/react';
 import { memo, useCallback, useLayoutEffect, useRef } from 'react';
 
 import { WEB_PAGE_FRAME_PADDING } from '@/constants';
-import { useWebPageWebviewLifecycle } from '@/hooks/siteboard/useWebPageWebviewLifecycle';
+import { useWebPageWebviewLifecycle } from '@/hooks/sheltie/useWebPageWebviewLifecycle';
 import { zoomPx } from '@/lib/canvas-zoom';
 import { isNodeEmpty } from '@/types';
 import type { DisplayMode, WebPageNode as WebPageNodeModel } from '@/types';

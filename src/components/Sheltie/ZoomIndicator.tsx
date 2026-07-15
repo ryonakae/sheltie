@@ -1,5 +1,5 @@
 import { AppButton } from '@/components/Common/AppButton';
-import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Siteboard/floatingControlStyles';
+import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Sheltie/floatingControlStyles';
 
 interface ZoomIndicatorProps {
   zoom: number;

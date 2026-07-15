@@ -1,7 +1,7 @@
 # WKWebView プラットフォーム固有の注意
 
-Siteboard の WKWebView（macOS）に固有のワークアラウンドと注意事項をまとめる。
-表示モード遷移やスクリーンショット管理の全体像は `siteboard-runtime.md` を参照。
+Sheltie の WKWebView（macOS）に固有のワークアラウンドと注意事項をまとめる。
+表示モード遷移やスクリーンショット管理の全体像は `sheltie-runtime.md` を参照。
 
 ## スクロール完了通知チャネル
 

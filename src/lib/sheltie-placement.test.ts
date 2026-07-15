@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BoardNode } from '@/types';
 
-import { findNonOverlappingPosition } from './siteboard-placement';
+import { findNonOverlappingPosition } from './sheltie-placement';
 
 // 配置探索は type/x/y/width/height のみ参照するため、テストでは最小形を BoardNode として扱う
 function sticky(x: number, y: number, width: number, height: number): BoardNode {

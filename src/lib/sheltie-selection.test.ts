@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveActiveSelection, retainLiveSelectedIds } from './siteboard-selection';
+import { resolveActiveSelection, retainLiveSelectedIds } from './sheltie-selection';
 
 describe('resolveActiveSelection', () => {
   it.each([

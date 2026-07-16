@@ -699,9 +699,10 @@ export function Sheltie({
                 onPress={handleFitAllNodes}
                 aria-label="Zoom to Fit"
                 isDisabled={nodes.length === 0}
-                className={FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME}
+                className={`${FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME} group`}
+                style={{ opacity: 1 }}
               >
-                <ArrowsExpand className="size-4" />
+                <ArrowsExpand className="size-4 group-disabled:opacity-(--disabled-opacity)" />
               </AppButton>
             </div>
             <div className="pointer-events-auto">

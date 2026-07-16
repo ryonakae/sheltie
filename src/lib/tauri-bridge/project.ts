@@ -8,6 +8,8 @@ export const api = {
 
   presentDocumentWindow: (): Promise<void> => invoke('present_document_window'),
 
+  setDocumentEdited: (edited: boolean): Promise<void> => invoke('set_document_edited', { edited }),
+
   newDocumentTab: (): Promise<void> => invoke('new_document_tab'),
 
   newDocumentWindow: (): Promise<void> => invoke('new_document_window'),

@@ -141,6 +141,7 @@ pub fn run() {
             crate::commands::store::document_window::load_window_context,
             crate::commands::store::macos_tabs::present_document_window,
             crate::commands::store::macos_tabs::new_document_tab,
+            crate::commands::store::macos_tabs::set_document_edited,
             crate::commands::store::document_window::new_document_window,
             crate::commands::store::document_window::open_document_window,
             crate::commands::store::document_window::complete_app_exit,

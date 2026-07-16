@@ -20,6 +20,7 @@ src/
 
 ## フロントエンド責務
 
+- `App.tsx`: document window の表示名と、`isProjectDirty()` から導出した未保存状態を管理する。未保存状態の変更は直列化して window-local IPC へ送り、macOS ネイティブタブの `NSWindow.tab.accessoryView` に表示する edited indicator と同期する
 - `screens/Project.tsx`: 1 document window の Sheltie 画面を統括する。新規ノード追加後のセンタリングと選択状態を管理する
 - `components/Common/UnsavedChangesDialog.tsx`: HeroUI `AlertDialog` ベースの未保存変更確認ダイアログ。タブクローズとアプリ終了で共用する
 - `components/Sheltie/Sheltie.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。表示制御・ビューポート・ドラッグ・リサイズ・テキスト編集・コンテキストメニュー・flowNodes 構築をそれぞれ `hooks/sheltie/useSheltie*` フックへ委譲し、Sheltie.tsx 自身は配線と `onNodesChange`/`onEdgesChange`（選択状態・計測寸法・ドラッグ中座標の同期）に専念する。flowNodes 配列は `useSheltieFlowNodes` で構築する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する

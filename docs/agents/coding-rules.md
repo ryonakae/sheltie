@@ -25,6 +25,7 @@
 - `File > New Tab/New Window/Open/Save/Save As` は document window のコマンドとして扱い、メニューやショートカットの実装を window-local に保つ。
 - macOS の File ショートカットは `Cmd+T = New Tab`、`Cmd+N = New Window`、`Open` は別 document window を開く Finder 互換挙動にそろえる。
 - 表示名の変更は `Save As` で行う。rename 専用 UI や project title 編集を増やさない。
+- 未保存状態の正本は `isProjectDirty()` とし、別の dirty flag を store や Rust state に持たない。macOS ネイティブタブの edited indicator は、Boolean の変更時だけ window-local IPC へ直列送信し、`NSWindow.documentEdited` と `NSWindow.tab.accessoryView`（20pt 領域内の 4pt tertiary circle）へ同期する。
 
 ## React Flow（フェーズ 1 以降）
 

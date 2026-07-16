@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use tauri::{State, WebviewWindow};
+use tauri::{State, Window};
 
 use super::document_manager::DocumentManagerState;
 use super::document_window::get_file_display_name;
@@ -55,7 +55,7 @@ pub async fn load_project_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn save_project_file(
-    window: WebviewWindow,
+    window: Window,
     state: State<'_, DocumentManagerState>,
     path: String,
     contents: String,

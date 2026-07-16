@@ -17,6 +17,7 @@
 
 - `load_window_context` - 現在の document window に紐づく `filePath` / `untitledIndex` を読む
 - `present_document_window` - renderer 初期化完了後（最初の paint 後）に呼び出され、`visible(false)` で生成された document window をユーザーに見せる。pending な macOS `New Tab` child の場合は host document window へ attach し、それ以外は `show` + `setFocus` する
+- `set_document_edited(edited)` - 呼び出し元 document window の未保存表示を更新する。macOS では `NSWindow.setDocumentEdited:` に加え、`NSWindow.tab.accessoryView` へ 20pt 領域内の 4pt tertiary circle を設定・解除する。非 macOS では no-op
 - `new_document_tab` - 現在の macOS document window が解決できた時だけ、その native tab group と同じ `tabbingIdentifier` を継承した untitled document を host 限定の explicit attach で追加する。standalone window へはフォールバックしない
 - `new_document_window` - 新しい untitled standalone document window を開く
 - `open_document_window(path)` - 対象 `.sheltie` 用の document window を開く。既に開いていればその window を前面化する
@@ -24,7 +25,7 @@
 - `abort_app_exit` - 集約中の app quit を中止し、次の `Cmd+Q` / `Quit` を再度受け付ける
 - `close_ready` - 現在の document window を破棄する
 - `load_project_file(path)` - `.sheltie` ファイルを UTF-8 文字列として読む
-- `save_project_file(path, contents)` - `.sheltie` ファイルを書き込み、実際の保存パスを返す
+- `save_project_file(path, contents)` - `.sheltie` ファイルを書き込み、実際の保存パスを返す。child Webview 作成後も呼べるよう command context は `Window` を使う
 
 ### ダイアログ
 
@@ -88,7 +89,7 @@
 
 ### `api`
 
-- `loadWindowContext`, `newDocumentTab`, `newDocumentWindow`, `openDocumentWindow`, `closeReady`
+- `loadWindowContext`, `setDocumentEdited`, `newDocumentTab`, `newDocumentWindow`, `openDocumentWindow`, `closeReady`
 - `completeAppExit`, `abortAppExit`
 - `presentDocumentWindow`
 - `loadProjectFile`, `saveProjectFile`
@@ -125,6 +126,7 @@
 - `capture_webview_screenshot` は現状 macOS のみ
 - `get_navigation_state_page_webview` は macOS でネイティブ取得、非 macOS は `false/false`
 - `set_page_webview_opacity` は macOS 以外では no-op
+- `set_document_edited` は macOS 以外では no-op
 
 ## 変更ルール
 
@@ -140,4 +142,4 @@
 - document window に child webview が存在しうる command は `tauri::WebviewWindow` ではなく `tauri::Window` を受ける。
 - `add_child()` で child webview を追加すると Tauri v2 の `get_webview_window()` / `webview_windows()` が document window を返さなくなる。`WebviewWindow` パラメータの解決はこの関数に依存するため、child webview が存在する状態で失敗し `current webview is not a WebviewWindow` が発生する。
 - `Window` は `get_window()` で解決されるため child webview の有無に関わらず document window を返す。
-- この制約は「child webview から invoke」に限らず、「child webview が存在する window から invoke」でも同様に適用される（例: `close_ready` は document window の JS から呼ぶが、WebPageNode がある状態では失敗する）。
+- この制約は「child webview から invoke」に限らず、「child webview が存在する window から invoke」でも同様に適用される。`close_ready`、`save_project_file`、`set_document_edited` は document window の JS から呼ぶが、WebPageNode がある状態でも解決できるよう `Window` を使う。

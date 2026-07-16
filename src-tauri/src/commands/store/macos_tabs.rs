@@ -1,7 +1,14 @@
 use tauri::{AppHandle, Manager, Runtime, State, Window};
 
 #[cfg(target_os = "macos")]
-use objc2::runtime::{AnyClass, AnyObject};
+use objc2::{
+    runtime::{AnyClass, AnyObject},
+    MainThreadMarker,
+};
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSColor, NSView, NSWindow};
+#[cfg(target_os = "macos")]
+use objc2_foundation::{NSSize, NSString};
 
 use super::document_manager::DocumentManagerState;
 
@@ -9,12 +16,13 @@ use super::document_manager::DocumentManagerState;
 const NS_WINDOW_TITLE_VISIBILITY_VISIBLE: isize = 0;
 #[cfg(target_os = "macos")]
 const NS_WINDOW_ORDER_ABOVE: isize = 1;
+#[cfg(target_os = "macos")]
+const EDITED_INDICATOR_DIAMETER: f64 = 4.0;
+#[cfg(target_os = "macos")]
+const EDITED_INDICATOR_SIZE: f64 = 20.0;
 
 #[cfg(target_os = "macos")]
-pub(super) fn run_on_app_main_thread<R, T, F>(
-    app: &AppHandle<R>,
-    operation: F,
-) -> Result<T, String>
+pub(super) fn run_on_app_main_thread<R, T, F>(app: &AppHandle<R>, operation: F) -> Result<T, String>
 where
     R: Runtime,
     T: Send + 'static,
@@ -58,6 +66,95 @@ fn configure_ns_document_window(ns_window: *mut AnyObject) {
             setTitleVisibility: NS_WINDOW_TITLE_VISIBILITY_VISIBLE
         ];
     }
+}
+
+#[cfg(target_os = "macos")]
+fn create_ns_edited_indicator() -> Result<objc2::rc::Retained<NSView>, String> {
+    let mtm = MainThreadMarker::new().ok_or("edited indicator must be created on main thread")?;
+    let accessibility_description = NSString::from_str("Document has unsaved changes");
+    let indicator = NSView::new(mtm);
+    let dot = NSView::new(mtm);
+
+    indicator.setFrameSize(NSSize::new(EDITED_INDICATOR_SIZE, EDITED_INDICATOR_SIZE));
+    indicator.setToolTip(Some(&accessibility_description));
+    dot.setFrameSize(NSSize::new(
+        EDITED_INDICATOR_DIAMETER,
+        EDITED_INDICATOR_DIAMETER,
+    ));
+    dot.setWantsLayer(true);
+    indicator.addSubview(&dot);
+
+    unsafe {
+        let dot_layer: *mut AnyObject = objc2::msg_send![&*dot, layer];
+        if dot_layer.is_null() {
+            return Err("failed to create edited indicator layer".to_string());
+        }
+        let color = NSColor::tertiaryLabelColor();
+        let cg_color: *const std::ffi::c_void = objc2::msg_send![&*color, CGColor];
+        let _: () = objc2::msg_send![dot_layer, setBackgroundColor: cg_color];
+        let _: () = objc2::msg_send![
+            dot_layer,
+            setCornerRadius: EDITED_INDICATOR_DIAMETER / 2.0
+        ];
+
+        let _: () = objc2::msg_send![&*dot, setTranslatesAutoresizingMaskIntoConstraints: false];
+        let indicator_width_anchor: *mut AnyObject = objc2::msg_send![&*indicator, widthAnchor];
+        let indicator_width_constraint: *mut AnyObject = objc2::msg_send![
+            indicator_width_anchor,
+            constraintEqualToConstant: EDITED_INDICATOR_SIZE
+        ];
+        let _: () = objc2::msg_send![indicator_width_constraint, setActive: true];
+
+        let dot_width_anchor: *mut AnyObject = objc2::msg_send![&*dot, widthAnchor];
+        let dot_width_constraint: *mut AnyObject = objc2::msg_send![
+            dot_width_anchor,
+            constraintEqualToConstant: EDITED_INDICATOR_DIAMETER
+        ];
+        let _: () = objc2::msg_send![dot_width_constraint, setActive: true];
+
+        let dot_height_anchor: *mut AnyObject = objc2::msg_send![&*dot, heightAnchor];
+        let dot_height_constraint: *mut AnyObject = objc2::msg_send![
+            dot_height_anchor,
+            constraintEqualToConstant: EDITED_INDICATOR_DIAMETER
+        ];
+        let _: () = objc2::msg_send![dot_height_constraint, setActive: true];
+
+        let dot_center_x_anchor: *mut AnyObject = objc2::msg_send![&*dot, centerXAnchor];
+        let indicator_center_x_anchor: *mut AnyObject =
+            objc2::msg_send![&*indicator, centerXAnchor];
+        let center_x_constraint: *mut AnyObject = objc2::msg_send![
+            dot_center_x_anchor,
+            constraintEqualToAnchor: indicator_center_x_anchor
+        ];
+        let _: () = objc2::msg_send![center_x_constraint, setActive: true];
+
+        let dot_center_y_anchor: *mut AnyObject = objc2::msg_send![&*dot, centerYAnchor];
+        let indicator_center_y_anchor: *mut AnyObject =
+            objc2::msg_send![&*indicator, centerYAnchor];
+        let center_y_constraint: *mut AnyObject = objc2::msg_send![
+            dot_center_y_anchor,
+            constraintEqualToAnchor: indicator_center_y_anchor
+        ];
+        let _: () = objc2::msg_send![center_y_constraint, setActive: true];
+    }
+
+    Ok(indicator)
+}
+
+#[cfg(target_os = "macos")]
+fn set_ns_document_edited(ns_window: *mut AnyObject, edited: bool) -> Result<(), String> {
+    let ns_window = unsafe { &*ns_window.cast::<NSWindow>() };
+    ns_window.setDocumentEdited(edited);
+
+    let tab = ns_window.tab();
+    if edited {
+        let indicator = create_ns_edited_indicator()?;
+        tab.setAccessoryView(Some(&indicator));
+    } else {
+        tab.setAccessoryView(None);
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -107,6 +204,29 @@ pub(super) fn configure_macos_document_window<R: Runtime>(
     _: &str,
 ) -> Result<(), String> {
     Ok(())
+}
+
+#[tauri::command]
+pub async fn set_document_edited(window: Window, edited: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let label = window.label().to_string();
+        let app = window.app_handle();
+
+        run_on_app_main_thread(&app, move |app| {
+            let window = app
+                .get_window(&label)
+                .ok_or_else(|| format!("window '{label}' not found"))?;
+            let ns_window = get_ns_window_object(&window)?;
+            set_ns_document_edited(ns_window, edited)
+        })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, edited);
+        Ok(())
+    }
 }
 
 #[cfg(target_os = "macos")]

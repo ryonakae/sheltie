@@ -81,18 +81,14 @@ fn show_nsalert_sheet(
         let ns_discard = NSString::from_str(discard_label);
         let _: () = objc2::msg_send![alert, addButtonWithTitle: &*ns_discard];
 
-        // 「削除」ボタンに Cmd+D を割り当て（macOS 標準）と danger soft カラーを設定
+        // 「削除」ボタンに Cmd+D を割り当て（macOS 標準）
         let buttons: *mut AnyObject = objc2::msg_send![alert, buttons];
         let discard_btn: *mut AnyObject = objc2::msg_send![buttons, objectAtIndex: 2usize];
         let ns_d = NSString::from_str("d");
         let _: () = objc2::msg_send![discard_btn, setKeyEquivalent: &*ns_d];
         // NSEventModifierFlagCommand = 1 << 20
         let _: () = objc2::msg_send![discard_btn, setKeyEquivalentModifierMask: (1u64 << 20)];
-
-        // macOS システムレッド（CotEditor の「削除」ボタンと同じ）
-        let color_class = AnyClass::get(c"NSColor").expect("NSColor class not found");
-        let danger_color: *mut AnyObject = objc2::msg_send![color_class, systemRedColor];
-        let _: () = objc2::msg_send![discard_btn, setBezelColor: danger_color];
+        let _: () = objc2::msg_send![discard_btn, setHasDestructiveAction: true];
 
         // 「保存」ボタン（index 0）を初期フォーカスに設定
         let save_btn: *mut AnyObject = objc2::msg_send![buttons, objectAtIndex: 0usize];

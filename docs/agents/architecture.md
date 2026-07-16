@@ -110,6 +110,7 @@ IPC 契約は `tauri-ipc.md` を参照。
 
 - 開発: `npm run dev`
 - ビルド: `npm run build`
+- Cargo バイナリターゲット: `src-tauri/Cargo.toml` の `Sheltie`（`src/main.rs`）。Cargo を直接実行する場合は `(cd src-tauri && cargo run --bin Sheltie)` を使う。
 
 Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/setup.rs` の `pub fn run()` で登録する。
 

@@ -38,7 +38,8 @@ npm run build      # アプリをビルド・パッケージング
 アプリケーションは Tauri v2 の統合ビルドシステムで構築されます。
 - Rust バックエンド: `src-tauri/`
 - React フロントエンド: `src/renderer/`
-- 出力: プラットフォーム固有のバイナリ + インストーラー（`src-tauri/target/release/bundle/` 配下）
+- Cargo バイナリターゲット: `Sheltie`（`src-tauri/src/main.rs`）
+- 出力: プラットフォーム固有の `Sheltie` バイナリ + インストーラー（`src-tauri/target/release/bundle/` 配下）
 
 ## アーキテクチャ
 

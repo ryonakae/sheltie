@@ -4,3 +4,4 @@ dist/
 node_modules/
 *.md
 src-tauri/gen/
+src-tauri/icons/*.icon/

@@ -7,6 +7,7 @@
     "dev": "tauri dev",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
+    "icon:macos": "sh scripts/generate-macos-icon.sh",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prepare": "husky",
@@ -50,7 +51,7 @@
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
-    "@tauri-apps/cli": "2.10.0",
+    "@tauri-apps/cli": "2.11.4",
     "@types/node": "25.4.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

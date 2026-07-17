@@ -29,6 +29,14 @@ npm run test
 - UI / Webview 挙動はテスト対象外のため、UI 変更時は最低限、対象画面の手動確認を行う。
 - Tauri Webview 変更時は macOS と非 macOS の差分挙動を意識する。
 
+## macOS アプリアイコン
+
+- `src-tauri/icons/icon.icon` を Icon Composer の編集用ソース、`Assets.car` を生成・コミット対象とする。
+- `icon.icon` の staged 変更があるコミットでは、pre-commit hook が staged 内容から `Assets.car` を再生成して同じコミットへ追加する。
+- 手動で再生成する場合は Xcode 26 以上の環境で `npm run icon:macos` を実行する。
+- `git commit --no-verify` は自動生成をスキップするため、使用前に手動で再生成する。
+- [Tauri issue #15315](https://github.com/tauri-apps/tauri/issues/15315) の修正をローカルで確認するまでは、`tauri.conf.json` から `.icon` を直接参照せず、`Assets.car` を参照する。
+
 ## TDD ルール
 
 新規実装・バグ修正・リファクタ抽出はいずれも **テスト先行（red → green → refactor）** で進める。テストを後追いで書かない。

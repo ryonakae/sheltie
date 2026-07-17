@@ -322,6 +322,17 @@ mod tests {
     }
 
     #[test]
+    fn remote_capability_includes_non_default_http_and_https_ports() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../../../capabilities/page-automation.json"))
+                .unwrap();
+        assert_eq!(
+            capability["remote"]["urls"],
+            serde_json::json!(["http://*:*", "https://*:*"])
+        );
+    }
+
+    #[test]
     fn maps_page_identity_and_normalizes_navigation_urls() {
         assert_eq!(
             page_key("document-7", "node-4"),

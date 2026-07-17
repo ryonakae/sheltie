@@ -4,7 +4,7 @@
   "description": "Allows embedded macOS pages to complete matching semantic automation requests.",
   "local": false,
   "remote": {
-    "urls": ["http://*", "https://*"]
+    "urls": ["http://*:*", "https://*:*"]
   },
   "webviews": ["page-*"],
   "permissions": ["allow-page-automation-completion"],

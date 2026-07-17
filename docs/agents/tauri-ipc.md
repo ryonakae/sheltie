@@ -154,4 +154,4 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - Semantic bridgeは`initialization_script_for_all_frames`でtop frameとdescendant frameへ入れる。descendantは`postMessage`でtop frameへ結果を返し、native completionを呼ぶのはtop frameだけとする。
 - Phase 3のcoordinate/evaluate/upload/dialog/capture geometryも同じtyped bridgeとcompletion IPCを使う。任意scriptを受けるTauri commandや第二のcompletion routeを追加しない。
 - `on_new_window`はpopupを`Deny`し、HTTP(S) URLを同じ`page-*` Webviewで開く。新しいpage nodeや外部browserを作らない。
-- Remote `page-*` Webviewのcapabilityは`complete_page_automation_request`だけを許可する。document UIのlocal capabilityと混ぜない。
+- Remote `page-*` Webviewのcapabilityは`complete_page_automation_request`だけを許可する。`remote.urls`は`http://*:*` / `https://*:*`とし、default/non-default portの両方を対象にする。`http://*`だけではTauriのURLPatternがdefault portにしか一致しない。document UIのlocal capabilityと混ぜない。

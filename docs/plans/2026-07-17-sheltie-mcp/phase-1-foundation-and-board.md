@@ -364,19 +364,19 @@ git commit -m "feat: add opt-in local MCP server"
 - Produces: `DocumentSummary`, `McpRequestBrokerState::request`, Tauri command `complete_mcp_renderer_request`, renderer `setupMcpRendererBridge`.
 - Consumed by: Tasks 5–8 and phases 2–3.
 
-- [ ] **Step 1: Write failing broker tests**
+- [x] **Step 1: Write failing broker tests**
 
 Cover: successful matching completion; wrong document cannot complete; timeout removes pending entry; stop fails all pending; two commands for one document serialize while different documents proceed independently.
 
 Use a fake emitter callback rather than constructing `AppHandle`; the broker core accepts `emit: impl FnOnce(RendererRequest) -> Result<(), String>`.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run: `(cd src-tauri && cargo test --lib mcp::broker::tests)`
 
 Expected: broker core and pending request contract are missing.
 
-- [ ] **Step 3: Implement document snapshots**
+- [x] **Step 3: Implement document snapshots**
 
 Add `DocumentManagerState::document_summaries(focused_label)` returning stable board order by window creation index:
 
@@ -393,7 +393,7 @@ pub struct DocumentSummary {
 
 Do not expose `Project.id`; it is renderer-local and regenerated.
 
-- [ ] **Step 4: Implement broker request/complete**
+- [x] **Step 4: Implement broker request/complete**
 
 Store pending `uuid::Uuid` entries containing expected `document_id` and oneshot sender. Before emit, verify the document exists in `DocumentManagerState`. Acquire the document-local async mutex, insert pending, `app.emit_to(document_id, MCP_RENDERER_REQUEST_EVENT, request)`, and use `tokio::time::timeout(MCP_RENDERER_TIMEOUT, receiver)`.
 
@@ -410,7 +410,7 @@ pub async fn complete_mcp_renderer_request(
 
 Verify `window.label()` equals the pending document ID. Unknown/late request IDs return an error and never complete another request.
 
-- [ ] **Step 5: Implement the renderer listener**
+- [x] **Step 5: Implement the renderer listener**
 
 `setupMcpRendererBridge()` listens through `getCurrentWebviewWindow().listen`, dispatches by the typed `RendererCommand`, catches errors, and always invokes `complete_mcp_renderer_request` with:
 
@@ -422,7 +422,7 @@ export type RendererResult =
 
 Initialize once in `main.tsx` with the same HMR cleanup pattern used by edit/file/view/app-exit listeners. Initially support an injected command handler map and return `renderer_unavailable` for unregistered phase-1 commands; later tasks register handlers.
 
-- [ ] **Step 6: Confirm GREEN**
+- [x] **Step 6: Confirm GREEN**
 
 Run:
 - `(cd src-tauri && cargo test --lib mcp::broker::tests)`
@@ -432,7 +432,7 @@ Expected: broker tests pass; renderer payloads and Tauri bridge compile.
 
 Manual check: emit a temporary test request from a Rust unit-accessible debug path only while developing, then remove that path before commit. Verify two native tabs answer only their own document ID.
 
-- [ ] **Step 7: Document and commit**
+- [x] **Step 7: Document and commit**
 
 Add the exact event, command, timeout, window verification, and multi-window rule to `docs/agents/tauri-ipc.md` and `docs/agents/mcp.md`.
 

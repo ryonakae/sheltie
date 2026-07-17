@@ -8,7 +8,7 @@ use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 use tokio_util::sync::CancellationToken;
 
-use super::{service::SheltieMcpService, MCP_BIND_ADDRESS};
+use super::{broker::McpRequestBrokerState, service::SheltieMcpService, MCP_BIND_ADDRESS};
 use crate::commands::theme::STORE_PATH;
 
 pub const MCP_ENABLED_KEY: &str = "mcpEnabled";
@@ -285,7 +285,11 @@ pub async fn start(app: tauri::AppHandle) -> Result<(), String> {
     let cancellation = CancellationToken::new();
     let router = mcp_router(cancellation.child_token());
     let graceful_cancellation = cancellation.clone();
+    let (accept_sender, accept_receiver) = tokio::sync::oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
+        if accept_receiver.await.is_err() {
+            return;
+        }
         if let Err(error) = axum::serve(listener, router)
             .with_graceful_shutdown(async move { graceful_cancellation.cancelled_owned().await })
             .await
@@ -294,17 +298,31 @@ pub async fn start(app: tauri::AppHandle) -> Result<(), String> {
         }
     });
 
+    if let Err(error) = app.state::<McpRequestBrokerState>().resume() {
+        cancellation.cancel();
+        drop(accept_sender);
+        let _ = task.await;
+        state.transition(McpLifecycleEvent::StartFailed)?;
+        return Err(error);
+    }
+
     let running = RunningMcpServer { cancellation, task };
     if let Some(interrupted) = state.install_running(running)? {
+        app.state::<McpRequestBrokerState>().stop()?;
         interrupted.cancellation.cancel();
+        drop(accept_sender);
         let _ = interrupted.task.await;
         state.finish_stop()?;
+    } else if accept_sender.send(()).is_err() {
+        stop(app.clone()).await?;
+        return Err("failed to start MCP listener task".to_string());
     }
 
     Ok(())
 }
 
 pub async fn stop(app: tauri::AppHandle) -> Result<(), String> {
+    app.state::<McpRequestBrokerState>().stop()?;
     let state = app.state::<McpServerState>();
     let running = state.take_running_for_stop()?;
     if let Some(running) = running {

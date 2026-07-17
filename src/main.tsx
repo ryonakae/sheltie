@@ -6,6 +6,7 @@ import App from '@/App';
 import { setupAppExitCoordinator } from '@/lib/app-exit';
 import { runEditCommand } from '@/lib/edit-commands';
 import { runFileCommand } from '@/lib/file-commands';
+import { setupMcpRendererBridge } from '@/lib/mcp/renderer-bridge';
 import { onEditCommand, onFileCommand, onViewCommand } from '@/lib/tauri-bridge';
 import { runViewCommand } from '@/lib/view-commands';
 import { setupProjectPersistence } from '@/store/tab-persistence';
@@ -21,6 +22,8 @@ let isViewCommandListenerInitialized = false;
 let viewCommandUnlistenPromise: Promise<() => void> | null = null;
 let isAppExitCoordinatorInitialized = false;
 let appExitCoordinatorCleanupPromise: Promise<() => void> | null = null;
+let isMcpRendererBridgeInitialized = false;
+let mcpRendererBridgeCleanupPromise: Promise<() => void> | null = null;
 type HotModule = { dispose: (callback: () => void) => void };
 
 function setupEditCommandListener(): void {
@@ -83,6 +86,24 @@ function setupViewCommandListener(): void {
   }
 }
 
+function setupMcpRendererBridgeListener(): void {
+  if (isMcpRendererBridgeInitialized) return;
+  isMcpRendererBridgeInitialized = true;
+
+  mcpRendererBridgeCleanupPromise = setupMcpRendererBridge();
+
+  const hot = (import.meta as ImportMeta & { hot?: HotModule }).hot;
+  if (hot) {
+    hot.dispose(() => {
+      if (mcpRendererBridgeCleanupPromise) {
+        void mcpRendererBridgeCleanupPromise.then((cleanup) => cleanup());
+      }
+      mcpRendererBridgeCleanupPromise = null;
+      isMcpRendererBridgeInitialized = false;
+    });
+  }
+}
+
 function setupAppExitCoordinatorListener(): void {
   if (isAppExitCoordinatorInitialized) return;
   isAppExitCoordinatorInitialized = true;
@@ -107,6 +128,7 @@ setupThemeListener();
 setupEditCommandListener();
 setupFileCommandListener();
 setupViewCommandListener();
+setupMcpRendererBridgeListener();
 setupAppExitCoordinatorListener();
 // 非同期で初期テーマを適用（React マウントをブロックしない）
 void useThemeStore

@@ -4,6 +4,7 @@ export {
   onAppExitRequested,
   onEditCommand,
   onFileCommand,
+  onMcpRendererRequest,
   onViewCommand,
 } from '@/lib/tauri-bridge/events';
 export { webviewApi } from '@/lib/tauri-bridge/webview';
@@ -14,6 +15,8 @@ export type {
   AppExitStateResponse,
   AppExitStateSnapshot,
   FileCommand,
+  McpRendererRequest,
+  McpRendererResponse,
   ViewCommand,
   NavigationState,
   PlatformInfo,

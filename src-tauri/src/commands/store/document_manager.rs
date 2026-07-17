@@ -4,6 +4,8 @@ use std::{
     sync::Mutex,
 };
 
+use crate::mcp::types::DocumentSummary;
+
 pub(super) const DOCUMENT_WINDOW_LABEL_PREFIX: &str = "document-";
 pub(super) const DOCUMENT_WINDOW_TABBING_IDENTIFIER: &str = "sheltie-document";
 
@@ -34,6 +36,7 @@ struct DocumentManager {
 
 #[derive(Clone)]
 pub(super) struct WindowRecord {
+    pub(super) creation_index: usize,
     pub(super) file_path: Option<PathBuf>,
     pub(super) untitled_index: usize,
     pub(super) tabbing_identifier: String,
@@ -102,6 +105,7 @@ impl DocumentManagerState {
         };
 
         let record = WindowRecord {
+            creation_index: inner.next_window_index,
             file_path: file_path.clone(),
             untitled_index,
             tabbing_identifier,
@@ -140,6 +144,43 @@ impl DocumentManagerState {
             .get(label)
             .map(WindowRecord::to_context)
             .ok_or_else(|| format!("window '{label}' state not found"))
+    }
+
+    pub fn contains_document(&self, label: &str) -> Result<bool, String> {
+        self.inner
+            .lock()
+            .map(|inner| inner.windows.contains_key(label))
+            .map_err(|_| "failed to acquire document state lock".to_string())
+    }
+
+    pub fn document_summaries(
+        &self,
+        focused_label: Option<&str>,
+    ) -> Result<Vec<DocumentSummary>, String> {
+        let inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
+        let mut summaries = inner
+            .windows
+            .iter()
+            .map(|(label, record)| {
+                (
+                    record.creation_index,
+                    DocumentSummary {
+                        document_id: label.clone(),
+                        file_path: record
+                            .file_path
+                            .as_ref()
+                            .map(|path| path.to_string_lossy().to_string()),
+                        untitled_index: record.untitled_index,
+                        focused: focused_label == Some(label.as_str()),
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        summaries.sort_by_key(|(creation_index, _)| *creation_index);
+        Ok(summaries.into_iter().map(|(_, summary)| summary).collect())
     }
 
     pub(super) fn existing_window_label_for_path(&self, path: &Path) -> Option<String> {
@@ -323,7 +364,10 @@ mod tests {
         let (_child_label, child_record) = state
             .reserve_window(None, &tab_in_group(&host_label))
             .unwrap();
-        assert_eq!(child_record.tabbing_identifier, host_record.tabbing_identifier);
+        assert_eq!(
+            child_record.tabbing_identifier,
+            host_record.tabbing_identifier
+        );
         assert_eq!(
             child_record.pending_tab_host_label,
             Some(host_label.clone())
@@ -406,6 +450,26 @@ mod tests {
 
         let second = state.take_pending_tab_attachment(&child_label).unwrap();
         assert!(second.is_none());
+    }
+
+    #[test]
+    fn document_summaries_follow_creation_order_and_mark_focus() {
+        let state = DocumentManagerState::default();
+        let (first_label, _) = state.reserve_window(None, &standalone()).unwrap();
+        let (second_label, _) = state.reserve_window(None, &standalone()).unwrap();
+        let (third_label, _) = state.reserve_window(None, &standalone()).unwrap();
+        state.unregister_window(&second_label);
+
+        let summaries = state.document_summaries(Some(&third_label)).unwrap();
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|summary| summary.document_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![first_label.as_str(), third_label.as_str()]
+        );
+        assert!(!summaries[0].focused);
+        assert!(summaries[1].focused);
     }
 
     #[test]

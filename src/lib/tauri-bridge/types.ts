@@ -44,3 +44,8 @@ export type AppExitSaveResponse = {
   windowLabel: string;
   status: SaveProjectStatus;
 };
+
+export type {
+  RendererRequest as McpRendererRequest,
+  RendererResponse as McpRendererResponse,
+} from '@/lib/mcp/types';

@@ -13,6 +13,7 @@ use crate::commands::{
     },
     theme::{load_persisted_theme, MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM},
 };
+use crate::mcp::broker::McpRequestBrokerState;
 use crate::mcp::lifecycle::{
     apply_requested_enabled, apply_requested_runtime_only, load_mcp_enabled, McpServerState,
 };
@@ -88,6 +89,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(DocumentManagerState::default())
         .manage(AppExitCoordinatorState::default())
+        .manage(McpRequestBrokerState::default())
         .manage(McpServerState::default())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if let Err(error) = handle_launch_args(app, &argv, Some(cwd.as_str())) {
@@ -238,6 +240,7 @@ pub fn run() {
             crate::commands::webview::screenshots::get_existing_screenshot_paths,
             crate::commands::webview::screenshots::delete_screenshot,
             crate::commands::dialog::show_unsaved_changes_dialog,
+            crate::mcp::broker::complete_mcp_renderer_request,
         ])
         .build(tauri::generate_context!())
         .expect("an error occurred while running the Tauri app");

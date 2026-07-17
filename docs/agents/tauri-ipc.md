@@ -26,6 +26,7 @@
 - `close_ready` - 現在の document window を破棄する
 - `load_project_file(path)` - `.sheltie` ファイルを UTF-8 文字列として読む
 - `save_project_file(path, contents)` - `.sheltie` ファイルを書き込み、実際の保存パスを返す。child Webview 作成後も呼べるよう command context は `Window` を使う
+- `complete_mcp_renderer_request(response)` - Rustから対象document rendererへ送ったMCP requestを完了する。呼び出し元`Window.label()`がpending requestの`documentId`と一致する場合だけ受理し、unknown / late / 別windowの`requestId`は拒否する
 
 ### ダイアログ
 
@@ -65,6 +66,7 @@
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
 - `view-command`: メニューバー `View` 操作のビューコマンド通知（payload は `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out`）
 - `theme-command`: ネイティブテーマメニュー（`show_theme_menu`）で選択されたテーマ通知（payload は `light` / `dark` / `system`）
+- `mcp-renderer-request`: Rust brokerが明示された`documentId`のwindowだけへ送るrequest。payloadは`{ requestId, command, params }`で、rendererは成功/失敗にかかわらず`complete_mcp_renderer_request`を1回呼ぶ
 
 ## Renderer <-> Renderer（window-local app quit coordination）
 
@@ -95,6 +97,7 @@
 - `loadProjectFile`, `saveProjectFile`
 - `loadTheme`, `saveTheme`, `getPlatformInfo`
 - `onAppExitRequested`
+- `onMcpRendererRequest`
 - `onEditCommand`
 - `onFileCommand`
 - `onViewCommand`
@@ -119,6 +122,7 @@
 - `Save` は保存先 `filePath` 未設定時に `Save As` へフォールバックする
 - `save_project_file` は常に拡張子を `.sheltie` に正規化する
 - window-local な IPC では `main` のような固定 label を前提にしない
+- MCP renderer requestはdocumentごとのasync mutexで直列化し、異なるdocumentだけを並行実行する。timeoutは10秒で、disable時はpending requestを`server_stopped`で全て終了する
 - `Cmd+Q` / `Quit` は macOS app menu の既定 `Quit` を custom `app.quit` item に差し替え、その menu event から renderer 側 coordinator を起動する
 
 ## プラットフォーム差分

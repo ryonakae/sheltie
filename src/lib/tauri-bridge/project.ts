@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-import type { WindowContext } from '@/lib/tauri-bridge/types';
+import type { McpRendererResponse, WindowContext } from '@/lib/tauri-bridge/types';
 
 export const api = {
   loadWindowContext: (): Promise<WindowContext> => invoke('load_window_context'),
@@ -34,4 +34,7 @@ export const api = {
   abortAppExit: (): Promise<void> => invoke('abort_app_exit'),
 
   closeReady: (): Promise<void> => invoke('close_ready'),
+
+  completeMcpRendererRequest: (response: McpRendererResponse): Promise<void> =>
+    invoke('complete_mcp_renderer_request', { response }),
 };

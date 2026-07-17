@@ -58,10 +58,20 @@ macOSの`Sheltie > Settings`に次を置く。
 
 Theme項目とMCP項目はseparatorで分ける。setup時はplugin store初期化後に`mcpEnabled`を読み、checked stateとserver lifecycleを復元する。
 
+## Renderer broker
+
+- board stateはrenderer/Zustandを正本とするため、Rust tool handlerは`McpRequestBrokerState`を通して対象document windowへrequestを送る。
+- request IDはUUID v4。pending entryにはexpected `documentId`とoneshot senderを保持し、renderer completionの呼び出し元`Window.label()`が一致する場合だけ完了する。
+- 同一documentのrequestはdocument-local async mutexで直列化する。異なるdocumentは独立して進行できる。document存在確認はlock取得前と取得直後の両方で行い、queue待機中に閉じたwindowへemitしない。
+- stopped stateとpending admissionは同じmutexで更新し、disableがdrainした後に新しいpending entryが入らないようにする。listener taskはadmission gateを開くまでHTTP requestを受けず、brokerをresumeしてからgateを開く。
+- renderer timeoutは10秒。emit失敗は`renderer_unavailable`、timeoutは`renderer_timeout`、server disableは`server_stopped`を返し、いずれもpending entryを残さない。client cancellationでrequest futureがdropされた場合もRAII registration guardがentryを除去する。
+- rendererは`mcp-renderer-request`をwindow-local listenerで受け、`complete_mcp_renderer_request`へ`{ requestId, result }`を返す。未登録commandも`renderer_unavailable`として完了し、requestを放置しない。
+
 ## Tool routing rules
 
 - document-scoped toolはruntime `documentId` (`document-*` window label)を必須にする。
 - WebPage-scoped toolは`documentId`と`pageNodeId`を必須にする。
 - tool開始後にfocused windowから対象を推測しない。focusはread metadataとしてだけ扱う。
+- `list_documents`はRustのdocument managerからwindow作成順に返し、focused windowはmetadataとして示す。renderer-localな`Project.id`は外部へ出さない。
 - board stateはrenderer/Zustandを正本とし、Rust serviceは内容をmirrorしない。
 - stable errorは`{ code, message, retry? }`を返す。

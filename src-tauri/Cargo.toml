@@ -21,6 +21,7 @@ tauri-build = { version = "2.5.4", features = [] }
 
 [dependencies]
 axum = "0.8"
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -45,4 +46,3 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["NSColor", "NSResponder", "NSView", "NSWindow", "NSWindowTab", "std"] }
 objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
 block2 = "0.6"
-base64 = "0.22"

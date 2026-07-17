@@ -550,13 +550,13 @@ Run:
 
 Expected: compilation fails because bounded upload reading does not exist.
 
-- [ ] **Step 3: Implement validation before reads**
+- [x] **Step 3: Implement validation before reads**
 
 Reject non-absolute requested paths, canonicalize each path, and require canonical metadata to describe a readable regular file. Check the file count first, gather metadata, and apply per-file/total limits before reading any bytes. Only then read files, base64 encode them, and build internal `UploadFilePayload { name, mime_type, bytes_base64 }`. Use a small extension map and `application/octet-stream` fallback; do not add content sniffing.
 
 Do not query `roots/list`, accept a roots list, or add a general filesystem tool: the no-auth loopback MCP connection is already the explicit trust boundary. Do not log requested/canonical path strings or base64 data; MCP results expose basenames and sizes only.
 
-- [ ] **Step 4: Confirm GREEN**
+- [x] **Step 4: Confirm GREEN**
 
 Run:
 

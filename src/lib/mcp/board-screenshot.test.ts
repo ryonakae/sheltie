@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  extractTiptapText,
   resolveBoardCaptureBounds,
   resolveBoardCaptureScale,
   resolveBoardCaptureSelection,
+  resolveBoardEdgeGeometry,
   resolveMissingScreenshotNodeIds,
 } from '@/lib/mcp/board-screenshot';
 import type { BoardEdge, BoardNode } from '@/types';
@@ -102,6 +104,40 @@ describe('resolveBoardCaptureSelection', () => {
     expect(() => resolveBoardCaptureSelection(nodes, edges, [])).toThrow(
       expect.objectContaining({ code: 'validation_failed' }),
     );
+  });
+});
+
+describe('board canvas primitives', () => {
+  it('extracts readable lines from nested Tiptap JSON', () => {
+    expect(
+      extractTiptapText({
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },
+          {
+            type: 'bulletList',
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Second' }] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe('First\nSecond');
+  });
+
+  it('connects arrows at the selected node frame centers', () => {
+    const nodes = [
+      node('a', { x: 10, y: 20, width: 100, height: 80 }),
+      node('b', { type: 'webpage', x: 300, y: 200, width: 200, height: 100 }),
+    ];
+
+    expect(resolveBoardEdgeGeometry(nodes, edge('a-b', 'a', 'b'))).toEqual({
+      from: { x: 110, y: 60 },
+      to: { x: 300, y: 266 },
+    });
   });
 });
 

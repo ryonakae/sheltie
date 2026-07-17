@@ -175,6 +175,14 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - `保存`: dirty document を順番に保存。`Save As` が必要な document はその window を focus してダイアログを開く。途中で `Save As` キャンセル / 保存失敗が起きたら Quit 全体を中止（window は 1 枚も閉じない）
 - `保存せず終了`: 全 document window をまとめて destroy
 
+## MCP semantic page automation
+
+- MCPのDOM操作は現在の`DisplayMode`を変えない。撮影目的でnativeへ切り替えず、native Webviewを一時表示しない
+- Semantic snapshotとactionはboard selection、board viewport、board node、Undo/Redo、dirty stateを変更しない。`browser_scroll`を含むpage内のDOMとnavigationだけを対象にする
+- 操作対象には`labelsByNodeId`へ登録済みのlive child Webviewが必要。screenshot cacheだけのpageは`webview_not_ready`を返す
+- 同じ`documentId`でもpage actorは`pageNodeId`ごとに分かれる。同じpageの操作は直列、別pageの操作は並行する
+- Webview破棄前に`unregister_page_automation_page`を呼び、実行中requestとqueueを終了してからcloseする
+
 ## スクリーンショット
 
 撮影キュー / 永続化 / 撮影タイミング / ちらつき回避の詳細は `sheltie-screenshots.md` を参照。
@@ -190,6 +198,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - Webview API は例外時 no-op を許容する前提
 - 空フレーム（`url === ''`）は Webview を作成しない
 - Webview の create/destroy は URL 同期から切り離す（`node.url` 更新では再生成しない）
+- create時はpage actorを登録し、失敗時は登録を戻す。destroy時は`webviewApi.destroy(pageId, label)`がactor unregisterを完了してからchild Webviewを閉じる
 - `Sheltie.tsx` は mount 直後の `useLayoutEffect` で `data-sheltie-container` に `--canvas-zoom` を seed する。`zoomPx()` 前提のフレーム枠線太さを Webview 作成前に確定させ、初回 `placeholder.getBoundingClientRect()` が fallback zoom `1` を読まないようにする
 - macOS の child WKWebView は host `contentView` 座標系で配置される一方、renderer の `getBoundingClientRect()` は `contentLayoutRect` 基準。`commands/webview.rs` では `contentLayoutRect` と host view 高さの差分を top inset として求め、`create_page_webview` / `update_page_webview_bounds` / `batch_update_webview_positions` の `y` に加算してから child Webview へ渡す
 - `webviewApi.create` / `webviewApi.updateBounds` に渡す `(x, y, width, height)` は呼び出し直前に `snapRectToDevicePixels(rect, window.devicePixelRatio || 1)`（`src/lib/device-pixel-snap.ts`）で device pixel grid に snap する。WKWebView の `NSView.frame` は最終的に backingAlignedRect に snap されるため、subpixel な値をそのまま渡すと CSS placeholder の subpixel rendering 結果と 1 device px ずれて、native ↔ screenshot 切替時の位置/サイズずれとして見える。`width` のみ snap だと right edge がずれるため、left/top と right/bottom を独立に snap してから差分で width/height を再計算する

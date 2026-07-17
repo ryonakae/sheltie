@@ -10,13 +10,22 @@ Sheltie の WKWebView（macOS）に固有のワークアラウンドと注意事
 - `\x01`: SPA URL 変更（`page-navigated-{pageId}`）
 - `\x02`: スクロール完了（`page-scroll-ended-{pageId}`）
 
-新しい通知を増やす場合はプレフィックス衝突を避ける。
+新しい通知を増やす場合はプレフィックス衝突を避ける。MCP automation replyにはtitle sentinelを使わない。
 
 ### スクロール完了の捕捉（capture:true 必須）
 
 `scroll` イベントはバブルしないため、`window` のリスナは **`capture: true`** で登録しないと内側スクロールコンテナ（`overflow:auto` の div など）の scroll を捕捉できない。`scrollend`（macOS 26.x の WKWebView はサポート）も同様に `capture: true` で登録する。
 
 `SCROLL_DETECTION_SCRIPT` は capture:true の `scroll` + 150ms debounce を常に張り（未サポート/未発火環境のフォールバック）、`scrollend` があれば即時通知に使う（debounce を解除して `notify()`）。`'onscrollend' in window` の true 枝だけにすると内側スクロールを取りこぼすので、scroll debounce を併用する。
+
+## Semantic automation bridge
+
+- `WebviewBuilder::initialization_script_for_all_frames`で同じbridgeをtop frameとdescendant frameへdocument startで注入する。既存のSPA/scroll scriptはtop frame用`initialization_script`として残す
+- descendant frameは固有frame IDとsemantic element refを持ち、`postMessage`でtop frameへsnapshot/action resultを返す。top frameはmessageの`WindowProxy`と登録済みframeを照合する
+- child frame responseは通常750msで打ち切り、そのframeだけを`unavailable`にする。`browser_wait`は指定timeoutの範囲でchild conditionを待つ
+- nativeへ返すcompletionはtop frameだけが`complete_page_automation_request`を呼ぶ。Rust側はrequest/document/page/window/Webview labelを照合する
+- Rustからpageへ実行する式は`window.__SHELTIE_MCP_PAGE_AUTOMATION__.dispatch(<typed JSON>)`に固定する。任意scriptを受け取るendpointは作らない
+- full navigationは`PageLoadEvent::Finished`、SPAは`\x01` URL observerでactor epochを進める。`on_navigation`はcommit前に発火するためbarrier解除に使わない
 
 ## CSS Viewport Units（svh/lvh）の補正
 

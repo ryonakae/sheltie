@@ -7,7 +7,7 @@
 - アプリ終了集約フロー: `app_exit.rs`
 - メニュー構築（App/File/Edit/View/Theme）: `menus/`
 - ドキュメントウィンドウ・ファイル IO: `commands/store/{document_manager,document_window,file_io,macos_tabs}.rs`
-- Webview 関連 IPC: `commands/webview/{labels,navigation,bounds,screenshots,snapshot}.rs`
+- Webview 関連 IPC: `commands/webview/{labels,navigation,bounds,page_automation,screenshots,snapshot}.rs`
 - ダイアログ: `commands/dialog.rs`
 - テーマ: `commands/theme.rs`
 
@@ -55,6 +55,8 @@
 - `save_webview_screenshot(label, pageId, projectId, hideAfterSnapshotRequest?)` - PNG ファイルを保存しファイルパスを返す（macOS のみ）。`hideAfterSnapshotRequest=true` の時は snapshot 要求直後に同じ Rust コマンド内で Webview を hide する
 - `get_existing_screenshot_paths(projectId, pageIds)` - 存在するスクリーンショットのパスを一括取得
 - `delete_screenshot(pageId, projectId)` - スクリーンショットファイルを削除
+- `unregister_page_automation_page(pageId)` - child Webviewを閉じる前にpage actorの実行中requestとqueueを`webview_not_ready`で終了する。呼び出し元`Window.label()`を`documentId`として使う
+- `complete_page_automation_request(result)` - injected top frame専用。引数に`tauri::Webview`を受け、`requestId`、payloadの`documentId` / `pageNodeId`、呼び出し元window label / Webview labelがpending requestと一致した場合だけ完了する。一般用途のJavaScript評価には使わない
 
 ## Backend -> Renderer（イベント）
 
@@ -106,7 +108,7 @@
 
 - `create(nodeId, ...) -> label`
 - `updateBounds(label, ...)`, `updateAllBounds(entries[])`, `updateAllPositions(entries[])`
-- `show(label)`, `hide(label)`, `destroy(label)`, `hideAll(labels)`, `showAllWithBounds(entries[])`
+- `show(label)`, `hide(label)`, `destroy(pageId, label)`, `hideAll(labels)`, `showAllWithBounds(entries[])`
 - `setOpacity(label, opacity)`, `reload(label, url)`, `goBack(label)`, `goForward(label)`, `getNavigationState(label)`
 - `captureScreenshot(label)`, `saveScreenshot(label, pageId, projectId, options?)`, `getExistingScreenshotPaths`, `deleteScreenshot`
 - `onPageNavigated`, `onPageTitleChanged`, `onPageScrollEnded`
@@ -147,3 +149,5 @@
 - `add_child()` で child webview を追加すると Tauri v2 の `get_webview_window()` / `webview_windows()` が document window を返さなくなる。`WebviewWindow` パラメータの解決はこの関数に依存するため、child webview が存在する状態で失敗し `current webview is not a WebviewWindow` が発生する。
 - `Window` は `get_window()` で解決されるため child webview の有無に関わらず document window を返す。
 - この制約は「child webview から invoke」に限らず、「child webview が存在する window から invoke」でも同様に適用される。`close_ready`、`save_project_file`、`set_document_edited` は document window の JS から呼ぶが、WebPageNode がある状態でも解決できるよう `Window` を使う。
+- Semantic bridgeは`initialization_script_for_all_frames`でtop frameとdescendant frameへ入れる。descendantは`postMessage`でtop frameへ結果を返し、native completionを呼ぶのはtop frameだけとする。
+- Remote `page-*` Webviewのcapabilityは`complete_page_automation_request`だけを許可する。document UIのlocal capabilityと混ぜない。

@@ -96,8 +96,10 @@ src/
 - `lib.rs`: モジュール宣言と `pub use` の入口（実体は持たない）
 - `mcp/mod.rs`: ローカル MCP endpoint・renderer event・timeout の共通定数と MCP module の入口
 - `mcp/types.rs`: MCP toolの入出力、renderer request/response envelope、安定したerror codeの型契約。JSON fieldはrendererと共有するcamelCaseを正本にする
-- `mcp/service.rs`: 7 toolsのschema/annotation、document provider/broker dispatch、structured/text結果、image content block、session connection leaseを担当する。board内容は保持しない
-- `mcp/broker.rs`: document存在確認、document単位直列化、window-local event、10秒timeout、completion照合を担当する
+- `mcp/service.rs`: board toolsとbrowser toolsのrouter、schema/annotation、structured/text結果、image content block、session connection leaseを担当する。board内容は保持しない
+- `mcp/broker.rs`: Phase 1のrenderer requestを扱う。document存在確認、document単位直列化、window-local event、10秒timeout、completion照合を担当する
+- `mcp/page_automation/{protocol,actor}.rs`: Phase 2のtyped page operationとcompact snapshot契約、page単位の直列actor、request ID照合、navigation epochを管理する。異なるpageのactorは並行動作する
+- `mcp/tools/browser.rs`: `documentId`と`pageNodeId`を検証し、WKWebViewのsemantic snapshot・DOM action・navigationをpage actorへ渡す
 - `mcp/lifecycle.rs`: default-off設定、loopback listener、Host/Origin制限、session managerと全session shutdownを担当する
 - `setup.rs`: `pub fn run()` 本体、`invoke_handler` 登録、menu event 配信
 - `app_exit.rs`: `AppExitCoordinatorState` とアプリ終了の集約フロー
@@ -109,7 +111,8 @@ src/
 - `commands/theme.rs`: テーマ設定、プラットフォーム情報
 - `commands/webview/labels.rs`: child webview label の解決と namespacing
 - `commands/webview/navigation.rs`: back/forward/reload とナビゲーション状態取得
-- `commands/webview/bounds.rs`: ページ Webview の生成・frame/opacity/batch 更新
+- `commands/webview/page_automation.rs`: tested bridge script、固定dispatch式、呼び出し元Webviewを使うcompletion commandを担当する。一般用途のpage evaluation endpointは持たない
+- `commands/webview/bounds.rs`: ページ Webview の生成・frame/opacity/batch 更新。生成時にsemantic bridgeを全frameへ注入し、full/SPA navigationをpage actorへ通知する
 - `commands/webview/screenshots.rs`: スクリーンショット capture/save/delete/restore（低レベル変換は `snapshot.rs`）
 
 IPC 契約は `tauri-ipc.md` を参照。
@@ -151,6 +154,8 @@ Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/se
 - MCP SDK は `rmcp 2.2.0` を固定し、Tauri process 内で Streamable HTTP server を動かす。
 - endpoint は `http://127.0.0.1:29978/mcp`。bind address、renderer event、timeout は `src-tauri/src/mcp/mod.rs` の定数を参照する。
 - Rust側はtransport・session・document routing・timeout・tool response shapingを担当し、board state自体はrenderer/Zustandを正本とする。
+- Board toolはrenderer brokerを通る。Browser toolは対象nodeをrendererで1回確認した後、page actorからchild WKWebViewへ直接dispatchする。
+- Browser actionはboardのUndo/Redo履歴とdocument dirty stateを変更しない。MCPからSave / Save Asも呼ばない。
 - `StreamableHttpService`のsession managerをrunning server stateに保持し、disable時はlistener cancellationに加えて全sessionを明示closeする。service cloneはsession単位のleaseを共有し、最終dropでmenu connection countを減算する。
 - MCP toolとrenderer間のJSON契約は`src-tauri/src/mcp/types.rs`に集約し、tool実装でad-hocなfield名を増やさない。
 

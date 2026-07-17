@@ -65,7 +65,6 @@ struct PageAutomationInner {
     actors: HashMap<PageKey, Arc<PageActor>>,
     pending: HashMap<String, PendingRequest>,
     next_request_id: u64,
-    stopped: bool,
 }
 
 pub struct PageAutomationState {
@@ -101,9 +100,6 @@ impl PageAutomationState {
             .inner
             .lock()
             .map_err(|_| "failed to acquire page automation state".to_string())?;
-        if inner.stopped {
-            return Err("page automation is stopped".to_string());
-        }
         inner
             .actors
             .entry(key)
@@ -157,37 +153,6 @@ impl PageAutomationState {
         for request in pending {
             let _ = request.sender.send(Err(webview_not_ready()));
         }
-        Ok(())
-    }
-
-    pub fn stop(&self) -> Result<(), String> {
-        let pending = {
-            let mut inner = self
-                .inner
-                .lock()
-                .map_err(|_| "failed to acquire page automation state".to_string())?;
-            inner.stopped = true;
-            for actor in inner.actors.values() {
-                actor.removed.store(true, Ordering::Release);
-            }
-            inner.actors.clear();
-            inner
-                .pending
-                .drain()
-                .map(|(_, request)| request)
-                .collect::<Vec<_>>()
-        };
-        for request in pending {
-            let _ = request.sender.send(Err(webview_not_ready()));
-        }
-        Ok(())
-    }
-
-    pub fn resume(&self) -> Result<(), String> {
-        self.inner
-            .lock()
-            .map_err(|_| "failed to acquire page automation state".to_string())?
-            .stopped = false;
         Ok(())
     }
 
@@ -455,9 +420,10 @@ impl PageAutomationState {
                     match self.validate_success(actor, &progress, &snapshot_request, result) {
                         Ok(success)
                             if navigation.borrow().epoch == snapshot_request.navigation_epoch
-                                && rejected_token.is_none_or(|token| {
-                                    token != success.snapshot.document_token
-                                }) =>
+                                && (!progress.requires_new_document_token
+                                    || rejected_token.is_none_or(|token| {
+                                        token != success.snapshot.document_token
+                                    })) =>
                         {
                             return Ok(PageAutomationSuccessResult {
                                 snapshot: success.snapshot,
@@ -487,9 +453,6 @@ impl PageAutomationState {
 
     fn actor(&self, key: &PageKey) -> Result<Arc<PageActor>, ToolError> {
         let inner = self.inner.lock().map_err(|_| webview_not_ready())?;
-        if inner.stopped {
-            return Err(webview_not_ready());
-        }
         inner.actors.get(key).cloned().ok_or_else(webview_not_ready)
     }
 
@@ -572,7 +535,7 @@ impl PageAutomationState {
             .actors
             .get(key)
             .is_some_and(|current| Arc::ptr_eq(current, actor));
-        if inner.stopped || actor.removed.load(Ordering::Acquire) || !actor_is_current {
+        if actor.removed.load(Ordering::Acquire) || !actor_is_current {
             return Err(webview_not_ready());
         }
         inner.pending.insert(
@@ -1399,6 +1362,60 @@ mod tests {
         assert_eq!(dispatches.load(Ordering::SeqCst), 2);
         assert_eq!(success.snapshot.navigation_epoch, 2);
         assert_eq!(success.snapshot.url, "https://example.test/new");
+    }
+
+    #[tokio::test]
+    async fn navigation_marker_accepts_the_same_token_after_spa_history_navigation() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        let page_key = key("page-a");
+        state.register_page(page_key.clone()).unwrap();
+        let initial_state = state.clone();
+        let marker = state
+            .prepare_navigation_with(
+                page_key.clone(),
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                move |request| {
+                    complete_in_thread(
+                        initial_state.clone(),
+                        result(
+                            &request,
+                            "0123456789abcdef0123456789abcdef",
+                            "https://example.test/current",
+                        ),
+                    );
+                    Ok(())
+                },
+            )
+            .await
+            .unwrap();
+
+        state
+            .note_spa_navigation(&page_key, "https://example.test/previous".into())
+            .unwrap();
+        let replacement_state = state.clone();
+        let snapshot = state
+            .snapshot_after_navigation_with(
+                marker,
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                move |request| {
+                    complete_in_thread(
+                        replacement_state.clone(),
+                        result(
+                            &request,
+                            "0123456789abcdef0123456789abcdef",
+                            "https://example.test/previous",
+                        ),
+                    );
+                    Ok(())
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(snapshot.navigation_epoch, 1);
+        assert_eq!(snapshot.url, "https://example.test/previous");
     }
 
     #[tokio::test]

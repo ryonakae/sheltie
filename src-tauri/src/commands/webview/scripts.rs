@@ -46,7 +46,10 @@ pub const SCROLL_DETECTION_SCRIPT: &str = r#"(function() {
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::webview::page_automation::PAGE_AUTOMATION_SCRIPT;
+    use crate::{
+        commands::webview::page_automation::PAGE_AUTOMATION_SCRIPT,
+        mcp::page_automation::protocol::PAGE_AUTOMATION_FRAME_RESPONSE_TIMEOUT_MS,
+    };
 
     #[test]
     fn page_automation_source_has_the_all_frame_bridge_contract() {
@@ -68,5 +71,8 @@ mod tests {
                 "contains forbidden source {forbidden}"
             );
         }
+        assert!(PAGE_AUTOMATION_SCRIPT.contains(&format!(
+            "const FRAME_RESPONSE_TIMEOUT_MS = {PAGE_AUTOMATION_FRAME_RESPONSE_TIMEOUT_MS};"
+        )));
     }
 }

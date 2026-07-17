@@ -7,6 +7,7 @@ pub const PAGE_AUTOMATION_REQUEST_TIMEOUT_MS: u64 = 15_000;
 pub const PAGE_AUTOMATION_SETTLE_DELAY_MS: u64 = 250;
 pub const PAGE_AUTOMATION_SETTLE_POLL_MS: u64 = 50;
 pub const PAGE_AUTOMATION_SETTLE_TIMEOUT_MS: u64 = 5_000;
+#[allow(dead_code)]
 pub const PAGE_AUTOMATION_FRAME_RESPONSE_TIMEOUT_MS: u64 = 750;
 pub const PAGE_AUTOMATION_MAX_SNAPSHOT_ELEMENTS: usize = 200;
 pub const PAGE_AUTOMATION_MAX_SNAPSHOT_CHARS: usize = 20_000;
@@ -192,6 +193,7 @@ pub struct CompactSnapshot {
 }
 
 impl CompactSnapshot {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn from_value(value: serde_json::Value) -> Result<Self, ToolError> {
         let snapshot: Self = serde_json::from_value(value)
             .map_err(|_| invalid_argument("The page returned an invalid semantic snapshot."))?;
@@ -334,11 +336,13 @@ impl PageAutomationBridgeResult {
         Ok(result)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn compact_snapshot(&self) -> Result<CompactSnapshot, ToolError> {
         self.success_result().map(|result| result.snapshot)
     }
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn unsupported_platform() -> ToolError {
     ToolError::new(
         "unsupported_platform",
@@ -377,6 +381,7 @@ pub fn bridge_rejected() -> ToolError {
     .with_retry("Treat the operation as failed and inspect the current page")
 }
 
+#[allow(dead_code)]
 pub fn stale_element(_snapshot_id: &str, _element_ref: &str) -> ToolError {
     ToolError::new(
         "stale_element",
@@ -385,6 +390,7 @@ pub fn stale_element(_snapshot_id: &str, _element_ref: &str) -> ToolError {
     .with_retry("Call browser_snapshot and use a returned elementRef")
 }
 
+#[allow(dead_code)]
 pub fn element_not_found(_element_ref: &str) -> ToolError {
     ToolError::new(
         "element_not_found",
@@ -393,6 +399,7 @@ pub fn element_not_found(_element_ref: &str) -> ToolError {
     .with_retry("Call browser_snapshot")
 }
 
+#[allow(dead_code)]
 pub fn element_not_interactable(_element_ref: &str) -> ToolError {
     ToolError::new(
         "element_not_interactable",
@@ -405,6 +412,7 @@ pub fn invalid_argument(message: impl Into<String>) -> ToolError {
     ToolError::new("invalid_argument", message)
 }
 
+#[allow(dead_code)]
 pub fn wait_timeout() -> ToolError {
     ToolError::new(
         "wait_timeout",

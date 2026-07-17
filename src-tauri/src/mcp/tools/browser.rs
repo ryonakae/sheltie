@@ -57,8 +57,10 @@ pub(crate) trait BrowserBackend: Send + Sync {
     ) -> BrowserFuture<'_, CompactSnapshot>;
 }
 
+#[cfg(test)]
 pub(crate) struct UnavailableBrowserBackend;
 
+#[cfg(test)]
 impl BrowserBackend for UnavailableBrowserBackend {
     fn verify_page(&self, _key: PageKey) -> BrowserFuture<'_, ()> {
         Box::pin(async { Err(webview_not_ready()) })

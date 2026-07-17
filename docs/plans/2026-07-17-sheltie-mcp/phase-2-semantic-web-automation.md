@@ -779,19 +779,19 @@ git commit -m "test(mcp): add semantic web automation fixtures"
 - Consumes: final Phase 2 implementation and manual results from Task 7.
 - Produces: one authoritative description per concern, without duplicating transient fixture data.
 
-- [ ] **Step 1: Update architecture documentation**
+- [x] **Step 1: Update architecture documentation**
 
 In `architecture.md`, add the MCP page-automation service under backend responsibilities. State that Phase 1 owns HTTP/renderer routing, Phase 2 owns one serial actor per page, and native Webview results are correlated by request ID. State that page actions do not alter board Undo/Redo or document save state.
 
-- [ ] **Step 2: Update IPC documentation**
+- [x] **Step 2: Update IPC documentation**
 
 In `tauri-ipc.md`, add `complete_page_automation_request(result)` under Webview commands. Document that it is called only by the injected top frame, receives the invoking `Webview`, checks request/document/page/window/Webview label equality, and does not expose a general page-evaluation endpoint. Add the new all-frame bridge behavior to the multiwebview command context section.
 
-- [ ] **Step 3: Update runtime and WKWebView documentation**
+- [x] **Step 3: Update runtime and WKWebView documentation**
 
 In `sheltie-runtime.md`, state that semantic automation does not force a native/screenshot transition, does not change selection or viewport, and requires a currently live child Webview. In `wkwebview-internals.md`, document `initialization_script_for_all_frames`, frame-to-top `postMessage` aggregation, the 750 ms frame response bound, and the prohibition on using the title sentinel channel for automation replies.
 
-- [ ] **Step 4: Run all required automated validation**
+- [x] **Step 4: Run all required automated validation**
 
 Run:
 
@@ -805,7 +805,7 @@ npm run test
 
 Expected: every command exits 0. `npm run test` includes jsdom bridge tests; Rust tests include protocol, actor, completion validation, tool handler, and existing application tests.
 
-- [ ] **Step 5: Commit documentation and final validation state**
+- [x] **Step 5: Commit documentation and final validation state**
 
 ```bash
 git add docs/agents/architecture.md docs/agents/tauri-ipc.md docs/agents/sheltie-runtime.md docs/agents/wkwebview-internals.md

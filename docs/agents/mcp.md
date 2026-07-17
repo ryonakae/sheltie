@@ -5,9 +5,11 @@ Sheltieがopen中のdocumentとWKWebViewを、local MCP clientから操作する
 実装の主入口:
 
 - `src-tauri/src/mcp/lifecycle.rs`: 設定永続化、listener、session cancellation
-- `src-tauri/src/mcp/service.rs`: 7 toolsのrouter、schema/annotation、response/image block整形、session connection lease
+- `src-tauri/src/mcp/service.rs`: board/browser tool router、schema/annotation、response/image block整形、session connection lease
 - `src-tauri/src/mcp/types.rs`: tool・renderer間のJSON契約
 - `src-tauri/src/mcp/broker.rs`: document rendererへのrequest routing
+- `src-tauri/src/mcp/page_automation/{protocol,actor}.rs`: typed page operation、compact snapshot、page単位の直列actor
+- `src-tauri/src/mcp/tools/browser.rs`: WebPage照合と13 browser tools
 
 ## Trust boundary
 
@@ -81,6 +83,34 @@ Theme項目とMCP項目はseparatorで分ける。setup時はplugin store初期�
 
 `nodeTypes`は`webpage` / `stickynote` / `text`。`nodeIds`で絞った`get_board`のedgeは、両endpointが返却node集合に含まれる場合だけ返す。optional ID listを省略すると全対象、明示した空配列はboard screenshotでは`validation_failed`になる。
 
+## Phase 2 browser tools
+
+各toolは`documentId`と`pageNodeId`を必須とし、対象nodeがlive WebPageであることを確認してからWKWebViewへdispatchする。初期releaseではmacOSだけを実行対象とし、非macOSは`unsupported_platform`を返す。
+
+```text
+browser_snapshot
+browser_navigate
+browser_go_back
+browser_go_forward
+browser_reload
+browser_click
+browser_hover
+browser_fill
+browser_fill_form
+browser_select_option
+browser_press_key
+browser_scroll
+browser_wait
+```
+
+- `browser_snapshot`はread-only。他のbrowser toolsはpageのDOM・historyへ作用するため`destructiveHint=true`
+- DOM actionは直前の`snapshotId`と`elementRef`を使う。新しいsnapshotを作るたびに以前のrefはstaleになる
+- 同じpageの操作は1 actorで直列化し、異なるpageは並行動作する
+- action成功時は250ms後に新しいcompact snapshotを返す。navigationは`PageLoadEvent::Finished`後のURL、epoch、新しい`documentToken`を照合する
+- snapshotはpassword/OTP、hidden element、cookie、local/session storageを含めない
+- descendant frameはtop frameが`postMessage`結果を集約する。応答しないframeはpage全体を失敗させず`unavailable`とする
+- browser toolsはboard selection、viewport、Undo/Redo、dirty stateを変更せず、保存も実行しない
+
 ## Result convention
 
 - JSON tool resultは同じobjectをMCP `structuredContent`と後方互換text contentの両方へ入れる。
@@ -99,6 +129,17 @@ Theme項目とMCP項目はseparatorで分ける。setup時はplugin store初期�
 | `validation_failed` | tool inputまたはbatch operationが不正。batchは未変更 |
 | `server_stopped` | disable/stopがpending requestを終了した |
 | `screenshot_failed` | cache assetの取得・decode・PNG生成に失敗した |
+| `unsupported_platform` | browser toolをmacOS以外で呼んだ |
+| `page_not_found` | `pageNodeId`が存在しないかWebPageではない |
+| `webview_not_ready` | 対象pageのlive child Webviewが無い、または破棄された |
+| `request_timeout` | page bridgeが応答しない、またはnavigation settlement中にURL・epoch・document tokenが期限内に確定しない |
+| `bridge_rejected` | completionのrequest/document/page/window/Webview identityがpending requestと一致しない、または通常snapshotのURL・epoch・document tokenがactor stateと一致しない |
+| `stale_element` | snapshot更新後の古いelement refを使った |
+| `element_not_found` | current snapshotにrefが無い |
+| `element_not_interactable` | hidden、disabled、inertなどで操作できない |
+| `invalid_argument` | browser toolのURL、値、件数、文字数などが不正 |
+| `wait_timeout` | browser waitのconditionが期限内に成立しない |
+| `snapshot_too_large` | page snapshotが要素数・UTF-16文字数制限を超えた |
 
 error resultも`{ code, message, retry? }`をstructured/textの両方へ返す。tool parameter、board/page内容、base64、local file pathをRust logへ出さない。
 
@@ -115,4 +156,4 @@ error resultも`{ code, message, retry? }`をstructured/textの両方へ返す�
 
 ## Client verification
 
-Claude Code、Codex、Cursor / VS Codeでは同じStreamable HTTP endpointを登録し、tool discoveryが上記7件だけであることを確認する。最低限、2 documentの列挙、valid/invalid batchと1回Undo、dirty/no-auto-save、explicit focus、cached multi-site画像、offscreen board画像、disable時disconnect、foreign Host / OriginのHTTP 403を確認する。
+Claude Code、Codex、Cursor / VS Codeでは同じStreamable HTTP endpointを登録し、tool discoveryがPhase 1の7件とPhase 2の13件だけであることを確認する。最低限、2 documentの列挙、valid/invalid batchと1回Undo、dirty/no-auto-save、explicit focus、cached multi-site画像、offscreen board画像、disable時disconnect、foreign Host / OriginのHTTP 403を確認する。

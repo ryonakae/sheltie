@@ -142,7 +142,7 @@ mod tests {
         let directory = TestDirectory::new();
         let path = directory.file("hello.txt", b"hello");
 
-        let files = read_upload_files(&strings(&[path.clone()])).unwrap();
+        let files = read_upload_files(&strings(std::slice::from_ref(&path))).unwrap();
 
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].name, "hello.txt");

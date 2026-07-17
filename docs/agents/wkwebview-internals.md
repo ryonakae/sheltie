@@ -31,7 +31,7 @@ Sheltie の WKWebView（macOS）に固有のワークアラウンドと注意事
 
 - coordinate clickはCSS viewport座標で`elementFromPoint`を解決し、`PointerEvent`と`MouseEvent`をsynthetic dispatchする。`isTrusted`を偽装せず、tool resultも`inputTrusted: false`を返す
 - optional highlightはpointer targetとは独立したfixed overlayで、薄い背景と色付き2px borderを約180msだけ描く
-- evaluateは共有bridge内の固定`evaluate` operationだけがindirect evalへ到達する。Promiseを10秒で打ち切り、結果をJSON round-tripして256KiB以内に制限する。同一event loopの同期非停止scriptはWebKit APIで強制中断できない
+- evaluateは共有bridge内の固定`evaluate` operationだけがindirect evalへ到達する。Promiseを10秒で打ち切り、結果をJSON round-tripして256KiB以内に制限する。background timerがthrottleされても同じcontractになるようactor側にも10秒deadlineを置き、`evaluate_timeout`へ型付けする。同一event loopの同期非停止scriptはWebKit APIで強制中断できない
 - uploadはRustで検証・base64化したfileだけを`File` / `DataTransfer`でfile inputへ割り当て、synthetic `input` / `change`をdispatchする。pathはpageへ渡さない
 - dialog shimはdocument startで`alert` / `confirm` / `prompt`を置換し、各frameの次のresponse policyと発生metadataを保持する。1 actionあたり20件、messageは512 UTF-16 code unitsへ制限し、超過時は末尾metadataを置換する。prompt default valueはmetadataへ含めない。frame間の同期one-shot共有は行わない
 - descendant-frame element captureのgeometryは各親frame bridgeが`postMessage` relayでembedding iframe座標を加算し、top viewport座標へ変換する。top frameはframe IDと割当tokenを照合してからpending requestを完了する

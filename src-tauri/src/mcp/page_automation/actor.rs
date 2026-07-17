@@ -14,11 +14,12 @@ use super::{
         FullPageComposer,
     },
     protocol::{
-        bridge_rejected, invalid_argument, page_changed_during_capture, request_timeout,
-        screenshot_target_not_visible, screenshot_too_large, webview_not_ready, CompactSnapshot,
-        CssRect, PageAutomationActionResult, PageAutomationBridgeRequest,
+        bridge_rejected, evaluate_timeout, invalid_argument, page_changed_during_capture,
+        request_timeout, screenshot_target_not_visible, screenshot_too_large, webview_not_ready,
+        CompactSnapshot, CssRect, PageAutomationActionResult, PageAutomationBridgeRequest,
         PageAutomationBridgeResult, PageAutomationOperation, PageAutomationSuccessResult, PageKey,
-        PageViewportGeometry, PAGE_AUTOMATION_MAX_FULL_PAGE_TILES,
+        PageViewportGeometry, PAGE_AUTOMATION_EVALUATE_TIMEOUT_MS,
+        PAGE_AUTOMATION_MAX_FULL_PAGE_TILES,
     },
 };
 use crate::mcp::types::ToolError;
@@ -215,6 +216,7 @@ impl PageAutomationState {
         Dispatch: FnMut(PageAutomationBridgeRequest) -> Result<(), ToolError>,
     {
         operation.validate()?;
+        let is_evaluate = matches!(operation, PageAutomationOperation::Evaluate { .. });
         let actor = self.actor(&key)?;
         let _execution = actor.execution.lock().await;
         self.ensure_actor_current(&key, &actor)?;
@@ -245,7 +247,13 @@ impl PageAutomationState {
             &request,
             &mut dispatch,
         )?;
-        let request_deadline = tokio::time::Instant::now() + self.timeout;
+        let request_timeout_duration = if is_evaluate {
+            self.timeout
+                .min(Duration::from_millis(PAGE_AUTOMATION_EVALUATE_TIMEOUT_MS))
+        } else {
+            self.timeout
+        };
+        let request_deadline = tokio::time::Instant::now() + request_timeout_duration;
         let outcome = self
             .await_result_or_navigation(
                 receiver,
@@ -253,7 +261,14 @@ impl PageAutomationState {
                 request.navigation_epoch,
                 request_deadline,
             )
-            .await?;
+            .await
+            .map_err(|error| {
+                if is_evaluate && error.code == "request_timeout" {
+                    evaluate_timeout()
+                } else {
+                    error
+                }
+            })?;
 
         if let RequestOutcome::Completed(result) = outcome {
             let success = result.success_result()?;
@@ -1591,6 +1606,33 @@ mod tests {
         assert_eq!(
             timeout_task.await.unwrap().unwrap_err().code,
             "request_timeout"
+        );
+        assert_eq!(state.pending_count(), 0);
+
+        let evaluate_state = state.clone();
+        let evaluate_task = tokio::spawn(async move {
+            evaluate_state
+                .execute_with(
+                    key("page-a"),
+                    "document-1".into(),
+                    "page-document-1-page-a".into(),
+                    PageAutomationOperation::Evaluate {
+                        script: "new Promise(() => {})".into(),
+                    },
+                    |_| Ok(()),
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(
+            PAGE_AUTOMATION_EVALUATE_TIMEOUT_MS - 1,
+        ))
+        .await;
+        assert!(!evaluate_task.is_finished());
+        tokio::time::advance(Duration::from_millis(1)).await;
+        assert_eq!(
+            evaluate_task.await.unwrap().unwrap_err().code,
+            "evaluate_timeout"
         );
         assert_eq!(state.pending_count(), 0);
 

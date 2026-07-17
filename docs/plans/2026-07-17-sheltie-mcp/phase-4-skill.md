@@ -176,13 +176,13 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 - Consumes: Phase 1–3 final tool schemas and Task 1 fixture contract.
 - Produces: a package-valid `sheltie-use` Skill and three executable test prompts with objective expectations.
 
-- [ ] **Step 1: Draft the frontmatter and bounded main workflow.**
+- [x] **Step 1: Draft the frontmatter and bounded main workflow.**
 
   Give `SKILL.md` the name `sheltie-use` and a deliberately broad, pushy description that triggers when a user asks to inspect, compare, research, navigate, interact with, or organize WebPage nodes in a Sheltie board through an AI/MCP client, including requests that only describe comparing several open websites or turning findings into board notes. Exclude implementation of Sheltie itself, general browser automation outside Sheltie, and standalone design-tool tasks from the description.
 
   Keep the body below 500 lines. State the reason for every ordering rule: explicit IDs prevent a user tab switch from retargeting writes; cached overview reveals cross-site relationships before narrow page work; current refs prevent stale actions; typed controls preserve semantic intent; atomic batches preserve one-step Undo; no save preserves user ownership; limited focus avoids stealing the viewport.
 
-- [ ] **Step 2: Put details in four conditional references.**
+- [x] **Step 2: Put details in four conditional references.**
 
   Write these exact responsibilities:
 
@@ -191,7 +191,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
   - `browser-actions.md`: snapshot first, use the latest returned refs, inspect the operation-returned snapshot, typed navigation/click/type/fill/select/key/scroll/wait before coordinates, screenshot-coordinate fallback only after no semantic target, `browser_evaluate` only after typed and coordinate paths cannot express the task, and how to report navigation/dialog/upload limitations from the actual schema.
   - `examples.md`: one comparison that creates linked notes in a single batch, one semantic form task, one canvas coordinate task, and one request that legitimately ends with `focus_nodes`. Each example uses the final Phase 1–3 argument names, not hypothetical ones.
 
-- [ ] **Step 3: Create three realistic `evals/evals.json` entries without assertions at first.**
+- [x] **Step 3: Create three realistic `evals/evals.json` entries without assertions at first.**
 
   Follow the Skill Creator schema and create these descriptive IDs and prompts, each using only Task 1 local fixtures:
 
@@ -201,7 +201,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Set `files` to the corresponding fixture paths and write concise `expected_output` text. Leave `expectations` empty in this first draft as required by the Skill Creator process.
 
-- [ ] **Step 4: Validate packaging shape and source formatting.**
+- [x] **Step 4: Validate packaging shape and source formatting.**
 
   From the Skill Creator directory, run the actual validator invoked by packaging, then verify the root packaging exclusion:
 
@@ -215,7 +215,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: the package command validates successfully, creates the ignored `.skill` archive, includes `sheltie-use/SKILL.md` and `sheltie-use/references/*`, and contains no `sheltie-use/evals/` entries.
 
-- [ ] **Step 5: Commit the installable source and initial eval prompts.**
+- [x] **Step 5: Commit the installable source and initial eval prompts.**
 
   ```bash
   git add skills/sheltie-use/SKILL.md skills/sheltie-use/references skills/sheltie-use/evals/evals.json

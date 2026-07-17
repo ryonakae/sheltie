@@ -1,0 +1,36 @@
+{
+  "skill_name": "sheltie-use",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Compare the two cached local product WebPages on the open Sheltie board. State that the third page has a missing screenshot, then add two finding notes and style the existing WebPage comparison edge as warning-colored, dashed, and 6 px in one atomic edit. Do not move my view. Saving remains my action, and there is no save MCP tool.",
+      "expected_output": "Reports comparison evidence and the third page's missing image, creates two source-attributed finding notes and updates the valid WebPage-to-WebPage edge in exactly one board batch, preserves the viewport, and states that the document remains unsaved.",
+      "files": [
+        "evals/fixtures/sites/compare-a/index.html",
+        "evals/fixtures/sites/compare-b/index.html",
+        "evals/fixtures/boards/comparison-board.sheltie"
+      ],
+      "expectations": []
+    },
+    {
+      "id": 1,
+      "prompt": "In the named local form WebPage, select the Pro plan and fill the labelled customer field with Ada. Treat the supplied snapshotId s0-stale and elementRef e999 as stale: obtain a current snapshot and use fresh refs after every state-changing action. Verify the confirmation in an action-returned snapshot, then add one board note without moving my view.",
+      "expected_output": "Uses a current semantic snapshot and fresh references for typed form actions, verifies the confirmation from a returned snapshot, and adds one note in an atomic board batch without focus or save.",
+      "files": [
+        "evals/fixtures/sites/semantic-form/index.html",
+        "evals/fixtures/boards/comparison-board.sheltie"
+      ],
+      "expectations": []
+    },
+    {
+      "id": 2,
+      "prompt": "Inspect the local canvas fixture in the open Sheltie WebPage. Establish semantic context first, then operate the visually rendered target by CSS viewport coordinates only if no semantic ref exists. Record the result atomically on the board, and show me the note you created.",
+      "expected_output": "Uses a semantic snapshot before a screenshot-coordinate fallback, records the result in one board batch, and focuses only the created note because the request explicitly asks to show it.",
+      "files": [
+        "evals/fixtures/sites/canvas-fallback/index.html",
+        "evals/fixtures/boards/comparison-board.sheltie"
+      ],
+      "expectations": []
+    }
+  ]
+}

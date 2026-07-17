@@ -76,7 +76,13 @@ For every completed Agent run, the orchestrator immediately calls `get_subagent_
 $RUN_DIR/agent-result.verbose.json
 ```
 
-Then derive the only trace used for grading:
+Pi also persists the complete subagent transcript as JSONL at the Agent task output path. When that path is the durable source, convert every record without filtering before normalization:
+
+```bash
+jq -s '.' "$AGENT_OUTPUT_PATH" > "$RUN_DIR/agent-result.verbose.json"
+```
+
+The normalizer supports direct MCP tool records and Pi MCP gateway call/result pairs. Then derive the only trace used for grading:
 
 ```bash
 node skills/sheltie-use/evals/fixtures/derive-redacted-mcp-trace.mjs \

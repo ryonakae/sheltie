@@ -10,7 +10,14 @@
         "evals/fixtures/sites/compare-b/index.html",
         "evals/fixtures/boards/comparison-board.sheltie"
       ],
-      "expectations": []
+      "expectations": [
+        "The trace starts with list_documents followed by get_editor_state for the assigned document.",
+        "The workflow calls both get_webpage_screenshots and get_board_screenshot and observes exactly two cached screenshots and one missing screenshot.",
+        "Exactly one successful batch_edit_board creates two source-attributed finding notes and styles a WebPage comparison edge as warning, dashed, and 6 px.",
+        "Every document or page operation uses explicit documentId and pageNodeId values.",
+        "The workflow never calls focus_nodes, save, or export.",
+        "The final response states the evidence limitation and that the dirty document remains for the user to save."
+      ]
     },
     {
       "id": 1,
@@ -20,7 +27,14 @@
         "evals/fixtures/sites/semantic-form/index.html",
         "evals/fixtures/boards/comparison-board.sheltie"
       ],
-      "expectations": []
+      "expectations": [
+        "The trace obtains a current browser_snapshot before interaction and never uses the supplied stale snapshot or element reference.",
+        "The workflow uses typed browser_select_option, browser_fill, and browser_click actions with references from the newest snapshot after every state change.",
+        "An action-returned snapshot contains the semantic confirmation Pro plan confirmed for Ada.",
+        "Exactly one successful batch_edit_board creates one finding note containing the confirmation.",
+        "The workflow never calls browser_click_coordinates, browser_evaluate, focus_nodes, save, or export.",
+        "Every document or page operation uses explicit documentId and pageNodeId values."
+      ]
     },
     {
       "id": 2,
@@ -30,7 +44,14 @@
         "evals/fixtures/sites/canvas-fallback/index.html",
         "evals/fixtures/boards/comparison-board.sheltie"
       ],
-      "expectations": []
+      "expectations": [
+        "A semantic browser_snapshot occurs before browser_screenshot and confirms that no semantic target exists for the painted control.",
+        "browser_click_coordinates uses CSS viewport coordinates from screenshot evidence and its returned snapshot contains Canvas target activated.",
+        "Exactly one successful batch_edit_board creates one finding note containing Canvas target activated.",
+        "Exactly one focus_nodes call names only the note created by that batch because the prompt explicitly asks to show it.",
+        "The workflow never calls browser_evaluate, save, or export.",
+        "Every document or page operation uses explicit documentId and pageNodeId values."
+      ]
     }
   ]
 }

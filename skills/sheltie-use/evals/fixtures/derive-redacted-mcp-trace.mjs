@@ -62,6 +62,7 @@ function normalizedToolName(value) {
       value.endsWith(`__${toolName}`) ||
       value.endsWith(`.${toolName}`) ||
       value.endsWith(`/${toolName}`) ||
+      value.endsWith(`_${toolName}`) ||
       value.includes(`__${toolName}__`),
   );
 }
@@ -170,12 +171,48 @@ function collectCalls(value, calls, visited = new Set()) {
   Object.values(parsed).forEach((child) => collectCalls(child, calls, visited));
 }
 
+function gatewayCalls(records) {
+  if (!Array.isArray(records)) return [];
+  const pending = new Map();
+  const calls = [];
+  for (const record of records) {
+    const message = directRecord(record?.message);
+    if (message.role === 'assistant' && Array.isArray(message.content)) {
+      for (const content of message.content) {
+        if (!isRecord(content) || (content.type !== 'toolCall' && content.type !== 'tool_call')) {
+          continue;
+        }
+        if (content.name !== 'mcp' || typeof content.id !== 'string') continue;
+        const gatewayArguments = directRecord(content.arguments);
+        const toolName = normalizedToolName(gatewayArguments.tool);
+        if (!toolName) continue;
+        const toolArguments = directRecord(gatewayArguments.args);
+        const call = {
+          order: calls.length + 1,
+          toolName,
+          args: extractArgs(toolArguments),
+          response: { status: 'error' },
+        };
+        calls.push(call);
+        pending.set(content.id, call);
+      }
+    }
+    if (message.role !== 'toolResult' || typeof message.toolCallId !== 'string') continue;
+    const call = pending.get(message.toolCallId);
+    if (!call) continue;
+    const details = directRecord(message.details);
+    call.response = extractResponse(details.mcpResult ?? {});
+    if (message.isError === true) call.response.status = 'error';
+  }
+  return calls;
+}
+
 async function main() {
   const [inputPath, outputPath] = process.argv.slice(2);
   if (!inputPath || !outputPath) usage();
   const verboseResult = JSON.parse(await readFile(inputPath, 'utf8'));
-  const calls = [];
-  collectCalls(verboseResult, calls);
+  const calls = gatewayCalls(verboseResult);
+  if (calls.length === 0) collectCalls(verboseResult, calls);
   if (calls.length === 0) {
     throw new Error('Verbose Agent result contains no recognizable MCP tool-call data.');
   }

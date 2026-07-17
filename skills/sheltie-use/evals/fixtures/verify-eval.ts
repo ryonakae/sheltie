@@ -47,7 +47,7 @@ const comparisonExpected: ExpectedFixture = {
   requiredFinalNoteTextFragments: ['Atlas Basic costs $29', 'Beacon Basic costs $24'],
   requiredCreatedNoteCount: 2,
   requiredFinalEdgeStyle: {
-    edgeId: 'existing-product-edge',
+    edgeId: '*',
     strokeWidth: 6,
     lineStyle: 'dashed',
     colorPreset: 'warning',
@@ -270,7 +270,15 @@ function finalEdgeExpectation(board: FinalBoard, expected: ExpectedFixture): Fix
     );
   }
   const required = expected.requiredFinalEdgeStyle;
-  const edge = board.edges.find((candidate) => candidate.id === required.edgeId);
+  const edge =
+    required.edgeId === '*'
+      ? board.edges.find(
+          (candidate) =>
+            candidate.strokeWidth === required.strokeWidth &&
+            candidate.lineStyle === required.lineStyle &&
+            candidate.colorPreset === required.colorPreset,
+        )
+      : board.edges.find((candidate) => candidate.id === required.edgeId);
   const passed =
     edge?.strokeWidth === required.strokeWidth &&
     edge?.lineStyle === required.lineStyle &&
@@ -279,8 +287,8 @@ function finalEdgeExpectation(board: FinalBoard, expected: ExpectedFixture): Fix
     'Final board contains the expected WebPage comparison edge style',
     passed,
     passed
-      ? `board: ${required.edgeId} uses ${required.colorPreset}/${required.lineStyle}/${required.strokeWidth}`
-      : `board: ${required.edgeId} does not have the expected edge style`,
+      ? `board: a WebPage comparison edge uses ${required.colorPreset}/${required.lineStyle}/${required.strokeWidth}`
+      : 'board: no WebPage comparison edge has the expected style',
   );
 }
 

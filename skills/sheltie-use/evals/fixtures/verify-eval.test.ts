@@ -192,6 +192,71 @@ describe('redacted trace derivation', () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it('pairs Pi MCP gateway calls with their separate tool results', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'sheltie-gateway-trace-'));
+    try {
+      const inputPath = path.join(directory, 'verbose.json');
+      const outputPath = path.join(directory, 'trace.json');
+      writeFileSync(
+        inputPath,
+        JSON.stringify([
+          {
+            message: {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'toolCall',
+                  id: 'call-1',
+                  name: 'mcp',
+                  arguments: {
+                    tool: 'sheltie_browser_snapshot',
+                    args: JSON.stringify({ documentId, pageNodeId: pageC }),
+                  },
+                },
+              ],
+            },
+          },
+          {
+            message: {
+              role: 'toolResult',
+              toolCallId: 'call-1',
+              toolName: 'mcp',
+              details: {
+                mode: 'call',
+                mcpResult: {
+                  structuredContent: {
+                    documentId,
+                    pageNodeId: pageC,
+                    snapshot: { snapshotId: 'snapshot-1', compactText: 'safe fixture state' },
+                  },
+                },
+              },
+            },
+          },
+        ]),
+      );
+
+      execFileSync('node', [
+        new URL('./derive-redacted-mcp-trace.mjs', import.meta.url).pathname,
+        inputPath,
+        outputPath,
+      ]);
+      expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual({
+        version: 1,
+        calls: [
+          {
+            order: 1,
+            toolName: 'browser_snapshot',
+            args: { documentId, pageNodeId: pageC },
+            response: { status: 'success', snapshotId: 'snapshot-1' },
+          },
+        ],
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('deterministic canvas fixture', () => {

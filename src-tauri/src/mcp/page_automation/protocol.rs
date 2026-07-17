@@ -96,6 +96,20 @@ impl PageAutomationOperation {
         Ok(operation)
     }
 
+    pub fn action_kind(&self) -> Option<PageAutomationActionKind> {
+        match self {
+            Self::Snapshot => None,
+            Self::Click { .. } => Some(PageAutomationActionKind::Click),
+            Self::Hover { .. } => Some(PageAutomationActionKind::Hover),
+            Self::Fill { .. } => Some(PageAutomationActionKind::Fill),
+            Self::FillForm { .. } => Some(PageAutomationActionKind::FillForm),
+            Self::SelectOption { .. } => Some(PageAutomationActionKind::SelectOption),
+            Self::PressKey { .. } => Some(PageAutomationActionKind::PressKey),
+            Self::Scroll { .. } => Some(PageAutomationActionKind::Scroll),
+            Self::Wait { .. } => Some(PageAutomationActionKind::Wait),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), ToolError> {
         match self {
             Self::Fill { text, .. } => validate_fill_text(text),

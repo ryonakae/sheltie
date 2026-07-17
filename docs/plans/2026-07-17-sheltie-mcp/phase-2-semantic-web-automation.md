@@ -391,7 +391,7 @@ git commit -m "feat(mcp): add semantic WKWebView bridge"
 - Consumes: `PageKey`, bridge types/constants, Phase 1 `ToolError`, and a direct-Webview dispatch closure abstracted for unit tests.
 - Produces: `PageAutomationState::enqueue`, `PageAutomationState::prepare_navigation`, `PageAutomationState::snapshot_after_navigation`, `PageAutomationState::complete`, `PageAutomationState::note_committed_navigation`, `PageAutomationState::note_spa_navigation`, and `PageAutomationState::remove_page`.
 
-- [ ] **Step 1: Write failing actor tests**
+- [x] **Step 1: Write failing actor tests**
 
 Write Rust unit tests using a fake dispatcher and `tokio::time::pause/advance` for these cases:
 
@@ -404,7 +404,7 @@ Write Rust unit tests using a fake dispatcher and `tokio::time::pause/advance` f
 7. An SPA notification increments the epoch but permits the same `documentToken`; the accepted snapshot must match the reported SPA URL and new epoch.
 8. `prepare_navigation(page)` returns the current `{ epoch, documentToken }`, first obtaining a read-only snapshot if the actor has no accepted token. `snapshot_after_navigation(page, marker)` waits until `note_committed_navigation` reports an epoch greater than the marker, then rejects the marker token and retries only snapshot dispatch until the new document token, committed URL, and epoch match. Timeout returns `request_timeout` without replaying navigation.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -414,7 +414,7 @@ Run:
 
 Expected: compilation fails because `PageAutomationState` and its actor APIs do not exist.
 
-- [ ] **Step 3: Implement the actor state machine**
+- [x] **Step 3: Implement the actor state machine**
 
 Enable the required Tokio features without changing the minimum Rust version:
 
@@ -443,7 +443,7 @@ Keep per-`PageKey` actor state containing the monotonic navigation epoch, last a
 
 `remove_page` must cancel the current pending request and drain queued requests as `webview_not_ready`; call it when a page Webview is destroyed. Keep this and every future coordinate-action extension in `src-tauri/src/mcp/page_automation/`, but do not define coordinate variants now.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -453,7 +453,7 @@ Run:
 
 Expected: FIFO, cross-page independence, mismatch rejection, timeout cleanup, and navigation-settle tests pass.
 
-- [ ] **Step 5: Commit actor isolation**
+- [x] **Step 5: Commit actor isolation**
 
 ```bash
 git add src-tauri/Cargo.toml src-tauri/src/mcp/page_automation/mod.rs src-tauri/src/mcp/page_automation/actor.rs

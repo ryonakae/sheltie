@@ -1,4 +1,6 @@
 import type { WebpageScreenshotCacheDescriptor } from '@/hooks/sheltie/useScreenshotCaptureQueue';
+import type { PageScreenshotSource } from '@/lib/mcp/types';
+import type { ScreenshotCacheEntry } from '@/types';
 
 const MCP_SCREENSHOT_LONGEST_SIDE = 1024;
 
@@ -41,7 +43,7 @@ export function resolveScreenshotOutputSize(
   };
 }
 
-async function loadImage(assetUrl: string): Promise<HTMLImageElement> {
+async function loadScreenshotBlob(assetUrl: string): Promise<Blob> {
   let response: Response;
   try {
     response = await fetch(assetUrl);
@@ -49,8 +51,11 @@ async function loadImage(assetUrl: string): Promise<HTMLImageElement> {
     screenshotFailed('Failed to read cached screenshot');
   }
   if (!response.ok) screenshotFailed('Failed to read cached screenshot');
+  return response.blob();
+}
 
-  const objectUrl = URL.createObjectURL(await response.blob());
+async function decodeScreenshotBlob(blob: Blob): Promise<HTMLImageElement> {
+  const objectUrl = URL.createObjectURL(blob);
   const image = new Image();
   image.src = objectUrl;
   try {
@@ -61,6 +66,58 @@ async function loadImage(assetUrl: string): Promise<HTMLImageElement> {
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+async function loadImage(assetUrl: string): Promise<HTMLImageElement> {
+  return decodeScreenshotBlob(await loadScreenshotBlob(assetUrl));
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+export function resolvePageScreenshotSourceDescriptor(
+  pageNodeId: string,
+  pageNodeIds: readonly string[],
+  displayModes: Record<string, PageScreenshotSource['displayMode']>,
+  screenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>,
+): { displayMode: PageScreenshotSource['displayMode']; entry?: ScreenshotCacheEntry } {
+  if (!pageNodeIds.includes(pageNodeId)) {
+    throw {
+      code: 'page_not_found',
+      message: 'The requested page node does not exist.',
+      retry: 'Call get_board and use a returned pageNodeId',
+    };
+  }
+  return {
+    displayMode: displayModes[pageNodeId] ?? 'hidden',
+    ...(screenshotCacheByNodeId[pageNodeId] ? { entry: screenshotCacheByNodeId[pageNodeId] } : {}),
+  };
+}
+
+export async function encodePageScreenshotSource(
+  displayMode: PageScreenshotSource['displayMode'],
+  entry?: ScreenshotCacheEntry,
+): Promise<PageScreenshotSource> {
+  if (!entry) return { displayMode };
+
+  const blob = await loadScreenshotBlob(entry.assetUrl);
+  const [image, buffer] = await Promise.all([decodeScreenshotBlob(blob), blob.arrayBuffer()]);
+  return {
+    displayMode,
+    cached: {
+      base64: bytesToBase64(new Uint8Array(buffer)),
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      capturedAt: entry.capturedAt,
+      capturedUrl: entry.capturedUrl,
+    },
+  };
 }
 
 async function encodeCachedScreenshot(

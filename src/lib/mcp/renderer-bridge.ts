@@ -2,6 +2,7 @@ import {
   captureBoardScreenshot,
   focusNodes,
   getEditorState,
+  getPageScreenshotSource,
   getWebpageScreenshots,
 } from '@/lib/mcp/editor-adapter';
 import type {
@@ -64,6 +65,23 @@ function parseFocusNodeIds(params: unknown): string[] {
   }
 
   return params.nodeIds;
+}
+
+function parsePageNodeId(params: unknown, command: string): string {
+  if (
+    typeof params !== 'object' ||
+    params === null ||
+    Array.isArray(params) ||
+    !('pageNodeId' in params) ||
+    typeof params.pageNodeId !== 'string' ||
+    params.pageNodeId.length === 0
+  ) {
+    throw {
+      code: 'validation_failed',
+      message: `${command} requires pageNodeId to be a non-empty string`,
+    };
+  }
+  return params.pageNodeId;
 }
 
 function parsePageNodeIds(params: unknown): string[] | undefined {
@@ -228,6 +246,8 @@ export function createBuiltInRendererCommandHandlers(): RendererCommandHandlers 
     batchEditBoard: (params) => batchEditBoard(params),
     focusNodes: (params) => focusNodes(parseFocusNodeIds(params)),
     getWebpageScreenshots: (params) => getWebpageScreenshots(parsePageNodeIds(params)),
+    getPageScreenshotSource: (params) =>
+      getPageScreenshotSource(parsePageNodeId(params, 'getPageScreenshotSource')),
     getBoardScreenshot: (params) => captureBoardScreenshot(parseBoardNodeIds(params)),
   };
 }

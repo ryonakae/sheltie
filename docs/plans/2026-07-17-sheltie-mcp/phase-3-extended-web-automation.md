@@ -474,11 +474,11 @@ git commit -m "feat(mcp): add visual page automation bridge"
   };
   ```
 
-- [ ] **Step 1: Write failing TypeScript adapter tests**
+- [x] **Step 1: Write failing TypeScript adapter tests**
 
 In `src/lib/mcp/editor-adapter.test.ts`, add pure registration tests that verify a registered source accessor returns the exact current display mode/cache descriptor, does not call focus/viewport/display setters, and returns `renderer_unavailable` after cleanup. Add a test that a cache descriptor without a native mode remains `screenshot`/`hidden`; do not normalize it to native.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run:
 
@@ -488,13 +488,13 @@ npm run test -- src/lib/mcp/editor-adapter.test.ts
 
 Expected: TypeScript fails because `getPageScreenshotSource` is not part of the adapter contract.
 
-- [ ] **Step 3: Implement read-only broker routing**
+- [x] **Step 3: Implement read-only broker routing**
 
 Add the typed `RendererCommand::GetPageScreenshotSource` and matching TypeScript command in Phase 1’s existing bridge types. Have the existing `McpRequestBrokerState` dispatch it to the document renderer exactly as any other request; do not add a Tauri command or direct Rust-to-Webview call.
 
 Register the adapter in `Sheltie.tsx` using existing display-engine state and cached screenshot runtime metadata. It returns only current mode and decoded/transient cache bytes. It must not call `computeDisplayModes`, `show`, `hide`, `updateBounds`, `setViewport`, or any screenshot queue refresh function.
 
-- [ ] **Step 4: Confirm GREEN**
+- [x] **Step 4: Confirm GREEN**
 
 Run:
 
@@ -506,10 +506,10 @@ npm run typecheck
 
 Expected: adapter, type, and broker tests pass; the lookup is read-only.
 
-- [ ] **Step 5: Commit source lookup**
+- [x] **Step 5: Commit source lookup**
 
 ```bash
-git add src/lib/mcp/types.ts src/lib/mcp/editor-adapter.ts src/lib/mcp/editor-adapter.test.ts src/lib/mcp/renderer-bridge.ts src/components/Sheltie/Sheltie.tsx src-tauri/src/mcp/types.rs src-tauri/src/mcp/broker.rs
+git add src/lib/mcp/types.ts src/lib/mcp/editor-adapter.ts src/lib/mcp/editor-adapter.test.ts src/lib/mcp/renderer-bridge.ts src/lib/mcp/renderer-bridge.test.ts src/lib/mcp/webpage-screenshots.ts src/lib/mcp/webpage-screenshots.test.ts src/components/Sheltie/Sheltie.tsx src-tauri/src/mcp/types.rs src-tauri/src/mcp/broker.rs
 git commit -m "feat(mcp): expose page screenshot sources"
 ```
 

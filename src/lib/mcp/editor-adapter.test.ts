@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   focusNodes,
   getEditorState,
+  getPageScreenshotSource,
   registerMcpEditorAdapter,
   requireMcpEditorAdapter,
   type McpEditorAdapter,
@@ -29,6 +30,7 @@ function createAdapter(name: string): McpEditorAdapter {
     }),
     focusNodes: vi.fn(async (nodeIds: string[]) => ({ focusedNodeIds: nodeIds })),
     getWebpageScreenshots: async () => [],
+    getPageScreenshotSource: async () => ({ displayMode: 'hidden' }),
     captureBoardScreenshot: async () => emptyBoardScreenshot(),
   };
 }
@@ -76,6 +78,7 @@ describe('MCP editor adapter', () => {
       getEditorState: () => source,
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
       getWebpageScreenshots: async () => [],
+      getPageScreenshotSource: async () => ({ displayMode: 'hidden' }),
       captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
@@ -88,6 +91,43 @@ describe('MCP editor adapter', () => {
       selectedEdgeIds: ['edge-1'],
       viewport: { zoom: 2, panX: 10, panY: 20 },
     });
+  });
+
+  it('returns the exact read-only screenshot source without changing editor state', async () => {
+    const source = {
+      displayMode: 'screenshot' as const,
+      cached: {
+        base64: 'cG5n',
+        width: 640,
+        height: 480,
+        capturedAt: '2026-07-17T00:00:00.000Z',
+        capturedUrl: 'https://example.com/',
+      },
+    };
+    const adapter = createAdapter('source');
+    const getSource = vi.fn(async () => source);
+    adapter.getPageScreenshotSource = getSource;
+    cleanup = registerMcpEditorAdapter(adapter);
+
+    await expect(getPageScreenshotSource('page-1')).resolves.toEqual(source);
+    expect(getSource).toHaveBeenCalledWith('page-1');
+    expect(adapter.focusNodes).not.toHaveBeenCalled();
+  });
+
+  it('preserves hidden mode without a cache and becomes unavailable after cleanup', async () => {
+    const adapter = createAdapter('hidden');
+    adapter.getPageScreenshotSource = vi.fn(async () => ({ displayMode: 'hidden' as const }));
+    cleanup = registerMcpEditorAdapter(adapter);
+
+    await expect(getPageScreenshotSource('page-hidden')).resolves.toEqual({
+      displayMode: 'hidden',
+    });
+    cleanup();
+    cleanup = undefined;
+
+    await expect(getPageScreenshotSource('page-hidden')).rejects.toEqual(
+      expect.objectContaining({ code: 'renderer_unavailable' }),
+    );
   });
 
   it('forwards focus IDs and returns the adapter result', async () => {

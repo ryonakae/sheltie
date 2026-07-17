@@ -203,6 +203,7 @@ describe('built-in editor commands', () => {
       }),
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
       getWebpageScreenshots: async () => [],
+      getPageScreenshotSource: async () => ({ displayMode: 'hidden' }),
       captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
@@ -231,6 +232,7 @@ describe('built-in editor commands', () => {
       }),
       focusNodes,
       getWebpageScreenshots: async () => [],
+      getPageScreenshotSource: async () => ({ displayMode: 'hidden' }),
       captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
@@ -281,6 +283,7 @@ describe('built-in editor commands', () => {
       }),
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
       getWebpageScreenshots,
+      getPageScreenshotSource: async () => ({ displayMode: 'hidden' }),
       captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
@@ -300,6 +303,45 @@ describe('built-in editor commands', () => {
         { pageNodeId: 'page-2', freshness: 'missing' },
         { pageNodeId: 'page-1', freshness: 'missing' },
       ],
+    });
+  });
+
+  it('validates and forwards a read-only page screenshot source request', async () => {
+    const getPageScreenshotSource = vi.fn(async () => ({
+      displayMode: 'screenshot' as const,
+      cached: {
+        base64: 'cG5n',
+        width: 320,
+        height: 200,
+        capturedAt: '2026-07-17T00:00:00.000Z',
+        capturedUrl: null,
+      },
+    }));
+    cleanupAdapter = registerMcpEditorAdapter({
+      getEditorState: () => ({
+        selectedNodeIds: [],
+        selectedEdgeIds: [],
+        viewport: { zoom: 1, panX: 0, panY: 0 },
+      }),
+      focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
+      getWebpageScreenshots: async () => [],
+      getPageScreenshotSource,
+      captureBoardScreenshot: async () => emptyBoardScreenshot(),
+    });
+
+    const response = await createRendererResponse(
+      {
+        requestId: 'page-source',
+        command: 'getPageScreenshotSource',
+        params: { pageNodeId: 'page-1' },
+      },
+      createBuiltInRendererCommandHandlers(),
+    );
+
+    expect(getPageScreenshotSource).toHaveBeenCalledWith('page-1');
+    expect(response.result).toMatchObject({
+      ok: true,
+      data: { displayMode: 'screenshot', cached: { width: 320, height: 200 } },
     });
   });
 
@@ -345,6 +387,7 @@ describe('built-in editor commands', () => {
       }),
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
       getWebpageScreenshots: async () => [],
+      getPageScreenshotSource: async () => ({ displayMode: 'hidden' }),
       captureBoardScreenshot,
     });
 

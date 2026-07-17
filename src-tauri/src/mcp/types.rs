@@ -34,6 +34,7 @@ pub enum RendererCommand {
     BatchEditBoard,
     FocusNodes,
     GetWebpageScreenshots,
+    GetPageScreenshotSource,
     GetBoardScreenshot,
 }
 
@@ -282,6 +283,10 @@ mod tests {
 
     #[test]
     fn renderer_request_uses_camel_case_contract() {
+        assert_eq!(
+            serde_json::to_value(RendererCommand::GetPageScreenshotSource).unwrap(),
+            serde_json::json!("getPageScreenshotSource")
+        );
         let request = RendererRequest {
             request_id: "request-1".into(),
             command: RendererCommand::GetBoard,

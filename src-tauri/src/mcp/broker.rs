@@ -278,8 +278,8 @@ mod tests {
             task_broker
                 .request_with(
                     "document-1",
-                    RendererCommand::GetBoard,
-                    serde_json::json!({}),
+                    RendererCommand::GetPageScreenshotSource,
+                    serde_json::json!({"pageNodeId": "page-1"}),
                     || true,
                     move |request| {
                         *task_emitted.lock().unwrap() = Some(request);
@@ -291,19 +291,25 @@ mod tests {
 
         tokio::task::yield_now().await;
         let request = emitted.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            serde_json::to_value(request.command).unwrap(),
+            serde_json::json!("getPageScreenshotSource")
+        );
         broker
             .complete(
                 "document-1",
                 RendererResponse {
                     request_id: request.request_id,
-                    result: RendererResult::success(serde_json::json!({"nodes": []})),
+                    result: RendererResult::success(serde_json::json!({
+                        "displayMode": "hidden"
+                    })),
                 },
             )
             .unwrap();
 
         assert_eq!(
             task.await.unwrap().unwrap(),
-            serde_json::json!({"nodes": []})
+            serde_json::json!({"displayMode": "hidden"})
         );
     }
 

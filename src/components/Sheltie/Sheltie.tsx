@@ -38,7 +38,11 @@ import { useSheltieTextEditing } from '@/hooks/sheltie/useSheltieTextEditing';
 import { useSheltieViewportController } from '@/hooks/sheltie/useSheltieViewportController';
 import { captureBoardScreenshot } from '@/lib/mcp/board-screenshot';
 import { registerMcpEditorAdapter } from '@/lib/mcp/editor-adapter';
-import { encodeWebpageScreenshots } from '@/lib/mcp/webpage-screenshots';
+import {
+  encodePageScreenshotSource,
+  encodeWebpageScreenshots,
+  resolvePageScreenshotSourceDescriptor,
+} from '@/lib/mcp/webpage-screenshots';
 import { resolveActiveSelection, retainLiveSelectedIds } from '@/lib/sheltie-selection';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
@@ -312,6 +316,15 @@ export function Sheltie({
         focusNodes: async (nodeIds) => focusNodes(nodeIds),
         getWebpageScreenshots: async (pageNodeIds) =>
           encodeWebpageScreenshots(await getWebpageScreenshotCache(pageNodeIds)),
+        getPageScreenshotSource: async (pageNodeId) => {
+          const source = resolvePageScreenshotSourceDescriptor(
+            pageNodeId,
+            webPageNodes.map((page) => page.id),
+            displayModes,
+            projectWebviewRuntime.screenshotCacheByNodeId,
+          );
+          return encodePageScreenshotSource(source.displayMode, source.entry);
+        },
         captureBoardScreenshot: async (nodeIds) =>
           captureBoardScreenshot({
             viewportElement:
@@ -324,6 +337,7 @@ export function Sheltie({
           }),
       }),
     [
+      displayModes,
       edges,
       focusNodes,
       getSelectedEdgeIds,
@@ -332,7 +346,9 @@ export function Sheltie({
       getWebpageScreenshotCache,
       isDark,
       nodes,
+      projectWebviewRuntime.screenshotCacheByNodeId,
       screenshotUrls,
+      webPageNodes,
     ],
   );
 

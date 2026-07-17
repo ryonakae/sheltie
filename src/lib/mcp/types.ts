@@ -12,6 +12,7 @@ export type RendererCommand =
   | 'batchEditBoard'
   | 'focusNodes'
   | 'getWebpageScreenshots'
+  | 'getPageScreenshotSource'
   | 'getBoardScreenshot';
 
 export type RendererRequest = {
@@ -25,6 +26,17 @@ export type RendererResult = { ok: true; data: unknown } | { ok: false; error: M
 export type RendererResponse = {
   requestId: string;
   result: RendererResult;
+};
+
+export type PageScreenshotSource = {
+  displayMode: 'native' | 'screenshot' | 'hidden';
+  cached?: {
+    base64: string;
+    width: number;
+    height: number;
+    capturedAt: string;
+    capturedUrl: string | null;
+  };
 };
 
 export type RendererCommandHandler = (params: unknown) => unknown | Promise<unknown>;

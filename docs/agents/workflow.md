@@ -8,6 +8,12 @@
 4. 検証コマンドを実行する。
 5. 変更内容と確認結果を簡潔に共有する。
 
+## Plan 運用
+
+- Active plan は `docs/plans/` 配下に置く。完了済み plan は `docs/plans/archived/` 配下に移す。
+- 大きな plan は親 plan と子 plan に分ける。親は目的、方針、進捗、子 plan link に絞る。
+- 子 plan ディレクトリ名は親 plan ファイル名から `.md` を除いた名前と一致させる。
+
 ## 検証コマンド
 
 ```bash

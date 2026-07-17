@@ -95,6 +95,8 @@ src-tauri/target/
 # Claude Code
 .claude/settings.local.json
 
+/skills/sheltie-use-workspace/
+
 # Electron-Forge (削除予定)
 out/
 

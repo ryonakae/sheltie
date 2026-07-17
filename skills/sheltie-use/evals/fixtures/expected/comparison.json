@@ -1,0 +1,21 @@
+{
+  "id": "comparison",
+  "requiredFinalNoteTextFragments": ["Atlas Basic costs $29", "Beacon Basic costs $24"],
+  "requiredCreatedNoteCount": 2,
+  "requiredFinalEdgeStyle": {
+    "edgeId": "existing-product-edge",
+    "strokeWidth": 6,
+    "lineStyle": "dashed",
+    "colorPreset": "warning"
+  },
+  "requiredToolCategories": [
+    "list_documents",
+    "get_editor_state",
+    "get_webpage_screenshots",
+    "get_board_screenshot",
+    "batch_edit_board"
+  ],
+  "forbiddenToolCategories": ["save"],
+  "requiredBrowserEvidence": ["2 cached and 1 missing screenshot records"],
+  "focusNodes": "forbidden"
+}

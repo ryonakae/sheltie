@@ -94,6 +94,16 @@ export default tseslint.config(
     },
   },
 
+  // 評価フィクスチャの Node.js スクリプト
+  {
+    files: ['skills/sheltie-use/evals/fixtures/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+
   // 設定ファイル側は import-plugin の誤検知を抑制
   {
     files: ['*.config.ts', '*.config.mts', '*.config.mjs', 'vite.config.mts'],

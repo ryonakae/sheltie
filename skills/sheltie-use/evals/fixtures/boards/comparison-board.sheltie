@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "nodes": [
+    {
+      "id": "page-compare-a",
+      "type": "webpage",
+      "title": "Atlas Basic fixture",
+      "url": "http://127.0.0.1:4174/compare-a/",
+      "addedUrl": "http://127.0.0.1:4174/compare-a/",
+      "x": 0,
+      "y": 0,
+      "width": 720,
+      "height": 500
+    },
+    {
+      "id": "page-compare-b",
+      "type": "webpage",
+      "title": "Beacon Basic fixture",
+      "url": "http://127.0.0.1:4174/compare-b/",
+      "addedUrl": "http://127.0.0.1:4174/compare-b/",
+      "x": 900,
+      "y": 0,
+      "width": 720,
+      "height": 500
+    },
+    {
+      "id": "page-semantic-form",
+      "type": "webpage",
+      "title": "Plan confirmation fixture",
+      "url": "http://127.0.0.1:4174/semantic-form/",
+      "addedUrl": "http://127.0.0.1:4174/semantic-form/",
+      "x": 1800,
+      "y": 0,
+      "width": 720,
+      "height": 500
+    },
+    {
+      "id": "existing-comparison-note",
+      "type": "stickynote",
+      "title": "Comparison brief",
+      "content": "Compare price, availability, and included features before adding findings.",
+      "colorIndex": 0,
+      "fontSizePreset": 1,
+      "x": 0,
+      "y": 650,
+      "width": 280,
+      "height": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "existing-product-edge",
+      "source": "page-compare-a",
+      "sourceHandle": "right",
+      "target": "page-compare-b",
+      "targetHandle": "left",
+      "strokeWidth": 3,
+      "lineStyle": "solid",
+      "colorPreset": "accent"
+    }
+  ]
+}

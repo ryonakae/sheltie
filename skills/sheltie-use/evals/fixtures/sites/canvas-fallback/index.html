@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Canvas-only control fixture</title>
+    <style>
+      body {
+        margin: 0;
+        min-width: 720px;
+        min-height: 540px;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      h1,
+      p {
+        margin-left: 40px;
+        max-width: 640px;
+      }
+      canvas {
+        position: absolute;
+        left: 40px;
+        top: 180px;
+        border: 1px solid #475569;
+      }
+      #canvas-result {
+        position: absolute;
+        left: 0;
+        top: 510px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Canvas-only activation target</h1>
+      <p>The blue target is painted into the canvas and deliberately has no DOM or ARIA control.</p>
+      <canvas
+        id="control-canvas"
+        width="640"
+        height="320"
+        aria-label="Visual fixture canvas"
+        data-target-center-x="381"
+        data-target-center-y="337"
+      ></canvas>
+      <p id="canvas-result" role="status" aria-live="polite">Target is inactive.</p>
+    </main>
+    <script>
+      const canvas = document.querySelector('#control-canvas');
+      const context = canvas.getContext('2d');
+      const target = { x: 280, y: 120, width: 120, height: 72 };
+      function draw(active) {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = '#e2e8f0';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = active ? '#16a34a' : '#2563eb';
+        context.fillRect(target.x, target.y, target.width, target.height);
+        context.fillStyle = '#ffffff';
+        context.font = '20px system-ui';
+        context.fillText(active ? 'Activated' : 'Activate', target.x + 16, target.y + 43);
+      }
+      draw(false);
+      canvas.addEventListener('click', (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+        if (
+          x >= target.x &&
+          x <= target.x + target.width &&
+          y >= target.y &&
+          y <= target.y + target.height
+        ) {
+          draw(true);
+          document.querySelector('#canvas-result').textContent = 'Canvas target activated.';
+        }
+      });
+    </script>
+  </body>
+</html>

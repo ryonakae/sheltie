@@ -87,13 +87,13 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 - Consumes: the finalized Phase 1–3 MCP schemas, `get_subagent_result(verbose: true)` output, and the `.sheltie` schema.
 - Produces: loopback pages, board setup instructions, normalized redacted traces, read-only final board snapshots, and a verifier used by all later Agent runs.
 
-- [ ] **Step 1: Freeze the production tool contract and evaluation evidence path before creating fixtures.**
+- [x] **Step 1: Freeze the production tool contract and evaluation evidence path before creating fixtures.**
 
   Record the exact Phase 1 endpoint and enablement procedure in `fixtures/README.md`, along with the fixed read tools: `list_documents()`, `get_editor_state(documentId)`, `get_board(documentId, nodeIds?, nodeTypes?, includeEdges?)`, `get_webpage_screenshots(documentId, pageNodeIds?)`, and `get_board_screenshot(documentId, nodeIds?)`. Add the completed Phase 2–3 browser schemas without renaming them. State explicitly that no save, board-export, or production trace tool exists.
 
   For each Agent run, the evaluation orchestrator must call `get_subagent_result` with `verbose: true` immediately after completion and save the complete returned transcript/tool-call data at `$RUN_DIR/agent-result.verbose.json`. It then runs `derive-redacted-mcp-trace.mjs` to create `$RUN_DIR/outputs/redacted-mcp-trace.json`. The script retains only tool name, explicit IDs, snapshot ID, element ref, batch ID, response status, and ordering; it redacts all other arguments and results. The orchestrator invokes the existing read-only `get_board` with that run’s known `documentId` and `includeEdges: true`, then writes its `structuredContent` to `$RUN_DIR/outputs/final-board.json`. The verifier must not inspect page credentials, cookies, `localStorage`, or password values.
 
-- [ ] **Step 2: Define local sites and board setup with observable, deterministic differences.**
+- [x] **Step 2: Define local sites and board setup with observable, deterministic differences.**
 
   Implement four sites served from one `127.0.0.1` static server:
 
@@ -104,7 +104,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Use explicit expected state files. Each expected file lists the required final note text fragments, required or forbidden tool categories, required browser evidence available in the normalized trace, and whether `focus_nodes` is permitted.
 
-- [ ] **Step 3: Write the failing pure verifier tests.**
+- [x] **Step 3: Write the failing pure verifier tests.**
 
   In `verify-eval.test.ts`, add at least these cases before implementing `verify-eval.ts`:
 
@@ -121,13 +121,13 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: Vitest reports failing tests because the verifier module does not exist yet.
 
-- [ ] **Step 4: Implement the minimal verifier and the fixture server.**
+- [x] **Step 4: Implement the minimal verifier and the fixture server.**
 
   Implement `derive-redacted-mcp-trace.mjs` first as the sole converter from `$RUN_DIR/agent-result.verbose.json` to `$RUN_DIR/outputs/redacted-mcp-trace.json`; it must fail when the verbose result lacks tool-call data rather than invent evidence. Export deterministic functions from `verify-eval.ts` that accept that normalized trace and the orchestrator-written `final-board.json`, then return the Skill Creator `expectations` form: `{ text, passed, evidence }[]`. `verify-run.mjs` must write `outputs/verification.json` and `outputs/user_notes.md`, allowing graders to verify outcomes without trusting a prose claim by the executor. It must never invoke a save/export MCP tool.
 
   `serve-local-sites.mjs` must bind to `127.0.0.1`, set deterministic no-cache headers, print its URL once, and terminate cleanly on `SIGINT`/`SIGTERM`. Do not add a production dependency.
 
-- [ ] **Step 5: Verify the harness and isolation.**
+- [x] **Step 5: Verify the harness and isolation.**
 
   Run:
 
@@ -153,7 +153,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: the workspace path is ignored by the new root rule; a future Skill source file is not ignored.
 
-- [ ] **Step 6: Commit the fixture harness.**
+- [x] **Step 6: Commit the fixture harness.**
 
   ```bash
   git add .gitignore skills/sheltie-use/evals

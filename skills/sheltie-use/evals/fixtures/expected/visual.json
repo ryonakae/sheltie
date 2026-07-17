@@ -1,0 +1,15 @@
+{
+  "id": "visual",
+  "requiredFinalNoteTextFragments": ["Canvas target activated"],
+  "requiredCreatedNoteCount": 1,
+  "requiredToolCategories": [
+    "browser_snapshot",
+    "browser_screenshot",
+    "browser_click_coordinates",
+    "batch_edit_board",
+    "focus_nodes"
+  ],
+  "forbiddenToolCategories": ["browser_evaluate", "save"],
+  "requiredBrowserEvidence": ["semantic snapshot before screenshot-coordinate action"],
+  "focusNodes": "required"
+}

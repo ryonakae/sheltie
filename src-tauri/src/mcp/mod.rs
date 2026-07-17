@@ -5,5 +5,6 @@ pub const MCP_RENDERER_TIMEOUT: std::time::Duration = std::time::Duration::from_
 
 pub mod broker;
 pub mod lifecycle;
+pub mod page_automation;
 pub mod service;
 pub mod types;

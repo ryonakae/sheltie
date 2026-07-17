@@ -204,11 +204,11 @@ The current snapshot table lives only inside the injected top-frame bridge. Crea
 - Consumes: Phase 1 `ToolError`, `RendererCommand::GetBoard`, and `McpRequestBrokerState`.
 - Produces: `PageKey`, `PageAutomationOperation`, `CompactSnapshot`, `PageAutomationBridgeRequest`, `PageAutomationBridgeResult`, and the exact constants/error codes documented above.
 
-- [ ] **Step 1: Write failing protocol tests**
+- [x] **Step 1: Write failing protocol tests**
 
 Add tests that deserialize each operation, reject a `Fill` string of 10,001 characters, reject `Wait.timeoutMs` above 10,000, reject a negative time wait, and serialize `ToolError::new("stale_element", "The page changed after this element was observed.").with_retry("Call browser_snapshot and use a returned elementRef")`. Add a snapshot test that accepts `f2:e7` but rejects `frame-2:e7`, a snapshot ID other than `s<epoch>-<sequence>`, and a `documentToken` that is not 32 lowercase hexadecimal characters. Verify `PageAutomationBridgeRequest.navigationEpoch` is required and serialized as camelCase.
 
-- [ ] **Step 2: Run the focused Rust test and verify RED**
+- [x] **Step 2: Run the focused Rust test and verify RED**
 
 Run:
 
@@ -218,7 +218,7 @@ Run:
 
 Expected: compilation fails because the `mcp::page_automation` module and protocol types do not exist.
 
-- [ ] **Step 3: Implement the complete protocol module**
+- [x] **Step 3: Implement the complete protocol module**
 
 Use `#[serde(rename_all = "camelCase")]` only for JSON payload structs so MCP receives `snapshotId`, `elementRef`, `navigationEpoch`, and `pageNodeId`; retain snake_case only in the internally tagged `kind` enum values. Put bounds checks in constructors used by MCP handlers rather than relying on `serde` alone.
 
@@ -257,7 +257,7 @@ pub struct PageAutomationBridgeResult {
 }
 ```
 
-- [ ] **Step 4: Run the focused Rust test and verify GREEN**
+- [x] **Step 4: Run the focused Rust test and verify GREEN**
 
 Run:
 
@@ -267,7 +267,7 @@ Run:
 
 Expected: all protocol tests pass and no error code is represented by an ad-hoc string outside `protocol.rs`.
 
-- [ ] **Step 5: Commit the protocol boundary**
+- [x] **Step 5: Commit the protocol boundary**
 
 ```bash
 git add src-tauri/src/mcp/page_automation/mod.rs src-tauri/src/mcp/page_automation/protocol.rs

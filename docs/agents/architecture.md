@@ -92,6 +92,8 @@ src/
 ## バックエンド責務
 
 - `lib.rs`: モジュール宣言と `pub use` の入口（実体は持たない）
+- `mcp/mod.rs`: ローカル MCP endpoint・renderer event・timeout の共通定数と MCP module の入口
+- `mcp/types.rs`: MCP tool の入出力、renderer request/response envelope、安定した error code の型契約。JSON field は renderer と共有する camelCase を正本にする
 - `setup.rs`: `pub fn run()` 本体、`invoke_handler` 登録、menu event 配信
 - `app_exit.rs`: `AppExitCoordinatorState` とアプリ終了の集約フロー
 - `menus/{app,file,edit,view,theme}.rs` + `menus/{helpers,macos}.rs`: メニュー構築と `file-command` / `edit-command` / `view-command` / `theme-command` 配信
@@ -138,6 +140,13 @@ Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/se
 | `tauri-plugin-dialog` | Open / Save / message ダイアログ | File メニューの `.sheltie` 入出力に利用 |
 | `tauri-plugin-prevent-default` | メインウィンドウのデフォルトコンテキストメニュー無効化 | `Flags::CONTEXT_MENU` のみ指定。DevTools は維持。子 Webview（外部サイト）は対象外 |
 | `tauri-plugin-log` | Rust ログを OS ログに転送 | `#[cfg(debug_assertions)]` でのみ登録（開発時のみ） |
+
+## MCP サーバー基盤
+
+- MCP SDK は `rmcp 2.2.0` を固定し、Tauri process 内で Streamable HTTP server を動かす。
+- endpoint は `http://127.0.0.1:29978/mcp`。bind address、renderer event、timeout は `src-tauri/src/mcp/mod.rs` の定数を参照する。
+- Rust 側は transport・session・document routing・timeout・tool response shapingを担当し、board state自体はrenderer/Zustandを正本とする。
+- MCP toolとrenderer間のJSON契約は`src-tauri/src/mcp/types.rs`に集約し、tool実装でad-hocなfield名を増やさない。
 
 ## アセットプロトコル
 

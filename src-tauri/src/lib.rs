@@ -1,5 +1,6 @@
 mod app_exit;
 mod commands;
+mod mcp;
 mod menus;
 mod setup;
 

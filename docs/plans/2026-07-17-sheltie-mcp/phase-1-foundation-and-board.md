@@ -143,7 +143,7 @@ get_board_screenshot(documentId, nodeIds?)
 - Produces: endpoint constants, `ToolError`, document/tool params/results, `RendererRequest`, `RendererResponse`.
 - Consumed by: Tasks 2–8 and phases 2–3.
 
-- [ ] **Step 1: Write failing Rust serialization tests**
+- [x] **Step 1: Write failing Rust serialization tests**
 
 In `src-tauri/src/mcp/types.rs`, define tests first for camelCase JSON and stable errors. Use these exact expectations:
 
@@ -179,13 +179,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run: `(cd src-tauri && cargo test --lib mcp::types::tests)`
 
 Expected: compilation fails because `mcp`, `RendererRequest`, `RendererCommand`, and `ToolError` do not exist.
 
-- [ ] **Step 3: Add exact dependency and module declarations**
+- [x] **Step 3: Add exact dependency and module declarations**
 
 Set `rust-version = "1.93.1"` and add:
 
@@ -213,13 +213,13 @@ pub mod types;
 
 Implement the tested serde types with `#[serde(rename_all = "camelCase")]` and `RendererCommand` with `#[serde(rename_all = "camelCase")]`. Define all phase-1 input/result structs in this file so `service.rs` contains routing rather than ad-hoc JSON parsing.
 
-- [ ] **Step 4: Confirm GREEN and compile the dependency graph**
+- [x] **Step 4: Confirm GREEN and compile the dependency graph**
 
 Run: `(cd src-tauri && cargo test --lib mcp::types::tests && cargo check)`
 
 Expected: 2 tests pass and Cargo resolves `rmcp 2.2.0`; no MSRV or edition error remains.
 
-- [ ] **Step 5: Document and commit**
+- [x] **Step 5: Document and commit**
 
 Document the new Rust module boundary in `docs/agents/architecture.md`.
 

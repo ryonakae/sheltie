@@ -288,7 +288,7 @@ git commit -m "feat(mcp): define semantic page automation protocol"
 - Consumes: JSON `PageAutomationBridgeRequest` passed by native `eval` as `window.__SHELTIE_MCP_PAGE_AUTOMATION__.dispatch(request)`.
 - Produces: one top-frame `window.__TAURI__.core.invoke('complete_page_automation_request', { result })` call containing `PageAutomationBridgeResult`.
 
-- [ ] **Step 1: Add jsdom and write failing script tests**
+- [x] **Step 1: Add jsdom and write failing script tests**
 
 Run `npm install --save-dev --save-exact jsdom@29.1.1` so `package.json` and `package-lock.json` agree. In `page-automation-script.test.ts`, load the exact JavaScript with `readFileSync(new URL('../../../src-tauri/src/commands/webview/page_automation_script.js', import.meta.url), 'utf8')`, instantiate `JSDOM` with `runScripts: 'outside-only'`, stub `window.__TAURI__.core.invoke`, evaluate the script, and dispatch requests.
 
@@ -302,7 +302,7 @@ Write deterministic tests for:
 6. A child-frame message registered from a distinct `WindowProxy` becomes `f1:e1`; an unregistered source is ignored and a missing child response produces `frames: [{ frameId: 'f1', status: 'unavailable' }]` after 750 ms.
 7. Stub `crypto.getRandomValues`, load two independent `JSDOM` documents, and verify each top frame keeps one stable 32-hex `documentToken`, the two documents differ, and every snapshot echoes the request's `navigationEpoch` rather than accepting an epoch from page code.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -312,7 +312,7 @@ npm run test -- src/lib/mcp/page-automation-script.test.ts
 
 Expected: the test fails because the script file and jsdom dependency are absent.
 
-- [ ] **Step 3: Implement the script as a strict IIFE**
+- [x] **Step 3: Implement the script as a strict IIFE**
 
 The file must contain no imports, no build-time substitutions, and no access to Node APIs because Rust includes it verbatim. Begin with the following top-frame/frame split and retain the fixed namespace:
 
@@ -360,7 +360,7 @@ Implement native semantics only:
 
 After any successful operation (including `Wait`), wait 250 ms, create a new compact snapshot, and return `{ action: { kind: request.operation.kind }, snapshot }`. Do not wait for network idle because WKWebView exposes no reliable page-network lifecycle here. For `Wait`, return the Phase 1-compatible `ToolError` fields `{ code: "wait_timeout", message, retry }` rather than throwing an unstructured JavaScript error.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -370,7 +370,7 @@ npm run test -- src/lib/mcp/page-automation-script.test.ts
 
 Expected: all seven jsdom cases pass using the exact script that Rust will inject.
 
-- [ ] **Step 5: Commit the tested page bridge**
+- [x] **Step 5: Commit the tested page bridge**
 
 ```bash
 git add package.json package-lock.json src-tauri/src/commands/webview/page_automation_script.js src/lib/mcp/page-automation-script.test.ts

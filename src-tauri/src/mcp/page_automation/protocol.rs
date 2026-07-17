@@ -12,6 +12,7 @@ pub const PAGE_AUTOMATION_FRAME_RESPONSE_TIMEOUT_MS: u64 = 750;
 pub const PAGE_AUTOMATION_MAX_SNAPSHOT_ELEMENTS: usize = 200;
 pub const PAGE_AUTOMATION_MAX_SNAPSHOT_CHARS: usize = 20_000;
 pub const PAGE_AUTOMATION_MAX_TEXT_CHARS: usize = 512;
+pub const PAGE_AUTOMATION_MAX_DIALOGS: usize = 20;
 pub const PAGE_AUTOMATION_MAX_FILL_CHARS: usize = 10_000;
 pub const PAGE_AUTOMATION_MAX_WAIT_TIMEOUT_MS: u64 = 10_000;
 #[allow(dead_code)]
@@ -592,8 +593,6 @@ pub struct PageDialog {
     #[serde(rename = "type")]
     pub dialog_type: PageDialogType,
     pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_value: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, JsonSchema, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -701,6 +700,16 @@ impl PageAutomationActionResult {
         }
         if let Some(geometry) = &self.geometry {
             geometry.validate()?;
+        }
+        if self.dialogs.as_ref().is_some_and(|dialogs| {
+            dialogs.len() > PAGE_AUTOMATION_MAX_DIALOGS
+                || dialogs
+                    .iter()
+                    .any(|dialog| utf16_len(&dialog.message) > PAGE_AUTOMATION_MAX_TEXT_CHARS)
+        }) {
+            return Err(invalid_argument(
+                "The page returned oversized dialog metadata.",
+            ));
         }
         match self.kind {
             PageAutomationActionKind::ScreenshotElement
@@ -1342,7 +1351,7 @@ mod tests {
                             "scrollY": 6.0
                         }
                     },
-                    "dialogs": [{"type": "prompt", "message": "Continue?", "defaultValue": "yes"}]
+                    "dialogs": [{"type": "prompt", "message": "Continue?", "defaultValue": "secret"}]
                 }
             }),
         };
@@ -1350,13 +1359,14 @@ mod tests {
         let action = result.raw_action_result().unwrap();
         assert_eq!(action.kind, PageAutomationActionKind::ScreenshotElement);
         assert!(matches!(
-            action.geometry.unwrap(),
+            action.geometry.as_ref().unwrap(),
             PageScreenshotGeometry::Element { element, .. } if element.width == 30.0
         ));
         assert_eq!(
-            action.dialogs.unwrap()[0].dialog_type,
+            action.dialogs.as_ref().unwrap()[0].dialog_type,
             PageDialogType::Prompt
         );
+        assert!(!serde_json::to_string(&action).unwrap().contains("secret"));
 
         let full_page = PageAutomationBridgeResult {
             result: serde_json::json!({

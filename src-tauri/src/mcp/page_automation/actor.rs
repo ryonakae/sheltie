@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::Future,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -10,8 +10,8 @@ use std::{
 
 use super::{
     images::{
-        annotate_css_rect, crop_css_rect, decode_png, encode_capped_png,
-        stitch_vertical_tiles_at_offsets, EncodedPng,
+        annotate_css_rect, crop_css_rect, decode_png, encode_capped_png, EncodedPng,
+        FullPageComposer,
     },
     protocol::{
         bridge_rejected, invalid_argument, page_changed_during_capture, request_timeout,
@@ -530,9 +530,10 @@ impl PageAutomationState {
         CaptureFuture: Future<Output = Result<Vec<u8>, ToolError>>,
     {
         let positions = full_page_tile_positions(geometry)?;
-        let mut tiles = Vec::with_capacity(positions.len());
+        let mut composer: Option<FullPageComposer> = None;
+        let mut captured_offsets = HashSet::new();
         let mut capture_scale: Option<f64> = None;
-        for position in positions {
+        for (position_x, position_y) in positions {
             self.ensure_capture_epoch(actor, capture_epoch)?;
             let action = self
                 .execute_raw_locked_with(
@@ -541,8 +542,8 @@ impl PageAutomationState {
                     window_label,
                     webview_label,
                     PageAutomationOperation::ScreenshotScroll {
-                        x: 0.0,
-                        y: position,
+                        x: position_x,
+                        y: position_y,
                     },
                     dispatch,
                 )
@@ -550,24 +551,25 @@ impl PageAutomationState {
                 .map_err(|error| self.capture_error_for_epoch(actor, capture_epoch, error))?;
             self.ensure_capture_epoch(actor, capture_epoch)?;
             let current = action.screenshot_full_page_geometry()?;
+            let maximum_scroll_x = (geometry.document_width - geometry.viewport_width).max(0.0);
             let maximum_scroll_y = (geometry.document_height - geometry.viewport_height).max(0.0);
-            let expected_scroll_y = position.min(maximum_scroll_y);
+            let expected_scroll_x = position_x.min(maximum_scroll_x);
+            let expected_scroll_y = position_y.min(maximum_scroll_y);
             if current.viewport_width != geometry.viewport_width
                 || current.viewport_height != geometry.viewport_height
                 || current.document_width != geometry.document_width
                 || current.document_height != geometry.document_height
-                || current.scroll_x.abs() > 0.5
+                || (current.scroll_x - expected_scroll_x).abs() > 0.5
                 || (current.scroll_y - expected_scroll_y).abs() > 0.5
             {
                 return Err(page_changed_during_capture());
             }
             let expected_scale = capture_scale.unwrap_or(1.0);
-            let expected_offset = css_offset_to_pixels(current.scroll_y, expected_scale)?;
-            if capture_scale.is_some()
-                && tiles
-                    .last()
-                    .is_some_and(|(_, previous_offset)| *previous_offset == expected_offset)
-            {
+            let expected_offset = (
+                css_offset_to_pixels(current.scroll_x, expected_scale)?,
+                css_offset_to_pixels(current.scroll_y, expected_scale)?,
+            );
+            if capture_scale.is_some() && captured_offsets.contains(&expected_offset) {
                 continue;
             }
             let bytes = capture()
@@ -586,16 +588,28 @@ impl PageAutomationState {
             } else {
                 capture_scale = Some(scale);
             }
-            let offset = css_offset_to_pixels(current.scroll_y, scale)?;
-            if tiles
-                .last()
-                .is_some_and(|(_, previous_offset)| *previous_offset == offset)
-            {
+            let offset = (
+                css_offset_to_pixels(current.scroll_x, scale)?,
+                css_offset_to_pixels(current.scroll_y, scale)?,
+            );
+            if !captured_offsets.insert(offset) {
                 continue;
             }
-            tiles.push((image, offset));
+            if composer.is_none() {
+                composer = Some(FullPageComposer::new(
+                    &image,
+                    geometry.viewport_width,
+                    geometry.viewport_height,
+                    geometry.document_width,
+                    geometry.document_height,
+                )?);
+            }
+            composer
+                .as_mut()
+                .expect("composer is initialized from the first tile")
+                .add_tile(&image, current.scroll_x, current.scroll_y)?;
         }
-        let stitched = stitch_vertical_tiles_at_offsets(&tiles)?;
+        let stitched = composer.ok_or_else(screenshot_too_large)?.finish();
         encode_capped_png(&stitched)
     }
 
@@ -1046,20 +1060,37 @@ fn normalize_url(url: &str) -> Result<String, String> {
         .map_err(|error| format!("invalid navigation URL: {error}"))
 }
 
-fn full_page_tile_positions(geometry: PageViewportGeometry) -> Result<Vec<f64>, ToolError> {
-    if geometry.viewport_width <= 0.0
+fn full_page_tile_positions(geometry: PageViewportGeometry) -> Result<Vec<(f64, f64)>, ToolError> {
+    if geometry.viewport_width <= 1.0
         || geometry.viewport_height <= 1.0
+        || geometry.document_width < geometry.viewport_width
         || geometry.document_height < geometry.viewport_height
     {
         return Err(bridge_rejected());
     }
-    let maximum_scroll = (geometry.document_height - geometry.viewport_height).max(0.0);
-    let step = geometry.viewport_height - 1.0;
+    let horizontal = tile_axis_positions(geometry.document_width, geometry.viewport_width)?;
+    let vertical = tile_axis_positions(geometry.document_height, geometry.viewport_height)?;
+    let count = horizontal
+        .len()
+        .checked_mul(vertical.len())
+        .ok_or_else(screenshot_too_large)?;
+    if count > PAGE_AUTOMATION_MAX_FULL_PAGE_TILES {
+        return Err(screenshot_too_large());
+    }
+    Ok(vertical
+        .into_iter()
+        .flat_map(|y| horizontal.iter().copied().map(move |x| (x, y)))
+        .collect())
+}
+
+fn tile_axis_positions(document: f64, viewport: f64) -> Result<Vec<f64>, ToolError> {
+    let maximum_scroll = (document - viewport).max(0.0);
+    let step = viewport - 1.0;
     let mut positions = vec![0.0];
     while *positions.last().expect("positions starts with zero") < maximum_scroll {
-        let next =
-            (*positions.last().expect("positions starts with zero") + step).min(maximum_scroll);
-        if next <= *positions.last().expect("positions starts with zero") {
+        let previous = *positions.last().expect("positions starts with zero");
+        let next = (previous + step).min(maximum_scroll);
+        if next <= previous {
             return Err(bridge_rejected());
         }
         if positions.len() == PAGE_AUTOMATION_MAX_FULL_PAGE_TILES {
@@ -2220,6 +2251,31 @@ mod tests {
 
         assert_eq!(error.code, "page_changed_during_capture");
         assert_eq!(restores.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn full_page_tile_positions_cover_horizontal_and_vertical_overflow() {
+        let positions = full_page_tile_positions(PageViewportGeometry {
+            viewport_width: 4.0,
+            viewport_height: 5.0,
+            document_width: 7.0,
+            document_height: 12.0,
+            scroll_x: 0.0,
+            scroll_y: 0.0,
+        })
+        .unwrap();
+
+        assert_eq!(
+            positions,
+            vec![
+                (0.0, 0.0),
+                (3.0, 0.0),
+                (0.0, 4.0),
+                (3.0, 4.0),
+                (0.0, 7.0),
+                (3.0, 7.0)
+            ]
+        );
     }
 
     #[test]

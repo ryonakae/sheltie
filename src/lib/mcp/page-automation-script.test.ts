@@ -69,7 +69,7 @@ type BridgeResult = {
       inputTrusted?: boolean;
       value?: unknown;
       files?: Array<{ name: string; size: number }>;
-      dialogs?: Array<{ type: string; message: string; defaultValue?: string }>;
+      dialogs?: Array<{ type: string; message: string }>;
       geometry?: Record<string, unknown>;
     };
     error?: { code: string };
@@ -274,6 +274,18 @@ describe('page automation initialization script', () => {
     const child = new JSDOM('', { runScripts: 'outside-only', url: 'https://child.test/' });
     doms.push(child);
     const source = child.window;
+    const iframe = bridge.window.document.createElement('iframe');
+    Object.defineProperties(iframe, {
+      contentWindow: { value: source },
+      clientWidth: { value: 200 },
+      clientHeight: { value: 100 },
+      clientLeft: { value: 2 },
+      clientTop: { value: 3 },
+      getBoundingClientRect: {
+        value: () => ({ x: 100, y: 50, width: 204, height: 106 }),
+      },
+    });
+    bridge.window.document.body.appendChild(iframe);
     let childClicked = false;
     let childFormFilled = false;
     vi.spyOn(source, 'postMessage').mockImplementation((message: unknown) => {
@@ -311,7 +323,24 @@ describe('page automation initialization script', () => {
                         dialogs: [{ type: 'confirm', message: 'Child confirmation' }],
                       },
                     }
-                  : { ok: true },
+                  : data.operation?.kind === 'screenshot_element'
+                    ? {
+                        ok: true,
+                        action: {
+                          geometry: {
+                            element: { x: 10, y: 10, width: 20, height: 15 },
+                            viewport: {
+                              viewportWidth: 200,
+                              viewportHeight: 100,
+                              documentWidth: 200,
+                              documentHeight: 100,
+                              scrollX: 0,
+                              scrollY: 0,
+                            },
+                          },
+                        },
+                      }
+                    : { ok: true },
           },
         }),
       );
@@ -326,6 +355,16 @@ describe('page automation initialization script', () => {
     const withChild = snapshot(await dispatch(bridge, { kind: 'snapshot' }));
     const frameElement = withChild.elements.find((element) => element.ref === 'f1:e1');
     expect(frameElement).toEqual(expect.objectContaining({ name: 'Frame action' }));
+    const childElementScreenshot = await dispatch(bridge, {
+      kind: 'screenshot_element',
+      snapshotId: withChild.snapshotId,
+      elementRef: frameElement!.ref,
+      annotate: false,
+    });
+    expect(childElementScreenshot.result.error).toBeUndefined();
+    expect(childElementScreenshot.result.action?.geometry).toMatchObject({
+      element: { x: 112, y: 63, width: 20, height: 15 },
+    });
     const afterClick = snapshot(
       await dispatch(bridge, {
         kind: 'click',
@@ -373,6 +412,131 @@ describe('page automation initialization script', () => {
     expect(unavailable.frames).toContainEqual(
       expect.objectContaining({ frameId: 'f1', status: 'unavailable' }),
     );
+  });
+
+  it('accepts nested-frame element geometry relayed through its direct parent', async () => {
+    const bridge = install('<h1>Top</h1>');
+    const parent = new JSDOM('', { runScripts: 'outside-only', url: 'https://parent.test/' });
+    const nested = new JSDOM('', { runScripts: 'outside-only', url: 'https://nested.test/' });
+    doms.push(parent, nested);
+    const parentSource = parent.window;
+    const nestedSource = nested.window;
+    const iframe = bridge.window.document.createElement('iframe');
+    Object.defineProperties(iframe, {
+      contentWindow: { value: parentSource },
+      clientWidth: { value: 300 },
+      clientHeight: { value: 200 },
+      clientLeft: { value: 2 },
+      clientTop: { value: 3 },
+      getBoundingClientRect: {
+        value: () => ({ x: 100, y: 50, width: 304, height: 206 }),
+      },
+    });
+    bridge.window.document.body.appendChild(iframe);
+    let nestedFrameId = '';
+    let nestedFrameToken = '';
+
+    const respond = (
+      source: typeof parentSource,
+      requestId: string,
+      result: Record<string, unknown>,
+    ) => {
+      bridge.window.dispatchEvent(
+        new bridge.window.MessageEvent('message', {
+          source: source as unknown as MessageEventSource,
+          data: {
+            channel: 'sheltie-mcp-page-automation-v1',
+            type: 'frame-response',
+            requestId,
+            result,
+          },
+        }),
+      );
+    };
+    vi.spyOn(parentSource, 'postMessage').mockImplementation((message: unknown) => {
+      const data = message as { type?: string; requestId?: string; operation?: { kind: string } };
+      if (data.type === 'frame-request' && data.operation?.kind === 'snapshot') {
+        respond(parentSource, data.requestId!, {
+          elements: [],
+          compactText: '',
+          url: 'https://parent.test/',
+          title: 'Parent',
+          truncated: false,
+        });
+      }
+    });
+    vi.spyOn(nestedSource, 'postMessage').mockImplementation((message: unknown) => {
+      const data = message as {
+        type?: string;
+        frameId?: string;
+        frameToken?: string;
+        requestId?: string;
+        operation?: { kind: string };
+      };
+      if (data.type === 'frame-assigned') {
+        nestedFrameId = data.frameId!;
+        nestedFrameToken = data.frameToken!;
+      } else if (data.type === 'frame-request' && data.operation?.kind === 'snapshot') {
+        respond(nestedSource, data.requestId!, {
+          elements: [{ ref: 'e1', role: 'button', name: 'Nested target', tagName: 'BUTTON' }],
+          compactText: 'button Nested target',
+          url: 'https://nested.test/',
+          title: 'Nested',
+          truncated: false,
+        });
+      } else if (data.type === 'frame-request' && data.operation?.kind === 'screenshot_element') {
+        bridge.window.dispatchEvent(
+          new bridge.window.MessageEvent('message', {
+            source: parentSource as unknown as MessageEventSource,
+            data: {
+              channel: 'sheltie-mcp-page-automation-v1',
+              type: 'frame-geometry-relay',
+              requestId: data.requestId,
+              frameId: nestedFrameId,
+              frameToken: nestedFrameToken,
+              result: {
+                ok: true,
+                action: {
+                  geometry: {
+                    element: { x: 10, y: 12, width: 20, height: 15 },
+                    viewport: {
+                      viewportWidth: 300,
+                      viewportHeight: 200,
+                      documentWidth: 300,
+                      documentHeight: 200,
+                      scrollX: 0,
+                      scrollY: 0,
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        );
+      }
+    });
+    for (const source of [parentSource, nestedSource]) {
+      bridge.window.dispatchEvent(
+        new bridge.window.MessageEvent('message', {
+          source: source as unknown as MessageEventSource,
+          data: { channel: 'sheltie-mcp-page-automation-v1', type: 'frame-ready' },
+        }),
+      );
+    }
+
+    const initial = snapshot(await dispatch(bridge, { kind: 'snapshot' }));
+    const target = initial.elements.find((element) => element.name === 'Nested target')!;
+    const result = await dispatch(bridge, {
+      kind: 'screenshot_element',
+      snapshotId: initial.snapshotId,
+      elementRef: target.ref,
+      annotate: false,
+    });
+
+    expect(result.result.error).toBeUndefined();
+    expect(result.result.action?.geometry).toMatchObject({
+      element: { x: 112, y: 65, width: 20, height: 15 },
+    });
   });
 
   it('does not satisfy text waits from hidden content', async () => {
@@ -496,14 +660,33 @@ describe('page automation initialization script', () => {
     });
     expect(bridge.window.prompt('Name?', 'Guest')).toBe('Approved');
     expect(bridge.window.alert('Notice')).toBeUndefined();
+    await dispatch(bridge, { kind: 'set_dialog_handler', action: 'accept' });
+    expect(bridge.window.prompt('Count?', 0 as unknown as string)).toBe('0');
 
     const result = await dispatch(bridge, { kind: 'press_key', key: 'Enter' });
     expect(result.result.action?.dialogs).toEqual([
       { type: 'confirm', message: 'Continue?' },
       { type: 'confirm', message: 'Default dismissal' },
-      { type: 'prompt', message: 'Name?', defaultValue: 'Guest' },
+      { type: 'prompt', message: 'Name?' },
       { type: 'alert', message: 'Notice' },
+      { type: 'prompt', message: 'Count?' },
     ]);
+    expect(JSON.stringify(result)).not.toContain('Guest');
+  });
+
+  it('bounds dialog metadata and reports omitted entries', async () => {
+    const bridge = install('<button>Dialogs</button>');
+    for (let index = 0; index < 25; index += 1) {
+      bridge.window.alert(`Dialog ${index}`);
+    }
+
+    const result = await dispatch(bridge, { kind: 'press_key', key: 'Enter' });
+
+    expect(result.result.action?.dialogs).toHaveLength(20);
+    expect(result.result.action?.dialogs?.at(-1)).toEqual({
+      type: 'alert',
+      message: 'Additional dialogs were omitted.',
+    });
   });
 
   it('evaluates JSON-safe values through the typed operation only', async () => {

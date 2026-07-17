@@ -55,26 +55,27 @@ pub fn read_upload_files(paths: &[String]) -> Result<Vec<UploadFilePayload>, Too
         });
     }
 
-    validated
-        .into_iter()
-        .map(|mut upload| {
-            let capacity = usize::try_from(upload.size).map_err(|_| upload_file_invalid())?;
-            let mut bytes = Vec::with_capacity(capacity);
-            upload
-                .file
-                .read_to_end(&mut bytes)
-                .map_err(|_| upload_file_invalid())?;
-            if bytes.len() as u64 != upload.size {
-                return Err(upload_file_invalid());
-            }
-            Ok(UploadFilePayload {
-                name: upload.name,
-                mime_type: upload.mime_type,
-                size: upload.size,
-                bytes_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
-            })
-        })
-        .collect()
+    validated.into_iter().map(read_validated_upload).collect()
+}
+
+fn read_validated_upload(upload: ValidatedUpload) -> Result<UploadFilePayload, ToolError> {
+    let bounded_size = upload.size.checked_add(1).ok_or_else(upload_file_invalid)?;
+    let capacity = usize::try_from(bounded_size).map_err(|_| upload_file_invalid())?;
+    let mut bytes = Vec::with_capacity(capacity);
+    upload
+        .file
+        .take(bounded_size)
+        .read_to_end(&mut bytes)
+        .map_err(|_| upload_file_invalid())?;
+    if bytes.len() as u64 != upload.size {
+        return Err(upload_file_invalid());
+    }
+    Ok(UploadFilePayload {
+        name: upload.name,
+        mime_type: upload.mime_type,
+        size: upload.size,
+        bytes_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+    })
 }
 
 fn mime_type(path: &Path) -> &'static str {
@@ -101,7 +102,7 @@ fn mime_type(path: &Path) -> &'static str {
 mod tests {
     use std::{fs, path::PathBuf};
 
-    use super::read_upload_files;
+    use super::{read_upload_files, read_validated_upload, ValidatedUpload};
     use crate::mcp::page_automation::protocol::{
         PAGE_AUTOMATION_MAX_UPLOAD_FILES, PAGE_AUTOMATION_MAX_UPLOAD_FILE_BYTES,
         PAGE_AUTOMATION_MAX_UPLOAD_TOTAL_BYTES,
@@ -238,6 +239,28 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             read_upload_files(&strings(&total)).unwrap_err().code,
+            "upload_file_invalid"
+        );
+    }
+
+    #[test]
+    fn rejects_growth_after_metadata_validation_without_reading_the_remainder() {
+        use std::io::Write;
+
+        let directory = TestDirectory::new();
+        let path = directory.file("growing.bin", b"small");
+        let file = fs::File::open(&path).unwrap();
+        let validated = ValidatedUpload {
+            file,
+            name: "growing.bin".into(),
+            mime_type: "application/octet-stream".into(),
+            size: 5,
+        };
+        let mut writer = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        writer.write_all(&vec![0; 1024]).unwrap();
+
+        assert_eq!(
+            read_validated_upload(validated).unwrap_err().code,
             "upload_file_invalid"
         );
     }

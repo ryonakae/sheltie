@@ -37,6 +37,15 @@ PNGファイルとして保存する（macOSのみ）。保存先は`~/Library/A
 - native撮影に失敗しても既存cacheがあれば返す。cacheが無いpageは`freshness: missing`として返し、call全体は失敗させない
 - 返却用画像だけcanvasで最長辺1024px以下のPNGへ縮小する。保存済みPNGは書き換えない。asset取得・decode・encodeに失敗した場合は`screenshot_failed`
 
+## MCPからのpage単体撮影
+
+- `browser_screenshot`の`viewport`は現在modeが`native`ならWKWebView snapshotを1回取得し、失敗時だけ既存cacheへfallbackする。`screenshot` / `hidden`ではcacheだけを返し、Webviewを表示・移動・リサイズしない
+- `element`はcurrent `snapshotId` / `elementRef`から得たviewport内CSS rectをnative scaleへ変換してcropする。target全体がviewport外なら`screenshot_target_not_visible`
+- `fullPage`は同じpage actor内で最大64 tileを横・縦へscroll/captureし、actual `(x, y)` offsetで重複を除いてstitchする。全tileを保持せず、最終4096px / 16,777,216 pixels内のcanvasへ1枚ずつ縮小合成する。capture中にdocument/epoch/geometryが変われば`page_changed_during_capture`とし、成功・失敗にかかわらず元scroll位置へrestoreを試みる
+- PNG headerのdimensionをdecode前に検査し、decode後も最長辺4096px、16,777,216 pixels、encoded PNG 8MiBを検査する。上限を超える出力はaspect ratioを維持して縮小し、収まらなければ`screenshot_too_large`
+- `annotate: true`は対象rectへ薄い背景と色付き2px borderを合成する。cache fallbackではWebviewを表示して対象を再取得せず、`annotated: false`とwarningを返す
+- 永続化cacheは入力として読むだけで、返却用crop/stitch/annotation/縮小結果を書き戻さない。base64はMCP image blockだけへ入れる
+
 ## MCPボード全景画像
 
 - `get_board_screenshot`は`.react-flow__viewport`をoffscreen hostへcloneし、visible viewport・selection・display modeを変更せずにPNG化する

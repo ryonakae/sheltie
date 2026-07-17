@@ -8,6 +8,7 @@
   const HIGHLIGHT_FADE_MS = 180;
   const WAIT_POLL_MS = 50;
   const MAX_ELEMENTS = 200;
+  const MAX_DIALOGS = 20;
   const MAX_CHARS = 20_000;
   const MAX_TEXT_CHARS = 512;
   const isTopFrame = window.top === window;
@@ -41,22 +42,33 @@
       state.dialogPolicy = { action: 'dismiss', promptText: null };
       return policy;
     }
+    const dialogMessage = (message) => truncate(normalizeText(message), MAX_TEXT_CHARS);
+    const recordDialog = (dialog) => {
+      if (state.dialogs.length < MAX_DIALOGS) {
+        state.dialogs.push(dialog);
+      } else {
+        state.dialogs[MAX_DIALOGS - 1] = {
+          type: 'alert',
+          message: 'Additional dialogs were omitted.',
+        };
+      }
+    };
     window.alert = function (message) {
-      state.dialogs.push({ type: 'alert', message: String(message) });
+      recordDialog({ type: 'alert', message: dialogMessage(message) });
       consumePolicy();
     };
     window.confirm = function (message) {
-      state.dialogs.push({ type: 'confirm', message: String(message) });
+      recordDialog({ type: 'confirm', message: dialogMessage(message) });
       return consumePolicy().action === 'accept';
     };
     window.prompt = function (message, defaultValue) {
-      const dialog = { type: 'prompt', message: String(message) };
-      if (defaultValue !== undefined) dialog.defaultValue = String(defaultValue);
-      state.dialogs.push(dialog);
+      recordDialog({ type: 'prompt', message: dialogMessage(message) });
       const policy = consumePolicy();
       return policy.action === 'accept'
         ? policy.promptText === null
-          ? String(defaultValue || '')
+          ? defaultValue === undefined
+            ? ''
+            : String(defaultValue)
           : policy.promptText
         : null;
     };
@@ -318,6 +330,48 @@
   function cssRectFromElement(element) {
     const rect = element.getBoundingClientRect();
     return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  }
+
+  function frameElementForSource(source) {
+    return Array.from(document.querySelectorAll('iframe')).find(
+      (frameElement) => frameElement.contentWindow === source,
+    );
+  }
+
+  function parentFrameElementGeometry(frameElement, childGeometry) {
+    const childElement = childGeometry && childGeometry.element;
+    const childViewport = childGeometry && childGeometry.viewport;
+    if (!frameElement || !childElement || !childViewport) return null;
+    const frameRect = frameElement.getBoundingClientRect();
+    const contentWidth = Number(frameElement.clientWidth);
+    const contentHeight = Number(frameElement.clientHeight);
+    if (
+      !Number.isFinite(contentWidth) ||
+      !Number.isFinite(contentHeight) ||
+      contentWidth <= 0 ||
+      contentHeight <= 0 ||
+      childViewport.viewportWidth <= 0 ||
+      childViewport.viewportHeight <= 0
+    ) {
+      return null;
+    }
+    const scaleX = contentWidth / childViewport.viewportWidth;
+    const scaleY = contentHeight / childViewport.viewportHeight;
+    const element = {
+      x: frameRect.x + frameElement.clientLeft + childElement.x * scaleX,
+      y: frameRect.y + frameElement.clientTop + childElement.y * scaleY,
+      width: childElement.width * scaleX,
+      height: childElement.height * scaleY,
+    };
+    if (
+      element.x < 0 ||
+      element.y < 0 ||
+      element.x + element.width > window.innerWidth ||
+      element.y + element.height > window.innerHeight
+    ) {
+      return null;
+    }
+    return { element, viewport: fullPageGeometry() };
   }
 
   function showHighlight(rect, target) {
@@ -624,14 +678,6 @@
     }
     const resolved = resolveElement(operation);
     if (resolved.failure) return resolved;
-    if (operation.kind === 'screenshot_element' && resolved.frame) {
-      return {
-        failure: error(
-          'invalid_argument',
-          'Element screenshots do not support descendant frame references.',
-        ),
-      };
-    }
     if (resolved.frame) return resolved;
     const element = resolved.element;
     if (operation.kind === 'screenshot_element') {
@@ -821,6 +867,7 @@
         state.elements.set(ref, {
           id: response.frame.id,
           source: response.frame.source,
+          element: response.frame.element,
           frameId: response.frame.id,
           childRef: childElement.ref,
         });
@@ -898,7 +945,28 @@
         return complete(bridgeResult(request, { error: response.result.error }));
       }
       if (response.result && response.result.action) {
-        operationResult.action = { ...operationResult.action, ...response.result.action };
+        if (request.operation.kind === 'screenshot_element') {
+          const geometry = response.result.__geometryRelayed
+            ? response.result.action.geometry
+            : parentFrameElementGeometry(
+                operationResult.frame.element,
+                response.result.action.geometry,
+              );
+          if (!geometry) {
+            return complete(
+              bridgeResult(
+                request,
+                error(
+                  'screenshot_target_not_visible',
+                  'The requested descendant-frame target is not fully visible in the native WebPage.',
+                ),
+              ),
+            );
+          }
+          operationResult.action = { ...operationResult.action, geometry };
+        } else {
+          operationResult.action = { ...operationResult.action, ...response.result.action };
+        }
       }
     }
     const rawResultKinds = [
@@ -936,16 +1004,60 @@
     return complete(bridgeResult(request, result));
   }
 
+  function installFrameGeometryRelay() {
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || data.channel !== CHANNEL || data.type !== 'frame-geometry-relay') return;
+      const frameElement = frameElementForSource(event.source);
+      const geometry = parentFrameElementGeometry(
+        frameElement,
+        data.result && data.result.action && data.result.action.geometry,
+      );
+      const result = geometry
+        ? {
+            ...data.result,
+            action: { ...data.result.action, geometry },
+          }
+        : {
+            error: error(
+              'screenshot_target_not_visible',
+              'The requested nested-frame target is not fully visible in the native WebPage.',
+            ).error,
+          };
+      if (!isTopFrame) {
+        window.parent.postMessage({ ...data, result }, '*');
+        return;
+      }
+      const frame = Array.from(state.frames.values()).find(
+        (candidate) => candidate.id === data.frameId && candidate.token === data.frameToken,
+      );
+      const pending = state.pendingFrameRequests.get(data.requestId);
+      if (!frame || !pending || !pending.expected.has(frame.id)) return;
+      pending.responses.set(frame.id, { ...result, __geometryRelayed: true });
+      if (pending.responses.size === pending.expected.size) finishFrameRequest(data.requestId);
+    });
+  }
+
   function installTopFrameMessaging() {
     window.addEventListener('message', (event) => {
       const data = event.data;
       if (!data || data.channel !== CHANNEL) return;
       if (data.type === 'frame-ready') {
         if (!event.source || state.frames.has(event.source)) return;
-        const frame = { id: `f${state.nextFrameId++}`, source: event.source };
+        const frame = {
+          id: `f${state.nextFrameId++}`,
+          source: event.source,
+          element: frameElementForSource(event.source),
+          token: createDocumentToken(),
+        };
         state.frames.set(event.source, frame);
         event.source.postMessage(
-          { channel: CHANNEL, type: 'frame-assigned', frameId: frame.id },
+          {
+            channel: CHANNEL,
+            type: 'frame-assigned',
+            frameId: frame.id,
+            frameToken: frame.token,
+          },
           '*',
         );
         return;
@@ -961,12 +1073,14 @@
 
   function installChildFrameMessaging() {
     let frameId = null;
+    let frameToken = null;
     window.top.postMessage({ channel: CHANNEL, type: 'frame-ready' }, '*');
     window.addEventListener('message', async (event) => {
       const data = event.data;
       if (!data || data.channel !== CHANNEL || event.source !== window.top) return;
       if (data.type === 'frame-assigned') {
         frameId = data.frameId;
+        frameToken = data.frameToken;
         return;
       }
       if (data.type !== 'frame-request' || !frameId) return;
@@ -999,6 +1113,25 @@
       if (operation.kind === 'wait') result = await waitForCondition(operation);
       const dialogs = data.operation.kind === 'set_dialog_handler' ? [] : takeDialogs();
       if (result.cleanupHighlight) setTimeout(result.cleanupHighlight, SETTLE_DELAY_MS);
+      if (
+        operation.kind === 'screenshot_element' &&
+        result.action &&
+        result.action.geometry &&
+        frameToken
+      ) {
+        window.parent.postMessage(
+          {
+            channel: CHANNEL,
+            type: 'frame-geometry-relay',
+            requestId: data.requestId,
+            frameId,
+            frameToken,
+            result: { ok: true, action: result.action },
+          },
+          '*',
+        );
+        return;
+      }
       event.source.postMessage(
         {
           channel: CHANNEL,
@@ -1032,6 +1165,7 @@
 
   installNavigationInvalidation();
   installDialogShim();
+  installFrameGeometryRelay();
   if (isTopFrame) installTopFrameMessaging();
   else installChildFrameMessaging();
 

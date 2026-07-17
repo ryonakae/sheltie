@@ -688,7 +688,7 @@ In `docs/agents/mcp.md`, add the five tools, input contracts, annotations, error
 
 In `tauri-ipc.md`, document only the additional fixed page-automation operation payloads; no renderer command may show a hidden WebView. In `sheltie-runtime.md`, state that MCP capture reads the current display mode and never changes it. In `sheltie-screenshots.md`, distinguish transient Phase 3 bytes from persisted cache and document native/cache mode behavior plus output caps. In `wkwebview-internals.md`, record all-frame script extension, synthetic `isTrusted === false`, `target=_blank`/`window.open()` in-place navigation, Wry’s normal `NSOpenPanel`, and nonblocking dialog shim.
 
-- [ ] **Step 3: Run complete automated validation**
+- [x] **Step 3: Run complete automated validation**
 
 Run:
 
@@ -717,7 +717,7 @@ Expected: every command exits 0.
 9. Upload a readable absolute regular-file path to a current file-input ref. Verify basename/size plus synthetic `input`/`change`. Verify a canonicalized symlink to another readable regular file also succeeds. Then verify relative, nonexistent, directory, unreadable, oversized, over-count, and non-file-input cases fail before page mutation. Manually click the input and verify Wry’s standard chooser still works.
 10. Confirm Phase 1 multi-site and full-board screenshot tools retain cache-first behavior and are unchanged by Phase 3.
 
-- [ ] **Step 5: Commit docs and validation state**
+- [x] **Step 5: Commit docs and validation state**
 
 ```bash
 git add docs/agents/mcp.md docs/agents/architecture.md docs/agents/tauri-ipc.md docs/agents/sheltie-runtime.md docs/agents/sheltie-screenshots.md docs/agents/wkwebview-internals.md

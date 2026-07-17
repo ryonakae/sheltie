@@ -266,6 +266,9 @@ pub(crate) enum BrowserActionKind {
     PressKey,
     Scroll,
     Wait,
+    ClickCoordinates,
+    Evaluate,
+    UploadFiles,
     Navigate,
 }
 
@@ -286,6 +289,15 @@ impl From<crate::mcp::page_automation::protocol::PageAutomationActionKind> for B
             }
             crate::mcp::page_automation::protocol::PageAutomationActionKind::Scroll => Self::Scroll,
             crate::mcp::page_automation::protocol::PageAutomationActionKind::Wait => Self::Wait,
+            crate::mcp::page_automation::protocol::PageAutomationActionKind::ClickCoordinates => {
+                Self::ClickCoordinates
+            }
+            crate::mcp::page_automation::protocol::PageAutomationActionKind::Evaluate => {
+                Self::Evaluate
+            }
+            crate::mcp::page_automation::protocol::PageAutomationActionKind::UploadFiles => {
+                Self::UploadFiles
+            }
         }
     }
 }

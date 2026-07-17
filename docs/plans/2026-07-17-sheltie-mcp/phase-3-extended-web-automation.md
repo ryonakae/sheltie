@@ -199,7 +199,7 @@ If `viewport` has no cached PNG while not native, return `screenshot_failed` wit
 - Consumes: Phase 1 `ToolError`, Phase 2 `PageKey`, `CompactSnapshot`, and `PageAutomationOperation`.
 - Produces: Phase 3 variants, limits, `PageScreenshotSource`, `CssRect`, and named `ToolError` constructors used by later tasks.
 
-- [ ] **Step 1: Write failing inline Rust tests**
+- [x] **Step 1: Write failing inline Rust tests**
 
 In `protocol.rs`, add a `#[cfg(test)] mod tests` that verifies:
 
@@ -210,7 +210,7 @@ In `protocol.rs`, add a `#[cfg(test)] mod tests` that verifies:
 5. an evaluate JSON result over `PAGE_AUTOMATION_MAX_EVALUATE_RESPONSE_BYTES` becomes `evaluate_result_too_large`.
 6. a `PageScreenshotSource { display_mode: "hidden", cached: None }` selects `screenshot_failed` for viewport and `live_webview_required` for element/fullPage.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run:
 
@@ -220,7 +220,7 @@ Run:
 
 Expected: compilation fails because the Phase 3 types, constants, and error constructors do not exist.
 
-- [ ] **Step 3: Add the typed variants and error constructors**
+- [x] **Step 3: Add the typed variants and error constructors**
 
 Add these variants to the existing enum rather than a new operation enum:
 
@@ -253,7 +253,7 @@ Keep `ScreenshotElement` and `ScreenshotFullPage` actor-only operations. `browse
 
 Define errors through `ToolError::new(code, message).with_retry(...)`, using exact codes: `unsupported_platform`, `invalid_argument`, `live_webview_required`, `screenshot_failed`, `screenshot_target_not_visible`, `page_changed_during_capture`, `screenshot_too_large`, `evaluate_not_json`, `evaluate_timeout`, `evaluate_result_too_large`, `upload_file_invalid`, `upload_target_not_file_input`, and existing Phase 2 `stale_element`/`element_not_found`/`webview_not_ready`.
 
-- [ ] **Step 4: Confirm GREEN**
+- [x] **Step 4: Confirm GREEN**
 
 Run:
 
@@ -263,7 +263,7 @@ Run:
 
 Expected: all protocol tests pass and every Phase 3 MCP failure can be constructed without an ad-hoc string envelope.
 
-- [ ] **Step 5: Commit protocol changes**
+- [x] **Step 5: Commit protocol changes**
 
 ```bash
 git add src-tauri/src/mcp/page_automation/protocol.rs src-tauri/src/mcp/page_automation/mod.rs

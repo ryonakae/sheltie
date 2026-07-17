@@ -1,4 +1,9 @@
-import { focusNodes, getEditorState, getWebpageScreenshots } from '@/lib/mcp/editor-adapter';
+import {
+  captureBoardScreenshot,
+  focusNodes,
+  getEditorState,
+  getWebpageScreenshots,
+} from '@/lib/mcp/editor-adapter';
 import type {
   McpToolError,
   RendererCommandHandlers,
@@ -79,11 +84,32 @@ function parsePageNodeIds(params: unknown): string[] | undefined {
   return params.pageNodeIds;
 }
 
+function parseBoardNodeIds(params: unknown): string[] | undefined {
+  if (typeof params !== 'object' || params === null || Array.isArray(params)) {
+    throw {
+      code: 'validation_failed',
+      message: 'getBoardScreenshot requires params to be an object',
+    };
+  }
+  if (!('nodeIds' in params) || params.nodeIds === undefined) return undefined;
+  if (
+    !Array.isArray(params.nodeIds) ||
+    params.nodeIds.some((nodeId) => typeof nodeId !== 'string' || nodeId.length === 0)
+  ) {
+    throw {
+      code: 'validation_failed',
+      message: 'getBoardScreenshot requires nodeIds to be an array of non-empty strings',
+    };
+  }
+  return params.nodeIds;
+}
+
 export function createBuiltInRendererCommandHandlers(): RendererCommandHandlers {
   return {
     getEditorState: () => getEditorState(),
     focusNodes: (params) => focusNodes(parseFocusNodeIds(params)),
     getWebpageScreenshots: (params) => getWebpageScreenshots(parsePageNodeIds(params)),
+    getBoardScreenshot: (params) => captureBoardScreenshot(parseBoardNodeIds(params)),
   };
 }
 

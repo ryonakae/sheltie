@@ -36,6 +36,7 @@ import { useSheltieNodeRuntime } from '@/hooks/sheltie/useSheltieNodeRuntime';
 import { useSheltieResize } from '@/hooks/sheltie/useSheltieResize';
 import { useSheltieTextEditing } from '@/hooks/sheltie/useSheltieTextEditing';
 import { useSheltieViewportController } from '@/hooks/sheltie/useSheltieViewportController';
+import { captureBoardScreenshot } from '@/lib/mcp/board-screenshot';
 import { registerMcpEditorAdapter } from '@/lib/mcp/editor-adapter';
 import { encodeWebpageScreenshots } from '@/lib/mcp/webpage-screenshots';
 import { resolveActiveSelection, retainLiveSelectedIds } from '@/lib/sheltie-selection';
@@ -311,8 +312,28 @@ export function Sheltie({
         focusNodes: async (nodeIds) => focusNodes(nodeIds),
         getWebpageScreenshots: async (pageNodeIds) =>
           encodeWebpageScreenshots(await getWebpageScreenshotCache(pageNodeIds)),
+        captureBoardScreenshot: async (nodeIds) =>
+          captureBoardScreenshot({
+            viewportElement:
+              containerRef.current?.querySelector<HTMLElement>('.react-flow__viewport') ?? null,
+            nodes,
+            edges,
+            screenshotUrlsByNodeId: screenshotUrls,
+            backgroundColor: isDark ? '#18181b' : '#f9fafb',
+            nodeIds,
+          }),
       }),
-    [focusNodes, getSelectedEdgeIds, getSelectedNodeIds, getViewport, getWebpageScreenshotCache],
+    [
+      edges,
+      focusNodes,
+      getSelectedEdgeIds,
+      getSelectedNodeIds,
+      getViewport,
+      getWebpageScreenshotCache,
+      isDark,
+      nodes,
+      screenshotUrls,
+    ],
   );
 
   const {

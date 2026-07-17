@@ -37,6 +37,15 @@ PNGファイルとして保存する（macOSのみ）。保存先は`~/Library/A
 - native撮影に失敗しても既存cacheがあれば返す。cacheが無いpageは`freshness: missing`として返し、call全体は失敗させない
 - 返却用画像だけcanvasで最長辺1024px以下のPNGへ縮小する。保存済みPNGは書き換えない。asset取得・decode・encodeに失敗した場合は`screenshot_failed`
 
+## MCPボード全景画像
+
+- `get_board_screenshot`は`.react-flow__viewport`をoffscreen hostへcloneし、visible viewport・selection・display modeを変更せずにPNG化する
+- 全nodeのframe外接矩形へ64 world pxのpaddingを加える。WebPageはframe chrome込みで計算し、出力はaspect ratioを維持して最長辺2048px以下、`pixelRatio: 1`とする
+- subset指定時は指定nodeだけをboard順で残し、両endpointがsubsetに含まれるedgeだけを描画する
+- clone内のhandle、resize control、selection frame、toolbar、connection line、edge selection endpoint、`data-board-capture-exclude`要素を除外する。新しい一時UIも同じdata属性を付ける
+- clone内の全WebPageを`screenshot`表示へ正規化し、mounted済みcache画像だけを使う。hidden/native Webviewを表示・移動・撮影せず、cacheが無いWebPage IDは`missingScreenshotNodeIds`へ返す
+- React Flowの背景はviewport cloneに含まれないため、現在themeの背景色を`html-to-image`へ明示する。hostは成功・失敗にかかわらず`finally`で削除する
+
 ## 撮影タイミング
 
 撮影は目的の違う 2 系統に分かれる。

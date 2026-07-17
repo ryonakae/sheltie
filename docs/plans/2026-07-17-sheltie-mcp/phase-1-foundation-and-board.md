@@ -697,6 +697,8 @@ git commit -m "feat: expose cached multi-site screenshots"
 - Create: `src/lib/mcp/board-screenshot.ts`
 - Test: `src/lib/mcp/board-screenshot.test.ts`
 - Modify: `src/lib/mcp/editor-adapter.ts`
+- Modify: `src/lib/mcp/renderer-bridge.ts`
+- Modify: `src/components/ReactFlowNodes/SelectionFrameOverlay.tsx`
 - Modify: `src/components/Sheltie/Sheltie.tsx`
 - Modify: `docs/agents/sheltie-screenshots.md`
 
@@ -704,7 +706,7 @@ git commit -m "feat: expose cached multi-site screenshots"
 - Produces: `captureBoardScreenshot`, `BoardScreenshotResult`.
 - Consumed by: Task 8.
 
-- [ ] **Step 1: Add `html-to-image` and write failing geometry tests**
+- [x] **Step 1: Add `html-to-image` and write failing geometry tests**
 
 Run: `npm install --save-exact html-to-image@1.11.13`
 
@@ -718,13 +720,13 @@ expect(resolveBoardCaptureScale({ width: 800, height: 600 }, 2048)).toBe(1);
 
 Include empty-board error, selected subset, and edge inclusion only when both endpoints are selected.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run: `npm run test -- src/lib/mcp/board-screenshot.test.ts`
 
 Expected: helpers do not exist.
 
-- [ ] **Step 3: Implement offscreen clone normalization**
+- [x] **Step 3: Implement offscreen clone normalization**
 
 Use `.react-flow__viewport` as the source. Clone it, attach beneath an offscreen host (`position: fixed; left: -100000px; top: 0`) without `visibility: hidden` or root opacity changes, and then:
 - set clone transform to `translate(${-bounds.x}px, ${-bounds.y}px) scale(1)`;

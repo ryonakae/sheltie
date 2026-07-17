@@ -8,6 +8,18 @@ import {
   type McpEditorAdapter,
 } from '@/lib/mcp/editor-adapter';
 
+function emptyBoardScreenshot() {
+  return {
+    mimeType: 'image/png' as const,
+    base64: '',
+    width: 1,
+    height: 1,
+    worldBounds: { x: 0, y: 0, width: 1, height: 1 },
+    includedNodeIds: [],
+    missingScreenshotNodeIds: [],
+  };
+}
+
 function createAdapter(name: string): McpEditorAdapter {
   return {
     getEditorState: () => ({
@@ -17,6 +29,7 @@ function createAdapter(name: string): McpEditorAdapter {
     }),
     focusNodes: vi.fn(async (nodeIds: string[]) => ({ focusedNodeIds: nodeIds })),
     getWebpageScreenshots: async () => [],
+    captureBoardScreenshot: async () => emptyBoardScreenshot(),
   };
 }
 
@@ -63,6 +76,7 @@ describe('MCP editor adapter', () => {
       getEditorState: () => source,
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
       getWebpageScreenshots: async () => [],
+      captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
     const result = getEditorState();

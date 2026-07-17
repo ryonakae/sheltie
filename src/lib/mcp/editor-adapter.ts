@@ -1,3 +1,4 @@
+import type { BoardScreenshotResult } from '@/lib/mcp/board-screenshot';
 import type { WebpageScreenshotResult } from '@/lib/mcp/webpage-screenshots';
 import type { Viewport } from '@/types';
 
@@ -11,6 +12,7 @@ export interface McpEditorAdapter {
   getEditorState: () => McpEditorState;
   focusNodes: (nodeIds: string[]) => Promise<{ focusedNodeIds: string[] }>;
   getWebpageScreenshots: (pageNodeIds?: string[]) => Promise<WebpageScreenshotResult[]>;
+  captureBoardScreenshot: (nodeIds?: string[]) => Promise<BoardScreenshotResult>;
 }
 
 let currentRegistration: { token: symbol; adapter: McpEditorAdapter } | null = null;
@@ -55,4 +57,8 @@ export async function getWebpageScreenshots(
   return requireMcpEditorAdapter().getWebpageScreenshots(
     pageNodeIds ? [...pageNodeIds] : undefined,
   );
+}
+
+export async function captureBoardScreenshot(nodeIds?: string[]): Promise<BoardScreenshotResult> {
+  return requireMcpEditorAdapter().captureBoardScreenshot(nodeIds ? [...nodeIds] : undefined);
 }

@@ -8,6 +8,18 @@ import {
 
 let cleanupAdapter: (() => void) | undefined;
 
+function emptyBoardScreenshot() {
+  return {
+    mimeType: 'image/png' as const,
+    base64: '',
+    width: 1,
+    height: 1,
+    worldBounds: { x: 0, y: 0, width: 1, height: 1 },
+    includedNodeIds: [],
+    missingScreenshotNodeIds: [],
+  };
+}
+
 afterEach(() => {
   cleanupAdapter?.();
   cleanupAdapter = undefined;
@@ -100,6 +112,7 @@ describe('built-in editor commands', () => {
       }),
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
       getWebpageScreenshots: async () => [],
+      captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
     const response = await createRendererResponse(
@@ -127,6 +140,7 @@ describe('built-in editor commands', () => {
       }),
       focusNodes,
       getWebpageScreenshots: async () => [],
+      captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
     const response = await createRendererResponse(
@@ -176,6 +190,7 @@ describe('built-in editor commands', () => {
       }),
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
       getWebpageScreenshots,
+      captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
     const response = await createRendererResponse(
@@ -224,6 +239,45 @@ describe('built-in editor commands', () => {
       createBuiltInRendererCommandHandlers(),
     );
     expect(arrayResponse.result).toMatchObject({
+      ok: false,
+      error: { code: 'validation_failed' },
+    });
+  });
+
+  it('validates and forwards optional board screenshot node IDs', async () => {
+    const captureBoardScreenshot = vi.fn(async () => emptyBoardScreenshot());
+    cleanupAdapter = registerMcpEditorAdapter({
+      getEditorState: () => ({
+        selectedNodeIds: [],
+        selectedEdgeIds: [],
+        viewport: { zoom: 1, panX: 0, panY: 0 },
+      }),
+      focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
+      getWebpageScreenshots: async () => [],
+      captureBoardScreenshot,
+    });
+
+    const response = await createRendererResponse(
+      {
+        requestId: 'board-screenshot',
+        command: 'getBoardScreenshot',
+        params: { documentId: 'doc-1', nodeIds: ['node-2', 'node-1'] },
+      },
+      createBuiltInRendererCommandHandlers(),
+    );
+
+    expect(captureBoardScreenshot).toHaveBeenCalledWith(['node-2', 'node-1']);
+    expect(response.result).toEqual({ ok: true, data: emptyBoardScreenshot() });
+
+    const invalid = await createRendererResponse(
+      {
+        requestId: 'board-screenshot-invalid',
+        command: 'getBoardScreenshot',
+        params: [],
+      },
+      createBuiltInRendererCommandHandlers(),
+    );
+    expect(invalid.result).toMatchObject({
       ok: false,
       error: { code: 'validation_failed' },
     });

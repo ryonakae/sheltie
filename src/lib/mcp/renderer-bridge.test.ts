@@ -5,6 +5,7 @@ import {
   createBuiltInRendererCommandHandlers,
   createRendererResponse,
 } from '@/lib/mcp/renderer-bridge';
+import { useProjectStore } from '@/store/tab-store';
 
 let cleanupAdapter: (() => void) | undefined;
 
@@ -103,6 +104,96 @@ describe('createRendererResponse', () => {
 });
 
 describe('built-in editor commands', () => {
+  it('reads a filtered board without changing runtime state', async () => {
+    useProjectStore.getState().initializeProject({
+      untitledIndex: 1,
+      document: {
+        schemaVersion: 2,
+        nodes: [
+          {
+            id: 'page',
+            type: 'webpage',
+            title: 'Page',
+            url: 'https://example.com',
+            x: 0,
+            y: 0,
+            width: 393,
+            height: 852,
+          },
+          {
+            id: 'text',
+            type: 'text',
+            title: 'Text',
+            x: 500,
+            y: 0,
+            width: 200,
+            height: 100,
+            fontSizePreset: 1,
+            fontWeight: 'normal',
+            italic: false,
+            strikethrough: false,
+            textColorIndex: 0,
+            widthMode: 'fixed',
+          },
+        ],
+        edges: [],
+      },
+    });
+    const beforeRuntime = structuredClone(useProjectStore.getState().webviewRuntime);
+
+    const response = await createRendererResponse(
+      {
+        requestId: 'get-board',
+        command: 'getBoard',
+        params: { documentId: 'doc-1', nodeTypes: ['text'], includeEdges: false },
+      },
+      createBuiltInRendererCommandHandlers(),
+    );
+
+    expect(response.result).toMatchObject({
+      ok: true,
+      data: { nodes: [{ id: 'text', type: 'text' }], edges: [] },
+    });
+    expect(useProjectStore.getState().webviewRuntime).toEqual(beforeRuntime);
+    expect(useProjectStore.getState().history.past).toHaveLength(0);
+  });
+
+  it('applies a board batch through the atomic store action', async () => {
+    useProjectStore.getState().initializeProject({
+      untitledIndex: 1,
+      document: { schemaVersion: 2, nodes: [], edges: [] },
+    });
+
+    const response = await createRendererResponse(
+      {
+        requestId: 'batch',
+        command: 'batchEditBoard',
+        params: {
+          documentId: 'doc-1',
+          operations: [
+            {
+              op: 'create_node',
+              tempId: 'note',
+              node: { type: 'stickynote', content: 'Created by MCP' },
+            },
+          ],
+        },
+      },
+      createBuiltInRendererCommandHandlers(),
+    );
+
+    expect(response.result).toMatchObject({
+      ok: true,
+      data: {
+        changed: true,
+        createdNodeIds: [expect.any(String)],
+        tempIdMap: { note: expect.any(String) },
+      },
+    });
+    expect(useProjectStore.getState().project?.nodes).toHaveLength(1);
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+  });
+
   it('returns the registered editor state', async () => {
     cleanupAdapter = registerMcpEditorAdapter({
       getEditorState: () => ({

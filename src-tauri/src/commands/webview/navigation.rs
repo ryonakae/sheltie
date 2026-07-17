@@ -11,7 +11,7 @@ pub struct NavigationState {
 /// ページ Webview のブラウザ履歴を1つ戻る。
 #[tauri::command]
 pub async fn go_back_page_webview(window: Window, label: String) -> Result<(), String> {
-    let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
+    let webview = resolve_page_webview(window.app_handle(), window.label(), &label)?;
     webview
         .eval("history.back()")
         .map_err(|e| format!("failed to run history.back(): {e}"))
@@ -20,7 +20,7 @@ pub async fn go_back_page_webview(window: Window, label: String) -> Result<(), S
 /// ページ Webview のブラウザ履歴を1つ進める。
 #[tauri::command]
 pub async fn go_forward_page_webview(window: Window, label: String) -> Result<(), String> {
-    let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
+    let webview = resolve_page_webview(window.app_handle(), window.label(), &label)?;
     webview
         .eval("history.forward()")
         .map_err(|e| format!("failed to run history.forward(): {e}"))
@@ -90,12 +90,8 @@ async fn get_navigation_state_impl(
 
 /// ページの Webview を指定 URL にナビゲートする（追加時 URL へのリセットに使用）。
 #[tauri::command]
-pub async fn reload_page_webview(
-    window: Window,
-    label: String,
-    url: String,
-) -> Result<(), String> {
-    let webview = resolve_page_webview(&window.app_handle(), window.label(), &label)?;
+pub async fn reload_page_webview(window: Window, label: String, url: String) -> Result<(), String> {
+    let webview = resolve_page_webview(window.app_handle(), window.label(), &label)?;
     let parsed_url = url
         .parse::<tauri::Url>()
         .map_err(|e| format!("failed to parse URL: {e}"))?;

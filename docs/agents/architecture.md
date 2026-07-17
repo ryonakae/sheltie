@@ -43,7 +43,9 @@ src/
 - `components/ReactFlowEdges/arrowGeometry.ts`: 太さ別の矢印形状・破線パターン・色・選択端点リング・ベジェ境界計算と Handle サイズの共通定数/純関数
 - `components/ReactFlowEdges/edgeTypes.ts`: React Flow `edgeTypes` 定数。既定の `default` を `ArrowEdge` で上書き
 - `hooks/sheltie/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
-- `store/tab-store.ts`: 単一 document window の node・edge・ビューポート状態と統合履歴（Undo/Redo）を管理。同じ2接続点のエッジ追加は後勝ちで向きを置換して旧スタイルを継承し、`updateEdgeStyle` / `reverseEdge` も履歴へ記録する
+- `store/tab-store.ts`: 単一 document window の node・edge・ビューポート状態と統合履歴（Undo/Redo）を管理。同じ2接続点のエッジ追加は後勝ちで向きを置換して旧スタイルを継承し、`updateEdgeStyle` / `reverseEdge` も履歴へ記録する。MCP batchは`applyMcpBoardBatch`だけを使い、全operationを1 history entryとして適用する
+- `lib/mcp/renderer-bridge.ts`: window-local MCP requestを検証し、Zustand board read/batchとmounted editor adapterへdispatchしてcompletion envelopeを返す
+- `lib/mcp/editor-adapter.ts`: Project/Sheltieが所有するselection、live viewport、cache-first screenshot、offscreen board captureをwindow-localに公開する。永続stateの正本にはしない
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
 - `lib/file-commands.ts`: File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` を処理し、`.sheltie` の入出力と window-local な store 連携を担当する
@@ -93,7 +95,10 @@ src/
 
 - `lib.rs`: モジュール宣言と `pub use` の入口（実体は持たない）
 - `mcp/mod.rs`: ローカル MCP endpoint・renderer event・timeout の共通定数と MCP module の入口
-- `mcp/types.rs`: MCP tool の入出力、renderer request/response envelope、安定した error code の型契約。JSON field は renderer と共有する camelCase を正本にする
+- `mcp/types.rs`: MCP toolの入出力、renderer request/response envelope、安定したerror codeの型契約。JSON fieldはrendererと共有するcamelCaseを正本にする
+- `mcp/service.rs`: 7 toolsのschema/annotation、document provider/broker dispatch、structured/text結果、image content block、session connection leaseを担当する。board内容は保持しない
+- `mcp/broker.rs`: document存在確認、document単位直列化、window-local event、10秒timeout、completion照合を担当する
+- `mcp/lifecycle.rs`: default-off設定、loopback listener、Host/Origin制限、session managerと全session shutdownを担当する
 - `setup.rs`: `pub fn run()` 本体、`invoke_handler` 登録、menu event 配信
 - `app_exit.rs`: `AppExitCoordinatorState` とアプリ終了の集約フロー
 - `menus/{app,file,edit,view,theme}.rs` + `menus/{helpers,macos}.rs`: メニュー構築と `file-command` / `edit-command` / `view-command` / `theme-command` 配信
@@ -145,7 +150,8 @@ Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/se
 
 - MCP SDK は `rmcp 2.2.0` を固定し、Tauri process 内で Streamable HTTP server を動かす。
 - endpoint は `http://127.0.0.1:29978/mcp`。bind address、renderer event、timeout は `src-tauri/src/mcp/mod.rs` の定数を参照する。
-- Rust 側は transport・session・document routing・timeout・tool response shapingを担当し、board state自体はrenderer/Zustandを正本とする。
+- Rust側はtransport・session・document routing・timeout・tool response shapingを担当し、board state自体はrenderer/Zustandを正本とする。
+- `StreamableHttpService`のsession managerをrunning server stateに保持し、disable時はlistener cancellationに加えて全sessionを明示closeする。service cloneはsession単位のleaseを共有し、最終dropでmenu connection countを減算する。
 - MCP toolとrenderer間のJSON契約は`src-tauri/src/mcp/types.rs`に集約し、tool実装でad-hocなfield名を増やさない。
 
 ## アセットプロトコル

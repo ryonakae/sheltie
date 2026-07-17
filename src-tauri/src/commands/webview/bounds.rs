@@ -133,6 +133,7 @@ fn platform_top_inset(window: &Window) -> Result<f64, String> {
 /// WKWebView は常に論理サイズを認識し、最小フォントサイズ問題も回避できる。
 /// 併せて set_css_viewport_unit_sizes で svh/lvh/dvh/vh の基準サイズを論理サイズに同期し、
 /// 物理 frame サイズからの乖離を防ぐ（新旧 API の両方をサポート）。
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_page_webview(
     window: Window,
@@ -247,11 +248,7 @@ pub async fn create_page_webview(
             let log_label = label.clone();
             wv.with_webview(move |platform_wv| {
                 let raw = platform_wv.inner() as *mut objc2::runtime::AnyObject;
-                log_child_webview_metrics(
-                    "create_page_webview:child-after-build",
-                    &log_label,
-                    raw,
-                );
+                log_child_webview_metrics("create_page_webview:child-after-build", &log_label, raw);
                 configure_new_webview_viewport(raw, width, height, zoom);
             })
             .ok();
@@ -302,7 +299,7 @@ pub async fn update_page_webview_bounds(
     #[cfg(target_os = "macos")]
     log_host_window_metrics(&window, "update_page_webview_bounds:host-before");
     update_bounds_impl(
-        &window.app_handle(),
+        window.app_handle(),
         window.label(),
         &label,
         x,
@@ -315,6 +312,7 @@ pub async fn update_page_webview_bounds(
 }
 
 #[cfg(target_os = "macos")]
+#[allow(clippy::too_many_arguments)]
 async fn update_bounds_impl(
     app: &AppHandle,
     window_label: &str,
@@ -452,7 +450,7 @@ pub async fn batch_update_page_webview_bounds(
     // エラーは個別に無視（一括更新中の孤児 Webview 対策）
     for e in entries {
         let _ = update_bounds_impl(
-            &app,
+            app,
             &window_label,
             &e.label,
             e.x,
@@ -487,7 +485,7 @@ pub async fn batch_update_webview_positions(
     let top_inset = platform_top_inset(&window)?;
 
     for e in entries {
-        if let Ok(wv) = resolve_page_webview(&app, &window_label, &e.label) {
+        if let Ok(wv) = resolve_page_webview(app, &window_label, &e.label) {
             wv.set_position(LogicalPosition::new(e.x, e.y + top_inset))
                 .ok();
         }

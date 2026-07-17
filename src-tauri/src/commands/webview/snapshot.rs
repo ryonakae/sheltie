@@ -4,10 +4,11 @@ use tauri::AppHandle;
 use tauri::Manager;
 
 #[cfg(target_os = "macos")]
-pub async fn capture_webview_png_bytes(
-    app: &AppHandle,
-    label: &str,
-) -> Result<Vec<u8>, String> {
+type SnapshotSender =
+    std::sync::Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<Result<Vec<u8>, String>>>>>;
+
+#[cfg(target_os = "macos")]
+pub async fn capture_webview_png_bytes(app: &AppHandle, label: &str) -> Result<Vec<u8>, String> {
     capture_webview_png_bytes_with_options(app, label, false).await
 }
 
@@ -21,7 +22,7 @@ pub async fn capture_webview_png_bytes_with_options(
     use tokio::sync::oneshot;
 
     let webview = app
-        .get_webview(&label)
+        .get_webview(label)
         .ok_or_else(|| format!("Webview '{label}' not found"))?;
 
     let (tx, rx) = oneshot::channel::<Result<Vec<u8>, String>>();
@@ -49,10 +50,7 @@ pub async fn capture_webview_png_bytes_with_options(
 }
 
 #[cfg(not(target_os = "macos"))]
-pub async fn capture_webview_png_bytes(
-    _app: &AppHandle,
-    _label: &str,
-) -> Result<Vec<u8>, String> {
+pub async fn capture_webview_png_bytes(_app: &AppHandle, _label: &str) -> Result<Vec<u8>, String> {
     Err("this OS is not supported".to_string())
 }
 
@@ -65,10 +63,7 @@ pub async fn capture_webview_png_bytes_with_options(
     Err("this OS is not supported".to_string())
 }
 
-pub async fn capture_webview_base64(
-    app: &AppHandle,
-    label: &str,
-) -> Result<String, String> {
+pub async fn capture_webview_base64(app: &AppHandle, label: &str) -> Result<String, String> {
     use base64::Engine as _;
 
     let bytes = capture_webview_png_bytes(app, label).await?;
@@ -77,14 +72,7 @@ pub async fn capture_webview_base64(
 }
 
 #[cfg(target_os = "macos")]
-fn take_wkwebview_snapshot(
-    raw_ptr: *mut objc2::runtime::AnyObject,
-    tx: std::sync::Arc<
-        std::sync::Mutex<
-            Option<tokio::sync::oneshot::Sender<Result<Vec<u8>, String>>>,
-        >,
-    >,
-) {
+fn take_wkwebview_snapshot(raw_ptr: *mut objc2::runtime::AnyObject, tx: SnapshotSender) {
     use block2::RcBlock;
     use objc2::runtime::{AnyClass, AnyObject};
     use objc2_foundation::NSRect;
@@ -146,8 +134,7 @@ fn nsimage_to_png_bytes(image: *mut objc2::runtime::AnyObject) -> Result<Vec<u8>
             return Err("TIFFRepresentation is null".to_string());
         }
 
-        let cls = AnyClass::get(c"NSBitmapImageRep")
-            .ok_or("NSBitmapImageRep class not found")?;
+        let cls = AnyClass::get(c"NSBitmapImageRep").ok_or("NSBitmapImageRep class not found")?;
         let bitmap: *mut AnyObject = objc2::msg_send![cls, imageRepWithData: tiff];
         if bitmap.is_null() {
             return Err("failed to create NSBitmapImageRep".to_string());

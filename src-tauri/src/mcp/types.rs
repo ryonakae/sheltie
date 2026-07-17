@@ -63,19 +63,12 @@ pub struct RendererResult {
 }
 
 impl RendererResult {
+    #[cfg(test)]
     pub fn success(data: serde_json::Value) -> Self {
         Self {
             ok: true,
             data: Some(data),
             error: None,
-        }
-    }
-
-    pub fn failure(error: ToolError) -> Self {
-        Self {
-            ok: false,
-            data: None,
-            error: Some(error),
         }
     }
 
@@ -220,7 +213,7 @@ pub enum ScreenshotFreshness {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WebpageScreenshotResult {
+pub struct RendererWebpageScreenshotResult {
     pub page_node_id: String,
     pub freshness: ScreenshotFreshness,
     pub mime_type: Option<String>,
@@ -233,9 +226,21 @@ pub struct WebpageScreenshotResult {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WebpageScreenshotMetadata {
+    pub page_node_id: String,
+    pub freshness: ScreenshotFreshness,
+    pub mime_type: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub captured_at: Option<String>,
+    pub captured_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WebpageScreenshotsResult {
     pub document_id: String,
-    pub screenshots: Vec<WebpageScreenshotResult>,
+    pub screenshots: Vec<WebpageScreenshotMetadata>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
@@ -249,10 +254,21 @@ pub struct WorldBoundsResult {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RendererBoardScreenshotResult {
+    pub mime_type: String,
+    pub base64: String,
+    pub width: u32,
+    pub height: u32,
+    pub world_bounds: WorldBoundsResult,
+    pub included_node_ids: Vec<String>,
+    pub missing_screenshot_node_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BoardScreenshotResult {
     pub document_id: String,
     pub mime_type: String,
-    pub base64: String,
     pub width: u32,
     pub height: u32,
     pub world_bounds: WorldBoundsResult,

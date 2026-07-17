@@ -132,17 +132,17 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            if let Err(error) = configure_macos_window_tabbing_policy(&app.handle()) {
+            if let Err(error) = configure_macos_window_tabbing_policy(app.handle()) {
                 log::error!("failed to initialize macOS native tab: {error}");
             }
             // tauri_plugin_store の State がここで初期化済みなので、
             // 永続化済みテーマで Settings > Theme の初期チェック状態を反映する
-            let initial_theme = load_persisted_theme(&app.handle());
-            update_theme_check_state(&app.handle(), &initial_theme);
-            update_mcp_connection_count(&app.handle(), 0);
-            let initial_mcp_enabled = load_mcp_enabled(&app.handle());
+            let initial_theme = load_persisted_theme(app.handle());
+            update_theme_check_state(app.handle(), &initial_theme);
+            update_mcp_connection_count(app.handle(), 0);
+            let initial_mcp_enabled = load_mcp_enabled(app.handle());
             update_mcp_check_state(
-                &app.handle(),
+                app.handle(),
                 cfg!(target_os = "macos") && initial_mcp_enabled,
             );
 
@@ -157,7 +157,7 @@ pub fn run() {
             }
 
             let launch_args: Vec<String> = std::env::args().collect();
-            if let Err(error) = handle_launch_args(&app.handle(), &launch_args, None) {
+            if let Err(error) = handle_launch_args(app.handle(), &launch_args, None) {
                 log::error!("failed to create initial window: {error}");
             }
             app.on_menu_event(|app, event| match event.id().as_ref() {

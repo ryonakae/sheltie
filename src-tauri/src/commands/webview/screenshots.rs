@@ -146,8 +146,8 @@ fn screenshots_dir(app: &AppHandle, project_id: &str) -> Result<PathBuf, String>
 /// hide中は空白画像になる可能性がある。
 #[tauri::command]
 pub async fn capture_webview_screenshot(window: Window, label: String) -> Result<String, String> {
-    resolve_page_webview(&window.app_handle(), window.label(), &label)?;
-    snapshot::capture_webview_base64(&window.app_handle(), &label).await
+    resolve_page_webview(window.app_handle(), window.label(), &label)?;
+    snapshot::capture_webview_base64(window.app_handle(), &label).await
 }
 
 /// WKWebViewのスクリーンショットと撮影時メタデータを保存する。
@@ -180,14 +180,14 @@ async fn save_screenshot_impl(
     captured_url: Option<String>,
     hide_after_snapshot_request: bool,
 ) -> Result<SavedScreenshot, String> {
-    resolve_page_webview(&window.app_handle(), window.label(), &label)?;
+    resolve_page_webview(window.app_handle(), window.label(), &label)?;
     let png_bytes = snapshot::capture_webview_png_bytes_with_options(
-        &window.app_handle(),
+        window.app_handle(),
         &label,
         hide_after_snapshot_request,
     )
     .await?;
-    let dir = screenshots_dir(&window.app_handle(), &project_id)?;
+    let dir = screenshots_dir(window.app_handle(), &project_id)?;
     let captured_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     write_screenshot_artifacts(&dir, &page_id, &png_bytes, captured_url, captured_at)
 }

@@ -5,6 +5,7 @@ import {
   getWebpageScreenshots,
 } from '@/lib/mcp/editor-adapter';
 import type {
+  BoardOperation,
   McpToolError,
   RendererCommandHandlers,
   RendererRequest,
@@ -12,6 +13,7 @@ import type {
 } from '@/lib/mcp/types';
 import { onMcpRendererRequest } from '@/lib/tauri-bridge/events';
 import { api } from '@/lib/tauri-bridge/project';
+import { useProjectStore } from '@/store/tab-store';
 
 let currentRegistration: { token: symbol; handlers: RendererCommandHandlers } | null = null;
 
@@ -84,6 +86,121 @@ function parsePageNodeIds(params: unknown): string[] | undefined {
   return params.pageNodeIds;
 }
 
+function parseGetBoardParams(params: unknown): {
+  nodeIds?: string[];
+  nodeTypes?: Array<'webpage' | 'stickynote' | 'text'>;
+  includeEdges: boolean;
+} {
+  if (typeof params !== 'object' || params === null || Array.isArray(params)) {
+    throw { code: 'validation_failed', message: 'getBoard requires params to be an object' };
+  }
+  const nodeIds = 'nodeIds' in params ? params.nodeIds : undefined;
+  if (
+    nodeIds !== undefined &&
+    (!Array.isArray(nodeIds) ||
+      nodeIds.some((nodeId) => typeof nodeId !== 'string' || nodeId.length === 0))
+  ) {
+    throw {
+      code: 'validation_failed',
+      message: 'getBoard requires nodeIds to be an array of non-empty strings',
+    };
+  }
+  const nodeTypes = 'nodeTypes' in params ? params.nodeTypes : undefined;
+  const validNodeTypes = new Set(['webpage', 'stickynote', 'text']);
+  if (
+    nodeTypes !== undefined &&
+    (!Array.isArray(nodeTypes) ||
+      nodeTypes.some((nodeType) => typeof nodeType !== 'string' || !validNodeTypes.has(nodeType)))
+  ) {
+    throw {
+      code: 'validation_failed',
+      message: 'getBoard nodeTypes must contain webpage, stickynote, or text',
+    };
+  }
+  const includeEdges = 'includeEdges' in params ? params.includeEdges : true;
+  if (typeof includeEdges !== 'boolean') {
+    throw { code: 'validation_failed', message: 'getBoard includeEdges must be a boolean' };
+  }
+  return {
+    ...(nodeIds ? { nodeIds: nodeIds as string[] } : {}),
+    ...(nodeTypes ? { nodeTypes: nodeTypes as Array<'webpage' | 'stickynote' | 'text'> } : {}),
+    includeEdges,
+  };
+}
+
+function getBoard(params: unknown) {
+  const project = useProjectStore.getState().project;
+  if (!project) {
+    throw {
+      code: 'renderer_unavailable',
+      message: 'No project is loaded in this document renderer',
+    };
+  }
+  const parsed = parseGetBoardParams(params);
+  const liveIds = new Set(project.nodes.map((node) => node.id));
+  const unknownIds = parsed.nodeIds?.filter((nodeId) => !liveIds.has(nodeId)) ?? [];
+  if (unknownIds.length > 0) {
+    throw { code: 'validation_failed', message: `Unknown node IDs: ${unknownIds.join(', ')}` };
+  }
+  const requestedIds = parsed.nodeIds ? new Set(parsed.nodeIds) : null;
+  const requestedTypes = parsed.nodeTypes ? new Set(parsed.nodeTypes) : null;
+  const nodes = project.nodes.filter((node) => {
+    const nodeType = node.type ?? 'webpage';
+    return (
+      (!requestedIds || requestedIds.has(node.id)) &&
+      (!requestedTypes || requestedTypes.has(nodeType))
+    );
+  });
+  const selectedIds = new Set(nodes.map((node) => node.id));
+  const edges = parsed.includeEdges
+    ? project.edges.filter((edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target))
+    : [];
+  return { nodes, edges };
+}
+
+function batchEditBoard(params: unknown) {
+  if (
+    typeof params !== 'object' ||
+    params === null ||
+    Array.isArray(params) ||
+    !('operations' in params) ||
+    !Array.isArray(params.operations)
+  ) {
+    throw {
+      code: 'validation_failed',
+      message: 'batchEditBoard requires operations to be an array',
+    };
+  }
+  const invalidOperationIndex = params.operations.findIndex(
+    (operation) => typeof operation !== 'object' || operation === null || Array.isArray(operation),
+  );
+  if (invalidOperationIndex >= 0) {
+    throw {
+      code: 'validation_failed',
+      message: `Operation ${invalidOperationIndex}: operation must be an object`,
+    };
+  }
+  const result = useProjectStore
+    .getState()
+    .applyMcpBoardBatch(params.operations as BoardOperation[]);
+  if (!result.ok) {
+    throw {
+      code: result.error.code,
+      message: `Operation ${result.error.operationIndex}: ${result.error.message}`,
+    };
+  }
+  return {
+    changed: result.changed,
+    createdNodeIds: result.createdNodeIds,
+    updatedNodeIds: result.updatedNodeIds,
+    deletedNodeIds: result.deletedNodeIds,
+    createdEdgeIds: result.createdEdgeIds,
+    updatedEdgeIds: result.updatedEdgeIds,
+    deletedEdgeIds: result.deletedEdgeIds,
+    tempIdMap: result.tempIdMap,
+  };
+}
+
 function parseBoardNodeIds(params: unknown): string[] | undefined {
   if (typeof params !== 'object' || params === null || Array.isArray(params)) {
     throw {
@@ -107,6 +224,8 @@ function parseBoardNodeIds(params: unknown): string[] | undefined {
 export function createBuiltInRendererCommandHandlers(): RendererCommandHandlers {
   return {
     getEditorState: () => getEditorState(),
+    getBoard: (params) => getBoard(params),
+    batchEditBoard: (params) => batchEditBoard(params),
     focusNodes: (params) => focusNodes(parseFocusNodeIds(params)),
     getWebpageScreenshots: (params) => getWebpageScreenshots(parsePageNodeIds(params)),
     getBoardScreenshot: (params) => captureBoardScreenshot(parseBoardNodeIds(params)),

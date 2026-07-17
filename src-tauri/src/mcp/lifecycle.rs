@@ -2,13 +2,18 @@ use std::sync::Mutex;
 
 use axum::Router;
 use rmcp::transport::streamable_http_server::{
-    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
+    session::{local::LocalSessionManager, SessionManager},
+    StreamableHttpServerConfig, StreamableHttpService,
 };
 use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 use tokio_util::sync::CancellationToken;
 
-use super::{broker::McpRequestBrokerState, service::SheltieMcpService, MCP_BIND_ADDRESS};
+use super::{
+    broker::McpRequestBrokerState,
+    service::{McpConnectionCounter, SheltieMcpService},
+    MCP_BIND_ADDRESS,
+};
 use crate::commands::theme::STORE_PATH;
 
 pub const MCP_ENABLED_KEY: &str = "mcpEnabled";
@@ -78,6 +83,7 @@ pub fn set_mcp_enabled(app: &tauri::AppHandle, enabled: bool) -> Result<(), Stri
 pub struct McpServerState {
     inner: Mutex<McpServerInner>,
     operation_lock: tokio::sync::Mutex<()>,
+    connections: std::sync::Arc<McpConnectionCounter>,
 }
 
 #[derive(Default)]
@@ -90,6 +96,7 @@ struct McpServerInner {
 
 struct RunningMcpServer {
     cancellation: CancellationToken,
+    sessions: std::sync::Arc<LocalSessionManager>,
     task: tauri::async_runtime::JoinHandle<()>,
 }
 
@@ -152,6 +159,10 @@ impl McpServerState {
             .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())
     }
 
+    pub fn connection_counter(&self) -> std::sync::Arc<McpConnectionCounter> {
+        self.connections.clone()
+    }
+
     fn transition(&self, event: McpLifecycleEvent) -> Result<McpLifecycle, String> {
         let mut inner = self
             .inner
@@ -206,14 +217,58 @@ fn server_config(cancellation: CancellationToken) -> StreamableHttpServerConfig 
         .with_cancellation_token(cancellation)
 }
 
-fn mcp_router(cancellation: CancellationToken) -> Router {
+fn mcp_router(
+    app: tauri::AppHandle,
+    cancellation: CancellationToken,
+) -> (Router, std::sync::Arc<LocalSessionManager>) {
+    let connections = app.state::<McpServerState>().connection_counter();
+    mcp_router_with_factory(
+        move || {
+            Ok(SheltieMcpService::from_app(
+                app.clone(),
+                connections.clone(),
+            ))
+        },
+        cancellation,
+    )
+}
+
+fn mcp_router_with_factory(
+    service_factory: impl Fn() -> Result<SheltieMcpService, std::io::Error> + Send + Sync + 'static,
+    cancellation: CancellationToken,
+) -> (Router, std::sync::Arc<LocalSessionManager>) {
+    let sessions = std::sync::Arc::new(LocalSessionManager::default());
     let service: StreamableHttpService<SheltieMcpService, LocalSessionManager> =
         StreamableHttpService::new(
-            || Ok(SheltieMcpService),
-            Default::default(),
+            service_factory,
+            sessions.clone(),
             server_config(cancellation),
         );
-    Router::new().nest_service("/mcp", service)
+    (Router::new().nest_service("/mcp", service), sessions)
+}
+
+async fn close_all_sessions(sessions: &LocalSessionManager) {
+    let session_ids = sessions
+        .sessions
+        .read()
+        .await
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    for session_id in session_ids {
+        if let Err(error) = sessions.close_session(&session_id).await {
+            log::warn!("failed to close MCP session {session_id}: {error}");
+        }
+    }
+}
+
+async fn shutdown_running_server(running: RunningMcpServer) {
+    running.cancellation.cancel();
+    close_all_sessions(&running.sessions).await;
+    let _ = running.task.await;
+    // An initialize request accepted before listener shutdown can create a session
+    // after the first sweep. No new requests can enter after the Axum task exits.
+    close_all_sessions(&running.sessions).await;
 }
 
 pub async fn apply_requested_enabled(
@@ -283,7 +338,7 @@ pub async fn start(app: tauri::AppHandle) -> Result<(), String> {
     };
 
     let cancellation = CancellationToken::new();
-    let router = mcp_router(cancellation.child_token());
+    let (router, sessions) = mcp_router(app.clone(), cancellation.child_token());
     let graceful_cancellation = cancellation.clone();
     let (accept_sender, accept_receiver) = tokio::sync::oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
@@ -306,12 +361,15 @@ pub async fn start(app: tauri::AppHandle) -> Result<(), String> {
         return Err(error);
     }
 
-    let running = RunningMcpServer { cancellation, task };
+    let running = RunningMcpServer {
+        cancellation,
+        sessions,
+        task,
+    };
     if let Some(interrupted) = state.install_running(running)? {
         app.state::<McpRequestBrokerState>().stop()?;
-        interrupted.cancellation.cancel();
         drop(accept_sender);
-        let _ = interrupted.task.await;
+        shutdown_running_server(interrupted).await;
         state.finish_stop()?;
     } else if accept_sender.send(()).is_err() {
         stop(app.clone()).await?;
@@ -326,8 +384,7 @@ pub async fn stop(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<McpServerState>();
     let running = state.take_running_for_stop()?;
     if let Some(running) = running {
-        running.cancellation.cancel();
-        let _ = running.task.await;
+        shutdown_running_server(running).await;
     }
     state.finish_stop()
 }
@@ -377,7 +434,14 @@ mod tests {
         use axum::{body::Body, http::Request};
         use tower::ServiceExt;
 
-        let router = mcp_router(CancellationToken::new());
+        let (router, _sessions) = mcp_router_with_factory(
+            || {
+                Err(std::io::Error::other(
+                    "service must not start for rejected requests",
+                ))
+            },
+            CancellationToken::new(),
+        );
         let foreign_host = router
             .clone()
             .oneshot(
@@ -427,8 +491,16 @@ mod tests {
         let cancellation = CancellationToken::new();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let task_cancellation = cancellation.clone();
+        let (router, _sessions) = mcp_router_with_factory(
+            || {
+                Err(std::io::Error::other(
+                    "service must not start for cancellation test",
+                ))
+            },
+            task_cancellation.child_token(),
+        );
         let task = tokio::spawn(async move {
-            axum::serve(listener, mcp_router(task_cancellation.child_token()))
+            axum::serve(listener, router)
                 .with_graceful_shutdown(async move { task_cancellation.cancelled_owned().await })
                 .await
                 .unwrap();
@@ -439,6 +511,39 @@ mod tests {
             .await
             .expect("listener should stop after cancellation")
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn closing_all_sessions_removes_active_sessions() {
+        let sessions = LocalSessionManager::default();
+        let (session_id, _transport) = sessions.create_session().await.unwrap();
+        assert!(sessions.has_session(&session_id).await.unwrap());
+
+        close_all_sessions(&sessions).await;
+
+        assert!(!sessions.has_session(&session_id).await.unwrap());
+        assert!(sessions.sessions.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn shutdown_closes_a_session_created_during_listener_shutdown() {
+        let sessions = std::sync::Arc::new(LocalSessionManager::default());
+        let cancellation = CancellationToken::new();
+        let task_sessions = sessions.clone();
+        let task_cancellation = cancellation.clone();
+        let task = tauri::async_runtime::spawn(async move {
+            task_cancellation.cancelled().await;
+            let _ = task_sessions.create_session().await.unwrap();
+        });
+        let running = RunningMcpServer {
+            cancellation,
+            sessions: sessions.clone(),
+            task,
+        };
+
+        shutdown_running_server(running).await;
+
+        assert!(sessions.sessions.read().await.is_empty());
     }
 
     #[test]

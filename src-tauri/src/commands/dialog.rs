@@ -8,7 +8,9 @@ pub struct UnsavedChangesDialogParams {
 }
 
 #[cfg(target_os = "macos")]
-fn build_alert_texts(params: &UnsavedChangesDialogParams) -> (String, String, &'static str, &'static str) {
+fn build_alert_texts(
+    params: &UnsavedChangesDialogParams,
+) -> (String, String, &'static str, &'static str) {
     let is_app_exit = params.kind == "app-exit";
 
     let titles = params.project_titles.as_deref().unwrap_or(&[]);
@@ -59,8 +61,7 @@ fn show_nsalert_sheet(
     const SECOND: isize = 1001;
 
     let result = objc2::exception::catch(std::panic::AssertUnwindSafe(|| unsafe {
-        let alert_class = AnyClass::get(c"NSAlert")
-            .expect("NSAlert class not found");
+        let alert_class = AnyClass::get(c"NSAlert").expect("NSAlert class not found");
         let alert: *mut AnyObject = objc2::msg_send![alert_class, new];
 
         let _: () = objc2::msg_send![alert, setAlertStyle: NS_ALERT_STYLE_WARNING];

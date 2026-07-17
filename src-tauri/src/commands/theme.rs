@@ -39,7 +39,9 @@ pub async fn set_theme(app: AppHandle, window: Window, mode: String) -> Result<b
         .map_err(|e| format!("failed to open store: {e}"))?;
 
     store.set(THEME_KEY, serde_json::Value::String(mode.clone()));
-    store.save().map_err(|e| format!("failed to save store: {e}"))?;
+    store
+        .save()
+        .map_err(|e| format!("failed to save store: {e}"))?;
 
     let is_dark = match mode.as_str() {
         "dark" => {

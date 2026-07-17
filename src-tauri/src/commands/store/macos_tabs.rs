@@ -213,7 +213,7 @@ pub async fn set_document_edited(window: Window, edited: bool) -> Result<(), Str
         let label = window.label().to_string();
         let app = window.app_handle();
 
-        run_on_app_main_thread(&app, move |app| {
+        run_on_app_main_thread(app, move |app| {
             let window = app
                 .get_window(&label)
                 .ok_or_else(|| format!("window '{label}' not found"))?;
@@ -296,7 +296,7 @@ pub fn create_untitled_document_tab<R: tauri::Runtime>(
 #[tauri::command]
 pub async fn new_document_tab(window: Window) -> Result<(), String> {
     log::info!("[new-tab] command start: host_label={}", window.label());
-    let result = create_untitled_document_tab(&window.app_handle(), window.label());
+    let result = create_untitled_document_tab(window.app_handle(), window.label());
     if let Err(error) = &result {
         log::error!(
             "[new-tab] command error: host_label={}, error={error}",
@@ -341,7 +341,7 @@ pub async fn present_document_window(
         let attach_child_label = child_label.clone();
         let attach_tabbing_identifier = tabbing_identifier.clone();
 
-        let result = run_on_app_main_thread(&app, move |app| {
+        let result = run_on_app_main_thread(app, move |app| {
             log::info!(
                 "[new-tab] main-thread entered: host_label={attach_host_label}, child_label={attach_child_label}, tabbing_identifier={attach_tabbing_identifier}"
             );

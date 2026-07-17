@@ -594,7 +594,7 @@ Run:
 
 Manual check: select mixed node/edge states and confirm editor state reports them; run explicit focus and confirm only requested nodes become selected and fit; run `get_board`/batch later and confirm selection does not move.
 
-- [ ] **Step 6: Document and commit**
+- [x] **Step 6: Document and commit**
 
 ```bash
 git add src/lib/mcp/editor-adapter.ts src/lib/mcp/editor-adapter.test.ts src/screens/Project.tsx src/components/Sheltie/Sheltie.tsx src/hooks/sheltie/useSheltieViewportController.ts src/lib/mcp/renderer-bridge.ts docs/agents/coding-rules.md
@@ -680,7 +680,7 @@ Run:
 
 Manual check with at least three WebPages, two outside viewport: one MCP call returns all three IDs; hidden pages remain hidden; cached/missing status is accurate; no viewport movement occurs.
 
-- [ ] **Step 6: Document and commit**
+- [x] **Step 6: Document and commit**
 
 ```bash
 git add src/types/index.ts src/store/tab-store.ts src/store/tab-store.test.ts src/hooks/sheltie/useScreenshotCaptureQueue.ts src-tauri/src/commands/webview/screenshots.rs src/lib/tauri-bridge/webview.ts src/lib/mcp/renderer-bridge.ts docs/agents/sheltie-screenshots.md
@@ -764,7 +764,7 @@ Manual check:
 4. Verify visible viewport/selection do not move, no native Webview flashes, output longest side is at most 2048, all requested nodes/edges appear, and missing screenshot IDs match placeholders.
 5. Repeat in light and dark themes.
 
-- [ ] **Step 5: Document and commit**
+- [x] **Step 5: Document and commit**
 
 ```bash
 git add package.json package-lock.json src/lib/mcp/board-screenshot.ts src/lib/mcp/board-screenshot.test.ts src/lib/mcp/editor-adapter.ts src/components/Sheltie/Sheltie.tsx docs/agents/sheltie-screenshots.md
@@ -788,17 +788,17 @@ git commit -m "feat: capture full Sheltie boards for MCP"
 - Consumes: Tasks 1–7.
 - Produces: complete phase-1 MCP server contract consumed by phases 2–4.
 
-- [ ] **Step 1: Write failing tool schema/annotation tests**
+- [x] **Step 1: Write failing tool schema/annotation tests**
 
 Instantiate `SheltieMcpService` with fake broker/document provider and inspect `tool_router.list_all()`. Assert exact names, required `documentId`, output schemas, and annotations. Add behavior tests for document-not-found, renderer timeout, atomic batch error, multi-image ordering, and image content blocks.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run: `(cd src-tauri && cargo test --lib mcp::service::tests)`
 
 Expected: service/router does not exist.
 
-- [ ] **Step 3: Implement the `rmcp` service**
+- [x] **Step 3: Implement the `rmcp` service**
 
 Use `#[tool_router]` plus `#[tool_handler]`. Each input derives `serde::Deserialize` and `rmcp::schemars::JsonSchema`. Reads return typed `rmcp::Json<T>` when no image is needed. Image tools build `CallToolResult` with one metadata text/structured payload and ordered `ContentBlock::image(base64, "image/png")` entries.
 
@@ -816,7 +816,7 @@ Apply annotations in each macro, for example:
 
 Increment connected session count when the service factory creates a session lease; decrement when the final clone drops. Update the disabled menu label to `MCP Connections: N` on the main thread. Do not log tool parameters or page/board content.
 
-- [ ] **Step 4: Confirm GREEN**
+- [x] **Step 4: Confirm GREEN**
 
 Run:
 - `(cd src-tauri && cargo test --lib mcp::service::tests)`
@@ -853,7 +853,7 @@ Verify in Claude Code, Codex, and one of Cursor/VS Code:
 9. Disabling MCP disconnects all clients and stops the port.
 10. Requests with a foreign `Origin` or disallowed `Host` receive HTTP 403.
 
-- [ ] **Step 6: Finish docs and commit**
+- [x] **Step 6: Finish docs and commit**
 
 Complete the phase-1 tool tables, JSON contracts, errors, setup examples, no-save rule, and client verification in `docs/agents/mcp.md`; align architecture responsibilities.
 

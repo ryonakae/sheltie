@@ -3734,6 +3734,7 @@ dependencies = [
  "tauri-plugin-store",
  "tokio",
  "tokio-util",
+ "tower",
  "uuid",
 ]
 

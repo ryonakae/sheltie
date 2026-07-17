@@ -20,6 +20,7 @@
 | `sheltie-runtime.md` | Sheltie 表示・操作仕様 | Sheltie/Webview 変更時 |
 | `sheltie-screenshots.md` | スクリーンショット撮影・永続化・ちらつき回避 | スクショ撮影タイミング・保存形式の変更時 |
 | `wkwebview-internals.md` | WKWebView 固有のワークアラウンド | WKWebView private API・macOS 固有問題の変更時 |
+| `mcp.md` | local MCP lifecycle・trust boundary・tool routing | MCP server・tool・renderer bridge変更時 |
 
 ## メンテナンス方針
 

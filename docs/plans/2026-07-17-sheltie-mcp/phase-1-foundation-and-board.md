@@ -247,7 +247,7 @@ git commit -m "feat: define Sheltie MCP contracts"
 - Consumes: constants/types from Task 1.
 - Produces: `McpServerState`, `load_mcp_enabled`, `set_mcp_enabled`, `start`, `stop`, menu update helpers.
 
-- [ ] **Step 1: Write failing lifecycle tests**
+- [x] **Step 1: Write failing lifecycle tests**
 
 Test a pure reducer/state transition separated from the socket side effect:
 
@@ -270,13 +270,13 @@ fn disable_cancels_running_server() {
 }
 ```
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run: `(cd src-tauri && cargo test --lib mcp::lifecycle::tests)`
 
 Expected: missing lifecycle types/functions.
 
-- [ ] **Step 3: Implement lifecycle state and server task**
+- [x] **Step 3: Implement lifecycle state and server task**
 
 Use this ownership model:
 
@@ -308,7 +308,7 @@ pub const MCP_ENABLED_KEY: &str = "mcpEnabled";
 
 Reuse `commands::theme::STORE_PATH`. Persist before returning from a menu toggle. On failed bind, persist `false`, uncheck the item, and show a native error message containing `127.0.0.1:29978`.
 
-- [ ] **Step 4: Add the menu contract**
+- [x] **Step 4: Add the menu contract**
 
 Create IDs:
 
@@ -319,7 +319,7 @@ pub const MENU_ID_MCP_CONNECTIONS: &str = "mcp.connections";
 
 Add a separator after Theme, a checked `MCP Server` item, and disabled text item `MCP Connections: 0` under the existing Settings submenu. During setup, load persisted state after `tauri-plugin-store` initialization; on macOS start only when true. Handle the check item in `app.on_menu_event` by spawning the asynchronous transition. Non-macOS keeps it disabled and unchecked.
 
-- [ ] **Step 5: Confirm GREEN**
+- [x] **Step 5: Confirm GREEN**
 
 Run: `(cd src-tauri && cargo test --lib mcp::lifecycle::tests && cargo check)`
 
@@ -333,7 +333,7 @@ Manual check:
 5. Disable it and verify the listener disappears.
 6. Occupy port 29978 before enabling; verify the item returns unchecked and the error dialog names the port.
 
-- [ ] **Step 6: Document and commit**
+- [x] **Step 6: Document and commit**
 
 Write `docs/agents/mcp.md` sections “Trust boundary”, “Lifecycle”, “Endpoint”, and “Menu setting”; link it from `docs/agents/README.md`.
 

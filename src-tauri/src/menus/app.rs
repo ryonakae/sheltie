@@ -52,7 +52,7 @@ fn insert_settings_submenu<R: tauri::Runtime>(
 ) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, PredefinedMenuItem, SubmenuBuilder};
 
-    use super::MENU_ID_SETTINGS;
+    use super::{MENU_ID_MCP_CONNECTIONS, MENU_ID_MCP_ENABLED, MENU_ID_SETTINGS};
     use crate::commands::theme::{MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM};
 
     // メニュー構築時点ではまだ tauri_plugin_store の State が manage されていないため、
@@ -71,11 +71,30 @@ fn insert_settings_submenu<R: tauri::Runtime>(
         CheckMenuItem::with_id(app, MENU_ID_THEME_LIGHT, "Light", true, false, None::<&str>)?;
     let dark_item =
         CheckMenuItem::with_id(app, MENU_ID_THEME_DARK, "Dark", true, false, None::<&str>)?;
+    let section_separator = PredefinedMenuItem::separator(app)?;
+    let mcp_enabled_item = CheckMenuItem::with_id(
+        app,
+        MENU_ID_MCP_ENABLED,
+        "MCP Server",
+        cfg!(target_os = "macos"),
+        false,
+        None::<&str>,
+    )?;
+    let mcp_connections_item = tauri::menu::MenuItem::with_id(
+        app,
+        MENU_ID_MCP_CONNECTIONS,
+        "MCP Connections: 0",
+        false,
+        None::<&str>,
+    )?;
 
     let settings_submenu = SubmenuBuilder::with_id(app, MENU_ID_SETTINGS, "Settings")
         .item(&system_item)
         .item(&light_item)
         .item(&dark_item)
+        .item(&section_separator)
+        .item(&mcp_enabled_item)
+        .item(&mcp_connections_item)
         .build()?;
 
     // App メニュー既定構成 [0] About, [1] separator, [2] Services, ...

@@ -2,6 +2,7 @@ use tauri::{
     menu::{Menu, MenuItemBuilder, SubmenuBuilder},
     Manager, RunEvent,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::app_exit::{emit_app_exit_requested, AppExitCoordinatorState};
 use crate::commands::{
@@ -12,17 +13,73 @@ use crate::commands::{
     },
     theme::{load_persisted_theme, MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM},
 };
+use crate::mcp::lifecycle::{
+    apply_requested_enabled, apply_requested_runtime_only, load_mcp_enabled, McpServerState,
+};
+use crate::mcp::MCP_BIND_ADDRESS;
 use crate::menus::{
     app::configure_app_menu,
     edit::{configure_edit_menu, emit_edit_command},
     file::{configure_file_menu, emit_file_command},
+    mcp::{mcp_menu_is_checked, update_mcp_check_state, update_mcp_connection_count},
     theme::{emit_theme_command, update_theme_check_state},
     view::{configure_view_menu, emit_view_command},
     MENU_ID_APP_QUIT, MENU_ID_EDIT_DELETE, MENU_ID_EDIT_REDO, MENU_ID_EDIT_UNDO,
     MENU_ID_FILE_NEW_TAB, MENU_ID_FILE_NEW_WINDOW, MENU_ID_FILE_OPEN, MENU_ID_FILE_SAVE,
-    MENU_ID_FILE_SAVE_AS, MENU_ID_OPEN_DEVTOOLS, MENU_ID_VIEW_FIT, MENU_ID_VIEW_RESET_ZOOM,
-    MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
+    MENU_ID_FILE_SAVE_AS, MENU_ID_MCP_ENABLED, MENU_ID_OPEN_DEVTOOLS, MENU_ID_VIEW_FIT,
+    MENU_ID_VIEW_RESET_ZOOM, MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
 };
+
+fn request_mcp_enabled(app: tauri::AppHandle, enabled: bool) {
+    let state = app.state::<McpServerState>();
+    let generation = match state.request_enabled(enabled) {
+        Ok(generation) => generation,
+        Err(error) => {
+            log::error!("failed to register MCP enablement intent: {error}");
+            update_mcp_check_state(&app, load_mcp_enabled(&app));
+            return;
+        }
+    };
+    update_mcp_check_state(&app, enabled);
+
+    tauri::async_runtime::spawn(async move {
+        match apply_requested_enabled(app.clone(), generation, enabled).await {
+            Ok(true) => update_mcp_check_state(&app, enabled),
+            Ok(false) => {}
+            Err(error) => {
+                log::error!("failed to update MCP server lifecycle: {error}");
+                let recovery_enabled = !enabled;
+                let recovery_generation = app
+                    .state::<McpServerState>()
+                    .request_recovery_if_current(generation, enabled, recovery_enabled)
+                    .ok()
+                    .flatten();
+                if let Some(recovery_generation) = recovery_generation {
+                    update_mcp_check_state(&app, recovery_enabled);
+                    if let Err(recovery_error) =
+                        apply_requested_enabled(app.clone(), recovery_generation, recovery_enabled)
+                            .await
+                    {
+                        log::error!("failed to persist MCP lifecycle recovery: {recovery_error}");
+                        let _ = apply_requested_runtime_only(
+                            app.clone(),
+                            recovery_generation,
+                            recovery_enabled,
+                        )
+                        .await;
+                    }
+                    app.dialog()
+                        .message(format!(
+                            "Sheltie could not change the MCP server setting on {MCP_BIND_ADDRESS}.\n\n{error}"
+                        ))
+                        .kind(MessageDialogKind::Error)
+                        .title("MCP Server")
+                        .show(|_| {});
+                }
+            }
+        }
+    });
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,6 +88,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(DocumentManagerState::default())
         .manage(AppExitCoordinatorState::default())
+        .manage(McpServerState::default())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if let Err(error) = handle_launch_args(app, &argv, Some(cwd.as_str())) {
                 log::error!("failed to handle single-instance launch request: {error}");
@@ -79,10 +137,21 @@ pub fn run() {
             // 永続化済みテーマで Settings > Theme の初期チェック状態を反映する
             let initial_theme = load_persisted_theme(&app.handle());
             update_theme_check_state(&app.handle(), &initial_theme);
+            update_mcp_connection_count(&app.handle(), 0);
+            let initial_mcp_enabled = load_mcp_enabled(&app.handle());
+            update_mcp_check_state(
+                &app.handle(),
+                cfg!(target_os = "macos") && initial_mcp_enabled,
+            );
 
             #[cfg(target_os = "macos")]
             if let Err(error) = crate::menus::macos::apply_settings_theme_section_header() {
                 log::warn!("failed to insert Theme section header in Settings: {error}");
+            }
+
+            #[cfg(target_os = "macos")]
+            if initial_mcp_enabled {
+                request_mcp_enabled(app.handle().clone(), true);
             }
 
             let launch_args: Vec<String> = std::env::args().collect();
@@ -114,6 +183,9 @@ pub fn run() {
                 MENU_ID_THEME_SYSTEM => {
                     update_theme_check_state(app, "system");
                     emit_theme_command(app, "system");
+                }
+                MENU_ID_MCP_ENABLED => {
+                    request_mcp_enabled(app.clone(), mcp_menu_is_checked(app));
                 }
                 MENU_ID_OPEN_DEVTOOLS =>
                 {

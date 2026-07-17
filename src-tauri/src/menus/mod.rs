@@ -2,6 +2,7 @@ pub mod app;
 pub mod edit;
 pub mod file;
 pub mod helpers;
+pub mod mcp;
 pub mod theme;
 pub mod view;
 
@@ -32,6 +33,8 @@ pub const MENU_ID_VIEW_ZOOM_IN: &str = "view.zoom-in";
 pub const MENU_ID_VIEW_ZOOM_OUT: &str = "view.zoom-out";
 pub const MENU_ID_OPEN_DEVTOOLS: &str = "develop.open-devtools";
 pub const MENU_ID_SETTINGS: &str = "app.settings";
+pub const MENU_ID_MCP_ENABLED: &str = "mcp.enabled";
+pub const MENU_ID_MCP_CONNECTIONS: &str = "mcp.connections";
 
 pub fn emit_window_command<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,

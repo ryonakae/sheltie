@@ -7,7 +7,7 @@ Tauri v2 で構築されたデスクトップアプリケーション。複数�
 ### 前提環件
 
 - Node.js 18+
-- Rust 1.70+ （Tauri v2 向け）
+- Rust 1.93.1（`mise.toml` で固定）
 - macOS / Windows / Linux
 
 ### インストール

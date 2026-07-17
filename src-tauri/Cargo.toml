@@ -35,6 +35,9 @@ tokio = { version = "1", features = ["macros", "net", "rt", "sync", "time"] }
 tokio-util = "0.7"
 uuid = { version = "1", features = ["serde", "v4"] }
 
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
 [target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["NSColor", "NSResponder", "NSView", "NSWindow", "NSWindowTab", "std"] }

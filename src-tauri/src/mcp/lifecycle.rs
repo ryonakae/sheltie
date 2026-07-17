@@ -1,0 +1,499 @@
+use std::sync::Mutex;
+
+use axum::Router;
+use rmcp::transport::streamable_http_server::{
+    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
+};
+use tauri::Manager;
+use tauri_plugin_store::StoreExt;
+use tokio_util::sync::CancellationToken;
+
+use super::{service::SheltieMcpService, MCP_BIND_ADDRESS};
+use crate::commands::theme::STORE_PATH;
+
+pub const MCP_ENABLED_KEY: &str = "mcpEnabled";
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum McpLifecycle {
+    #[default]
+    Disabled,
+    Starting,
+    Running,
+    Stopping,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum McpLifecycleEvent {
+    EnableRequested,
+    Started,
+    StartFailed,
+    DisableRequested,
+    Stopped,
+}
+
+pub fn reduce_lifecycle(state: McpLifecycle, event: McpLifecycleEvent) -> McpLifecycle {
+    match (state, event) {
+        (McpLifecycle::Disabled, McpLifecycleEvent::EnableRequested) => McpLifecycle::Starting,
+        (McpLifecycle::Starting, McpLifecycleEvent::Started) => McpLifecycle::Running,
+        (McpLifecycle::Starting, McpLifecycleEvent::StartFailed)
+        | (McpLifecycle::Stopping, McpLifecycleEvent::Stopped) => McpLifecycle::Disabled,
+        (McpLifecycle::Running, McpLifecycleEvent::DisableRequested)
+        | (McpLifecycle::Starting, McpLifecycleEvent::DisableRequested) => McpLifecycle::Stopping,
+        _ => state,
+    }
+}
+
+pub fn parse_mcp_enabled(value: Option<&serde_json::Value>) -> bool {
+    value.and_then(serde_json::Value::as_bool).unwrap_or(false)
+}
+
+pub fn load_mcp_enabled(app: &tauri::AppHandle) -> bool {
+    app.store(STORE_PATH)
+        .ok()
+        .map(|store| {
+            let value = store.get(MCP_ENABLED_KEY);
+            parse_mcp_enabled(value.as_ref())
+        })
+        .unwrap_or(false)
+}
+
+pub fn set_mcp_enabled(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let store = app
+        .store(STORE_PATH)
+        .map_err(|error| format!("failed to open store: {error}"))?;
+    let previous = store.get(MCP_ENABLED_KEY);
+    store.set(MCP_ENABLED_KEY, serde_json::Value::Bool(enabled));
+    if let Err(error) = store.save() {
+        if let Some(previous) = previous {
+            store.set(MCP_ENABLED_KEY, previous);
+        } else {
+            store.delete(MCP_ENABLED_KEY);
+        }
+        return Err(format!("failed to save store: {error}"));
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+pub struct McpServerState {
+    inner: Mutex<McpServerInner>,
+    operation_lock: tokio::sync::Mutex<()>,
+}
+
+#[derive(Default)]
+struct McpServerInner {
+    lifecycle: McpLifecycle,
+    running: Option<RunningMcpServer>,
+    desired_generation: u64,
+    desired_enabled: bool,
+}
+
+struct RunningMcpServer {
+    cancellation: CancellationToken,
+    task: tauri::async_runtime::JoinHandle<()>,
+}
+
+impl McpServerState {
+    pub fn request_enabled(&self, enabled: bool) -> Result<u64, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())?;
+        inner.desired_generation = inner.desired_generation.wrapping_add(1);
+        inner.desired_enabled = enabled;
+        if !enabled {
+            inner.lifecycle =
+                reduce_lifecycle(inner.lifecycle, McpLifecycleEvent::DisableRequested);
+            if let Some(running) = inner.running.as_ref() {
+                running.cancellation.cancel();
+            }
+        }
+        Ok(inner.desired_generation)
+    }
+
+    pub fn request_recovery_if_current(
+        &self,
+        failed_generation: u64,
+        failed_enabled: bool,
+        recovery_enabled: bool,
+    ) -> Result<Option<u64>, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())?;
+        if inner.desired_generation != failed_generation || inner.desired_enabled != failed_enabled
+        {
+            return Ok(None);
+        }
+
+        inner.desired_generation = inner.desired_generation.wrapping_add(1);
+        inner.desired_enabled = recovery_enabled;
+        if !recovery_enabled {
+            inner.lifecycle =
+                reduce_lifecycle(inner.lifecycle, McpLifecycleEvent::DisableRequested);
+            if let Some(running) = inner.running.as_ref() {
+                running.cancellation.cancel();
+            }
+        }
+        Ok(Some(inner.desired_generation))
+    }
+
+    pub fn is_current_intent(&self, generation: u64, enabled: bool) -> Result<bool, String> {
+        self.inner
+            .lock()
+            .map(|inner| inner.desired_generation == generation && inner.desired_enabled == enabled)
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())
+    }
+
+    pub fn lifecycle(&self) -> Result<McpLifecycle, String> {
+        self.inner
+            .lock()
+            .map(|inner| inner.lifecycle)
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())
+    }
+
+    fn transition(&self, event: McpLifecycleEvent) -> Result<McpLifecycle, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())?;
+        inner.lifecycle = reduce_lifecycle(inner.lifecycle, event);
+        Ok(inner.lifecycle)
+    }
+
+    fn install_running(
+        &self,
+        running: RunningMcpServer,
+    ) -> Result<Option<RunningMcpServer>, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())?;
+        if inner.lifecycle != McpLifecycle::Starting {
+            return Ok(Some(running));
+        }
+        inner.running = Some(running);
+        inner.lifecycle = reduce_lifecycle(inner.lifecycle, McpLifecycleEvent::Started);
+        Ok(None)
+    }
+
+    fn take_running_for_stop(&self) -> Result<Option<RunningMcpServer>, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())?;
+        inner.lifecycle = reduce_lifecycle(inner.lifecycle, McpLifecycleEvent::DisableRequested);
+        Ok(inner.running.take())
+    }
+
+    fn finish_stop(&self) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())?;
+        inner.lifecycle = match inner.lifecycle {
+            McpLifecycle::Stopping => reduce_lifecycle(inner.lifecycle, McpLifecycleEvent::Stopped),
+            state => state,
+        };
+        Ok(())
+    }
+}
+
+fn server_config(cancellation: CancellationToken) -> StreamableHttpServerConfig {
+    StreamableHttpServerConfig::default()
+        .with_allowed_hosts(["127.0.0.1:29978", "localhost:29978"])
+        .with_allowed_origins(["http://127.0.0.1:29978", "http://localhost:29978"])
+        .with_cancellation_token(cancellation)
+}
+
+fn mcp_router(cancellation: CancellationToken) -> Router {
+    let service: StreamableHttpService<SheltieMcpService, LocalSessionManager> =
+        StreamableHttpService::new(
+            || Ok(SheltieMcpService),
+            Default::default(),
+            server_config(cancellation),
+        );
+    Router::new().nest_service("/mcp", service)
+}
+
+pub async fn apply_requested_enabled(
+    app: tauri::AppHandle,
+    generation: u64,
+    enabled: bool,
+) -> Result<bool, String> {
+    apply_requested_enabled_inner(app, generation, enabled, true).await
+}
+
+pub async fn apply_requested_runtime_only(
+    app: tauri::AppHandle,
+    generation: u64,
+    enabled: bool,
+) -> Result<bool, String> {
+    apply_requested_enabled_inner(app, generation, enabled, false).await
+}
+
+async fn apply_requested_enabled_inner(
+    app: tauri::AppHandle,
+    generation: u64,
+    enabled: bool,
+    persist: bool,
+) -> Result<bool, String> {
+    let state = app.state::<McpServerState>();
+    let _operation = state.operation_lock.lock().await;
+    if !state.is_current_intent(generation, enabled)? {
+        return Ok(false);
+    }
+
+    if persist {
+        set_mcp_enabled(&app, enabled)?;
+        if !state.is_current_intent(generation, enabled)? {
+            return Ok(false);
+        }
+    }
+
+    if enabled && state.lifecycle()? == McpLifecycle::Stopping {
+        stop(app.clone()).await?;
+    }
+    let transition = if enabled {
+        start(app.clone()).await
+    } else {
+        stop(app.clone()).await
+    };
+    if !state.is_current_intent(generation, enabled)? {
+        return Ok(false);
+    }
+    transition?;
+    Ok(true)
+}
+
+pub async fn start(app: tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<McpServerState>();
+    if state.transition(McpLifecycleEvent::EnableRequested)? != McpLifecycle::Starting {
+        return Ok(());
+    }
+
+    let listener = match tokio::net::TcpListener::bind(MCP_BIND_ADDRESS).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            state.transition(McpLifecycleEvent::StartFailed)?;
+            return Err(format!(
+                "failed to bind MCP server to {MCP_BIND_ADDRESS}: {error}"
+            ));
+        }
+    };
+
+    let cancellation = CancellationToken::new();
+    let router = mcp_router(cancellation.child_token());
+    let graceful_cancellation = cancellation.clone();
+    let task = tauri::async_runtime::spawn(async move {
+        if let Err(error) = axum::serve(listener, router)
+            .with_graceful_shutdown(async move { graceful_cancellation.cancelled_owned().await })
+            .await
+        {
+            log::error!("MCP server stopped with an error: {error}");
+        }
+    });
+
+    let running = RunningMcpServer { cancellation, task };
+    if let Some(interrupted) = state.install_running(running)? {
+        interrupted.cancellation.cancel();
+        let _ = interrupted.task.await;
+        state.finish_stop()?;
+    }
+
+    Ok(())
+}
+
+pub async fn stop(app: tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<McpServerState>();
+    let running = state.take_running_for_stop()?;
+    if let Some(running) = running {
+        running.cancellation.cancel();
+        let _ = running.task.await;
+    }
+    state.finish_stop()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn persisted_missing_value_defaults_to_disabled() {
+        assert!(!parse_mcp_enabled(None));
+    }
+
+    #[test]
+    fn persisted_boolean_value_is_respected() {
+        assert!(parse_mcp_enabled(Some(&serde_json::Value::Bool(true))));
+        assert!(!parse_mcp_enabled(Some(&serde_json::Value::Bool(false))));
+    }
+
+    #[test]
+    fn start_failure_returns_to_disabled() {
+        let next = reduce_lifecycle(McpLifecycle::Starting, McpLifecycleEvent::StartFailed);
+        assert_eq!(next, McpLifecycle::Disabled);
+    }
+
+    #[test]
+    fn disable_cancels_running_server() {
+        let next = reduce_lifecycle(McpLifecycle::Running, McpLifecycleEvent::DisableRequested);
+        assert_eq!(next, McpLifecycle::Stopping);
+    }
+
+    #[test]
+    fn server_config_allows_only_expected_hosts_and_origins() {
+        let config = server_config(CancellationToken::new());
+        assert_eq!(
+            config.allowed_hosts,
+            vec!["127.0.0.1:29978", "localhost:29978"]
+        );
+        assert_eq!(
+            config.allowed_origins,
+            vec!["http://127.0.0.1:29978", "http://localhost:29978"]
+        );
+    }
+
+    #[tokio::test]
+    async fn transport_rejects_foreign_hosts_and_origins_without_cors() {
+        use axum::{body::Body, http::Request};
+        use tower::ServiceExt;
+
+        let router = mcp_router(CancellationToken::new());
+        let foreign_host = router
+            .clone()
+            .oneshot(
+                Request::post("/mcp")
+                    .header("host", "attacker.example")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign_host.status(), 403);
+
+        let foreign_origin = router
+            .clone()
+            .oneshot(
+                Request::post("/mcp")
+                    .header("host", "127.0.0.1:29978")
+                    .header("origin", "https://attacker.example")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign_origin.status(), 403);
+        assert!(foreign_origin
+            .headers()
+            .get("access-control-allow-origin")
+            .is_none());
+
+        let local_without_origin = router
+            .oneshot(
+                Request::post("/mcp")
+                    .header("host", "localhost:29978")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(local_without_origin.status(), 403);
+    }
+
+    #[tokio::test]
+    async fn cancellation_stops_the_http_listener() {
+        let cancellation = CancellationToken::new();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let task_cancellation = cancellation.clone();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, mcp_router(task_cancellation.child_token()))
+                .with_graceful_shutdown(async move { task_cancellation.cancelled_owned().await })
+                .await
+                .unwrap();
+        });
+
+        cancellation.cancel();
+        tokio::time::timeout(std::time::Duration::from_secs(1), task)
+            .await
+            .expect("listener should stop after cancellation")
+            .unwrap();
+    }
+
+    #[test]
+    fn latest_enablement_intent_wins_before_async_work_runs() {
+        let state = McpServerState::default();
+        let enable_generation = state.request_enabled(true).unwrap();
+        let disable_generation = state.request_enabled(false).unwrap();
+
+        assert!(!state.is_current_intent(enable_generation, true).unwrap());
+        assert!(state.is_current_intent(disable_generation, false).unwrap());
+    }
+
+    #[test]
+    fn stale_start_failure_cannot_rollback_a_newer_enable() {
+        let state = McpServerState::default();
+        let failed_generation = state.request_enabled(true).unwrap();
+        state.request_enabled(false).unwrap();
+        let latest_generation = state.request_enabled(true).unwrap();
+
+        assert_eq!(
+            state
+                .request_recovery_if_current(failed_generation, true, false)
+                .unwrap(),
+            None
+        );
+        assert!(state.is_current_intent(latest_generation, true).unwrap());
+    }
+
+    #[test]
+    fn current_start_failure_registers_a_disable_rollback() {
+        let state = McpServerState::default();
+        let failed_generation = state.request_enabled(true).unwrap();
+        let rollback_generation = state
+            .request_recovery_if_current(failed_generation, true, false)
+            .unwrap()
+            .expect("current failure should register rollback");
+
+        assert!(state.is_current_intent(rollback_generation, false).unwrap());
+    }
+
+    #[test]
+    fn current_disable_failure_can_restore_enabled_intent() {
+        let state = McpServerState::default();
+        let failed_generation = state.request_enabled(false).unwrap();
+        let recovery_generation = state
+            .request_recovery_if_current(failed_generation, false, true)
+            .unwrap()
+            .expect("current disable failure should register recovery");
+
+        assert!(state.is_current_intent(recovery_generation, true).unwrap());
+    }
+
+    #[test]
+    fn disable_intent_interrupts_a_start_in_progress() {
+        let state = McpServerState::default();
+        state
+            .transition(McpLifecycleEvent::EnableRequested)
+            .unwrap();
+        assert_eq!(state.lifecycle().unwrap(), McpLifecycle::Starting);
+
+        state.request_enabled(false).unwrap();
+        assert_eq!(state.lifecycle().unwrap(), McpLifecycle::Stopping);
+    }
+
+    #[test]
+    fn repeated_enable_and_disable_requests_are_idempotent() {
+        assert_eq!(
+            reduce_lifecycle(McpLifecycle::Running, McpLifecycleEvent::EnableRequested),
+            McpLifecycle::Running
+        );
+        assert_eq!(
+            reduce_lifecycle(McpLifecycle::Disabled, McpLifecycleEvent::DisableRequested),
+            McpLifecycle::Disabled
+        );
+    }
+}

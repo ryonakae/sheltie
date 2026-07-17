@@ -31,11 +31,16 @@ npm run test
 
 ## macOS アプリアイコン
 
-- `src-tauri/icons/icon.icon` を Icon Composer の編集用ソース、`Assets.car` を生成・コミット対象とする。
-- `icon.icon` の staged 変更があるコミットでは、pre-commit hook が staged 内容から `Assets.car` を再生成して同じコミットへ追加する。
-- 手動で再生成する場合は Xcode 26 以上の環境で `npm run icon:macos` を実行する。
-- `git commit --no-verify` は自動生成をスキップするため、使用前に手動で再生成する。
-- [Tauri issue #15315](https://github.com/tauri-apps/tauri/issues/15315) の修正をローカルで確認するまでは、`tauri.conf.json` から `.icon` を直接参照せず、`Assets.car` を参照する。
+アイコンを更新する場合は、Xcode 26 以上の環境で次の順に作業する。
+
+1. Icon Composer で `src-tauri/icons/icon.icon` を編集・保存する。
+2. macOS / Default の Flattened Image を512×512・RGBAのPNGとして `src-tauri/icons/icon.png` へ書き出す。
+3. `npm run icon:macos` を実行する。このコマンドは `icon.icon` から `Assets.car`、`icon.png` から全解像度入りの `icon.icns` を生成し、`icon.png` をTauri要件の8-bit RGBAへ正規化する。
+4. `icon.icon`、`icon.png`、`Assets.car`、`icon.icns` を同じコミットに含める。
+
+`Assets.car` と `icon.icns` は生成物だが、TauriのmacOSバンドルに必要なためコミット対象とする。アイコン更新はpre-commitで自動化せず、上記コマンドを明示的に実行する。
+
+[Tauri issue #15315](https://github.com/tauri-apps/tauri/issues/15315) の修正をローカルで確認するまでは、`tauri.conf.json` から `.icon` を直接参照せず、`Assets.car` を参照する。
 
 ## TDD ルール
 

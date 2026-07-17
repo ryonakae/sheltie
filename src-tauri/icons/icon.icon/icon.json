@@ -13,8 +13,8 @@
         {
           "glass" : false,
           "hidden" : false,
-          "image-name" : "生成画像1 (1) 3.png",
-          "name" : "生成画像1 (1) 3",
+          "image-name" : "sheltie.png",
+          "name" : "sheltie",
           "position" : {
             "scale" : 1.05,
             "translation-in-points" : [
@@ -26,8 +26,8 @@
         {
           "glass" : false,
           "hidden" : false,
-          "image-name" : "生成画像1 (1) 2.png",
-          "name" : "生成画像1 (1) 2"
+          "image-name" : "shadow.png",
+          "name" : "shadow"
         }
       ],
       "shadow" : {

@@ -1,10 +1,17 @@
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, Window};
+use tauri::{
+    webview::PageLoadEvent, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl,
+    Window,
+};
 
 #[cfg(target_os = "macos")]
 use objc2_foundation::NSRect;
 
 use super::labels::{resolve_page_webview, scoped_page_label};
+use super::page_automation::{
+    normalize_navigation_url, page_automation_initialization_script, page_key,
+};
 use super::scripts::{SCROLL_DETECTION_SCRIPT, SPA_URL_DETECTION_SCRIPT};
+use crate::mcp::page_automation::actor::PageAutomationState;
 
 #[cfg(target_os = "macos")]
 use super::macos_viewport::{
@@ -165,75 +172,110 @@ pub async fn create_page_webview(
         );
     }
 
+    let parsed_url = url
+        .parse::<tauri::Url>()
+        .map_err(|e| format!("failed to parse URL: {e}"))?;
+
+    let automation_key = page_key(&window_label, &page_id);
+    let automation_state = app.state::<PageAutomationState>();
+    automation_state.remove_page(&automation_key)?;
+
     // 既存の同名 Webview があれば破棄（HMR / 異常系での再作成に対する防御策）
     if let Some(existing) = app.get_webview(&label) {
         let _ = existing.close();
     }
+    automation_state.register_page(automation_key.clone())?;
 
     let app_handle = app.clone();
     let pid = page_id.clone();
     let label_clone = label.clone();
     let event_window_label = window_label.clone();
 
-    let parsed_url = url
-        .parse::<tauri::Url>()
-        .map_err(|e| format!("failed to parse URL: {e}"))?;
-
-    window
-        .add_child(
-            tauri::webview::WebviewBuilder::new(&label_clone, WebviewUrl::External(parsed_url))
-                .initialization_script(SPA_URL_DETECTION_SCRIPT)
-                .initialization_script(SCROLL_DETECTION_SCRIPT)
-                .on_navigation({
-                    let ah = app_handle.clone();
-                    let pid = pid.clone();
-                    let event_window_label = event_window_label.clone();
-                    move |nav_url| {
+    let add_result = window.add_child(
+        tauri::webview::WebviewBuilder::new(&label_clone, WebviewUrl::External(parsed_url))
+            .initialization_script_for_all_frames(page_automation_initialization_script())
+            .initialization_script(SPA_URL_DETECTION_SCRIPT)
+            .initialization_script(SCROLL_DETECTION_SCRIPT)
+            .on_navigation({
+                let ah = app_handle.clone();
+                let pid = pid.clone();
+                let event_window_label = event_window_label.clone();
+                move |nav_url| {
+                    ah.emit_to(
+                        &event_window_label,
+                        &format!("page-navigated-{pid}"),
+                        serde_json::json!({ "url": nav_url.to_string() }),
+                    )
+                    .ok();
+                    // ナビゲーションを許可
+                    true
+                }
+            })
+            .on_page_load({
+                let ah = app_handle.clone();
+                let automation_key = automation_key.clone();
+                move |_webview, payload| {
+                    if payload.event() != PageLoadEvent::Finished {
+                        return;
+                    }
+                    let Ok(url) = normalize_navigation_url(payload.url().as_str()) else {
+                        return;
+                    };
+                    if let Err(error) = ah
+                        .state::<PageAutomationState>()
+                        .note_committed_navigation(&automation_key, url)
+                    {
+                        log::warn!("failed to record committed page navigation: {error}");
+                    }
+                }
+            })
+            .on_document_title_changed({
+                let ah = app_handle.clone();
+                let automation_key = automation_key.clone();
+                let pid = pid.clone();
+                let event_window_label = event_window_label.clone();
+                move |_webview, title| {
+                    // \x01: initialization_script からの SPA URL 変更通知
+                    // \x02: initialization_script からのスクロール完了通知
+                    if let Some(url) = title.strip_prefix('\u{0001}') {
+                        if let Ok(url) = normalize_navigation_url(url) {
+                            if let Err(error) = ah
+                                .state::<PageAutomationState>()
+                                .note_spa_navigation(&automation_key, url)
+                            {
+                                log::warn!("failed to record SPA page navigation: {error}");
+                            }
+                        }
                         ah.emit_to(
                             &event_window_label,
                             &format!("page-navigated-{pid}"),
-                            serde_json::json!({ "url": nav_url.to_string() }),
+                            serde_json::json!({ "url": url }),
                         )
                         .ok();
-                        // ナビゲーションを許可
-                        true
+                    } else if title.starts_with('\u{0002}') {
+                        ah.emit_to(
+                            &event_window_label,
+                            &format!("page-scroll-ended-{pid}"),
+                            serde_json::json!({}),
+                        )
+                        .ok();
+                    } else {
+                        ah.emit_to(
+                            &event_window_label,
+                            &format!("page-title-changed-{pid}"),
+                            serde_json::json!({ "title": title }),
+                        )
+                        .ok();
                     }
-                })
-                .on_document_title_changed({
-                    let ah = app_handle.clone();
-                    let pid = pid.clone();
-                    let event_window_label = event_window_label.clone();
-                    move |_webview, title| {
-                        // \x01: initialization_script からの SPA URL 変更通知
-                        // \x02: initialization_script からのスクロール完了通知
-                        if let Some(url) = title.strip_prefix('\u{0001}') {
-                            ah.emit_to(
-                                &event_window_label,
-                                &format!("page-navigated-{pid}"),
-                                serde_json::json!({ "url": url }),
-                            )
-                            .ok();
-                        } else if title.starts_with('\u{0002}') {
-                            ah.emit_to(
-                                &event_window_label,
-                                &format!("page-scroll-ended-{pid}"),
-                                serde_json::json!({}),
-                            )
-                            .ok();
-                        } else {
-                            ah.emit_to(
-                                &event_window_label,
-                                &format!("page-title-changed-{pid}"),
-                                serde_json::json!({ "title": title }),
-                            )
-                            .ok();
-                        }
-                    }
-                }),
-            LogicalPosition::new(x, adjusted_y),
-            LogicalSize::new(width, height),
-        )
-        .map_err(|e| format!("failed to create Webview: {e}"))?;
+                }
+            }),
+        LogicalPosition::new(x, adjusted_y),
+        LogicalSize::new(width, height),
+    );
+    if let Err(error) = add_result {
+        let _ = automation_state.remove_page(&automation_key);
+        return Err(format!("failed to create Webview: {error}"));
+    }
 
     // macOS: _WKLayoutModeDynamicSizeComputedFromViewScale（layoutMode=2）+ _setViewScale: zoom を設定。
     // これにより CSS viewport = frame.size / viewScale となり、frame が物理的に縮小されても

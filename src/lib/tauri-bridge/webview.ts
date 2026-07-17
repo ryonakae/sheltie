@@ -141,8 +141,10 @@ export const webviewApi = {
   setOpacity: (label: string, opacity: number): Promise<void> =>
     invokeOrWarn('set_page_webview_opacity', { label, opacity }, { label }),
 
-  destroy: (label: string): Promise<void> =>
-    withWebviewHandleOrWarn(label, 'destroy', (webview) => webview.close()),
+  destroy: async (pageId: string, label: string): Promise<void> => {
+    await invokeOrWarn('unregister_page_automation_page', { pageId }, { pageId, label });
+    await withWebviewHandleOrWarn(label, 'destroy', (webview) => webview.close());
+  },
 
   async hideAll(labels: string[]): Promise<void> {
     await Promise.all(labels.map((label) => this.hide(label)));

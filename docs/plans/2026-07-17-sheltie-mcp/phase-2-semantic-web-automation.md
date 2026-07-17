@@ -554,11 +554,11 @@ git commit -m "feat(mcp): verify WKWebView automation replies"
 - Consumes: `PAGE_AUTOMATION_SCRIPT`, `PageAutomationState`, existing `on_navigation` and `on_document_title_changed` callbacks, and Tauri `on_page_load` with `PageLoadEvent::Finished`.
 - Produces: all-frame WKWebView bridge injection plus `PageAutomationState::note_committed_navigation(PageKey, url)` and `note_spa_navigation(PageKey, url)` calls.
 
-- [ ] **Step 1: Write failing source and helper tests**
+- [x] **Step 1: Write failing source and helper tests**
 
 Add a pure test that the script source contains the fixed namespace, `CHANNEL`, `postMessage`, `crypto.getRandomValues`, and `complete_page_automation_request`, but does not contain `document.cookie`, `localStorage`, `sessionStorage`, or `eval(`. Add unit tests for helpers that map `(document_window_label, page_id)` to the same `PageKey` and normalize the final URLs used by `on_page_load` and title-based SPA changes.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -568,7 +568,7 @@ Run:
 
 Expected: it fails because the script is not yet exposed and navigation-to-actor helper is absent.
 
-- [ ] **Step 3: Add the all-frame initialization and navigation hooks**
+- [x] **Step 3: Add the all-frame initialization and navigation hooks**
 
 In `create_page_webview`, retain the two existing `.initialization_script(...)` calls and add this separate call:
 
@@ -584,7 +584,7 @@ Keep the existing `on_navigation` callback for allow/cancel and renderer event b
 
 When a child Webview is closed, call `remove_page` through a new direct `unregister_page_automation_page` Tauri command from the existing `useWebPageWebviewLifecycle` cleanup path; do not send this lifecycle signal through `mcp-renderer-request` or infer it from a renderer event. The command resolves its invoking `Window`, derives the document ID from `window.label()`, and rejects queued work as `webview_not_ready`.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run:
 
@@ -596,7 +596,7 @@ npm run test -- src/lib/mcp/page-automation-script.test.ts
 
 Expected: the source checks, actor navigation test, and exact-script jsdom tests pass.
 
-- [ ] **Step 5: Commit all-frame injection**
+- [x] **Step 5: Commit all-frame injection**
 
 ```bash
 git add src-tauri/src/commands/webview/bounds.rs src-tauri/src/commands/webview/scripts.rs src-tauri/src/commands/webview/page_automation.rs src/hooks/sheltie/useWebPageWebviewLifecycle.ts

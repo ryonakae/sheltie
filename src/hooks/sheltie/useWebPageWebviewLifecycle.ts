@@ -17,7 +17,7 @@ function isCurrentWebviewOwner(nodeId: string, token: symbol): boolean {
 }
 
 function scheduleWebviewDestroy(nodeId: string, label: string): Promise<void> {
-  const destroyPromise = webviewApi.destroy(label).finally(() => {
+  const destroyPromise = webviewApi.destroy(nodeId, label).finally(() => {
     if (pendingWebviewDestroyPromises.get(nodeId) === destroyPromise) {
       pendingWebviewDestroyPromises.delete(nodeId);
     }

@@ -22,6 +22,19 @@ pub fn page_automation_initialization_script() -> &'static str {
     PAGE_AUTOMATION_SCRIPT
 }
 
+pub fn page_key(document_window_label: &str, page_id: &str) -> PageKey {
+    PageKey {
+        document_id: document_window_label.to_string(),
+        page_node_id: page_id.to_string(),
+    }
+}
+
+pub fn normalize_navigation_url(url: &str) -> Result<String, String> {
+    tauri::Url::parse(url)
+        .map(|url| url.to_string())
+        .map_err(|error| format!("invalid page navigation URL: {error}"))
+}
+
 fn dispatch_expression(request: &PageAutomationBridgeRequest) -> Result<String, ToolError> {
     let request = serde_json::to_string(request).map_err(|_| {
         ToolError::new(
@@ -124,6 +137,21 @@ mod tests {
         assert!(!expression.contains("eval("));
         assert!(expression.contains("globalThis.pwned = true"));
         assert_eq!(expression.matches(".dispatch(").count(), 1);
+    }
+
+    #[test]
+    fn maps_page_identity_and_normalizes_navigation_urls() {
+        assert_eq!(
+            page_key("document-7", "node-4"),
+            PageKey {
+                document_id: "document-7".into(),
+                page_node_id: "node-4".into(),
+            }
+        );
+        assert_eq!(
+            normalize_navigation_url("https://example.test").unwrap(),
+            "https://example.test/"
+        );
     }
 
     #[test]

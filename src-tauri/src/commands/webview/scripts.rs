@@ -43,3 +43,30 @@ pub const SCROLL_DETECTION_SCRIPT: &str = r#"(function() {
     }, { passive: true, capture: true });
   }
 })();"#;
+
+#[cfg(test)]
+mod tests {
+    use crate::commands::webview::page_automation::PAGE_AUTOMATION_SCRIPT;
+
+    #[test]
+    fn page_automation_source_has_the_all_frame_bridge_contract() {
+        for required in [
+            "__SHELTIE_MCP_PAGE_AUTOMATION__",
+            "CHANNEL",
+            "postMessage",
+            "crypto.getRandomValues",
+            "complete_page_automation_request",
+        ] {
+            assert!(
+                PAGE_AUTOMATION_SCRIPT.contains(required),
+                "missing {required}"
+            );
+        }
+        for forbidden in ["document.cookie", "localStorage", "sessionStorage", "eval("] {
+            assert!(
+                !PAGE_AUTOMATION_SCRIPT.contains(forbidden),
+                "contains forbidden source {forbidden}"
+            );
+        }
+    }
+}

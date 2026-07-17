@@ -725,7 +725,7 @@ git commit -m "feat(mcp): expose typed semantic browser tools"
 - Consumes: static fixture files under `public/mcp-fixtures/` and the Phase 2 MCP tools.
 - Produces: stable DOM content, explicit `window.__fixtureLog` observability, and two independently served loopback origins for required cross-origin frame checks.
 
-- [ ] **Step 1: Create deterministic fixture content**
+- [x] **Step 1: Create deterministic fixture content**
 
 Create `semantic-controls.html` with unique accessible names and a visible `#result` region. Include a named button, text input, password input, textarea, select with three option values, contenteditable element, checkbox, disabled button, hidden button, and landmarks/headings. Each allowed interaction appends a deterministic token to `window.__fixtureLog` and to `#result`; no network requests, timers, randomized IDs, or third-party assets.
 
@@ -733,7 +733,7 @@ Create the navigation pair so `semantic-navigation-a.html` links to `semantic-na
 
 Implement `serve-semantic-fixtures.mjs` with Node's built-in HTTP/file APIs only. By default start two servers in one process, both bound explicitly to `127.0.0.1`; support `--primary-only` to start only port 1420 for the unavailable-frame negative check. Serve only normalized paths below `public/`, reject traversal, set deterministic content types, print every ready URL, and close all started servers on `SIGINT`/`SIGTERM`. Port conflicts must fail startup rather than silently selecting another port.
 
-- [ ] **Step 2: Verify fixture formatting and static references**
+- [x] **Step 2: Verify fixture formatting and static references**
 
 Run:
 
@@ -746,6 +746,8 @@ Expected: Prettier exits 0; the server reports both `http://127.0.0.1:1420` and 
 
 - [ ] **Step 3: Run manual macOS Tauri/MCP checks**
 
+Blocked in the agent sandbox: the debug app aborts while initializing `tauri-plugin-log` with `Operation not permitted`; the release app starts, but Agent Safehouse denies the Application Support write needed to enable the persisted MCP setting, and macOS `System Events` is unavailable. Run this matrix outside Agent Safehouse before release.
+
 1. In separate terminals run `node scripts/mcp-fixtures/serve-semantic-fixtures.mjs` and `npm run dev`. Open a document, create one WebPage for `http://127.0.0.1:1420/mcp-fixtures/semantic-controls.html`, and enable MCP Server from the persisted Settings menu added in Phase 1.
 2. Connect an MCP inspector or configured local client to Phase 1's loopback endpoint. Call `browser_snapshot` with the `documentId` from `list_documents` and the WebPage node ID from `get_board`. Confirm controls have readable names, password values are absent, and the response has `snapshotId`, `navigationEpoch`, and a valid `documentToken`.
 3. Call `browser_fill`, `browser_select_option`, `browser_click`, `browser_press_key`, and `browser_scroll` with refs from the immediately preceding snapshot. Confirm each action response contains a different snapshot ID and the fixture log has the expected sequence.
@@ -756,7 +758,7 @@ Expected: Prettier exits 0; the server reports both `http://127.0.0.1:1420` and 
 8. Queue two actions for one page and one action for a second open page. Confirm the first page's effects are ordered while the second page remains responsive.
 9. Close a page node while an intentionally delayed `browser_wait` is pending. Confirm `webview_not_ready` and no stranded actor blocks a subsequent call after recreating the page.
 
-- [ ] **Step 4: Commit fixtures after manual checks**
+- [x] **Step 4: Commit fixtures (manual matrix remains environment-blocked)**
 
 ```bash
 git add public/mcp-fixtures scripts/mcp-fixtures/serve-semantic-fixtures.mjs

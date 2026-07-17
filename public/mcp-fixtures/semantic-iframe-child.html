@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Semantic iframe child fixture</title>
+  </head>
+  <body>
+    <main>
+      <h1>Frame fixture</h1>
+      <button id="frame-action" type="button">Frame action</button>
+      <output id="frame-result" aria-live="polite"></output>
+    </main>
+    <script>
+      window.__fixtureLog = [];
+      const frameName = new URL(location.href).searchParams.get('frame') ?? 'unknown';
+      document.querySelector('#frame-action').addEventListener('click', () => {
+        const token = `frame:${frameName}:action`;
+        window.__fixtureLog.push(token);
+        document.querySelector('#frame-result').textContent = token;
+      });
+    </script>
+  </body>
+</html>

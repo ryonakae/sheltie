@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Semantic controls fixture</title>
+    <style>
+      body {
+        max-width: 48rem;
+        min-height: 140vh;
+        margin: 0 auto;
+        padding: 2rem;
+        font-family: system-ui, sans-serif;
+      }
+      main,
+      form {
+        display: grid;
+        gap: 1rem;
+      }
+      label {
+        display: grid;
+        gap: 0.25rem;
+      }
+      #editable {
+        min-height: 3rem;
+        padding: 0.5rem;
+        border: 1px solid #777;
+      }
+      #result {
+        min-height: 4rem;
+        padding: 1rem;
+        white-space: pre-wrap;
+        background: #eee;
+      }
+    </style>
+  </head>
+  <body>
+    <header><h1>Semantic controls</h1></header>
+    <main aria-label="Fixture controls">
+      <form aria-label="Deterministic form" onsubmit="return false;">
+        <label>
+          Account name
+          <input id="account-name" name="account-name" autocomplete="off" />
+        </label>
+        <label>
+          Secret phrase
+          <input id="secret-phrase" name="secret-phrase" type="password" value="hidden-secret" />
+        </label>
+        <label>
+          Notes
+          <textarea id="notes" name="notes"></textarea>
+        </label>
+        <label>
+          Priority
+          <select id="priority" name="priority">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <div>
+          <span id="editable-label">Editable summary</span>
+          <div id="editable" contenteditable="true" aria-labelledby="editable-label"></div>
+        </div>
+        <label><input id="confirmed" type="checkbox" /> Confirm fixture</label>
+        <button id="primary-action" type="button">Run primary action</button>
+        <button type="button" disabled>Unavailable action</button>
+        <button id="hidden-action" type="button" hidden>Hidden action</button>
+      </form>
+      <section aria-labelledby="result-heading">
+        <h2 id="result-heading">Fixture result</h2>
+        <output id="result" aria-live="polite"></output>
+      </section>
+    </main>
+    <script>
+      window.__fixtureLog = [];
+      const result = document.querySelector('#result');
+      function record(token) {
+        window.__fixtureLog.push(token);
+        result.textContent = window.__fixtureLog.join('\n');
+      }
+      document
+        .querySelector('#primary-action')
+        .addEventListener('click', () => record('button:primary'));
+      document
+        .querySelector('#account-name')
+        .addEventListener('input', (event) => record(`input:account:${event.target.value}`));
+      document
+        .querySelector('#notes')
+        .addEventListener('input', (event) => record(`input:notes:${event.target.value}`));
+      document
+        .querySelector('#priority')
+        .addEventListener('change', (event) => record(`select:priority:${event.target.value}`));
+      document
+        .querySelector('#editable')
+        .addEventListener('input', (event) =>
+          record(`input:editable:${event.currentTarget.textContent}`),
+        );
+      document
+        .querySelector('#confirmed')
+        .addEventListener('change', (event) =>
+          record(`checkbox:confirmed:${event.target.checked}`),
+        );
+      document.addEventListener('keydown', (event) => record(`key:${event.key}`));
+      window.addEventListener(
+        'scroll',
+        () => record(`scroll:${window.scrollX}:${window.scrollY}`),
+        {
+          passive: true,
+        },
+      );
+    </script>
+  </body>
+</html>

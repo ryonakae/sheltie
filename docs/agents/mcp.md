@@ -124,7 +124,7 @@ browser_wait
 - `browser_screenshot`の`viewport`は`native`ならlive captureを試し、失敗時はcacheへfallbackする。`screenshot` / `hidden`ではcacheだけを使い、Webviewを表示しない。`element` / `fullPage`はlive `native` Webviewだけを対象にする
 - PNGは最長辺4096px、16,777,216 pixels、8MiB、full-page 64 tilesを上限とする。full-pageは最終上限内のcanvasへ横・縦tileを逐次縮小合成し、全native RGBA tileを保持しない。element cropと任意annotationはCSS座標をcapture scaleへ変換し、annotationは薄いfillと色付き2px borderで描く
 - coordinate clickとupload eventの`inputTrusted`は`false`。`highlight`はpageへ約180msだけ表示するvisual aidであり、入力targetを変更しない
-- evaluateは10秒のasync timeoutと256KiBのJSON response上限を持つ。同期的にevent loopを占有するscriptはWebKitから強制中断できないため、trusted clientは非停止scriptを送らない
+- evaluateは10秒のasync timeoutと256KiBのJSON response上限を持つ。同期的にevent loopを占有するscriptはWebKitから強制中断できないため、trusted clientは非停止scriptを送らない。`value`のoutput schemaはJSON-anyを`{}`で表し、boolean schemaを受け付けないMCP clientでもtool discoveryを維持する
 - uploadはcanonical absolute regular fileを最大10件、1件25MiB、合計100MiBまでreadする。errorやresultへcanonical pathを出さない
 - dialog policyはbridgeが注入された各frameの次のdialogで消費される。`alert`は記録してreturnし、`confirm` / `prompt`は設定済みresponseまたは既定dismissを返す。dialogは1 actionあたり20件、messageは512 UTF-16 code unitsへ制限し、超過は末尾metadataで示す。prompt default valueはresultへ含めない
 - `target="_blank"`とpopup navigationは新規Webviewを作らず、同じ`pageNodeId`のWebviewでURLを開く

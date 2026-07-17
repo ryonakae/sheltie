@@ -575,11 +575,16 @@ struct CoordinateResult {
     snapshot: CompactSnapshot,
 }
 
+fn json_value_output_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    serde_json::Map::new().into()
+}
+
 #[derive(Clone, Debug, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EvaluateResult {
     document_id: String,
     page_node_id: String,
+    #[schemars(schema_with = "json_value_output_schema")]
     value: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     dialogs: Option<Vec<PageDialog>>,
@@ -1689,6 +1694,17 @@ mod tests {
                 "browser_wait",
             ]
         );
+        let evaluate = tools
+            .iter()
+            .find(|tool| tool.name.as_ref() == "browser_evaluate")
+            .unwrap();
+        let evaluate_schema =
+            serde_json::to_value(evaluate.output_schema.as_ref().unwrap()).unwrap();
+        assert_eq!(
+            evaluate_schema.pointer("/properties/value"),
+            Some(&serde_json::json!({}))
+        );
+
         for tool in tools {
             let annotations = tool.annotations.as_ref().unwrap();
             if matches!(

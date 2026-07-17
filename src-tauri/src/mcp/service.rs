@@ -15,8 +15,11 @@ use rmcp::{
 use serde::{de::DeserializeOwned, Serialize};
 use tauri::Manager;
 
+#[cfg(test)]
+use super::tools::browser::UnavailableBrowserBackend;
 use super::{
     broker::McpRequestBrokerState,
+    tools::browser::{self, AppBrowserBackend, BrowserBackend},
     types::{
         BatchEditBoardParams, BatchEditBoardResult, BoardResult, BoardScreenshotResult,
         DocumentSummary, EditorStateResult, FocusNodesParams, FocusNodesResult, GetBoardParams,
@@ -27,6 +30,7 @@ use super::{
     },
     MCP_ENDPOINT,
 };
+
 use crate::{
     commands::store::{focused_document_window_label, DocumentManagerState},
     menus::mcp::update_mcp_connection_count,
@@ -117,6 +121,7 @@ fn update_connection_menu(app: &tauri::AppHandle, count: usize) {
 #[derive(Clone)]
 pub struct SheltieMcpService {
     backend: Arc<dyn McpServiceBackend>,
+    pub(crate) browser_backend: Arc<dyn BrowserBackend>,
     _connection_lease: Option<McpConnectionLease>,
     tool_router: ToolRouter<Self>,
 }
@@ -125,28 +130,46 @@ impl SheltieMcpService {
     pub(crate) fn from_app(app: tauri::AppHandle, connections: Arc<McpConnectionCounter>) -> Self {
         Self::with_backend_and_lease(
             AppMcpServiceBackend { app: app.clone() },
+            AppBrowserBackend::new(app.clone()),
             connections.lease(app),
         )
     }
 
     #[cfg(test)]
     fn with_backend(backend: impl McpServiceBackend + 'static) -> Self {
+        Self::with_backends(backend, UnavailableBrowserBackend)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_backends(
+        backend: impl McpServiceBackend + 'static,
+        browser_backend: impl BrowserBackend + 'static,
+    ) -> Self {
         Self {
             backend: Arc::new(backend),
+            browser_backend: Arc::new(browser_backend),
             _connection_lease: None,
-            tool_router: Self::tool_router(),
+            tool_router: Self::combined_tool_router(),
         }
     }
 
     fn with_backend_and_lease(
         backend: impl McpServiceBackend + 'static,
+        browser_backend: impl BrowserBackend + 'static,
         connection_lease: McpConnectionLease,
     ) -> Self {
         Self {
             backend: Arc::new(backend),
+            browser_backend: Arc::new(browser_backend),
             _connection_lease: Some(connection_lease),
-            tool_router: Self::tool_router(),
+            tool_router: Self::combined_tool_router(),
         }
+    }
+
+    fn combined_tool_router() -> ToolRouter<Self> {
+        let mut router = Self::tool_router();
+        router.merge(browser::tool_router());
+        router
     }
 
     async fn request(
@@ -173,7 +196,7 @@ fn validate_document_id(document_id: &str) -> Result<(), CallToolResult> {
     Ok(())
 }
 
-fn structured_error(error: ToolError) -> CallToolResult {
+pub(crate) fn structured_error(error: ToolError) -> CallToolResult {
     let value = serde_json::to_value(error).unwrap_or_else(|_| {
         serde_json::json!({
             "code": "renderer_unavailable",
@@ -527,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn lists_exactly_seven_tools_with_document_schemas_and_annotations() {
+    fn lists_phase_two_tools_with_document_schemas_and_annotations() {
         let service = service_with_responses([]);
         let tools = service.tool_router.list_all();
         assert_eq!(
@@ -537,6 +560,19 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 "batch_edit_board",
+                "browser_click",
+                "browser_fill",
+                "browser_fill_form",
+                "browser_go_back",
+                "browser_go_forward",
+                "browser_hover",
+                "browser_navigate",
+                "browser_press_key",
+                "browser_reload",
+                "browser_scroll",
+                "browser_select_option",
+                "browser_snapshot",
+                "browser_wait",
                 "focus_nodes",
                 "get_board",
                 "get_board_screenshot",

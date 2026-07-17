@@ -1,3 +1,6 @@
+use rmcp::schemars;
+use rmcp::schemars::JsonSchema;
+
 use crate::mcp::types::ToolError;
 
 pub const PAGE_AUTOMATION_REQUEST_TIMEOUT_MS: u64 = 15_000;
@@ -17,7 +20,7 @@ pub struct PageKey {
     pub page_node_id: String,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(
     tag = "kind",
     rename_all = "snake_case",
@@ -129,14 +132,14 @@ impl PageAutomationOperation {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FillField {
     pub element_ref: String,
     pub text: String,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(
     tag = "kind",
     rename_all = "snake_case",
@@ -149,7 +152,7 @@ pub enum WaitCondition {
     Text { text: String },
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SemanticElement {
     #[serde(rename = "ref")]
@@ -174,7 +177,7 @@ pub struct SemanticElement {
     pub frame_id: String,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompactSnapshot {
     pub navigation_epoch: u64,
@@ -251,7 +254,7 @@ impl CompactSnapshot {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SnapshotFrame {
     pub frame_id: String,
@@ -259,7 +262,7 @@ pub struct SnapshotFrame {
     pub status: SnapshotFrameStatus,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SnapshotFrameStatus {
     Ok,
@@ -285,7 +288,7 @@ pub struct PageAutomationBridgeResult {
     pub result: serde_json::Value,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PageAutomationActionKind {
     Click,
@@ -298,13 +301,13 @@ pub enum PageAutomationActionKind {
     Wait,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PageAutomationActionResult {
     pub kind: PageAutomationActionKind,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PageAutomationSuccessResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]

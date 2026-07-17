@@ -7,4 +7,5 @@ pub mod broker;
 pub mod lifecycle;
 pub mod page_automation;
 pub mod service;
+pub mod tools;
 pub mod types;

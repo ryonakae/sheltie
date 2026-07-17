@@ -635,7 +635,7 @@ browser_scroll
 browser_wait
 ```
 
-- [ ] **Step 1: Write failing handler tests**
+- [x] **Step 1: Write failing handler tests**
 
 Use a fake Phase 1 `McpRequestBrokerState` GetBoard verifier and a fake direct-Webview dispatcher to test:
 
@@ -647,7 +647,7 @@ Use a fake Phase 1 `McpRequestBrokerState` GetBoard verifier and a fake direct-W
 6. `browser_fill_form` rejects duplicate `elementRef` values and overlong values before dispatch.
 7. Tool metadata marks snapshots read-only and all actions destructive; no tool claims that a browser-side action can be undone by board Undo.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -657,7 +657,7 @@ Run:
 
 Expected: compilation fails because the Phase 2 browser tool module, methods, and registrations do not exist.
 
-- [ ] **Step 3: Implement the tool schemas and handlers**
+- [x] **Step 3: Implement the tool schemas and handlers**
 
 Define the input contracts exactly:
 
@@ -691,7 +691,7 @@ After `resolve_page` returns, use the page actor for `browser_snapshot` and ever
 
 Return the action name and `CompactSnapshot` as structured JSON in the MCP response. For navigation, use `{ "action": { "kind": "navigate", "url": "…" }, "snapshot": { … } }`; for DOM actions, preserve the bridge's `{ action, snapshot }`. Include `navigationEpoch` and `snapshotId` in every success response.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run:
 
@@ -702,7 +702,7 @@ Run:
 
 Expected: handler validation, schema metadata, protocol, and actor tests pass.
 
-- [ ] **Step 5: Commit the typed MCP interface**
+- [x] **Step 5: Commit the typed MCP interface**
 
 ```bash
 git add src-tauri/src/mcp/mod.rs src-tauri/src/mcp/page_automation src-tauri/src/mcp/service.rs src-tauri/src/mcp/tools

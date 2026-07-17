@@ -6,9 +6,9 @@ use crate::mcp::page_automation::protocol::unsupported_platform;
 
 use crate::mcp::{
     page_automation::{
-        actor::PageAutomationState,
+        actor::{NavigationMarker, PageAutomationState},
         protocol::{
-            document_not_found, webview_not_ready, PageAutomationBridgeRequest,
+            document_not_found, webview_not_ready, CompactSnapshot, PageAutomationBridgeRequest,
             PageAutomationBridgeResult, PageAutomationOperation, PageAutomationSuccessResult,
             PageKey,
         },
@@ -48,11 +48,10 @@ fn dispatch_expression(request: &PageAutomationBridgeRequest) -> Result<String, 
 }
 
 #[cfg(target_os = "macos")]
-pub async fn execute_page_automation(
+fn resolve_automation_webview(
     app: &AppHandle,
-    key: PageKey,
-    operation: PageAutomationOperation,
-) -> Result<PageAutomationSuccessResult, ToolError> {
+    key: &PageKey,
+) -> Result<(String, tauri::Webview), ToolError> {
     let documents = app.state::<crate::commands::store::DocumentManagerState>();
     if !documents
         .contains_document(&key.document_id)
@@ -60,10 +59,28 @@ pub async fn execute_page_automation(
     {
         return Err(document_not_found(&key.document_id));
     }
+    let label = scoped_page_label(&key.document_id, &key.page_node_id);
+    let webview =
+        resolve_page_webview(app, &key.document_id, &label).map_err(|_| webview_not_ready())?;
+    Ok((label, webview))
+}
 
-    let webview_label = scoped_page_label(&key.document_id, &key.page_node_id);
-    let webview = resolve_page_webview(app, &key.document_id, &webview_label)
-        .map_err(|_| webview_not_ready())?;
+#[cfg(target_os = "macos")]
+fn dispatch_to_webview(
+    webview: &tauri::Webview,
+    request: PageAutomationBridgeRequest,
+) -> Result<(), ToolError> {
+    let expression = dispatch_expression(&request)?;
+    webview.eval(&expression).map_err(|_| webview_not_ready())
+}
+
+#[cfg(target_os = "macos")]
+pub async fn execute_page_automation(
+    app: &AppHandle,
+    key: PageKey,
+    operation: PageAutomationOperation,
+) -> Result<PageAutomationSuccessResult, ToolError> {
+    let (webview_label, webview) = resolve_automation_webview(app, &key)?;
 
     let state = app.state::<PageAutomationState>();
     state
@@ -72,10 +89,40 @@ pub async fn execute_page_automation(
             key.document_id.clone(),
             webview_label,
             operation,
-            move |request| {
-                let expression = dispatch_expression(&request)?;
-                webview.eval(&expression).map_err(|_| webview_not_ready())
-            },
+            move |request| dispatch_to_webview(&webview, request),
+        )
+        .await
+}
+
+#[cfg(target_os = "macos")]
+pub async fn prepare_page_navigation(
+    app: &AppHandle,
+    key: PageKey,
+) -> Result<NavigationMarker, ToolError> {
+    let (webview_label, webview) = resolve_automation_webview(app, &key)?;
+    app.state::<PageAutomationState>()
+        .prepare_navigation_with(
+            key.clone(),
+            key.document_id.clone(),
+            webview_label,
+            move |request| dispatch_to_webview(&webview, request),
+        )
+        .await
+}
+
+#[cfg(target_os = "macos")]
+pub async fn snapshot_after_page_navigation(
+    app: &AppHandle,
+    marker: NavigationMarker,
+    key: &PageKey,
+) -> Result<CompactSnapshot, ToolError> {
+    let (webview_label, webview) = resolve_automation_webview(app, key)?;
+    app.state::<PageAutomationState>()
+        .snapshot_after_navigation_with(
+            marker,
+            key.document_id.clone(),
+            webview_label,
+            move |request| dispatch_to_webview(&webview, request),
         )
         .await
 }

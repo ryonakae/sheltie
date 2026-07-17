@@ -29,8 +29,9 @@ Typed actions preserve accessible intent, make state reviewable in the returned 
 Use coordinates only after the latest semantic snapshot shows that no semantic target exists.
 
 1. Capture `browser_screenshot({ documentId, pageNodeId, mode: "viewport", annotate: false })`.
-2. Call `browser_click_coordinates({ documentId, pageNodeId, snapshotId, x, y, button: "left", clickCount: 1 })` using finite CSS **viewport** coordinates. `button` may be `left`, `middle`, or `right`; `clickCount` is 1 or 2. Optional `highlight: { x, y, width, height }` is visual-only and needs finite non-negative values.
-3. Inspect the returned fresh snapshot. The synthetic event has `inputTrusted: false`, so report a site limitation if that prevented completion.
+2. Screenshot `width` / `height` are native image pixels; click coordinates are CSS viewport pixels. Convert an image point `(imageX, imageY)` with `x = imageX * cssViewportWidth / width` and `y = imageY * cssViewportHeight / height`. Apply the same scale to an optional highlight rectangle.
+3. Call `browser_click_coordinates({ documentId, pageNodeId, snapshotId, x, y, button: "left", clickCount: 1 })` using the converted finite CSS **viewport** coordinates. `button` may be `left`, `middle`, or `right`; `clickCount` is 1 or 2. Optional `highlight: { x, y, width, height }` is visual-only and needs finite non-negative values.
+4. Inspect the returned fresh snapshot. The synthetic event has `inputTrusted: false`, so report a site limitation if that prevented completion.
 
 A viewport screenshot of a native page is live when possible and falls back to its cache. A hidden or screenshot-mode page only serves cached viewport images; element and full-page captures require a live native WebView. `mode: "element"` additionally requires fresh `snapshotId` and `elementRef`; those fields are invalid for `viewport` and `fullPage`. Do not reveal a WebView merely to bypass this constraint.
 

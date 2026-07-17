@@ -102,14 +102,18 @@ export function resolvePageScreenshotSourceDescriptor(
 
 export async function encodePageScreenshotSource(
   displayMode: PageScreenshotSource['displayMode'],
+  cssViewportWidth: number,
+  cssViewportHeight: number,
   entry?: ScreenshotCacheEntry,
 ): Promise<PageScreenshotSource> {
-  if (!entry) return { displayMode };
+  if (!entry) return { displayMode, cssViewportWidth, cssViewportHeight };
 
   const blob = await loadScreenshotBlob(entry.assetUrl);
   const [image, buffer] = await Promise.all([decodeScreenshotBlob(blob), blob.arrayBuffer()]);
   return {
     displayMode,
+    cssViewportWidth,
+    cssViewportHeight,
     cached: {
       base64: bytesToBase64(new Uint8Array(buffer)),
       width: image.naturalWidth,

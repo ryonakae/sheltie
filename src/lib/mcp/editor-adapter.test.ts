@@ -30,7 +30,11 @@ function createAdapter(name: string): McpEditorAdapter {
     }),
     focusNodes: vi.fn(async (nodeIds: string[]) => ({ focusedNodeIds: nodeIds })),
     getWebpageScreenshots: async () => [],
-    getPageScreenshotSource: async () => ({ displayMode: 'hidden' }),
+    getPageScreenshotSource: async () => ({
+      displayMode: 'hidden',
+      cssViewportWidth: 720,
+      cssViewportHeight: 500,
+    }),
     captureBoardScreenshot: async () => emptyBoardScreenshot(),
   };
 }
@@ -78,7 +82,11 @@ describe('MCP editor adapter', () => {
       getEditorState: () => source,
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
       getWebpageScreenshots: async () => [],
-      getPageScreenshotSource: async () => ({ displayMode: 'hidden' }),
+      getPageScreenshotSource: async () => ({
+        displayMode: 'hidden',
+        cssViewportWidth: 720,
+        cssViewportHeight: 500,
+      }),
       captureBoardScreenshot: async () => emptyBoardScreenshot(),
     });
 
@@ -96,6 +104,8 @@ describe('MCP editor adapter', () => {
   it('returns the exact read-only screenshot source without changing editor state', async () => {
     const source = {
       displayMode: 'screenshot' as const,
+      cssViewportWidth: 720,
+      cssViewportHeight: 500,
       cached: {
         base64: 'cG5n',
         width: 640,
@@ -116,11 +126,17 @@ describe('MCP editor adapter', () => {
 
   it('preserves hidden mode without a cache and becomes unavailable after cleanup', async () => {
     const adapter = createAdapter('hidden');
-    adapter.getPageScreenshotSource = vi.fn(async () => ({ displayMode: 'hidden' as const }));
+    adapter.getPageScreenshotSource = vi.fn(async () => ({
+      displayMode: 'hidden' as const,
+      cssViewportWidth: 720,
+      cssViewportHeight: 500,
+    }));
     cleanup = registerMcpEditorAdapter(adapter);
 
     await expect(getPageScreenshotSource('page-hidden')).resolves.toEqual({
       displayMode: 'hidden',
+      cssViewportWidth: 720,
+      cssViewportHeight: 500,
     });
     cleanup();
     cleanup = undefined;

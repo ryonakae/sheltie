@@ -323,7 +323,14 @@ export function Sheltie({
             displayModes,
             projectWebviewRuntime.screenshotCacheByNodeId,
           );
-          return encodePageScreenshotSource(source.displayMode, source.entry);
+          const page = webPageNodes.find((candidate) => candidate.id === pageNodeId);
+          if (!page) throw new Error(`WebPage node not found: ${pageNodeId}`);
+          return encodePageScreenshotSource(
+            source.displayMode,
+            page.width,
+            page.height,
+            source.entry,
+          );
         },
         captureBoardScreenshot: async (nodeIds) =>
           captureBoardScreenshot({

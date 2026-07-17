@@ -203,7 +203,7 @@ pub(crate) fn structured_error(error: ToolError) -> CallToolResult {
             "message": "Failed to encode tool error"
         })
     });
-    CallToolResult::structured_error(value)
+    CallToolResult::error(vec![rmcp::model::ContentBlock::text(value.to_string())])
 }
 
 fn decode_renderer_result<T: DeserializeOwned>(
@@ -546,7 +546,8 @@ mod tests {
 
     fn error_value(result: CallToolResult) -> serde_json::Value {
         assert_eq!(result.is_error, Some(true));
-        result.structured_content.expect("structured error")
+        assert!(result.structured_content.is_none());
+        serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap()
     }
 
     #[test]
@@ -672,7 +673,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn preserves_document_and_renderer_errors_as_structured_errors() {
+    async fn preserves_json_errors_without_success_schema_validation() {
         let document_error =
             ToolError::new("document_not_found", "Document document-9 is not open")
                 .with_retry("Call list_documents and use a returned documentId");

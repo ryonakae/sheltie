@@ -88,6 +88,8 @@ pub struct CachedPageScreenshot {
 #[serde(rename_all = "camelCase")]
 pub struct PageScreenshotSource {
     pub display_mode: PageDisplayMode,
+    pub css_viewport_width: u32,
+    pub css_viewport_height: u32,
     pub cached: Option<CachedPageScreenshot>,
 }
 
@@ -1220,6 +1222,8 @@ mod tests {
 
         let source = PageScreenshotSource {
             display_mode: PageDisplayMode::Hidden,
+            css_viewport_width: 720,
+            css_viewport_height: 500,
             cached: None,
         };
         assert_eq!(

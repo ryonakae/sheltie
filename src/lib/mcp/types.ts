@@ -30,6 +30,8 @@ export type RendererResponse = {
 
 export type PageScreenshotSource = {
   displayMode: 'native' | 'screenshot' | 'hidden';
+  cssViewportWidth: number;
+  cssViewportHeight: number;
   cached?: {
     base64: string;
     width: number;

@@ -46,8 +46,9 @@ If `get_board` returned no comparison edge, use one `create_edge` from `productA
 
 1. Call `browser_snapshot({ documentId, pageNodeId })` and record the explanatory heading. Confirm the latest `snapshot.elements` has no semantic target for the canvas control.
 2. Call `browser_screenshot({ documentId, pageNodeId, mode: "viewport", annotate: false })`.
-3. Call `browser_click_coordinates({ documentId, pageNodeId, snapshotId, x, y, button: "left", clickCount: 1 })` with the screenshot-derived CSS viewport coordinate.
-4. Inspect the returned fresh snapshot, then record the outcome in one `batch_edit_board` call. Do not use `browser_evaluate` when this visual path works.
+3. Convert the target's image pixels to CSS viewport coordinates with `cssX = imageX * cssViewportWidth / width` and `cssY = imageY * cssViewportHeight / height`.
+4. Call `browser_click_coordinates({ documentId, pageNodeId, snapshotId, x: cssX, y: cssY, button: "left", clickCount: 1 })`.
+5. Inspect the returned fresh snapshot, then record the outcome in one `batch_edit_board` call. Do not use `browser_evaluate` when this visual path works.
 
 ## Reveal a result only on request
 

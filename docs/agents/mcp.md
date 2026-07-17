@@ -132,11 +132,11 @@ browser_wait
 
 ## Result convention
 
-- JSON tool resultは同じobjectをMCP `structuredContent`と後方互換text contentの両方へ入れる。
+- 成功したJSON tool resultは同じobjectをMCP `structuredContent`と後方互換text contentの両方へ入れる。tool-level errorは`isError: true`のJSON text blockだけに置き、success用`outputSchema`で再検証されないよう`structuredContent`を付けない。
 - image toolの先頭contentはbase64を含まないmetadata text。`structuredContent`も同じmetadata objectとし、その後へ`image/png` content blockを並べる。
 - `get_webpage_screenshots`のmetadataは`documentId`と`{ pageNodeId, freshness, mimeType?, width?, height?, capturedAt?, capturedUrl? }[]`。`missing`にはimage blockを付けない。
 - `get_board_screenshot`のmetadataは`documentId`, `mimeType`, `width`, `height`, `worldBounds`, `includedNodeIds`, `missingScreenshotNodeIds`。PNG base64はimage blockだけに置く。
-- `browser_screenshot`のmetadataは`documentId`, `pageNodeId`, `mode`, `source`, `mimeType`, `width`, `height`, `annotated`とoptional capture/warning field。PNG base64は唯一のimage blockだけに置く。
+- `browser_screenshot`のmetadataは`documentId`, `pageNodeId`, `mode`, `source`, `mimeType`, native pixelの`width` / `height`, CSS viewportの`cssViewportWidth` / `cssViewportHeight`, `annotated`とoptional capture/warning field。coordinate fallbackは画像上のpixel位置を`cssViewportWidth / width`と`cssViewportHeight / height`でCSS座標へ変換する。PNG base64は唯一のimage blockだけに置く。
 - read toolは`readOnlyHint=true`、`destructiveHint=false`、`openWorldHint=false`。`batch_edit_board`だけ`destructiveHint=true`、`focus_nodes`は`idempotentHint=true`。
 
 ## Stable errors
@@ -170,7 +170,7 @@ browser_wait
 | `upload_file_invalid` | upload path/file type/readability/count/sizeが契約外 |
 | `upload_target_not_file_input` | element refが現在snapshotのfile inputを指さない |
 
-error resultも`{ code, message, retry? }`をstructured/textの両方へ返す。tool parameter、board/page内容、base64、local file pathをRust logへ出さない。
+error resultは`{ code, message, retry? }`のJSON text blockとして返す。success用`outputSchema`との衝突を避けるため`structuredContent`には入れない。tool parameter、board/page内容、base64、local file pathをRust logへ出さない。
 
 ## Tool routing rules
 

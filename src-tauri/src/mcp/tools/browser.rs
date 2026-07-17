@@ -549,6 +549,8 @@ struct BrowserScreenshotResult {
     mime_type: String,
     width: u32,
     height: u32,
+    css_viewport_width: u32,
+    css_viewport_height: u32,
     scale_applied: f64,
     source: ScreenshotSource,
     mode: ScreenshotMode,
@@ -690,6 +692,8 @@ impl SheltieMcpService {
         source
             .ensure_available(request.mode)
             .map_err(structured_error)?;
+        let css_viewport_width = source.css_viewport_width;
+        let css_viewport_height = source.css_viewport_height;
 
         let (image, image_source, annotated, warning) = match (source.display_mode, request.mode) {
             (PageDisplayMode::Native, ScreenshotMode::Viewport) => {
@@ -774,6 +778,8 @@ impl SheltieMcpService {
             mime_type: "image/png".into(),
             width: image.width,
             height: image.height,
+            css_viewport_width,
+            css_viewport_height,
             scale_applied: image.scale_applied,
             source: image_source,
             mode: request.mode,
@@ -1429,6 +1435,8 @@ mod tests {
                 verification_error: Arc::new(Mutex::new(None)),
                 screenshot_source: Arc::new(Mutex::new(PageScreenshotSource {
                     display_mode: PageDisplayMode::Native,
+                    css_viewport_width: 720,
+                    css_viewport_height: 500,
                     cached: None,
                 })),
                 native_capture_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -1453,6 +1461,8 @@ mod tests {
         let encoded = encode_capped_png(&image).unwrap();
         PageScreenshotSource {
             display_mode: mode,
+            css_viewport_width: 720,
+            css_viewport_height: 500,
             cached: Some(CachedPageScreenshot {
                 base64: base64::engine::general_purpose::STANDARD.encode(encoded.bytes),
                 width: 1,
@@ -1624,10 +1634,9 @@ mod tests {
     }
 
     fn error_code(result: rmcp::model::CallToolResult) -> String {
-        result.structured_content.unwrap()["code"]
-            .as_str()
-            .unwrap()
-            .to_string()
+        let value: serde_json::Value =
+            serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+        value["code"].as_str().unwrap().to_string()
     }
 
     #[test]
@@ -1864,6 +1873,8 @@ mod tests {
         assert!(result.content[1].as_image().is_some());
         let metadata = result.structured_content.unwrap();
         assert_eq!(metadata["source"], "cached");
+        assert_eq!(metadata["cssViewportWidth"], 720);
+        assert_eq!(metadata["cssViewportHeight"], 500);
         assert_eq!(metadata["annotated"], false);
         assert_eq!(
             metadata["warning"],

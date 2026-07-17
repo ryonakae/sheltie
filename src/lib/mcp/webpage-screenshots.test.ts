@@ -49,7 +49,7 @@ describe('page screenshot source', () => {
     );
 
     await expect(
-      encodePageScreenshotSource('screenshot', {
+      encodePageScreenshotSource('screenshot', 720, 500, {
         assetUrl: 'asset://cached.png',
         filePath: '/not-returned/cached.png',
         capturedAt: '2026-07-17T00:00:00.000Z',
@@ -57,6 +57,8 @@ describe('page screenshot source', () => {
       }),
     ).resolves.toEqual({
       displayMode: 'screenshot',
+      cssViewportWidth: 720,
+      cssViewportHeight: 500,
       cached: {
         base64: 'iVBORw0KGgo=',
         width: 321,

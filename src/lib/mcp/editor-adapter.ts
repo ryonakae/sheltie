@@ -65,6 +65,8 @@ export async function getPageScreenshotSource(pageNodeId: string): Promise<PageS
   const source = await requireMcpEditorAdapter().getPageScreenshotSource(pageNodeId);
   return {
     displayMode: source.displayMode,
+    cssViewportWidth: source.cssViewportWidth,
+    cssViewportHeight: source.cssViewportHeight,
     ...(source.cached ? { cached: { ...source.cached } } : {}),
   };
 }

@@ -5,6 +5,16 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import type { NavigationState } from './types';
 
+export interface SavedScreenshot {
+  filePath: string;
+  capturedAt: string;
+  capturedUrl: string | null;
+}
+
+export interface ExistingScreenshot extends SavedScreenshot {
+  pageId: string;
+}
+
 /**
  * `skip: true` は Tauri の public 型には露出していないが、既存 runtime では
  * Webview ハンドル再取得の内部実装として使われている。
@@ -222,14 +232,16 @@ export const webviewApi = {
     label: string,
     pageId: string,
     projectId: string,
+    capturedUrl: string,
     options?: { hideAfterSnapshotRequest?: boolean },
-  ): Promise<string | null> {
-    return invokeWithFallback<string | null>(
+  ): Promise<SavedScreenshot | null> {
+    return invokeWithFallback<SavedScreenshot | null>(
       'save_webview_screenshot',
       {
         label,
         pageId,
         projectId,
+        capturedUrl,
         hideAfterSnapshotRequest: options?.hideAfterSnapshotRequest,
       },
       null,
@@ -240,8 +252,8 @@ export const webviewApi = {
   async getExistingScreenshotPaths(
     projectId: string,
     pageIds: string[],
-  ): Promise<Array<[string, string]>> {
-    return invokeWithFallback<Array<[string, string]>>(
+  ): Promise<ExistingScreenshot[]> {
+    return invokeWithFallback<ExistingScreenshot[]>(
       'get_existing_screenshot_paths',
       {
         projectId,

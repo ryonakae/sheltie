@@ -37,11 +37,12 @@ import { useSheltieResize } from '@/hooks/sheltie/useSheltieResize';
 import { useSheltieTextEditing } from '@/hooks/sheltie/useSheltieTextEditing';
 import { useSheltieViewportController } from '@/hooks/sheltie/useSheltieViewportController';
 import { registerMcpEditorAdapter } from '@/lib/mcp/editor-adapter';
+import { encodeWebpageScreenshots } from '@/lib/mcp/webpage-screenshots';
 import { resolveActiveSelection, retainLiveSelectedIds } from '@/lib/sheltie-selection';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
 import { useThemeStore } from '@/store/theme-store';
-import { isWebPageNode } from '@/types';
+import { isWebPageNode, type ScreenshotCacheEntry } from '@/types';
 
 interface SheltieProps {
   selectedNodeIds: string[];
@@ -115,9 +116,9 @@ export function Sheltie({
     updateTextNodeContent,
     updateTextNodeStyle,
     updateTextNodeWidthMode,
-    hydrateProjectScreenshotUrls,
-    setProjectScreenshotUrl,
-    clearProjectScreenshotUrl,
+    hydrateProjectScreenshotCache,
+    setProjectScreenshotCacheEntry,
+    clearProjectScreenshotCacheEntry,
     addEdge: addEdgeToStore,
     updateEdgeStyle,
     removeEdges,
@@ -132,18 +133,18 @@ export function Sheltie({
       updateEdgeStyle: s.updateEdgeStyle,
       removeEdges: s.removeEdges,
       reverseEdge: s.reverseEdge,
-      clearProjectScreenshotUrl: s.clearProjectScreenshotUrl,
+      clearProjectScreenshotCacheEntry: s.clearProjectScreenshotCacheEntry,
       updateStickyNoteStyle: s.updateStickyNoteStyle,
       updateTextNodeContent: s.updateTextNodeContent,
       updateTextNodeStyle: s.updateTextNodeStyle,
       updateTextNodeWidthMode: s.updateTextNodeWidthMode,
       clearWebNodeWebviewLabel: s.clearWebNodeWebviewLabel,
-      hydrateProjectScreenshotUrls: s.hydrateProjectScreenshotUrls,
+      hydrateProjectScreenshotCache: s.hydrateProjectScreenshotCache,
       redoProject: s.redoProject,
       pinWebNodeUrl: s.pinWebNodeUrl,
       removeNode: s.removeNode,
       removeNodes: s.removeNodes,
-      setProjectScreenshotUrl: s.setProjectScreenshotUrl,
+      setProjectScreenshotCacheEntry: s.setProjectScreenshotCacheEntry,
       setWebNodeUrl: s.setWebNodeUrl,
       changeWebNodeUrl: s.changeWebNodeUrl,
       setWebNodeWebviewLabel: s.setWebNodeWebviewLabel,
@@ -210,26 +211,27 @@ export function Sheltie({
     {},
   );
   const getZoom = useCallback(() => zoomRef.current, [zoomRef]);
-  const hydrateCachedScreenshotUrls = useCallback(
-    (_projectId: string, screenshotUrlsByNodeId: Record<string, string>) => {
-      hydrateProjectScreenshotUrls(screenshotUrlsByNodeId);
+  const hydrateCachedScreenshotCache = useCallback(
+    (_projectId: string, screenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>) => {
+      hydrateProjectScreenshotCache(screenshotCacheByNodeId);
     },
-    [hydrateProjectScreenshotUrls],
+    [hydrateProjectScreenshotCache],
   );
-  const setCachedScreenshotUrl = useCallback(
-    (_projectId: string, nodeId: string, url: string) => {
-      setProjectScreenshotUrl(nodeId, url);
+  const setCachedScreenshotCacheEntry = useCallback(
+    (_projectId: string, nodeId: string, entry: ScreenshotCacheEntry) => {
+      setProjectScreenshotCacheEntry(nodeId, entry);
     },
-    [setProjectScreenshotUrl],
+    [setProjectScreenshotCacheEntry],
   );
-  const clearCachedScreenshotUrl = useCallback(
+  const clearCachedScreenshotCacheEntry = useCallback(
     (_projectId: string, nodeId: string) => {
-      clearProjectScreenshotUrl(nodeId);
+      clearProjectScreenshotCacheEntry(nodeId);
     },
-    [clearProjectScreenshotUrl],
+    [clearProjectScreenshotCacheEntry],
   );
   const {
     captureScreenshot,
+    getWebpageScreenshotCache,
     cancelZoomRestore,
     displayModes,
     handleContextMenuClose: handleContextMenuCloseDisplay,
@@ -249,16 +251,16 @@ export function Sheltie({
   } = useSheltieDisplayEngine({
     webPageNodes,
     webviewLabelsByNodeId: projectWebviewRuntime.labelsByNodeId,
-    cachedScreenshotUrlsByNodeId: projectWebviewRuntime.screenshotUrlsByNodeId,
+    cachedScreenshotCacheByNodeId: projectWebviewRuntime.screenshotCacheByNodeId,
     projectId: project?.id ?? '',
     containerRef,
     zoomRef,
     centeredNodeId,
     onCenteredNodeHandled,
     selectedElementIds,
-    hydrateCachedScreenshotUrls,
-    setCachedScreenshotUrl,
-    clearCachedScreenshotUrl,
+    hydrateCachedScreenshotCache,
+    setCachedScreenshotCacheEntry,
+    clearCachedScreenshotCacheEntry,
   });
 
   const storeViewport = useMemo<FlowViewport>(
@@ -307,8 +309,10 @@ export function Sheltie({
           viewport: getViewport(),
         }),
         focusNodes: async (nodeIds) => focusNodes(nodeIds),
+        getWebpageScreenshots: async (pageNodeIds) =>
+          encodeWebpageScreenshots(await getWebpageScreenshotCache(pageNodeIds)),
       }),
-    [focusNodes, getSelectedEdgeIds, getSelectedNodeIds, getViewport],
+    [focusNodes, getSelectedEdgeIds, getSelectedNodeIds, getViewport, getWebpageScreenshotCache],
   );
 
   const {

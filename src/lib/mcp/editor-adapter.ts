@@ -1,3 +1,4 @@
+import type { WebpageScreenshotResult } from '@/lib/mcp/webpage-screenshots';
 import type { Viewport } from '@/types';
 
 export interface McpEditorState {
@@ -9,6 +10,7 @@ export interface McpEditorState {
 export interface McpEditorAdapter {
   getEditorState: () => McpEditorState;
   focusNodes: (nodeIds: string[]) => Promise<{ focusedNodeIds: string[] }>;
+  getWebpageScreenshots: (pageNodeIds?: string[]) => Promise<WebpageScreenshotResult[]>;
 }
 
 let currentRegistration: { token: symbol; adapter: McpEditorAdapter } | null = null;
@@ -45,4 +47,12 @@ export function getEditorState(): McpEditorState {
 
 export async function focusNodes(nodeIds: string[]): Promise<{ focusedNodeIds: string[] }> {
   return requireMcpEditorAdapter().focusNodes([...nodeIds]);
+}
+
+export async function getWebpageScreenshots(
+  pageNodeIds?: string[],
+): Promise<WebpageScreenshotResult[]> {
+  return requireMcpEditorAdapter().getWebpageScreenshots(
+    pageNodeIds ? [...pageNodeIds] : undefined,
+  );
 }

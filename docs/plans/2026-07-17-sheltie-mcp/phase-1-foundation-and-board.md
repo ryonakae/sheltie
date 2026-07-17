@@ -610,8 +610,14 @@ git commit -m "feat: expose MCP editor context"
 - Modify: `src/store/tab-store.ts`
 - Test: `src/store/tab-store.test.ts`
 - Modify: `src/hooks/sheltie/useScreenshotCaptureQueue.ts`
+- Test: `src/hooks/sheltie/useScreenshotCaptureQueue.test.ts`
+- Modify: `src/hooks/sheltie/useSheltieDisplayEngine.ts`
+- Modify: `src/components/Sheltie/Sheltie.tsx`
 - Modify: `src-tauri/src/commands/webview/screenshots.rs`
 - Modify: `src/lib/tauri-bridge/webview.ts`
+- Modify: `src/lib/mcp/editor-adapter.ts`
+- Create: `src/lib/mcp/webpage-screenshots.ts`
+- Test: `src/lib/mcp/webpage-screenshots.test.ts`
 - Modify: `src/lib/mcp/renderer-bridge.ts`
 - Modify: `docs/agents/sheltie-screenshots.md`
 
@@ -619,7 +625,7 @@ git commit -m "feat: expose MCP editor context"
 - Produces: `ScreenshotCacheEntry`, sidecar metadata, renderer command `getWebpageScreenshots`.
 - Consumed by: Tasks 7–8.
 
-- [ ] **Step 1: Write failing metadata/store tests**
+- [x] **Step 1: Write failing metadata/store tests**
 
 Define:
 
@@ -634,13 +640,13 @@ export interface ScreenshotCacheEntry {
 
 Test hydrate does not overwrite newer in-memory metadata, capture updates all fields, node deletion removes metadata, and restored legacy PNG accepts `capturedUrl: null`.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run: `npm run test -- src/store/tab-store.test.ts`
 
 Expected: runtime cache still stores URL strings only.
 
-- [ ] **Step 3: Add PNG sidecar metadata**
+- [x] **Step 3: Add PNG sidecar metadata**
 
 Store `{pageId}.json` next to `{pageId}.png` with exact schema:
 
@@ -654,7 +660,7 @@ Store `{pageId}.json` next to `{pageId}.png` with exact schema:
 
 Change `save_webview_screenshot` to accept `captured_url` and return `{ filePath, capturedAt, capturedUrl }`. For an existing PNG without JSON, use filesystem modified time and null URL. Delete PNG and JSON together. Update Tauri bridge and queue calls to pass the node’s current URL.
 
-- [ ] **Step 4: Implement cache-first batch retrieval**
+- [x] **Step 4: Implement cache-first batch retrieval**
 
 Renderer command behavior:
 1. Resolve requested IDs in board order; reject non-WebPage IDs.

@@ -10,25 +10,32 @@ Sheltie の Webview スクリーンショット撮影・永続化・差し替え
 
 ## 永続化
 
-PNG ファイルとして保存する（macOS のみ）。保存先 `~/Library/Application Support/com.sheltie.app/screenshots/{projectId}/{pageId}.png`。`projectId` はローカルワークスペース上の `Project.id`、`pageId` は node id（webpage 系 Webview IPC では歴史的に `pageId` 命名）。
+PNGファイルとして保存する（macOSのみ）。保存先は`~/Library/Application Support/com.sheltie.app/screenshots/{projectId}/{pageId}.png`、撮影時メタデータは同じ場所の`{pageId}.json`。`projectId`はローカルワークスペース上の`Project.id`、`pageId`はnode ID（WebPage系Webview IPCでは歴史的に`pageId`命名）。sidecarのschemaは`{ schemaVersion: 1, capturedAt, capturedUrl }`で、`capturedAt`はRFC 3339とする。
 
 **撮影時**:
 
-1. Rust `save_webview_screenshot(label, pageId, projectId, hideAfterSnapshotRequest?)` → WKWebView スナップショット要求。`hideAfterSnapshotRequest=true` の時は要求直後に同じコマンド内で Webview を hide
-2. JS で `convertFileSrc(filePath) + '?t=Date.now()'` のアセット URL を `<img src>` に設定
+1. Rust `save_webview_screenshot(label, pageId, projectId, capturedUrl, hideAfterSnapshotRequest?)` → WKWebViewスナップショット要求。`hideAfterSnapshotRequest=true`の時は要求直後に同じコマンド内でWebviewをhideし、PNGとsidecarを保存して`{ filePath, capturedAt, capturedUrl }`を返す
+2. JSで`convertFileSrc(filePath) + '?t=Date.now()'`のasset URLと返却メタデータを1つの`ScreenshotCacheEntry`としてruntime storeへ設定し、`<img src>`にも反映する
 3. `Image.decode()` でデコード完了を待ち、既存 screenshot は新 URL 準備まで差し替えない
 4. `onScreenshotPresented(pageId, url)` で表示可能スクショとして登録し、`screenshotReadyRef.current[pageId] = true`
 
-**起動時復元 / lazy restore**:
+**lazy restore**:
 
-- 起動時: `setupProjectPersistence()` が `_restoreState()` 直後・`_setLoaded()` 前に「保存状態で open だった tab」だけ `get_existing_screenshot_paths(projectId, pageIds)` を実行し、`tab-store.webviewRuntime.screenshotUrlsByNodeId` へ preload
-- lazy: `useSheltieDisplayEngine` の `projectId + webpage node ids` 依存 effect が、runtime cache にまだ無い page を対象に同じコマンドを実行し、local state と store の両方へ反映
-- 復元 URL は `convertFileSrc(filePath) + '?t=restored'`。in-memory に既に URL がある page は上書きしない
-- いずれも完了後に `computeDisplayModes()` を再実行して正しいモード判定に収束させる
+- `useScreenshotCaptureQueue`の`projectId + WebPage node IDs`依存effectが、runtime cacheにまだ無いpageを対象に`get_existing_screenshot_paths(projectId, pageIds)`を実行し、local stateとstoreの両方へ反映する。`setupProjectPersistence()`はスクリーンショットをpreloadしない
+- sidecarが無いlegacy PNGやsidecarが壊れているPNGは、ファイル更新時刻を`capturedAt`、`capturedUrl: null`として復元する
+- sidecarの`capturedUrl`が現在のnode URLと異なるPNGは復元せず削除する。in-memory entryより古いdisk entryは上書きしない
+- 復元URLは`convertFileSrc(filePath) + '?t=restored'`。復元後に`computeDisplayModes()`を再実行して正しいmode判定に収束させる
 
-**削除**: ページ削除時に `cleanupPageArtifacts()` → `delete_screenshot(pageId, projectId)` でファイルも削除。
+**削除**: ページ削除時に`cleanupPageArtifacts()` → `delete_screenshot(pageId, projectId)`でPNGとsidecarを両方削除する。
 
-**Tauri 設定**: `tauri.conf.json` の `app.security.assetProtocol.enable = true` と scope `$APPDATA/screenshots/**`、`Cargo.toml` の `tauri` feature に `protocol-asset`。
+**Tauri 設定**: `tauri.conf.json`の`app.security.assetProtocol.enable = true`とscope`$APPDATA/screenshots/**`、`Cargo.toml`の`tauri` featureに`protocol-asset`。
+
+## MCPからの一括取得
+
+- `get_webpage_screenshots`は指定IDを検証した後、board順で全結果を返す。ID省略時は全WebPageが対象
+- 現在`native`のpageだけ既存capture queueで再撮影を試みる。`screenshot` / `hidden`のWebviewを表示・移動・リサイズして撮影しない
+- native撮影に失敗しても既存cacheがあれば返す。cacheが無いpageは`freshness: missing`として返し、call全体は失敗させない
+- 返却用画像だけcanvasで最長辺1024px以下のPNGへ縮小する。保存済みPNGは書き換えない。asset取得・decode・encodeに失敗した場合は`screenshot_failed`
 
 ## 撮影タイミング
 

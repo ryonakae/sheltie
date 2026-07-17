@@ -9,7 +9,7 @@ import {
   roundDebugValue,
   serializeRect,
 } from '@/lib/webview-debug';
-import type { DisplayMode, WebPageNode } from '@/types';
+import type { DisplayMode, ScreenshotCacheEntry, WebPageNode } from '@/types';
 
 import {
   getSelectionToolbarRects,
@@ -46,19 +46,23 @@ import type { InteractionType } from './types';
 interface UseSheltieDisplayEngineParams {
   webPageNodes: WebPageNode[];
   webviewLabelsByNodeId: Record<string, string>;
-  cachedScreenshotUrlsByNodeId: Record<string, string>;
+  cachedScreenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>;
   projectId: string;
   containerRef: React.RefObject<HTMLDivElement | null>;
   zoomRef: React.RefObject<number>;
   centeredNodeId?: string | null;
   onCenteredNodeHandled?: () => void;
   selectedElementIds?: string[];
-  hydrateCachedScreenshotUrls: (
+  hydrateCachedScreenshotCache: (
     projectId: string,
-    screenshotUrlsByNodeId: Record<string, string>,
+    screenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>,
   ) => void;
-  setCachedScreenshotUrl: (projectId: string, nodeId: string, url: string) => void;
-  clearCachedScreenshotUrl: (projectId: string, nodeId: string) => void;
+  setCachedScreenshotCacheEntry: (
+    projectId: string,
+    nodeId: string,
+    entry: ScreenshotCacheEntry,
+  ) => void;
+  clearCachedScreenshotCacheEntry: (projectId: string, nodeId: string) => void;
 }
 
 type InteractionPreparationType = InteractionType | 'context-menu' | 'unsaved-changes-dialog';
@@ -67,11 +71,11 @@ const logDisplayEngineDebug = createScopedLogger('display-engine');
 
 function buildInitialDisplayModes(
   webPageNodes: WebPageNode[],
-  cachedScreenshotUrlsByNodeId: Record<string, string>,
+  cachedScreenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>,
 ): Record<string, DisplayMode> {
   const next: Record<string, DisplayMode> = {};
   for (const page of webPageNodes) {
-    const hasSeeded = Boolean(page.url) && Boolean(cachedScreenshotUrlsByNodeId[page.id]);
+    const hasSeeded = Boolean(page.url) && Boolean(cachedScreenshotCacheByNodeId[page.id]);
     next[page.id] = hasSeeded ? 'screenshot' : 'hidden';
   }
   return next;
@@ -82,20 +86,31 @@ const EMPTY_SELECTION: string[] = [];
 export function useSheltieDisplayEngine({
   webPageNodes,
   webviewLabelsByNodeId,
-  cachedScreenshotUrlsByNodeId,
+  cachedScreenshotCacheByNodeId,
   projectId,
   containerRef,
   zoomRef,
   centeredNodeId = null,
   onCenteredNodeHandled,
   selectedElementIds = EMPTY_SELECTION,
-  hydrateCachedScreenshotUrls,
-  setCachedScreenshotUrl,
-  clearCachedScreenshotUrl,
+  hydrateCachedScreenshotCache,
+  setCachedScreenshotCacheEntry,
+  clearCachedScreenshotCacheEntry,
 }: UseSheltieDisplayEngineParams) {
-  const [displayModes, setDisplayModes] = useState<Record<string, DisplayMode>>(() =>
-    buildInitialDisplayModes(webPageNodes, cachedScreenshotUrlsByNodeId),
+  const [displayModes, setDisplayModesState] = useState<Record<string, DisplayMode>>(() =>
+    buildInitialDisplayModes(webPageNodes, cachedScreenshotCacheByNodeId),
   );
+  const displayModesRef = useRef(displayModes);
+  const setDisplayModes = useCallback<
+    React.Dispatch<React.SetStateAction<Record<string, DisplayMode>>>
+  >((modesOrUpdater) => {
+    const next =
+      typeof modesOrUpdater === 'function'
+        ? modesOrUpdater(displayModesRef.current)
+        : modesOrUpdater;
+    displayModesRef.current = next;
+    setDisplayModesState(next);
+  }, []);
 
   // 5-5 段階 1: state machine の枠を導入。既存 ref が真実の状態のままで、
   // dispatch は既存 ref の書き換えと並走させて stateRef を同期させる（読み手はまだ無し）。
@@ -169,19 +184,21 @@ export function useSheltieDisplayEngine({
     handleScreenshotPresented,
     captureScreenshot,
     ensureScreenshotReady,
+    getWebpageScreenshotCache,
     cleanupScreenshot,
   } = useScreenshotCaptureQueue({
     webPageNodes,
     projectId,
-    cachedScreenshotUrlsByNodeId,
-    hydrateCachedScreenshotUrls,
-    setCachedScreenshotUrl,
+    cachedScreenshotCacheByNodeId,
+    hydrateCachedScreenshotCache,
+    setCachedScreenshotCacheEntry,
     getWebviewLabel,
     warnMissingWebviewLabel,
     sharedRefs,
     setNodeDisplayModeRef,
     hideNodeWebviewRef,
     computeDisplayModesRef,
+    displayModesRef,
   });
 
   const cancelInteractionCaptureRetry = useCallback(() => {
@@ -212,7 +229,7 @@ export function useSheltieDisplayEngine({
         return { ...prev, [nodeId]: mode };
       });
     },
-    [containerRef],
+    [containerRef, setDisplayModes],
   );
 
   const getInteractionPreparationNodeIds = useCallback(
@@ -460,6 +477,7 @@ export function useSheltieDisplayEngine({
     hasDisplayableScreenshot,
     isMacOsRef,
     isNativeRevealPending,
+    setDisplayModes,
     webPageNodes,
     zoomRef,
   ]);
@@ -859,12 +877,19 @@ export function useSheltieDisplayEngine({
         return next;
       });
       cleanupScreenshot(nodeId);
-      clearCachedScreenshotUrl(projectId, nodeId);
+      clearCachedScreenshotCacheEntry(projectId, nodeId);
       dispatch({ type: 'CLEANUP_NODE', nodeId });
       // スクリーンショットファイルをクリーンアップ
       void webviewApi.deleteScreenshot(nodeId, projectId);
     },
-    [cancelNativeReveal, cleanupScreenshot, clearCachedScreenshotUrl, dispatch, projectId],
+    [
+      cancelNativeReveal,
+      cleanupScreenshot,
+      clearCachedScreenshotCacheEntry,
+      dispatch,
+      projectId,
+      setDisplayModes,
+    ],
   );
 
   useEffect(() => {
@@ -1005,6 +1030,7 @@ export function useSheltieDisplayEngine({
 
   return {
     captureScreenshot,
+    getWebpageScreenshotCache,
     cancelZoomRestore,
     displayModes,
     handleContextMenuClose,

@@ -1,4 +1,4 @@
-import { focusNodes, getEditorState } from '@/lib/mcp/editor-adapter';
+import { focusNodes, getEditorState, getWebpageScreenshots } from '@/lib/mcp/editor-adapter';
 import type {
   McpToolError,
   RendererCommandHandlers,
@@ -59,10 +59,31 @@ function parseFocusNodeIds(params: unknown): string[] {
   return params.nodeIds;
 }
 
+function parsePageNodeIds(params: unknown): string[] | undefined {
+  if (typeof params !== 'object' || params === null || Array.isArray(params)) {
+    throw {
+      code: 'validation_failed',
+      message: 'getWebpageScreenshots requires params to be an object',
+    };
+  }
+  if (!('pageNodeIds' in params) || params.pageNodeIds === undefined) return undefined;
+  if (
+    !Array.isArray(params.pageNodeIds) ||
+    params.pageNodeIds.some((nodeId) => typeof nodeId !== 'string' || nodeId.length === 0)
+  ) {
+    throw {
+      code: 'validation_failed',
+      message: 'getWebpageScreenshots requires pageNodeIds to be an array of non-empty strings',
+    };
+  }
+  return params.pageNodeIds;
+}
+
 export function createBuiltInRendererCommandHandlers(): RendererCommandHandlers {
   return {
     getEditorState: () => getEditorState(),
     focusNodes: (params) => focusNodes(parseFocusNodeIds(params)),
+    getWebpageScreenshots: (params) => getWebpageScreenshots(parsePageNodeIds(params)),
   };
 }
 

@@ -229,7 +229,14 @@ export interface ProjectState {
   project: Project | null;
 }
 
+export interface ScreenshotCacheEntry {
+  assetUrl: string;
+  filePath: string;
+  capturedAt: string;
+  capturedUrl: string | null;
+}
+
 export interface ProjectWebviewRuntime {
   labelsByNodeId: Record<string, string>;
-  screenshotUrlsByNodeId: Record<string, string>;
+  screenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>;
 }

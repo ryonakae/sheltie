@@ -2,7 +2,9 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { webviewApi } from '@/lib/tauri-bridge';
-import type { DisplayMode, WebPageNode } from '@/types';
+import { useProjectStore } from '@/store/tab-store';
+import type { DisplayMode, ScreenshotCacheEntry, WebPageNode } from '@/types';
+import { isWebPageNode } from '@/types';
 
 import {
   type DisplayEngineAction,
@@ -31,12 +33,16 @@ export interface ScreenshotCaptureSharedRefs {
 interface UseScreenshotCaptureQueueParams {
   webPageNodes: WebPageNode[];
   projectId: string;
-  cachedScreenshotUrlsByNodeId: Record<string, string>;
-  hydrateCachedScreenshotUrls: (
+  cachedScreenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>;
+  hydrateCachedScreenshotCache: (
     projectId: string,
-    screenshotUrlsByNodeId: Record<string, string>,
+    screenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>,
   ) => void;
-  setCachedScreenshotUrl: (projectId: string, nodeId: string, url: string) => void;
+  setCachedScreenshotCacheEntry: (
+    projectId: string,
+    nodeId: string,
+    entry: ScreenshotCacheEntry,
+  ) => void;
   getWebviewLabel: (nodeId: string) => string | undefined;
   warnMissingWebviewLabel: (nodeId: string, command: string) => void;
   sharedRefs: ScreenshotCaptureSharedRefs;
@@ -45,18 +51,81 @@ interface UseScreenshotCaptureQueueParams {
   >;
   hideNodeWebviewRef: React.MutableRefObject<((label: string) => void) | null>;
   computeDisplayModesRef: React.MutableRefObject<(() => void) | null>;
+  displayModesRef: React.MutableRefObject<Record<string, DisplayMode>>;
+}
+
+export interface WebpageScreenshotCacheDescriptor {
+  pageNodeId: string;
+  entry: ScreenshotCacheEntry | null;
+}
+
+export function isCurrentScreenshotTarget(
+  projectId: string,
+  nodeId: string,
+  capturedUrl: string,
+): boolean {
+  const project = useProjectStore.getState().project;
+  if (!project || project.id !== projectId) return false;
+  const node = project.nodes.find((candidate) => candidate.id === nodeId);
+  return Boolean(node && isWebPageNode(node) && node.url === capturedUrl);
+}
+
+export async function collectWebpageScreenshotCache({
+  webPageNodes,
+  pageNodeIds,
+  displayModes,
+  captureScreenshot,
+  getCacheEntry,
+}: {
+  webPageNodes: WebPageNode[];
+  pageNodeIds?: string[];
+  displayModes: Record<string, DisplayMode>;
+  captureScreenshot: (nodeId: string) => Promise<unknown>;
+  getCacheEntry: (nodeId: string) => ScreenshotCacheEntry | null;
+}): Promise<WebpageScreenshotCacheDescriptor[]> {
+  const liveIds = new Set(webPageNodes.map((page) => page.id));
+  if (pageNodeIds && new Set(pageNodeIds).size !== pageNodeIds.length) {
+    throw {
+      code: 'validation_failed',
+      message: 'pageNodeIds must not contain duplicate IDs',
+    };
+  }
+  const unknownIds = pageNodeIds?.filter((nodeId) => !liveIds.has(nodeId)) ?? [];
+  if (unknownIds.length > 0) {
+    throw {
+      code: 'validation_failed',
+      message: `Unknown or non-WebPage node IDs: ${unknownIds.join(', ')}`,
+    };
+  }
+
+  const requestedIds = pageNodeIds ? new Set(pageNodeIds) : null;
+  const requestedPages = requestedIds
+    ? webPageNodes.filter((page) => requestedIds.has(page.id))
+    : webPageNodes;
+  const results: WebpageScreenshotCacheDescriptor[] = [];
+  for (const page of requestedPages) {
+    if (displayModes[page.id] === 'native') {
+      try {
+        await captureScreenshot(page.id);
+      } catch {
+        // The previous cache remains usable when a fresh native capture fails.
+      }
+    }
+    results.push({ pageNodeId: page.id, entry: getCacheEntry(page.id) });
+  }
+  return results;
 }
 
 function buildSeededScreenshotUrls(
   webPageNodes: WebPageNode[],
-  cachedScreenshotUrlsByNodeId: Record<string, string>,
+  cachedScreenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>,
 ): Record<string, string> {
   const next: Record<string, string> = {};
   for (const page of webPageNodes) {
     if (!page.url) continue;
-    const cachedUrl = cachedScreenshotUrlsByNodeId[page.id];
-    if (!cachedUrl) continue;
-    next[page.id] = cachedUrl;
+    const cached = cachedScreenshotCacheByNodeId[page.id];
+    if (!cached) continue;
+    next[page.id] = cached.assetUrl;
   }
   return next;
 }
@@ -90,19 +159,20 @@ function mergeCaptureOptions(
 export function useScreenshotCaptureQueue({
   webPageNodes,
   projectId,
-  cachedScreenshotUrlsByNodeId,
-  hydrateCachedScreenshotUrls,
-  setCachedScreenshotUrl,
+  cachedScreenshotCacheByNodeId,
+  hydrateCachedScreenshotCache,
+  setCachedScreenshotCacheEntry,
   getWebviewLabel,
   warnMissingWebviewLabel,
   sharedRefs,
   setNodeDisplayModeRef,
   hideNodeWebviewRef,
   computeDisplayModesRef,
+  displayModesRef,
 }: UseScreenshotCaptureQueueParams) {
   const seededScreenshotUrls = useMemo(
-    () => buildSeededScreenshotUrls(webPageNodes, cachedScreenshotUrlsByNodeId),
-    [cachedScreenshotUrlsByNodeId, webPageNodes],
+    () => buildSeededScreenshotUrls(webPageNodes, cachedScreenshotCacheByNodeId),
+    [cachedScreenshotCacheByNodeId, webPageNodes],
   );
 
   const [screenshotUrls, setScreenshotUrls] =
@@ -115,6 +185,9 @@ export function useScreenshotCaptureQueue({
   const pendingCaptureOptionsRef = useRef<Record<string, CaptureScreenshotOptions | undefined>>({});
   const queuedFreshCaptureRef = useRef<Record<string, boolean>>({});
   const screenshotUrlsRef = useRef<Record<string, string>>(seededScreenshotUrls);
+  const screenshotCacheRef = useRef<Record<string, ScreenshotCacheEntry>>({
+    ...cachedScreenshotCacheByNodeId,
+  });
   const presentedScreenshotUrlRef = useRef<Record<string, string>>({});
   const screenshotPresentationWaitersRef = useRef<
     Record<string, { url: string; resolvers: Array<() => void> }>
@@ -227,13 +300,18 @@ export function useScreenshotCaptureQueue({
               sharedRefs.dispatch({ type: 'NATIVE_HIDDEN_BY_CAPTURE_ADD', nodeId });
             }
 
-            const filePath = await webviewApi.saveScreenshot(label, nodeId, projectId, {
+            const capturedUrl = webPageNodes.find((page) => page.id === nodeId)?.url;
+            if (capturedUrl === undefined) return false;
+            const saved = await webviewApi.saveScreenshot(label, nodeId, projectId, capturedUrl, {
               hideAfterSnapshotRequest,
             });
-            if (!filePath) {
+            if (!saved) {
               if (nextOptions?.source === 'interaction-start' && hideAfterSnapshotRequest) {
                 sharedRefs.dispatch({ type: 'CAPTURE_RETRY_ADD', nodeId });
               }
+              lastResult = false;
+            } else if (!isCurrentScreenshotTarget(projectId, nodeId, capturedUrl)) {
+              await webviewApi.deleteScreenshot(nodeId, projectId);
               lastResult = false;
             } else if (
               !forceDuringInteraction &&
@@ -241,7 +319,13 @@ export function useScreenshotCaptureQueue({
             ) {
               lastResult = false;
             } else {
-              const assetUrl = `${convertFileSrc(filePath)}?t=${Date.now()}`;
+              const assetUrl = `${convertFileSrc(saved.filePath)}?t=${Date.now()}`;
+              const cacheEntry: ScreenshotCacheEntry = {
+                assetUrl,
+                filePath: saved.filePath,
+                capturedAt: saved.capturedAt,
+                capturedUrl: saved.capturedUrl,
+              };
 
               const img = new Image();
               img.src = assetUrl;
@@ -255,7 +339,11 @@ export function useScreenshotCaptureQueue({
               delete presentedScreenshotUrlRef.current[nodeId];
               sharedRefs.dispatch({ type: 'FORCE_HIDDEN_REMOVE', nodeId });
               sharedRefs.dispatch({ type: 'CAPTURE_RETRY_REMOVE', nodeId });
-              setCachedScreenshotUrl(projectId, nodeId, assetUrl);
+              screenshotCacheRef.current = {
+                ...screenshotCacheRef.current,
+                [nodeId]: cacheEntry,
+              };
+              setCachedScreenshotCacheEntry(projectId, nodeId, cacheEntry);
 
               setScreenshotUrls((prev) => {
                 const next = { ...prev, [nodeId]: assetUrl };
@@ -305,11 +393,12 @@ export function useScreenshotCaptureQueue({
       getWebviewLabel,
       hideNodeWebviewRef,
       projectId,
-      setCachedScreenshotUrl,
+      setCachedScreenshotCacheEntry,
       setNodeDisplayModeRef,
       sharedRefs,
       waitForScreenshotPresentation,
       warnMissingWebviewLabel,
+      webPageNodes,
     ],
   );
 
@@ -320,6 +409,23 @@ export function useScreenshotCaptureQueue({
   useEffect(() => {
     screenshotUrlsRef.current = screenshotUrls;
   }, [screenshotUrls]);
+
+  useEffect(() => {
+    screenshotCacheRef.current = { ...cachedScreenshotCacheByNodeId };
+    const nextUrls = buildSeededScreenshotUrls(webPageNodes, cachedScreenshotCacheByNodeId);
+    const nextReady = buildScreenshotReadyState(nextUrls);
+    screenshotReadyRef.current = nextReady;
+    setScreenshotUrls((previous) => {
+      const previousEntries = Object.entries(previous);
+      const nextEntries = Object.entries(nextUrls);
+      const unchanged =
+        previousEntries.length === nextEntries.length &&
+        nextEntries.every(([nodeId, url]) => previous[nodeId] === url);
+      if (unchanged) return previous;
+      screenshotUrlsRef.current = nextUrls;
+      return nextUrls;
+    });
+  }, [cachedScreenshotCacheByNodeId, webPageNodes]);
 
   const handleScreenshotPresented = useCallback(
     (nodeId: string, url: string) => {
@@ -343,43 +449,73 @@ export function useScreenshotCaptureQueue({
   // screenshotReadyRef を true に設定することで、右クリック時の白画面や
   // 起動直後の Webview がサイドバーに重なる問題を防ぐ。
   useEffect(() => {
-    const restorablePageIds = webPageNodes.filter((page) => page.url).map((page) => page.id);
-    const missingPageIds = restorablePageIds.filter((nodeId) => !screenshotUrlsRef.current[nodeId]);
+    const restorablePages = webPageNodes.filter((page) => page.url);
+    const pageById = new Map(restorablePages.map((page) => [page.id, page]));
+    const missingPageIds = restorablePages
+      .map((page) => page.id)
+      .filter((nodeId) => !screenshotCacheRef.current[nodeId]);
     if (missingPageIds.length === 0) return;
 
     let cancelled = false;
     void webviewApi.getExistingScreenshotPaths(projectId, missingPageIds).then((entries) => {
       if (cancelled || entries.length === 0) return;
 
+      const restoredCache: Record<string, ScreenshotCacheEntry> = {};
       const restoredUrls: Record<string, string> = {};
-      for (const [nodeId, filePath] of entries) {
-        if (screenshotUrlsRef.current[nodeId]) continue;
-        screenshotReadyRef.current[nodeId] = true;
-        restoredUrls[nodeId] = `${convertFileSrc(filePath)}?t=restored`;
-      }
-      if (Object.keys(restoredUrls).length === 0) return;
-
-      hydrateCachedScreenshotUrls(projectId, restoredUrls);
-      setScreenshotUrls((prev) => {
-        let changed = false;
-        const next = { ...prev };
-        for (const [nodeId, url] of Object.entries(restoredUrls)) {
-          if (next[nodeId]) continue;
-          next[nodeId] = url;
-          changed = true;
+      for (const restored of entries) {
+        const page = pageById.get(restored.pageId);
+        if (!page) continue;
+        if (restored.capturedUrl !== null && restored.capturedUrl !== page.url) {
+          void webviewApi.deleteScreenshot(restored.pageId, projectId);
+          continue;
         }
-        if (!changed) return prev;
+        const current = screenshotCacheRef.current[restored.pageId];
+        if (current && Date.parse(current.capturedAt) >= Date.parse(restored.capturedAt)) continue;
+
+        const assetUrl = `${convertFileSrc(restored.filePath)}?t=restored`;
+        restoredCache[restored.pageId] = {
+          assetUrl,
+          filePath: restored.filePath,
+          capturedAt: restored.capturedAt,
+          capturedUrl: restored.capturedUrl,
+        };
+        restoredUrls[restored.pageId] = assetUrl;
+        screenshotReadyRef.current[restored.pageId] = true;
+      }
+      if (Object.keys(restoredCache).length === 0) return;
+
+      screenshotCacheRef.current = { ...screenshotCacheRef.current, ...restoredCache };
+      hydrateCachedScreenshotCache(projectId, restoredCache);
+      setScreenshotUrls((previous) => {
+        const next = { ...previous, ...restoredUrls };
         screenshotUrlsRef.current = next;
         return next;
       });
-      // 復元後にモード判定を再実行し、端のページが screenshot モードで表示されるようにする
       requestAnimationFrame(() => computeDisplayModesRef.current?.());
     });
 
     return () => {
       cancelled = true;
     };
-  }, [computeDisplayModesRef, hydrateCachedScreenshotUrls, projectId, webPageIdsKey, webPageNodes]);
+  }, [
+    computeDisplayModesRef,
+    hydrateCachedScreenshotCache,
+    projectId,
+    webPageIdsKey,
+    webPageNodes,
+  ]);
+
+  const getWebpageScreenshotCache = useCallback(
+    (pageNodeIds?: string[]) =>
+      collectWebpageScreenshotCache({
+        webPageNodes,
+        pageNodeIds,
+        displayModes: displayModesRef.current,
+        captureScreenshot,
+        getCacheEntry: (nodeId) => screenshotCacheRef.current[nodeId] ?? null,
+      }),
+    [captureScreenshot, displayModesRef, webPageNodes],
+  );
 
   // 1 ノード分の screenshot 関連 state/ref をクリアする（メインフックの cleanup から呼ぶ）。
   const cleanupScreenshot = useCallback((nodeId: string) => {
@@ -390,6 +526,9 @@ export function useScreenshotCaptureQueue({
       screenshotUrlsRef.current = next;
       return next;
     });
+    const remainingCache = { ...screenshotCacheRef.current };
+    delete remainingCache[nodeId];
+    screenshotCacheRef.current = remainingCache;
     delete screenshotReadyRef.current[nodeId];
     delete capturePromiseRef.current[nodeId];
     delete pendingCaptureOptionsRef.current[nodeId];
@@ -408,6 +547,7 @@ export function useScreenshotCaptureQueue({
     handleScreenshotPresented,
     captureScreenshot,
     ensureScreenshotReady,
+    getWebpageScreenshotCache,
     cleanupScreenshot,
   };
 }

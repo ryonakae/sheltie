@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_EDGE_STYLE } from '@/constants';
-import type { BoardEdge, BoardNode } from '@/types';
+import type { BoardEdge, BoardNode, ScreenshotCacheEntry } from '@/types';
 
 import { omitKeys, patchNode, useProjectStore } from './tab-store';
 
@@ -19,6 +19,19 @@ function documentWebpage(id: string, x = 0) {
     y: 0,
     width: 393,
     height: 852,
+  };
+}
+
+function screenshotEntry(
+  nodeId: string,
+  overrides: Partial<ScreenshotCacheEntry> = {},
+): ScreenshotCacheEntry {
+  return {
+    assetUrl: `asset://${nodeId}.png`,
+    filePath: `/tmp/${nodeId}.png`,
+    capturedAt: '2026-07-17T12:00:00Z',
+    capturedUrl: `https://${nodeId}.example`,
+    ...overrides,
   };
 }
 
@@ -152,6 +165,56 @@ describe('edge actions', () => {
   });
 });
 
+describe('screenshot cache provenance', () => {
+  it('does not overwrite a newer in-memory entry during hydration', () => {
+    const newer = screenshotEntry('a', { capturedAt: '2026-07-17T13:00:00Z' });
+    const older = screenshotEntry('a', {
+      assetUrl: 'asset://old.png',
+      filePath: '/tmp/old.png',
+      capturedAt: '2026-07-17T12:00:00Z',
+    });
+    useProjectStore.getState().setProjectScreenshotCacheEntry('a', newer);
+
+    useProjectStore.getState().hydrateProjectScreenshotCache({ a: older });
+
+    expect(useProjectStore.getState().webviewRuntime.screenshotCacheByNodeId.a).toEqual(newer);
+  });
+
+  it('replaces all provenance fields atomically after capture', () => {
+    useProjectStore
+      .getState()
+      .setProjectScreenshotCacheEntry('a', screenshotEntry('a', { capturedUrl: null }));
+    const fresh = screenshotEntry('fresh', {
+      capturedAt: '2026-07-17T14:00:00Z',
+      capturedUrl: 'https://fresh.example/path',
+    });
+
+    useProjectStore.getState().setProjectScreenshotCacheEntry('a', fresh);
+
+    expect(useProjectStore.getState().webviewRuntime.screenshotCacheByNodeId.a).toEqual(fresh);
+  });
+
+  it('accepts restored legacy metadata with a null captured URL', () => {
+    const legacy = screenshotEntry('a', { capturedUrl: null });
+
+    useProjectStore.getState().hydrateProjectScreenshotCache({ a: legacy });
+
+    expect(useProjectStore.getState().webviewRuntime.screenshotCacheByNodeId.a).toEqual(legacy);
+  });
+
+  it('removes cache provenance when its node is deleted', () => {
+    useProjectStore.getState().initializeProject({
+      untitledIndex: 1,
+      document: { schemaVersion: 2, nodes: [documentWebpage('a')], edges: [] },
+    });
+    useProjectStore.getState().setProjectScreenshotCacheEntry('a', screenshotEntry('a'));
+
+    useProjectStore.getState().removeNode('a');
+
+    expect(useProjectStore.getState().webviewRuntime.screenshotCacheByNodeId).toEqual({});
+  });
+});
+
 describe('applyMcpBoardBatch', () => {
   it('leaves project, history, and runtime deeply unchanged after validation failure', () => {
     useProjectStore.getState().initializeProject({
@@ -159,7 +222,7 @@ describe('applyMcpBoardBatch', () => {
       document: { schemaVersion: 2, nodes: [documentWebpage('a')], edges: [] },
     });
     useProjectStore.getState().setWebNodeWebviewLabel('a', 'page-document-1-a');
-    useProjectStore.getState().setProjectScreenshotUrl('a', 'asset://a.png');
+    useProjectStore.getState().setProjectScreenshotCacheEntry('a', screenshotEntry('a'));
     const before = structuredClone({
       project: useProjectStore.getState().project,
       history: useProjectStore.getState().history,
@@ -190,7 +253,7 @@ describe('applyMcpBoardBatch', () => {
       },
     });
     useProjectStore.getState().setWebNodeWebviewLabel('a', 'page-document-1-a');
-    useProjectStore.getState().setProjectScreenshotUrl('a', 'asset://a.png');
+    useProjectStore.getState().setProjectScreenshotCacheEntry('a', screenshotEntry('a'));
 
     const result = useProjectStore.getState().applyMcpBoardBatch([
       {
@@ -203,7 +266,7 @@ describe('applyMcpBoardBatch', () => {
     expect(result.ok).toBe(true);
     expect(useProjectStore.getState().webviewRuntime).toEqual({
       labelsByNodeId: {},
-      screenshotUrlsByNodeId: {},
+      screenshotCacheByNodeId: {},
     });
     expect(useProjectStore.getState().project?.nodes[0]).toMatchObject({
       url: 'https://new.example/path',
@@ -222,9 +285,9 @@ describe('applyMcpBoardBatch', () => {
       },
     });
     useProjectStore.getState().setWebNodeWebviewLabel('a', 'page-document-1-a');
-    useProjectStore.getState().setProjectScreenshotUrl('a', 'asset://a.png');
+    useProjectStore.getState().setProjectScreenshotCacheEntry('a', screenshotEntry('a'));
     useProjectStore.getState().setWebNodeWebviewLabel('b', 'page-document-1-b');
-    useProjectStore.getState().setProjectScreenshotUrl('b', 'asset://b.png');
+    useProjectStore.getState().setProjectScreenshotCacheEntry('b', screenshotEntry('b'));
 
     const result = useProjectStore
       .getState()
@@ -233,7 +296,7 @@ describe('applyMcpBoardBatch', () => {
     expect(result.ok).toBe(true);
     expect(useProjectStore.getState().webviewRuntime).toEqual({
       labelsByNodeId: { b: 'page-document-1-b' },
-      screenshotUrlsByNodeId: { b: 'asset://b.png' },
+      screenshotCacheByNodeId: { b: screenshotEntry('b') },
     });
   });
 

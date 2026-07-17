@@ -99,6 +99,7 @@ describe('built-in editor commands', () => {
         viewport: { zoom: 1.5, panX: 10, panY: -20 },
       }),
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
+      getWebpageScreenshots: async () => [],
     });
 
     const response = await createRendererResponse(
@@ -125,6 +126,7 @@ describe('built-in editor commands', () => {
         viewport: { zoom: 1, panX: 0, panY: 0 },
       }),
       focusNodes,
+      getWebpageScreenshots: async () => [],
     });
 
     const response = await createRendererResponse(
@@ -162,9 +164,74 @@ describe('built-in editor commands', () => {
     });
   });
 
+  it('validates and forwards optional WebPage screenshot IDs', async () => {
+    const getWebpageScreenshots = vi.fn(async (pageNodeIds?: string[]) =>
+      (pageNodeIds ?? []).map((pageNodeId) => ({ pageNodeId, freshness: 'missing' as const })),
+    );
+    cleanupAdapter = registerMcpEditorAdapter({
+      getEditorState: () => ({
+        selectedNodeIds: [],
+        selectedEdgeIds: [],
+        viewport: { zoom: 1, panX: 0, panY: 0 },
+      }),
+      focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
+      getWebpageScreenshots,
+    });
+
+    const response = await createRendererResponse(
+      {
+        requestId: 'screenshots',
+        command: 'getWebpageScreenshots',
+        params: { documentId: 'doc-1', pageNodeIds: ['page-2', 'page-1'] },
+      },
+      createBuiltInRendererCommandHandlers(),
+    );
+
+    expect(getWebpageScreenshots).toHaveBeenCalledWith(['page-2', 'page-1']);
+    expect(response.result).toEqual({
+      ok: true,
+      data: [
+        { pageNodeId: 'page-2', freshness: 'missing' },
+        { pageNodeId: 'page-1', freshness: 'missing' },
+      ],
+    });
+  });
+
+  it('rejects malformed WebPage screenshot params', async () => {
+    const response = await createRendererResponse(
+      {
+        requestId: 'screenshots-invalid',
+        command: 'getWebpageScreenshots',
+        params: { pageNodeIds: ['page-1', 2] },
+      },
+      createBuiltInRendererCommandHandlers(),
+    );
+
+    expect(response.result).toEqual({
+      ok: false,
+      error: {
+        code: 'validation_failed',
+        message: 'getWebpageScreenshots requires pageNodeIds to be an array of non-empty strings',
+      },
+    });
+
+    const arrayResponse = await createRendererResponse(
+      {
+        requestId: 'screenshots-array',
+        command: 'getWebpageScreenshots',
+        params: [],
+      },
+      createBuiltInRendererCommandHandlers(),
+    );
+    expect(arrayResponse.result).toMatchObject({
+      ok: false,
+      error: { code: 'validation_failed' },
+    });
+  });
+
   it('reports unavailable when the editor adapter is not mounted', async () => {
     const response = await createRendererResponse(
-      { requestId: 'unavailable', command: 'getEditorState', params: {} },
+      { requestId: 'unavailable', command: 'getWebpageScreenshots', params: {} },
       createBuiltInRendererCommandHandlers(),
     );
 

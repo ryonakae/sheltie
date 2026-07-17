@@ -16,6 +16,7 @@ function createAdapter(name: string): McpEditorAdapter {
       viewport: { zoom: 1, panX: 0, panY: 0 },
     }),
     focusNodes: vi.fn(async (nodeIds: string[]) => ({ focusedNodeIds: nodeIds })),
+    getWebpageScreenshots: async () => [],
   };
 }
 
@@ -61,6 +62,7 @@ describe('MCP editor adapter', () => {
     cleanup = registerMcpEditorAdapter({
       getEditorState: () => source,
       focusNodes: async (nodeIds) => ({ focusedNodeIds: nodeIds }),
+      getWebpageScreenshots: async () => [],
     });
 
     const result = getEditorState();

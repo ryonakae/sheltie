@@ -35,6 +35,7 @@ import type {
   Project,
   ProjectState,
   ProjectWebviewRuntime,
+  ScreenshotCacheEntry,
   SheltieDocumentV2,
   TextNodeFontSizePreset,
   Viewport,
@@ -109,9 +110,11 @@ interface ProjectActions {
   pinWebNodeUrl: (nodeId: string) => void;
   setWebNodeWebviewLabel: (nodeId: string, label: string) => void;
   clearWebNodeWebviewLabel: (nodeId: string) => void;
-  hydrateProjectScreenshotUrls: (screenshotUrlsByNodeId: Record<string, string>) => void;
-  setProjectScreenshotUrl: (nodeId: string, url: string) => void;
-  clearProjectScreenshotUrl: (nodeId: string) => void;
+  hydrateProjectScreenshotCache: (
+    screenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>,
+  ) => void;
+  setProjectScreenshotCacheEntry: (nodeId: string, entry: ScreenshotCacheEntry) => void;
+  clearProjectScreenshotCacheEntry: (nodeId: string) => void;
   undoProject: () => void;
   redoProject: () => void;
   _setLoaded: () => void;
@@ -126,7 +129,7 @@ interface ProjectStore extends ProjectState, ProjectActions {
 function createEmptyProjectWebviewRuntime(): ProjectWebviewRuntime {
   return {
     labelsByNodeId: {},
-    screenshotUrlsByNodeId: {},
+    screenshotCacheByNodeId: {},
   };
 }
 
@@ -321,8 +324,8 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         }),
         webviewRuntime: {
           labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, runtimeIdsToClear),
-          screenshotUrlsByNodeId: omitKeys(
-            state.webviewRuntime.screenshotUrlsByNodeId,
+          screenshotCacheByNodeId: omitKeys(
+            state.webviewRuntime.screenshotCacheByNodeId,
             runtimeIdsToClear,
           ),
         },
@@ -415,7 +418,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         ),
         webviewRuntime: {
           labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, nodeId),
-          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
+          screenshotCacheByNodeId: omitKeys(state.webviewRuntime.screenshotCacheByNodeId, nodeId),
         },
       };
     }),
@@ -439,7 +442,7 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         }),
         webviewRuntime: {
           labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, nodeId),
-          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
+          screenshotCacheByNodeId: omitKeys(state.webviewRuntime.screenshotCacheByNodeId, nodeId),
         },
       };
     }),
@@ -465,7 +468,10 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         }),
         webviewRuntime: {
           labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, removeSet),
-          screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, removeSet),
+          screenshotCacheByNodeId: omitKeys(
+            state.webviewRuntime.screenshotCacheByNodeId,
+            removeSet,
+          ),
         },
       };
     }),
@@ -799,33 +805,39 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
       },
     })),
 
-  hydrateProjectScreenshotUrls: (screenshotUrlsByNodeId) =>
+  hydrateProjectScreenshotCache: (screenshotCacheByNodeId) =>
+    set((state) => {
+      const next = { ...state.webviewRuntime.screenshotCacheByNodeId };
+      for (const [nodeId, entry] of Object.entries(screenshotCacheByNodeId)) {
+        const current = next[nodeId];
+        if (!current || Date.parse(entry.capturedAt) > Date.parse(current.capturedAt)) {
+          next[nodeId] = entry;
+        }
+      }
+      return {
+        webviewRuntime: {
+          ...state.webviewRuntime,
+          screenshotCacheByNodeId: next,
+        },
+      };
+    }),
+
+  setProjectScreenshotCacheEntry: (nodeId, entry) =>
     set((state) => ({
       webviewRuntime: {
         ...state.webviewRuntime,
-        screenshotUrlsByNodeId: {
-          ...state.webviewRuntime.screenshotUrlsByNodeId,
-          ...screenshotUrlsByNodeId,
+        screenshotCacheByNodeId: {
+          ...state.webviewRuntime.screenshotCacheByNodeId,
+          [nodeId]: entry,
         },
       },
     })),
 
-  setProjectScreenshotUrl: (nodeId, url) =>
+  clearProjectScreenshotCacheEntry: (nodeId) =>
     set((state) => ({
       webviewRuntime: {
         ...state.webviewRuntime,
-        screenshotUrlsByNodeId: {
-          ...state.webviewRuntime.screenshotUrlsByNodeId,
-          [nodeId]: url,
-        },
-      },
-    })),
-
-  clearProjectScreenshotUrl: (nodeId) =>
-    set((state) => ({
-      webviewRuntime: {
-        ...state.webviewRuntime,
-        screenshotUrlsByNodeId: omitKeys(state.webviewRuntime.screenshotUrlsByNodeId, nodeId),
+        screenshotCacheByNodeId: omitKeys(state.webviewRuntime.screenshotCacheByNodeId, nodeId),
       },
     })),
 

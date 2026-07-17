@@ -7,10 +7,11 @@ use crate::mcp::page_automation::protocol::unsupported_platform;
 use crate::mcp::{
     page_automation::{
         actor::{NavigationMarker, PageAutomationState},
+        images::EncodedPng,
         protocol::{
-            document_not_found, webview_not_ready, CompactSnapshot, PageAutomationBridgeRequest,
-            PageAutomationBridgeResult, PageAutomationOperation, PageAutomationSuccessResult,
-            PageKey,
+            document_not_found, screenshot_failed, webview_not_ready, CompactSnapshot,
+            PageAutomationActionResult, PageAutomationBridgeRequest, PageAutomationBridgeResult,
+            PageAutomationOperation, PageAutomationSuccessResult, PageKey,
         },
     },
     types::ToolError,
@@ -27,6 +28,10 @@ pub fn page_key(document_window_label: &str, page_id: &str) -> PageKey {
         document_id: document_window_label.to_string(),
         page_node_id: page_id.to_string(),
     }
+}
+
+fn expected_capture_label(key: &PageKey) -> String {
+    scoped_page_label(&key.document_id, &key.page_node_id)
 }
 
 pub fn normalize_navigation_url(url: &str) -> Result<String, String> {
@@ -59,7 +64,7 @@ fn resolve_automation_webview(
     {
         return Err(document_not_found(&key.document_id));
     }
-    let label = scoped_page_label(&key.document_id, &key.page_node_id);
+    let label = expected_capture_label(key);
     let webview =
         resolve_page_webview(app, &key.document_id, &label).map_err(|_| webview_not_ready())?;
     Ok((label, webview))
@@ -95,6 +100,99 @@ pub async fn execute_page_automation(
 }
 
 #[cfg(target_os = "macos")]
+pub async fn execute_raw_page_automation(
+    app: &AppHandle,
+    key: PageKey,
+    operation: PageAutomationOperation,
+) -> Result<PageAutomationActionResult, ToolError> {
+    let (webview_label, webview) = resolve_automation_webview(app, &key)?;
+    app.state::<PageAutomationState>()
+        .execute_raw_with(
+            key.clone(),
+            key.document_id.clone(),
+            webview_label,
+            operation,
+            move |request| dispatch_to_webview(&webview, request),
+        )
+        .await
+}
+
+#[cfg(target_os = "macos")]
+pub async fn capture_page_viewport_screenshot(
+    app: &AppHandle,
+    key: PageKey,
+) -> Result<EncodedPng, ToolError> {
+    let (label, _) = resolve_automation_webview(app, &key)?;
+    let bytes = super::snapshot::capture_webview_png_bytes(app, &label)
+        .await
+        .map_err(|_| screenshot_failed())?;
+    let image = crate::mcp::page_automation::images::decode_png(&bytes)?;
+    crate::mcp::page_automation::images::encode_capped_png(&image)
+}
+
+#[cfg(target_os = "macos")]
+pub async fn capture_page_element_screenshot(
+    app: &AppHandle,
+    key: PageKey,
+    snapshot_id: String,
+    element_ref: String,
+    annotate: bool,
+) -> Result<EncodedPng, ToolError> {
+    let (webview_label, webview) = resolve_automation_webview(app, &key)?;
+    let capture_app = app.clone();
+    let capture_label = webview_label.clone();
+    app.state::<PageAutomationState>()
+        .capture_element_with(
+            key.clone(),
+            key.document_id.clone(),
+            webview_label,
+            snapshot_id,
+            element_ref,
+            annotate,
+            move |request| dispatch_to_webview(&webview, request),
+            move || {
+                let app = capture_app.clone();
+                let label = capture_label.clone();
+                async move {
+                    super::snapshot::capture_webview_png_bytes(&app, &label)
+                        .await
+                        .map_err(|_| screenshot_failed())
+                }
+            },
+        )
+        .await
+}
+
+#[cfg(target_os = "macos")]
+pub async fn capture_page_full_screenshot(
+    app: &AppHandle,
+    key: PageKey,
+    annotate: bool,
+) -> Result<EncodedPng, ToolError> {
+    let (webview_label, webview) = resolve_automation_webview(app, &key)?;
+    let capture_app = app.clone();
+    let capture_label = webview_label.clone();
+    app.state::<PageAutomationState>()
+        .capture_full_page_with(
+            key.clone(),
+            key.document_id.clone(),
+            webview_label,
+            annotate,
+            move |request| dispatch_to_webview(&webview, request),
+            move || {
+                let app = capture_app.clone();
+                let label = capture_label.clone();
+                async move {
+                    super::snapshot::capture_webview_png_bytes(&app, &label)
+                        .await
+                        .map_err(|_| screenshot_failed())
+                }
+            },
+        )
+        .await
+}
+
+#[cfg(target_os = "macos")]
 pub async fn prepare_page_navigation(
     app: &AppHandle,
     key: PageKey,
@@ -125,6 +223,43 @@ pub async fn snapshot_after_page_navigation(
             move |request| dispatch_to_webview(&webview, request),
         )
         .await
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn execute_raw_page_automation(
+    _app: &AppHandle,
+    _key: PageKey,
+    _operation: PageAutomationOperation,
+) -> Result<PageAutomationActionResult, ToolError> {
+    Err(unsupported_platform())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn capture_page_viewport_screenshot(
+    _app: &AppHandle,
+    _key: PageKey,
+) -> Result<EncodedPng, ToolError> {
+    Err(unsupported_platform())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn capture_page_element_screenshot(
+    _app: &AppHandle,
+    _key: PageKey,
+    _snapshot_id: String,
+    _element_ref: String,
+    _annotate: bool,
+) -> Result<EncodedPng, ToolError> {
+    Err(unsupported_platform())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn capture_page_full_screenshot(
+    _app: &AppHandle,
+    _key: PageKey,
+    _annotate: bool,
+) -> Result<EncodedPng, ToolError> {
+    Err(unsupported_platform())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -198,6 +333,10 @@ mod tests {
         assert_eq!(
             normalize_navigation_url("https://example.test").unwrap(),
             "https://example.test/"
+        );
+        assert_eq!(
+            expected_capture_label(&page_key("document-7", "node-4")),
+            "page-document-7-node-4"
         );
     }
 

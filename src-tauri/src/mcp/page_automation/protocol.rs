@@ -14,6 +14,7 @@ pub const PAGE_AUTOMATION_MAX_SNAPSHOT_CHARS: usize = 20_000;
 pub const PAGE_AUTOMATION_MAX_TEXT_CHARS: usize = 512;
 pub const PAGE_AUTOMATION_MAX_FILL_CHARS: usize = 10_000;
 pub const PAGE_AUTOMATION_MAX_WAIT_TIMEOUT_MS: u64 = 10_000;
+#[allow(dead_code)]
 pub const PAGE_AUTOMATION_EVALUATE_TIMEOUT_MS: u64 = 10_000;
 pub const PAGE_AUTOMATION_MAX_EVALUATE_RESPONSE_BYTES: usize = 256 * 1024;
 pub const PAGE_AUTOMATION_MAX_SCREENSHOT_EDGE_PX: u32 = 4_096;
@@ -23,6 +24,7 @@ pub const PAGE_AUTOMATION_MAX_FULL_PAGE_TILES: usize = 64;
 pub const PAGE_AUTOMATION_MAX_UPLOAD_FILES: usize = 10;
 pub const PAGE_AUTOMATION_MAX_UPLOAD_FILE_BYTES: u64 = 25 * 1024 * 1024;
 pub const PAGE_AUTOMATION_MAX_UPLOAD_TOTAL_BYTES: u64 = 100 * 1024 * 1024;
+#[allow(dead_code)]
 pub const PAGE_AUTOMATION_HIGHLIGHT_FADE_MS: u32 = 180;
 
 #[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -37,6 +39,7 @@ pub enum ScreenshotMode {
 #[serde(rename_all = "camelCase")]
 pub struct PageScreenshotRequest {
     pub mode: ScreenshotMode,
+    pub snapshot_id: Option<String>,
     pub element_ref: Option<String>,
     pub annotate: bool,
 }
@@ -44,15 +47,18 @@ pub struct PageScreenshotRequest {
 impl PageScreenshotRequest {
     pub fn validate(&self) -> Result<(), ToolError> {
         if self.mode == ScreenshotMode::Element
-            && self.element_ref.as_deref().is_none_or(str::is_empty)
+            && (self.snapshot_id.as_deref().is_none_or(str::is_empty)
+                || self.element_ref.as_deref().is_none_or(str::is_empty))
         {
             return Err(invalid_argument(
-                "elementRef is required for an element screenshot.",
+                "snapshotId and elementRef are required for an element screenshot.",
             ));
         }
-        if self.mode != ScreenshotMode::Element && self.element_ref.is_some() {
+        if self.mode != ScreenshotMode::Element
+            && (self.snapshot_id.is_some() || self.element_ref.is_some())
+        {
             return Err(invalid_argument(
-                "elementRef is supported only for an element screenshot.",
+                "snapshotId and elementRef are supported only for an element screenshot.",
             ));
         }
         Ok(())
@@ -130,6 +136,7 @@ pub enum MouseButton {
 }
 
 impl MouseButton {
+    #[allow(dead_code)]
     pub fn parse(value: &str) -> Result<Self, ToolError> {
         match value {
             "left" => Ok(Self::Left),
@@ -212,6 +219,16 @@ pub enum PageAutomationOperation {
     },
     ScreenshotFullPage {
         annotate: bool,
+    },
+    /// Actor-internal full-page capture step. The page script scrolls and waits two frames.
+    ScreenshotScroll {
+        x: f64,
+        y: f64,
+    },
+    /// Actor-internal full-page capture cleanup. This restores the original scroll position.
+    ScreenshotRestore {
+        x: f64,
+        y: f64,
     },
     ClickCoordinates {
         snapshot_id: String,
@@ -302,12 +319,25 @@ impl PageAutomationOperation {
             Self::PressKey { .. } => Some(PageAutomationActionKind::PressKey),
             Self::Scroll { .. } => Some(PageAutomationActionKind::Scroll),
             Self::Wait { .. } => Some(PageAutomationActionKind::Wait),
-            Self::ScreenshotElement { .. }
-            | Self::ScreenshotFullPage { .. }
-            | Self::SetDialogHandler { .. } => None,
+            Self::ScreenshotElement { .. } => Some(PageAutomationActionKind::ScreenshotElement),
+            Self::ScreenshotFullPage { .. } => Some(PageAutomationActionKind::ScreenshotFullPage),
+            Self::ScreenshotScroll { .. } => Some(PageAutomationActionKind::ScreenshotScroll),
+            Self::ScreenshotRestore { .. } => Some(PageAutomationActionKind::ScreenshotRestore),
+            Self::SetDialogHandler { .. } => Some(PageAutomationActionKind::SetDialogHandler),
             Self::ClickCoordinates { .. } => Some(PageAutomationActionKind::ClickCoordinates),
             Self::Evaluate { .. } => Some(PageAutomationActionKind::Evaluate),
             Self::UploadFiles { .. } => Some(PageAutomationActionKind::UploadFiles),
+        }
+    }
+
+    pub fn raw_action_kind(&self) -> Option<PageAutomationActionKind> {
+        match self {
+            Self::ScreenshotElement { .. } => Some(PageAutomationActionKind::ScreenshotElement),
+            Self::ScreenshotFullPage { .. } => Some(PageAutomationActionKind::ScreenshotFullPage),
+            Self::ScreenshotScroll { .. } => Some(PageAutomationActionKind::ScreenshotScroll),
+            Self::ScreenshotRestore { .. } => Some(PageAutomationActionKind::ScreenshotRestore),
+            Self::SetDialogHandler { .. } => Some(PageAutomationActionKind::SetDialogHandler),
+            _ => None,
         }
     }
 
@@ -324,6 +354,13 @@ impl PageAutomationOperation {
                 Err(invalid_argument(format!(
                     "Wait timeout must not exceed {PAGE_AUTOMATION_MAX_WAIT_TIMEOUT_MS} ms."
                 )))
+            }
+            Self::ScreenshotScroll { x, y } | Self::ScreenshotRestore { x, y }
+                if !x.is_finite() || !y.is_finite() =>
+            {
+                Err(invalid_argument(
+                    "Screenshot scroll coordinates must be finite CSS document coordinates.",
+                ))
             }
             Self::ClickCoordinates {
                 x,
@@ -524,15 +561,187 @@ pub enum PageAutomationActionKind {
     PressKey,
     Scroll,
     Wait,
+    ScreenshotElement,
+    ScreenshotFullPage,
+    ScreenshotScroll,
+    ScreenshotRestore,
     ClickCoordinates,
     Evaluate,
     UploadFiles,
+    SetDialogHandler,
+}
+
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadedFileMetadata {
+    pub name: String,
+    pub size: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PageDialogType {
+    Alert,
+    Confirm,
+    Prompt,
+}
+
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageDialog {
+    #[serde(rename = "type")]
+    pub dialog_type: PageDialogType,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_value: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, JsonSchema, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageViewportGeometry {
+    pub viewport_width: f64,
+    pub viewport_height: f64,
+    pub document_width: f64,
+    pub document_height: f64,
+    pub scroll_x: f64,
+    pub scroll_y: f64,
+}
+
+impl PageViewportGeometry {
+    fn validate(&self) -> Result<(), ToolError> {
+        if !self.viewport_width.is_finite()
+            || !self.viewport_height.is_finite()
+            || !self.document_width.is_finite()
+            || !self.document_height.is_finite()
+            || !self.scroll_x.is_finite()
+            || !self.scroll_y.is_finite()
+            || self.viewport_width < 0.0
+            || self.viewport_height < 0.0
+            || self.document_width < 0.0
+            || self.document_height < 0.0
+        {
+            return Err(invalid_argument(
+                "The page returned invalid screenshot geometry.",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
+#[serde(untagged)]
+pub enum PageScreenshotGeometry {
+    Element {
+        element: CssRect,
+        viewport: PageViewportGeometry,
+    },
+    FullPage(PageViewportGeometry),
+}
+
+impl PageScreenshotGeometry {
+    fn validate(&self) -> Result<(), ToolError> {
+        match self {
+            Self::Element { element, viewport } => {
+                element.validate()?;
+                viewport.validate()
+            }
+            Self::FullPage(viewport) => viewport.validate(),
+        }
+    }
+
+    fn is_element(&self) -> bool {
+        matches!(self, Self::Element { .. })
+    }
+
+    fn is_full_page(&self) -> bool {
+        matches!(self, Self::FullPage(_))
+    }
 }
 
 #[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PageAutomationActionResult {
     pub kind: PageAutomationActionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_trusted: Option<bool>,
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub value: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<Vec<UploadedFileMetadata>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dialogs: Option<Vec<PageDialog>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configured: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<PageScreenshotGeometry>,
+}
+
+impl PageAutomationActionResult {
+    pub fn screenshot_element_geometry(
+        &self,
+    ) -> Result<(CssRect, PageViewportGeometry), ToolError> {
+        match &self.geometry {
+            Some(PageScreenshotGeometry::Element { element, viewport }) => {
+                Ok((*element, *viewport))
+            }
+            _ => Err(bridge_rejected()),
+        }
+    }
+
+    pub fn screenshot_full_page_geometry(&self) -> Result<PageViewportGeometry, ToolError> {
+        match &self.geometry {
+            Some(PageScreenshotGeometry::FullPage(viewport)) => Ok(*viewport),
+            _ => Err(bridge_rejected()),
+        }
+    }
+
+    fn validate(&self) -> Result<(), ToolError> {
+        if self.kind == PageAutomationActionKind::Evaluate {
+            validate_evaluate_result(&self.value)?;
+        }
+        if let Some(geometry) = &self.geometry {
+            geometry.validate()?;
+        }
+        match self.kind {
+            PageAutomationActionKind::ScreenshotElement
+                if !self
+                    .geometry
+                    .as_ref()
+                    .is_some_and(PageScreenshotGeometry::is_element) =>
+            {
+                Err(invalid_argument(
+                    "The page returned no element screenshot geometry.",
+                ))
+            }
+            PageAutomationActionKind::ScreenshotFullPage
+            | PageAutomationActionKind::ScreenshotScroll
+            | PageAutomationActionKind::ScreenshotRestore
+                if !self
+                    .geometry
+                    .as_ref()
+                    .is_some_and(PageScreenshotGeometry::is_full_page) =>
+            {
+                Err(invalid_argument(
+                    "The page returned no screenshot geometry.",
+                ))
+            }
+            PageAutomationActionKind::ClickCoordinates if self.input_trusted != Some(false) => Err(
+                invalid_argument("The page did not identify coordinate input as synthetic."),
+            ),
+            PageAutomationActionKind::UploadFiles
+                if self.input_trusted != Some(false)
+                    || self.files.as_ref().is_none_or(Vec::is_empty) =>
+            {
+                Err(invalid_argument(
+                    "The page returned invalid upload result metadata.",
+                ))
+            }
+            PageAutomationActionKind::SetDialogHandler if self.configured != Some(true) => Err(
+                invalid_argument("The page did not confirm the dialog policy."),
+            ),
+            _ => Ok(()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
@@ -541,6 +750,12 @@ pub struct PageAutomationSuccessResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<PageAutomationActionResult>,
     pub snapshot: CompactSnapshot,
+}
+
+#[derive(Clone, Debug, JsonSchema, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageAutomationRawActionResult {
+    pub action: PageAutomationActionResult,
 }
 
 impl PageAutomationBridgeResult {
@@ -556,10 +771,33 @@ impl PageAutomationBridgeResult {
             }
             return Err(error);
         }
+        validate_action_payload_shape(&self.result)?;
         let result: PageAutomationSuccessResult = serde_json::from_value(self.result.clone())
             .map_err(|_| invalid_argument("The page returned an invalid automation result."))?;
         result.snapshot.validate()?;
+        if let Some(action) = &result.action {
+            action.validate()?;
+        }
         Ok(result)
+    }
+
+    pub fn raw_action_result(&self) -> Result<PageAutomationActionResult, ToolError> {
+        if let Some(error) = self.result.get("error") {
+            let error = serde_json::from_value::<ToolError>(error.clone()).map_err(|_| {
+                invalid_argument("The page returned an invalid automation error envelope.")
+            })?;
+            if !is_page_automation_error_code(&error.code) {
+                return Err(invalid_argument(
+                    "The page returned an unknown automation error code.",
+                ));
+            }
+            return Err(error);
+        }
+        validate_action_payload_shape(&self.result)?;
+        let result: PageAutomationRawActionResult = serde_json::from_value(self.result.clone())
+            .map_err(|_| invalid_argument("The page returned an invalid raw automation result."))?;
+        result.action.validate()?;
+        Ok(result.action)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
@@ -568,6 +806,37 @@ impl PageAutomationBridgeResult {
     }
 }
 
+fn validate_action_payload_shape(result: &serde_json::Value) -> Result<(), ToolError> {
+    let Some(action) = result.get("action").and_then(serde_json::Value::as_object) else {
+        return Ok(());
+    };
+    match action.get("kind").and_then(serde_json::Value::as_str) {
+        Some("evaluate") if !action.contains_key("value") => Err(invalid_argument(
+            "The page returned no evaluated JSON value.",
+        )),
+        Some("click_coordinates")
+            if action.get("inputTrusted") != Some(&serde_json::Value::Bool(false)) =>
+        {
+            Err(invalid_argument(
+                "The page did not identify coordinate input as synthetic.",
+            ))
+        }
+        Some("upload_files")
+            if action.get("inputTrusted") != Some(&serde_json::Value::Bool(false))
+                || action
+                    .get("files")
+                    .and_then(serde_json::Value::as_array)
+                    .is_none_or(Vec::is_empty) =>
+        {
+            Err(invalid_argument(
+                "The page returned invalid upload result metadata.",
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
+#[allow(dead_code)]
 pub fn ensure_supported_platform(supported: bool) -> Result<(), ToolError> {
     if supported {
         Ok(())
@@ -709,6 +978,7 @@ pub fn evaluate_not_json() -> ToolError {
     )
 }
 
+#[allow(dead_code)]
 pub fn evaluate_timeout() -> ToolError {
     ToolError::new(
         "evaluate_timeout",
@@ -740,6 +1010,7 @@ pub fn upload_file_invalid() -> ToolError {
     .with_retry("Use readable absolute paths within the documented upload limits")
 }
 
+#[allow(dead_code)]
 pub fn upload_target_not_file_input() -> ToolError {
     ToolError::new(
         "upload_target_not_file_input",
@@ -850,6 +1121,7 @@ mod tests {
     fn validates_phase_three_screenshot_and_coordinate_requests() {
         let error = PageScreenshotRequest {
             mode: ScreenshotMode::Element,
+            snapshot_id: None,
             element_ref: None,
             annotate: false,
         }
@@ -970,7 +1242,9 @@ mod tests {
             serde_json::json!({"kind": "wait", "condition": {"kind": "time", "milliseconds": 250}, "timeoutMs": 500}),
             serde_json::json!({"kind": "screenshot_element", "snapshotId": "s0-1", "elementRef": "e1", "annotate": true}),
             serde_json::json!({"kind": "screenshot_full_page", "annotate": false}),
-            serde_json::json!({"kind": "click_coordinates", "snapshotId": "s0-1", "x": 10.0, "y": 20.0, "button": "left", "clickCount": 1}),
+            serde_json::json!({"kind": "screenshot_scroll", "x": 0.0, "y": 100.0}),
+            serde_json::json!({"kind": "screenshot_restore", "x": 0.0, "y": 0.0}),
+            serde_json::json!({"kind": "click_coordinates",  "snapshotId": "s0-1", "x": 10.0, "y": 20.0, "button": "left", "clickCount": 1}),
             serde_json::json!({"kind": "evaluate", "script": "1 + 1"}),
             serde_json::json!({"kind": "upload_files", "snapshotId": "s0-1", "elementRef": "e1", "files": [{"name": "a.txt", "mimeType": "text/plain", "size": 1, "bytesBase64": "YQ=="}]}),
             serde_json::json!({"kind": "set_dialog_handler", "action": "dismiss"}),
@@ -1046,6 +1320,101 @@ mod tests {
         invalid_document_token["documentToken"] =
             serde_json::json!("ABCDEF0123456789ABCDEF0123456789");
         assert_invalid_snapshot(invalid_document_token);
+    }
+
+    #[test]
+    fn parses_typed_raw_action_metadata_without_a_snapshot() {
+        let result = PageAutomationBridgeResult {
+            request_id: "pa-1".into(),
+            document_id: "document-1".into(),
+            page_node_id: "page-1".into(),
+            result: serde_json::json!({
+                "action": {
+                    "kind": "screenshot_element",
+                    "geometry": {
+                        "element": {"x": 10.0, "y": 20.0, "width": 30.0, "height": 40.0},
+                        "viewport": {
+                            "viewportWidth": 100.0,
+                            "viewportHeight": 200.0,
+                            "documentWidth": 300.0,
+                            "documentHeight": 400.0,
+                            "scrollX": 5.0,
+                            "scrollY": 6.0
+                        }
+                    },
+                    "dialogs": [{"type": "prompt", "message": "Continue?", "defaultValue": "yes"}]
+                }
+            }),
+        };
+
+        let action = result.raw_action_result().unwrap();
+        assert_eq!(action.kind, PageAutomationActionKind::ScreenshotElement);
+        assert!(matches!(
+            action.geometry.unwrap(),
+            PageScreenshotGeometry::Element { element, .. } if element.width == 30.0
+        ));
+        assert_eq!(
+            action.dialogs.unwrap()[0].dialog_type,
+            PageDialogType::Prompt
+        );
+
+        let full_page = PageAutomationBridgeResult {
+            result: serde_json::json!({
+                "action": {
+                    "kind": "screenshot_full_page",
+                    "geometry": {
+                        "viewportWidth": 100.0,
+                        "viewportHeight": 200.0,
+                        "documentWidth": 300.0,
+                        "documentHeight": 400.0,
+                        "scrollX": 5.0,
+                        "scrollY": 6.0
+                    }
+                }
+            }),
+            ..result.clone()
+        };
+        assert!(matches!(
+            full_page.raw_action_result().unwrap().geometry,
+            Some(PageScreenshotGeometry::FullPage(_))
+        ));
+
+        let evaluate = PageAutomationBridgeResult {
+            result: serde_json::json!({
+                "action": {"kind": "evaluate", "value": {"ok": true}}
+            }),
+            ..result
+        };
+        assert_eq!(
+            evaluate.raw_action_result().unwrap().value,
+            serde_json::json!({"ok": true})
+        );
+
+        let null_evaluate = PageAutomationBridgeResult {
+            result: serde_json::json!({"action": {"kind": "evaluate", "value": null}}),
+            ..evaluate
+        };
+        assert_eq!(
+            null_evaluate.raw_action_result().unwrap().value,
+            serde_json::Value::Null
+        );
+
+        for malformed in [
+            serde_json::json!({"action": {"kind": "evaluate"}}),
+            serde_json::json!({"action": {"kind": "click_coordinates"}}),
+            serde_json::json!({
+                "action": {"kind": "upload_files", "inputTrusted": false, "files": []}
+            }),
+        ] {
+            let result = PageAutomationBridgeResult {
+                result: malformed,
+                ..null_evaluate.clone()
+            };
+            assert_eq!(
+                result.raw_action_result().unwrap_err().code,
+                "invalid_argument"
+            );
+        }
     }
 
     #[test]

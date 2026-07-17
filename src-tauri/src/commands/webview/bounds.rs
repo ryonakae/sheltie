@@ -194,6 +194,29 @@ pub async fn create_page_webview(
     let add_result = window.add_child(
         tauri::webview::WebviewBuilder::new(&label_clone, WebviewUrl::External(parsed_url))
             .initialization_script_for_all_frames(page_automation_initialization_script())
+            .on_new_window({
+                let app = app_handle.clone();
+                let label = label.clone();
+                move |new_url, _features| {
+                    let app = app.clone();
+                    let label = label.clone();
+                    let new_url = new_url.to_string();
+                    tauri::async_runtime::spawn(async move {
+                        let Ok(url) = tauri::Url::parse(&new_url) else {
+                            return;
+                        };
+                        let Some(webview) = app.get_webview(&label) else {
+                            return;
+                        };
+                        if let Err(error) = webview.navigate(url) {
+                            if cfg!(debug_assertions) {
+                                log::debug!("failed to navigate in-place popup Webview: {error}");
+                            }
+                        }
+                    });
+                    tauri::webview::NewWindowResponse::Deny
+                }
+            })
             .initialization_script(SPA_URL_DETECTION_SCRIPT)
             .initialization_script(SCROLL_DETECTION_SCRIPT)
             .on_navigation({

@@ -31,41 +31,80 @@ pub fn crop_css_rect(image: &RgbaImage, rect: CssRect, scale: f64) -> Result<Rgb
     Ok(imageops::crop_imm(image, x, y, width, height).to_image())
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn stitch_vertical_tiles(tiles: &[RgbaImage], overlap_px: u32) -> Result<RgbaImage, ToolError> {
     let Some(first) = tiles.first() else {
         return Err(invalid_argument(
             "At least one screenshot tile is required.",
         ));
     };
-    if first.width() == 0 || first.height() == 0 {
+    if first.height() <= overlap_px {
         return Err(invalid_argument(
-            "Screenshot tiles must have nonzero dimensions.",
+            "Screenshot tiles must have a valid overlap.",
+        ));
+    }
+
+    let step = first.height() - overlap_px;
+    let positioned = tiles
+        .iter()
+        .enumerate()
+        .map(|(index, tile)| {
+            let offset = u32::try_from(index)
+                .ok()
+                .and_then(|index| index.checked_mul(step))
+                .ok_or_else(screenshot_too_large)?;
+            Ok((tile.clone(), offset))
+        })
+        .collect::<Result<Vec<_>, ToolError>>()?;
+    stitch_vertical_tiles_at_offsets(&positioned)
+}
+
+/// Stitches visible viewport captures at their actual top pixel offsets.
+///
+/// The final scroll position is commonly clamped by the document height, so
+/// its overlap differs from the regular one-CSS-pixel overlap. Offsets retain
+/// that geometry instead of assuming every tile has the same stride.
+pub fn stitch_vertical_tiles_at_offsets(
+    tiles: &[(RgbaImage, u32)],
+) -> Result<RgbaImage, ToolError> {
+    let Some((first, first_offset)) = tiles.first() else {
+        return Err(invalid_argument(
+            "At least one screenshot tile is required.",
+        ));
+    };
+    if *first_offset != 0 || first.width() == 0 || first.height() == 0 {
+        return Err(invalid_argument(
+            "Screenshot tiles must start at offset zero and have nonzero dimensions.",
         ));
     }
 
     let width = first.width();
-    let mut output_height = u64::from(first.height());
-    for tile in &tiles[1..] {
-        if tile.width() != width || tile.height() == 0 || overlap_px >= tile.height() {
+    let mut output_height = 0_u64;
+    let mut previous_offset = None;
+    for (tile, offset) in tiles {
+        if tile.width() != width
+            || tile.height() == 0
+            || previous_offset.is_some_and(|previous| *offset <= previous)
+        {
             return Err(invalid_argument(
-                "Screenshot tiles must have matching widths and a valid overlap.",
+                "Screenshot tiles must have matching widths and increasing offsets.",
             ));
         }
-        output_height = output_height
-            .checked_add(u64::from(tile.height() - overlap_px))
-            .ok_or_else(screenshot_too_large)?;
+        output_height = output_height.max(
+            u64::from(*offset)
+                .checked_add(u64::from(tile.height()))
+                .ok_or_else(screenshot_too_large)?,
+        );
+        previous_offset = Some(*offset);
     }
     let output_height = u32::try_from(output_height).map_err(|_| screenshot_too_large())?;
 
     let mut stitched = RgbaImage::new(width, output_height);
-    let mut output_y = 0;
-    for (index, tile) in tiles.iter().enumerate() {
-        let source_y = if index == 0 { 0 } else { overlap_px };
-        for y in source_y..tile.height() {
+    for (tile, offset) in tiles {
+        for y in 0..tile.height() {
             for x in 0..width {
-                stitched.put_pixel(x, output_y, *tile.get_pixel(x, y));
+                stitched.put_pixel(x, offset + y, *tile.get_pixel(x, y));
             }
-            output_y += 1;
         }
     }
 
@@ -269,7 +308,10 @@ fn alpha_blend(destination: Rgba<u8>, source: Rgba<u8>) -> Rgba<u8> {
 mod tests {
     use image::{Rgba, RgbaImage};
 
-    use super::{annotate_css_rect, crop_css_rect, encode_capped_png, stitch_vertical_tiles};
+    use super::{
+        annotate_css_rect, crop_css_rect, encode_capped_png, stitch_vertical_tiles,
+        stitch_vertical_tiles_at_offsets,
+    };
     use crate::mcp::page_automation::protocol::CssRect;
 
     #[test]
@@ -335,6 +377,22 @@ mod tests {
         assert_eq!(stitched.get_pixel(0, 2), &Rgba([0, 0, 255, 255]));
         assert_eq!(stitched.get_pixel(0, 3), &Rgba([255, 255, 0, 255]));
         assert_eq!(stitched.get_pixel(0, 4), &Rgba([255, 0, 255, 255]));
+    }
+
+    #[test]
+    fn stitches_tiles_using_actual_offsets_when_the_last_scroll_is_clamped() {
+        let first = RgbaImage::from_pixel(2, 5, Rgba([255, 0, 0, 255]));
+        let second = RgbaImage::from_pixel(2, 5, Rgba([0, 255, 0, 255]));
+        let third = RgbaImage::from_pixel(2, 5, Rgba([0, 0, 255, 255]));
+
+        let stitched = stitch_vertical_tiles_at_offsets(&[(first, 0), (second, 4), (third, 7)])
+            .expect("clamped final tile must use its actual offset");
+
+        assert_eq!(stitched.dimensions(), (2, 12));
+        assert_eq!(stitched.get_pixel(0, 3), &Rgba([255, 0, 0, 255]));
+        assert_eq!(stitched.get_pixel(0, 4), &Rgba([0, 255, 0, 255]));
+        assert_eq!(stitched.get_pixel(0, 7), &Rgba([0, 0, 255, 255]));
+        assert_eq!(stitched.get_pixel(0, 11), &Rgba([0, 0, 255, 255]));
     }
 
     #[test]

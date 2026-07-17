@@ -351,7 +351,7 @@ git commit -m "feat(mcp): add bounded page screenshot encoding"
 - Consumes: Phase 2 fixed namespace `window.__SHELTIE_MCP_PAGE_AUTOMATION__.dispatch`, all-frame `postMessage` routing, and completion command.
 - Produces: page bridge results for every new `PageAutomationOperation`; only the top frame calls `complete_page_automation_request`.
 
-- [ ] **Step 1: Add failing jsdom and actor tests**
+- [x] **Step 1: Add failing jsdom and actor tests**
 
 Extend `src/lib/mcp/page-automation-script.test.ts` to execute the exact script and test:
 
@@ -367,7 +367,7 @@ In the existing `#[cfg(test)]` module in `actor.rs`, add a queue test proving an
 
 Update the Phase 2 source-safety test in `src-tauri/src/commands/webview/scripts.rs`: remove its now-obsolete assertion that the shared page script contains no `eval(`. Replace it with assertions that the script contains exactly one indirect evaluation site, the literal `(0, eval)(source)`, and contains neither `window.eval` nor `new Function`; verify `page_automation.rs` still builds only the fixed `window.__SHELTIE_MCP_PAGE_AUTOMATION__.dispatch({request_json});` native expression from a typed serialized request. This test documents the Phase 3 trust boundary rather than claiming evaluation is absent.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run:
 
@@ -379,7 +379,7 @@ npm run test -- src/lib/mcp/page-automation-script.test.ts
 
 Expected: the new operation tests fail because bridge handlers and actor variants do not exist, and the updated source-boundary test fails until the exact typed evaluation route is added.
 
-- [ ] **Step 3: Implement fixed page-side operations**
+- [x] **Step 3: Implement fixed page-side operations**
 
 Extend the same strict-IIFE script; do not add imports, a second global namespace, or a direct arbitrary Tauri command. Dispatch all operations through the existing request JSON and send only JSON-safe results through its existing top-frame completion.
 
@@ -417,7 +417,7 @@ For uploads, accept Rust-prevalidated base64 payloads, construct `File` objects 
 
 For screenshots, return current element rect/viewport dimensions for `ScreenshotElement`, and implement `ScreenshotFullPage` as actor-directed measurement/scroll steps. It must wait two animation frames after each scroll, use a 1 CSS-pixel tile overlap, and restore original scroll coordinates in script `finally` handling. The script never captures pixels itself.
 
-- [ ] **Step 4: Implement actor-side native capture sequencing**
+- [x] **Step 4: Implement actor-side native capture sequencing**
 
 In `actor.rs`, keep all requests within the existing queue. For a native `ScreenshotElement`, resolve current ref/rect through the bridge, verify it is completely inside `innerWidth`/`innerHeight`, call a fixed native helper in `page_automation.rs` that uses the existing visible-only `capture_webview_png_bytes`, then crop/annotate through `images.rs`.
 
@@ -425,7 +425,7 @@ For `ScreenshotFullPage`, get dimensions and initial scroll from the bridge, rej
 
 The native helper resolves the Phase 2 expected child label and uses no renderer display APIs. It returns `webview_not_ready`/`screenshot_failed` on missing/hidden capture failure. It does not save PNG data.
 
-- [ ] **Step 5: Confirm GREEN**
+- [x] **Step 5: Confirm GREEN**
 
 Run:
 
@@ -438,7 +438,7 @@ npm run test -- src/lib/mcp/page-automation-script.test.ts
 
 Expected: exact-script jsdom tests, actor queue tests, native-helper validation tests, and the typed-evaluate source-boundary tests pass.
 
-- [ ] **Step 6: Commit bridge extensions**
+- [x] **Step 6: Commit bridge extensions**
 
 ```bash
 git add src-tauri/src/commands/webview/page_automation_script.js src-tauri/src/commands/webview/page_automation.rs src-tauri/src/commands/webview/scripts.rs src-tauri/src/mcp/page_automation/actor.rs src-tauri/src/mcp/page_automation/protocol.rs src/lib/mcp/page-automation-script.test.ts
@@ -527,7 +527,7 @@ git commit -m "feat(mcp): expose page screenshot sources"
 - Consumes: tool-provided absolute paths under the established trusted-client boundary and Phase 2 snapshot/ref validation.
 - Produces: `read_upload_files(paths) -> Result<Vec<UploadFilePayload>, ToolError>`.
 
-- [ ] **Step 1: Write failing inline upload tests**
+- [x] **Step 1: Write failing inline upload tests**
 
 In `uploads.rs`, use temporary directories and add `#[cfg(test)] mod tests` cases for:
 
@@ -539,7 +539,7 @@ In `uploads.rs`, use temporary directories and add `#[cfg(test)] mod tests` case
 
 In the existing protocol tests, cover Promise timeout, `undefined`, circular, and oversized evaluation results.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run:
 
@@ -568,7 +568,7 @@ Run:
 
 Expected: all upload/protocol/Rust tests pass.
 
-- [ ] **Step 5: Commit safe upload/evaluate plumbing**
+- [x] **Step 5: Commit safe upload/evaluate plumbing**
 
 ```bash
 git add src-tauri/src/mcp/page_automation/uploads.rs src-tauri/src/mcp/page_automation/mod.rs src-tauri/src/mcp/page_automation/actor.rs src-tauri/src/mcp/page_automation/protocol.rs
@@ -589,7 +589,7 @@ git commit -m "feat(mcp): add bounded evaluation and uploads"
 - Consumes: Phase 1 `McpServerState` service registration, `McpRequestBrokerState`, Phase 2 page resolver/actor, Tasks 1–5.
 - Produces: the five Phase 3 MCP tools and in-place `on_new_window` behavior.
 
-- [ ] **Step 1: Write failing inline Rust handler tests**
+- [x] **Step 1: Write failing inline Rust handler tests**
 
 In the existing `#[cfg(test)]` module in `src-tauri/src/mcp/tools/browser.rs`, add tests using the Phase 2 fake resolver/actor traits:
 
@@ -602,7 +602,7 @@ In the existing `#[cfg(test)]` module in `src-tauri/src/mcp/tools/browser.rs`, a
 7. annotations: screenshot is read-only, coordinate/upload/dialog/evaluate are destructive, and evaluate description explicitly says arbitrary page-origin JavaScript runs;
 8. all action results use the existing Phase 2 post-action snapshot path exactly once.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run:
 
@@ -612,7 +612,7 @@ Run:
 
 Expected: the existing router lacks Phase 3 tool schemas and handlers.
 
-- [ ] **Step 3: Implement screenshot routing without reveal**
+- [x] **Step 3: Implement screenshot routing without reveal**
 
 Resolve page ownership using the existing Phase 2 resolver, then request `GetPageScreenshotSource` through `McpRequestBrokerState`.
 
@@ -623,13 +623,13 @@ Resolve page ownership using the existing Phase 2 resolver, then request `GetPag
 
 Do not call Phase 1 `get_webpage_screenshots` recursively from the tool handler. Reuse its cache descriptor via the read-only renderer command so all visibility decisions are explicit and the result metadata stays consistent.
 
-- [ ] **Step 4: Implement popup interception**
+- [x] **Step 4: Implement popup interception**
 
 In `create_page_webview`’s existing `WebviewBuilder` chain, add `.on_new_window(...)`. Capture the originating child-Webview label and `AppHandle`; when WebKit supplies a valid URL, schedule navigation of that same resolved child Webview to the URL, then return `tauri::webview::NewWindowResponse::Deny`.
 
 Use the same `page-navigated-{pageId}` event as ordinary navigation; do not advance actor state from the pre-commit popup callback. The Phase 2 `on_page_load(PageLoadEvent::Finished)` route records the committed navigation, final URL, and new document token after the in-place load finishes. Do not return `Allow`, build a `WebviewWindow`, modify the board, or create a page actor. Log native navigation failure only in development; ordinary snapshot/timeout behavior reports it to MCP callers.
 
-- [ ] **Step 5: Implement schemas, annotations, and post-action results**
+- [x] **Step 5: Implement schemas, annotations, and post-action results**
 
 Add typed `Deserialize`/`JsonSchema` inputs to the existing `browser.rs` service. Validate at the MCP boundary; never receive untyped `serde_json::Value` for user inputs. Preserve all Phase 2 tools.
 
@@ -645,7 +645,7 @@ Use annotations:
 
 `browser_click_coordinates`, `browser_evaluate`, and `browser_upload_file` return the actor-provided post-action compact snapshot. `browser_handle_dialog` only configures the next script policy and returns `{ configured: true }`; it does not create a snapshot or mutate a page. Every handler converts `ToolError` without losing `code`, `message`, or `retry`.
 
-- [ ] **Step 6: Confirm GREEN**
+- [x] **Step 6: Confirm GREEN**
 
 Run:
 
@@ -657,7 +657,7 @@ Run:
 
 Expected: handlers, page automation, and full Rust library tests pass.
 
-- [ ] **Step 7: Commit tool and popup behavior**
+- [x] **Step 7: Commit tool and popup behavior**
 
 ```bash
 git add src-tauri/src/commands/webview/bounds.rs src-tauri/src/mcp/tools/browser.rs src-tauri/src/mcp/page_automation/actor.rs src-tauri/src/mcp/page_automation/protocol.rs

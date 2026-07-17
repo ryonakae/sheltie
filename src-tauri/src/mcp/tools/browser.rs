@@ -1,5 +1,6 @@
 use std::{future::Future, pin::Pin};
 
+use base64::Engine as _;
 use rmcp::schemars;
 use rmcp::schemars::JsonSchema;
 use rmcp::{
@@ -15,7 +16,11 @@ use crate::mcp::page_automation::protocol::unsupported_platform;
 #[cfg(target_os = "macos")]
 use crate::commands::webview::{
     labels::scoped_page_label,
-    page_automation::{prepare_page_navigation, snapshot_after_page_navigation},
+    page_automation::{
+        capture_page_element_screenshot, capture_page_full_screenshot,
+        capture_page_viewport_screenshot, execute_raw_page_automation, prepare_page_navigation,
+        snapshot_after_page_navigation,
+    },
 };
 
 use crate::{
@@ -23,14 +28,21 @@ use crate::{
     mcp::{
         broker::McpRequestBrokerState,
         page_automation::protocol::{
-            invalid_argument, page_not_found, webview_not_ready, CompactSnapshot, FillField,
-            PageAutomationOperation, PageKey, WaitCondition, PAGE_AUTOMATION_MAX_FILL_CHARS,
+            invalid_argument, page_not_found, webview_not_ready, CachedPageScreenshot,
+            CompactSnapshot, CssRect, DialogAction, FillField, MouseButton,
+            PageAutomationActionResult, PageAutomationOperation, PageAutomationSuccessResult,
+            PageDialog, PageDisplayMode, PageKey, PageScreenshotRequest, PageScreenshotSource,
+            ScreenshotMode, UploadFilePayload, WaitCondition, PAGE_AUTOMATION_MAX_FILL_CHARS,
             PAGE_AUTOMATION_MAX_WAIT_TIMEOUT_MS,
         },
-        service::{structured_error, SheltieMcpService},
+        service::{image_result, structured_error, SheltieMcpService},
         types::{RendererCommand, ToolError},
     },
 };
+
+use crate::mcp::page_automation::images::{decode_png, encode_capped_png, EncodedPng};
+#[cfg(target_os = "macos")]
+use crate::mcp::page_automation::uploads::read_upload_files;
 
 pub(crate) type BrowserFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, ToolError>> + Send + 'a>>;
@@ -45,11 +57,27 @@ pub(crate) enum BrowserNavigation {
 
 pub(crate) trait BrowserBackend: Send + Sync {
     fn verify_page(&self, key: PageKey) -> BrowserFuture<'_, ()>;
+    fn screenshot_source(&self, key: PageKey) -> BrowserFuture<'_, PageScreenshotSource>;
+    fn capture_viewport(&self, key: PageKey) -> BrowserFuture<'_, EncodedPng>;
+    fn capture_element(
+        &self,
+        key: PageKey,
+        snapshot_id: String,
+        element_ref: String,
+        annotate: bool,
+    ) -> BrowserFuture<'_, EncodedPng>;
+    fn capture_full_page(&self, key: PageKey, annotate: bool) -> BrowserFuture<'_, EncodedPng>;
     fn execute(
         &self,
         key: PageKey,
         operation: PageAutomationOperation,
-    ) -> BrowserFuture<'_, crate::mcp::page_automation::protocol::PageAutomationSuccessResult>;
+    ) -> BrowserFuture<'_, PageAutomationSuccessResult>;
+    fn execute_raw(
+        &self,
+        key: PageKey,
+        operation: PageAutomationOperation,
+    ) -> BrowserFuture<'_, PageAutomationActionResult>;
+    fn read_uploads(&self, paths: Vec<String>) -> BrowserFuture<'_, Vec<UploadFilePayload>>;
     fn navigate(
         &self,
         key: PageKey,
@@ -66,11 +94,45 @@ impl BrowserBackend for UnavailableBrowserBackend {
         Box::pin(async { Err(webview_not_ready()) })
     }
 
+    fn screenshot_source(&self, _key: PageKey) -> BrowserFuture<'_, PageScreenshotSource> {
+        Box::pin(async { Err(webview_not_ready()) })
+    }
+
+    fn capture_viewport(&self, _key: PageKey) -> BrowserFuture<'_, EncodedPng> {
+        Box::pin(async { Err(webview_not_ready()) })
+    }
+
+    fn capture_element(
+        &self,
+        _key: PageKey,
+        _snapshot_id: String,
+        _element_ref: String,
+        _annotate: bool,
+    ) -> BrowserFuture<'_, EncodedPng> {
+        Box::pin(async { Err(webview_not_ready()) })
+    }
+
+    fn capture_full_page(&self, _key: PageKey, _annotate: bool) -> BrowserFuture<'_, EncodedPng> {
+        Box::pin(async { Err(webview_not_ready()) })
+    }
+
     fn execute(
         &self,
         _key: PageKey,
         _operation: PageAutomationOperation,
-    ) -> BrowserFuture<'_, crate::mcp::page_automation::protocol::PageAutomationSuccessResult> {
+    ) -> BrowserFuture<'_, PageAutomationSuccessResult> {
+        Box::pin(async { Err(webview_not_ready()) })
+    }
+
+    fn execute_raw(
+        &self,
+        _key: PageKey,
+        _operation: PageAutomationOperation,
+    ) -> BrowserFuture<'_, PageAutomationActionResult> {
+        Box::pin(async { Err(webview_not_ready()) })
+    }
+
+    fn read_uploads(&self, _paths: Vec<String>) -> BrowserFuture<'_, Vec<UploadFilePayload>> {
         Box::pin(async { Err(webview_not_ready()) })
     }
 
@@ -128,13 +190,84 @@ impl BrowserBackend for AppBrowserBackend {
         })
     }
 
+    fn screenshot_source(&self, key: PageKey) -> BrowserFuture<'_, PageScreenshotSource> {
+        let app = self.app.clone();
+        Box::pin(async move {
+            let value = app
+                .state::<McpRequestBrokerState>()
+                .request(
+                    &app,
+                    &key.document_id,
+                    RendererCommand::GetPageScreenshotSource,
+                    serde_json::json!({ "pageNodeId": key.page_node_id }),
+                )
+                .await?;
+            serde_json::from_value(value).map_err(|_| {
+                ToolError::new(
+                    "renderer_unavailable",
+                    "Renderer returned an invalid page screenshot source.",
+                )
+            })
+        })
+    }
+
+    fn capture_viewport(&self, key: PageKey) -> BrowserFuture<'_, EncodedPng> {
+        let app = self.app.clone();
+        Box::pin(async move { capture_page_viewport_screenshot(&app, key).await })
+    }
+
+    fn capture_element(
+        &self,
+        key: PageKey,
+        snapshot_id: String,
+        element_ref: String,
+        annotate: bool,
+    ) -> BrowserFuture<'_, EncodedPng> {
+        let app = self.app.clone();
+        Box::pin(async move {
+            capture_page_element_screenshot(&app, key, snapshot_id, element_ref, annotate).await
+        })
+    }
+
+    fn capture_full_page(&self, key: PageKey, annotate: bool) -> BrowserFuture<'_, EncodedPng> {
+        let app = self.app.clone();
+        Box::pin(async move { capture_page_full_screenshot(&app, key, annotate).await })
+    }
+
     fn execute(
         &self,
         key: PageKey,
         operation: PageAutomationOperation,
-    ) -> BrowserFuture<'_, crate::mcp::page_automation::protocol::PageAutomationSuccessResult> {
+    ) -> BrowserFuture<'_, PageAutomationSuccessResult> {
         let app = self.app.clone();
         Box::pin(async move { execute_page_automation(&app, key, operation).await })
+    }
+
+    fn execute_raw(
+        &self,
+        key: PageKey,
+        operation: PageAutomationOperation,
+    ) -> BrowserFuture<'_, PageAutomationActionResult> {
+        let app = self.app.clone();
+        Box::pin(async move { execute_raw_page_automation(&app, key, operation).await })
+    }
+
+    fn read_uploads(&self, paths: Vec<String>) -> BrowserFuture<'_, Vec<UploadFilePayload>> {
+        #[cfg(target_os = "macos")]
+        {
+            Box::pin(async move {
+                tokio::task::spawn_blocking(move || read_upload_files(&paths))
+                    .await
+                    .map_err(|_| {
+                        ToolError::new("upload_file_invalid", "Upload file could not be read.")
+                    })?
+            })
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = paths;
+            Box::pin(async { Err(unsupported_platform()) })
+        }
     }
 
     fn navigate(
@@ -255,6 +388,72 @@ struct WaitParams {
     timeout_ms: Option<u64>,
 }
 
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct ScreenshotParams {
+    document_id: String,
+    page_node_id: String,
+    mode: ScreenshotMode,
+    #[serde(default)]
+    snapshot_id: Option<String>,
+    #[serde(default)]
+    element_ref: Option<String>,
+    #[serde(default)]
+    annotate: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct ClickCoordinatesParams {
+    document_id: String,
+    page_node_id: String,
+    snapshot_id: String,
+    x: f64,
+    y: f64,
+    #[serde(default = "default_mouse_button")]
+    button: MouseButton,
+    #[serde(default = "default_click_count")]
+    click_count: u8,
+    #[serde(default)]
+    highlight: Option<CssRect>,
+}
+
+fn default_mouse_button() -> MouseButton {
+    MouseButton::Left
+}
+
+fn default_click_count() -> u8 {
+    1
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct EvaluateParams {
+    document_id: String,
+    page_node_id: String,
+    script: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct UploadParams {
+    document_id: String,
+    page_node_id: String,
+    snapshot_id: String,
+    element_ref: String,
+    paths: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct DialogParams {
+    document_id: String,
+    page_node_id: String,
+    action: DialogAction,
+    #[serde(default)]
+    prompt_text: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, JsonSchema, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum BrowserActionKind {
@@ -266,9 +465,14 @@ pub(crate) enum BrowserActionKind {
     PressKey,
     Scroll,
     Wait,
+    ScreenshotElement,
+    ScreenshotFullPage,
+    ScreenshotScroll,
+    ScreenshotRestore,
     ClickCoordinates,
     Evaluate,
     UploadFiles,
+    SetDialogHandler,
     Navigate,
 }
 
@@ -289,6 +493,18 @@ impl From<crate::mcp::page_automation::protocol::PageAutomationActionKind> for B
             }
             crate::mcp::page_automation::protocol::PageAutomationActionKind::Scroll => Self::Scroll,
             crate::mcp::page_automation::protocol::PageAutomationActionKind::Wait => Self::Wait,
+            crate::mcp::page_automation::protocol::PageAutomationActionKind::ScreenshotElement => {
+                Self::ScreenshotElement
+            }
+            crate::mcp::page_automation::protocol::PageAutomationActionKind::ScreenshotFullPage => {
+                Self::ScreenshotFullPage
+            }
+            crate::mcp::page_automation::protocol::PageAutomationActionKind::ScreenshotScroll => {
+                Self::ScreenshotScroll
+            }
+            crate::mcp::page_automation::protocol::PageAutomationActionKind::ScreenshotRestore => {
+                Self::ScreenshotRestore
+            }
             crate::mcp::page_automation::protocol::PageAutomationActionKind::ClickCoordinates => {
                 Self::ClickCoordinates
             }
@@ -297,6 +513,9 @@ impl From<crate::mcp::page_automation::protocol::PageAutomationActionKind> for B
             }
             crate::mcp::page_automation::protocol::PageAutomationActionKind::UploadFiles => {
                 Self::UploadFiles
+            }
+            crate::mcp::page_automation::protocol::PageAutomationActionKind::SetDialogHandler => {
+                Self::SetDialogHandler
             }
         }
     }
@@ -308,6 +527,8 @@ pub(crate) struct BrowserActionResult {
     pub kind: BrowserActionKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dialogs: Option<Vec<PageDialog>>,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize)]
@@ -318,6 +539,85 @@ pub(crate) struct BrowserPageResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<BrowserActionResult>,
     pub snapshot: CompactSnapshot,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserScreenshotResult {
+    document_id: String,
+    page_node_id: String,
+    mime_type: String,
+    width: u32,
+    height: u32,
+    scale_applied: f64,
+    source: ScreenshotSource,
+    mode: ScreenshotMode,
+    annotated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warning: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum ScreenshotSource {
+    Native,
+    Cached,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CoordinateResult {
+    document_id: String,
+    page_node_id: String,
+    input_trusted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dialogs: Option<Vec<PageDialog>>,
+    snapshot: CompactSnapshot,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EvaluateResult {
+    document_id: String,
+    page_node_id: String,
+    value: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dialogs: Option<Vec<PageDialog>>,
+    snapshot: CompactSnapshot,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadedFileResult {
+    name: String,
+    size: u64,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadResult {
+    document_id: String,
+    page_node_id: String,
+    files: Vec<UploadedFileResult>,
+    input_trusted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dialogs: Option<Vec<PageDialog>>,
+    snapshot: CompactSnapshot,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DialogResult {
+    document_id: String,
+    page_node_id: String,
+    configured: bool,
+}
+
+fn encode_cached_screenshot(cached: CachedPageScreenshot) -> Result<EncodedPng, ToolError> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(cached.base64)
+        .map_err(|_| crate::mcp::page_automation::protocol::screenshot_failed())?;
+    encode_capped_png(&decode_png(&bytes)?)
 }
 
 #[cfg(target_os = "macos")]
@@ -363,6 +663,127 @@ fn utf16_len(value: &str) -> usize {
 }
 
 impl SheltieMcpService {
+    async fn verify_browser_page(&self, key: &PageKey) -> Result<(), rmcp::model::CallToolResult> {
+        self.browser_backend
+            .verify_page(key.clone())
+            .await
+            .map_err(structured_error)
+    }
+
+    async fn browser_screenshot_with(
+        &self,
+        key: PageKey,
+        request: PageScreenshotRequest,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::model::CallToolResult> {
+        request.validate().map_err(structured_error)?;
+        self.verify_browser_page(&key).await?;
+        let source = self
+            .browser_backend
+            .screenshot_source(key.clone())
+            .await
+            .map_err(structured_error)?;
+        source
+            .ensure_available(request.mode)
+            .map_err(structured_error)?;
+
+        let (image, image_source, annotated, warning) = match (source.display_mode, request.mode) {
+            (PageDisplayMode::Native, ScreenshotMode::Viewport) => {
+                match self.browser_backend.capture_viewport(key.clone()).await {
+                    Ok(image) => (
+                        image,
+                        ScreenshotSource::Native,
+                        false,
+                        request.annotate.then(|| {
+                            "Viewport screenshots have no element target to annotate.".into()
+                        }),
+                    ),
+                    Err(_) => {
+                        let cached = source.cached.ok_or_else(|| {
+                            structured_error(
+                                crate::mcp::page_automation::protocol::screenshot_failed(),
+                            )
+                        })?;
+                        (
+                            encode_cached_screenshot(cached).map_err(structured_error)?,
+                            ScreenshotSource::Cached,
+                            false,
+                            Some(
+                                if request.annotate {
+                                    "Native screenshot failed; returned the existing cached image. Cached screenshot cannot be annotated without revealing the WebView."
+                                } else {
+                                    "Native screenshot failed; returned the existing cached image."
+                                }
+                                .into(),
+                            ),
+                        )
+                    }
+                }
+            }
+            (PageDisplayMode::Native, ScreenshotMode::Element) => {
+                let image = self
+                    .browser_backend
+                    .capture_element(
+                        key.clone(),
+                        request.snapshot_id.expect("validated snapshotId"),
+                        request.element_ref.expect("validated elementRef"),
+                        request.annotate,
+                    )
+                    .await
+                    .map_err(structured_error)?;
+                (image, ScreenshotSource::Native, request.annotate, None)
+            }
+            (PageDisplayMode::Native, ScreenshotMode::FullPage) => {
+                let image = self
+                    .browser_backend
+                    .capture_full_page(key.clone(), false)
+                    .await
+                    .map_err(structured_error)?;
+                (
+                    image,
+                    ScreenshotSource::Native,
+                    false,
+                    request.annotate.then(|| {
+                        "Full-page screenshots have no element target to annotate.".into()
+                    }),
+                )
+            }
+            (_, ScreenshotMode::Viewport) => {
+                let cached = source
+                    .cached
+                    .expect("availability requires cached screenshot");
+                let warning = request.annotate.then(|| {
+                    "Cached screenshot cannot be annotated without revealing the WebView.".into()
+                });
+                (
+                    encode_cached_screenshot(cached).map_err(structured_error)?,
+                    ScreenshotSource::Cached,
+                    false,
+                    warning,
+                )
+            }
+            _ => unreachable!("availability rejects non-native element and full-page captures"),
+        };
+        let metadata = BrowserScreenshotResult {
+            document_id: key.document_id,
+            page_node_id: key.page_node_id,
+            mime_type: "image/png".into(),
+            width: image.width,
+            height: image.height,
+            scale_applied: image.scale_applied,
+            source: image_source,
+            mode: request.mode,
+            annotated,
+            warning,
+        };
+        Ok(image_result(
+            &metadata,
+            [(
+                base64::engine::general_purpose::STANDARD.encode(image.bytes),
+                "image/png".into(),
+            )],
+        ))
+    }
+
     async fn browser_execute(
         &self,
         key: PageKey,
@@ -383,6 +804,7 @@ impl SheltieMcpService {
             action: result.action.map(|action| BrowserActionResult {
                 kind: action.kind.into(),
                 url: None,
+                dialogs: action.dialogs,
             }),
             snapshot: result.snapshot,
         }))
@@ -409,6 +831,7 @@ impl SheltieMcpService {
             action: Some(BrowserActionResult {
                 kind: BrowserActionKind::Navigate,
                 url: Some(final_url),
+                dialogs: None,
             }),
             snapshot,
         }))
@@ -737,6 +1160,214 @@ impl SheltieMcpService {
             .map_err(structured_error)?;
         self.browser_execute(key, operation).await
     }
+
+    #[tool(
+        name = "browser_screenshot",
+        description = "Capture one Sheltie WebPage viewport, element, or full page without revealing hidden WebViews",
+        output_schema = rmcp::handler::server::common::schema_for_output::<BrowserScreenshotResult>().expect("valid browser screenshot output schema"),
+        annotations(read_only_hint = true, destructive_hint = false, open_world_hint = true)
+    )]
+    async fn browser_screenshot(
+        &self,
+        Parameters(params): Parameters<ScreenshotParams>,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::model::CallToolResult> {
+        let key =
+            validate_page_key(params.document_id, params.page_node_id).map_err(structured_error)?;
+        self.browser_screenshot_with(
+            key,
+            PageScreenshotRequest {
+                mode: params.mode,
+                snapshot_id: params.snapshot_id,
+                element_ref: params.element_ref,
+                annotate: params.annotate,
+            },
+        )
+        .await
+    }
+
+    #[tool(
+        name = "browser_click_coordinates",
+        description = "Send untrusted synthetic pointer and mouse events at CSS viewport coordinates when no semantic element is available",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn browser_click_coordinates(
+        &self,
+        Parameters(params): Parameters<ClickCoordinatesParams>,
+    ) -> Result<Json<CoordinateResult>, rmcp::model::CallToolResult> {
+        let key =
+            validate_page_key(params.document_id, params.page_node_id).map_err(structured_error)?;
+        let operation = PageAutomationOperation::click_coordinates(
+            params.snapshot_id,
+            params.x,
+            params.y,
+            params.button,
+            params.click_count,
+            params.highlight,
+        )
+        .map_err(structured_error)?;
+        self.verify_browser_page(&key).await?;
+        let result = self
+            .browser_backend
+            .execute(key.clone(), operation)
+            .await
+            .map_err(structured_error)?;
+        let action = result.action.ok_or_else(|| {
+            structured_error(crate::mcp::page_automation::protocol::bridge_rejected())
+        })?;
+        Ok(Json(CoordinateResult {
+            document_id: key.document_id,
+            page_node_id: key.page_node_id,
+            input_trusted: action.input_trusted.unwrap_or(false),
+            dialogs: action.dialogs,
+            snapshot: result.snapshot,
+        }))
+    }
+
+    #[tool(
+        name = "browser_evaluate",
+        description = "Run arbitrary page-origin JavaScript in one trusted Sheltie WebPage and return only its JSON-safe value",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn browser_evaluate(
+        &self,
+        Parameters(params): Parameters<EvaluateParams>,
+    ) -> Result<Json<EvaluateResult>, rmcp::model::CallToolResult> {
+        let key =
+            validate_page_key(params.document_id, params.page_node_id).map_err(structured_error)?;
+        let operation = PageAutomationOperation::Evaluate {
+            script: params.script,
+        };
+        operation.validate().map_err(structured_error)?;
+        self.verify_browser_page(&key).await?;
+        let result = self
+            .browser_backend
+            .execute(key.clone(), operation)
+            .await
+            .map_err(structured_error)?;
+        let action = result.action.ok_or_else(|| {
+            structured_error(crate::mcp::page_automation::protocol::bridge_rejected())
+        })?;
+        Ok(Json(EvaluateResult {
+            document_id: key.document_id,
+            page_node_id: key.page_node_id,
+            value: action.value,
+            dialogs: action.dialogs,
+            snapshot: result.snapshot,
+        }))
+    }
+
+    #[tool(
+        name = "browser_upload_file",
+        description = "Assign trusted-client readable absolute files to a semantic file input with synthetic untrusted events",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn browser_upload_file(
+        &self,
+        Parameters(params): Parameters<UploadParams>,
+    ) -> Result<Json<UploadResult>, rmcp::model::CallToolResult> {
+        let key =
+            validate_page_key(params.document_id, params.page_node_id).map_err(structured_error)?;
+        if params.paths.is_empty()
+            || params
+                .paths
+                .iter()
+                .any(|path| !std::path::Path::new(path).is_absolute())
+        {
+            return Err(structured_error(invalid_argument(
+                "paths must contain at least one absolute path",
+            )));
+        }
+        self.verify_browser_page(&key).await?;
+        let files = self
+            .browser_backend
+            .read_uploads(params.paths)
+            .await
+            .map_err(structured_error)?;
+        let operation = PageAutomationOperation::UploadFiles {
+            snapshot_id: params.snapshot_id,
+            element_ref: params.element_ref,
+            files,
+        };
+        operation.validate().map_err(structured_error)?;
+        let result = self
+            .browser_backend
+            .execute(key.clone(), operation)
+            .await
+            .map_err(structured_error)?;
+        let action = result.action.ok_or_else(|| {
+            structured_error(crate::mcp::page_automation::protocol::bridge_rejected())
+        })?;
+        let files = action
+            .files
+            .ok_or_else(|| {
+                structured_error(crate::mcp::page_automation::protocol::bridge_rejected())
+            })?
+            .into_iter()
+            .map(|file| UploadedFileResult {
+                name: file.name,
+                size: file.size,
+            })
+            .collect();
+        Ok(Json(UploadResult {
+            document_id: key.document_id,
+            page_node_id: key.page_node_id,
+            files,
+            input_trusted: action.input_trusted.unwrap_or(false),
+            dialogs: action.dialogs,
+            snapshot: result.snapshot,
+        }))
+    }
+
+    #[tool(
+        name = "browser_handle_dialog",
+        description = "Configure the next page dialog shim response before retrying an action",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn browser_handle_dialog(
+        &self,
+        Parameters(params): Parameters<DialogParams>,
+    ) -> Result<Json<DialogResult>, rmcp::model::CallToolResult> {
+        let key =
+            validate_page_key(params.document_id, params.page_node_id).map_err(structured_error)?;
+        if params.action == DialogAction::Dismiss && params.prompt_text.is_some() {
+            return Err(structured_error(invalid_argument(
+                "promptText is supported only when action is accept",
+            )));
+        }
+        self.verify_browser_page(&key).await?;
+        let result = self
+            .browser_backend
+            .execute_raw(
+                key.clone(),
+                PageAutomationOperation::SetDialogHandler {
+                    action: params.action,
+                    prompt_text: params.prompt_text,
+                },
+            )
+            .await
+            .map_err(structured_error)?;
+        Ok(Json(DialogResult {
+            document_id: key.document_id,
+            page_node_id: key.page_node_id,
+            configured: result.configured.unwrap_or(false),
+        }))
+    }
 }
 
 pub(crate) fn tool_router() -> ToolRouter<SheltieMcpService> {
@@ -773,11 +1404,58 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Default)]
+    #[derive(Clone)]
     struct FakeBrowserBackend {
         operations: Arc<Mutex<Vec<(PageKey, PageAutomationOperation)>>>,
         navigations: Arc<Mutex<Vec<(PageKey, BrowserNavigation)>>>,
         verification_error: Arc<Mutex<Option<ToolError>>>,
+        screenshot_source: Arc<Mutex<PageScreenshotSource>>,
+        native_capture_calls: Arc<std::sync::atomic::AtomicUsize>,
+        native_capture_fails: Arc<std::sync::atomic::AtomicBool>,
+        element_capture_args: Arc<Mutex<Vec<(String, String, bool)>>>,
+        upload_paths: Arc<Mutex<Vec<Vec<String>>>>,
+    }
+
+    impl Default for FakeBrowserBackend {
+        fn default() -> Self {
+            Self {
+                operations: Arc::new(Mutex::new(Vec::new())),
+                navigations: Arc::new(Mutex::new(Vec::new())),
+                verification_error: Arc::new(Mutex::new(None)),
+                screenshot_source: Arc::new(Mutex::new(PageScreenshotSource {
+                    display_mode: PageDisplayMode::Native,
+                    cached: None,
+                })),
+                native_capture_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                native_capture_fails: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                element_capture_args: Arc::new(Mutex::new(Vec::new())),
+                upload_paths: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    fn fake_image() -> EncodedPng {
+        EncodedPng {
+            bytes: b"fake-png".to_vec(),
+            width: 1,
+            height: 1,
+            scale_applied: 1.0,
+        }
+    }
+
+    fn cached_source(mode: PageDisplayMode) -> PageScreenshotSource {
+        let image = image::RgbaImage::from_pixel(1, 1, image::Rgba([1, 2, 3, 255]));
+        let encoded = encode_capped_png(&image).unwrap();
+        PageScreenshotSource {
+            display_mode: mode,
+            cached: Some(CachedPageScreenshot {
+                base64: base64::engine::general_purpose::STANDARD.encode(encoded.bytes),
+                width: 1,
+                height: 1,
+                captured_at: "2026-07-17T00:00:00Z".into(),
+                captured_url: None,
+            }),
+        }
     }
 
     fn snapshot(epoch: u64, url: &str) -> CompactSnapshot {
@@ -800,6 +1478,76 @@ mod tests {
             Box::pin(async move { error.map_or(Ok(()), Err) })
         }
 
+        fn screenshot_source(&self, _key: PageKey) -> BrowserFuture<'_, PageScreenshotSource> {
+            let source = self.screenshot_source.lock().unwrap().clone();
+            Box::pin(async move { Ok(source) })
+        }
+
+        fn capture_viewport(&self, _key: PageKey) -> BrowserFuture<'_, EncodedPng> {
+            let calls = self.native_capture_calls.clone();
+            let fails = self.native_capture_fails.clone();
+            Box::pin(async move {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if fails.load(std::sync::atomic::Ordering::SeqCst) {
+                    Err(webview_not_ready())
+                } else {
+                    Ok(fake_image())
+                }
+            })
+        }
+
+        fn capture_element(
+            &self,
+            _key: PageKey,
+            snapshot_id: String,
+            element_ref: String,
+            annotate: bool,
+        ) -> BrowserFuture<'_, EncodedPng> {
+            self.element_capture_args
+                .lock()
+                .unwrap()
+                .push((snapshot_id, element_ref, annotate));
+            Box::pin(async { Ok(fake_image()) })
+        }
+
+        fn capture_full_page(
+            &self,
+            _key: PageKey,
+            _annotate: bool,
+        ) -> BrowserFuture<'_, EncodedPng> {
+            Box::pin(async { Ok(fake_image()) })
+        }
+
+        fn execute_raw(
+            &self,
+            _key: PageKey,
+            operation: PageAutomationOperation,
+        ) -> BrowserFuture<'_, PageAutomationActionResult> {
+            Box::pin(async move {
+                Ok(PageAutomationActionResult {
+                    kind: operation.raw_action_kind().unwrap(),
+                    input_trusted: None,
+                    value: serde_json::Value::Null,
+                    files: None,
+                    dialogs: None,
+                    configured: Some(true),
+                    geometry: None,
+                })
+            })
+        }
+
+        fn read_uploads(&self, paths: Vec<String>) -> BrowserFuture<'_, Vec<UploadFilePayload>> {
+            self.upload_paths.lock().unwrap().push(paths);
+            Box::pin(async {
+                Ok(vec![UploadFilePayload {
+                    name: "fixture.txt".into(),
+                    mime_type: "text/plain".into(),
+                    size: 7,
+                    bytes_base64: "Zml4dHVyZQ==".into(),
+                }])
+            })
+        }
+
         fn execute(
             &self,
             key: PageKey,
@@ -810,10 +1558,47 @@ mod tests {
                 .unwrap()
                 .push((key, operation.clone()));
             Box::pin(async move {
+                let action = operation.action_kind().map(|kind| {
+                    let (input_trusted, value, files) = match &operation {
+                        PageAutomationOperation::ClickCoordinates { .. } => {
+                            (Some(false), serde_json::Value::Null, None)
+                        }
+                        PageAutomationOperation::Evaluate { script } => (
+                            None,
+                            if script == "null" {
+                                serde_json::Value::Null
+                            } else {
+                                serde_json::json!({"ok": true})
+                            },
+                            None,
+                        ),
+                        PageAutomationOperation::UploadFiles { files, .. } => (
+                            Some(false),
+                            serde_json::Value::Null,
+                            Some(
+                                files
+                                    .iter()
+                                    .map(|file| crate::mcp::page_automation::protocol::UploadedFileMetadata {
+                                        name: file.name.clone(),
+                                        size: file.size,
+                                    })
+                                    .collect(),
+                            ),
+                        ),
+                        _ => (None, serde_json::Value::Null, None),
+                    };
+                    PageAutomationActionResult {
+                        kind,
+                        input_trusted,
+                        value,
+                        files,
+                        dialogs: None,
+                        configured: None,
+                        geometry: None,
+                    }
+                });
                 Ok(PageAutomationSuccessResult {
-                    action: operation
-                        .action_kind()
-                        .map(|kind| PageAutomationActionResult { kind }),
+                    action,
                     snapshot: snapshot(2, "https://example.test/after"),
                 })
             })
@@ -874,7 +1659,7 @@ mod tests {
     }
 
     #[test]
-    fn browser_router_exposes_exact_phase_two_metadata() {
+    fn browser_router_exposes_phase_three_metadata() {
         let router = tool_router();
         let tools = router.list_all();
         let names = tools
@@ -885,23 +1670,31 @@ mod tests {
             names,
             vec![
                 "browser_click",
+                "browser_click_coordinates",
+                "browser_evaluate",
                 "browser_fill",
                 "browser_fill_form",
                 "browser_go_back",
                 "browser_go_forward",
+                "browser_handle_dialog",
                 "browser_hover",
                 "browser_navigate",
                 "browser_press_key",
                 "browser_reload",
+                "browser_screenshot",
                 "browser_scroll",
                 "browser_select_option",
                 "browser_snapshot",
+                "browser_upload_file",
                 "browser_wait",
             ]
         );
         for tool in tools {
             let annotations = tool.annotations.as_ref().unwrap();
-            if tool.name == "browser_snapshot" {
+            if matches!(
+                tool.name.as_ref(),
+                "browser_snapshot" | "browser_screenshot"
+            ) {
                 assert_eq!(annotations.read_only_hint, Some(true));
                 assert_eq!(annotations.destructive_hint, Some(false));
             } else {
@@ -1027,5 +1820,220 @@ mod tests {
                 BrowserNavigation::Navigate("https://example.test/".into()),
             )]
         );
+    }
+
+    #[tokio::test]
+    async fn cached_screenshot_never_captures_or_reveals_a_hidden_page() {
+        let backend = FakeBrowserBackend::default();
+        *backend.screenshot_source.lock().unwrap() = cached_source(PageDisplayMode::Hidden);
+        let service = service(backend.clone());
+        let result = service
+            .browser_screenshot(Parameters(ScreenshotParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                mode: ScreenshotMode::Viewport,
+                snapshot_id: None,
+                element_ref: None,
+                annotate: true,
+            }))
+            .await
+            .unwrap();
+        assert_eq!(
+            backend
+                .native_capture_calls
+                .load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+        assert_eq!(result.content.len(), 2);
+        assert!(result.content[1].as_image().is_some());
+        let metadata = result.structured_content.unwrap();
+        assert_eq!(metadata["source"], "cached");
+        assert_eq!(metadata["annotated"], false);
+        assert_eq!(
+            metadata["warning"],
+            "Cached screenshot cannot be annotated without revealing the WebView."
+        );
+        assert!(metadata.get("base64").is_none());
+
+        let hidden_element = service
+            .browser_screenshot(Parameters(ScreenshotParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                mode: ScreenshotMode::Element,
+                snapshot_id: Some("s2-1".into()),
+                element_ref: Some("e1".into()),
+                annotate: false,
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(error_code(hidden_element), "live_webview_required");
+        assert_eq!(
+            backend
+                .native_capture_calls
+                .load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn native_viewport_captures_once_then_uses_cache_only_after_failure() {
+        let backend = FakeBrowserBackend::default();
+        *backend.screenshot_source.lock().unwrap() = cached_source(PageDisplayMode::Native);
+        backend
+            .native_capture_fails
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let service = service(backend.clone());
+        let result = service
+            .browser_screenshot(Parameters(ScreenshotParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                mode: ScreenshotMode::Viewport,
+                snapshot_id: None,
+                element_ref: None,
+                annotate: true,
+            }))
+            .await
+            .unwrap();
+        assert_eq!(
+            backend
+                .native_capture_calls
+                .load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        let metadata = result.structured_content.unwrap();
+        assert_eq!(metadata["source"], "cached");
+        assert_eq!(
+            metadata["warning"],
+            "Native screenshot failed; returned the existing cached image. Cached screenshot cannot be annotated without revealing the WebView."
+        );
+        assert_eq!(metadata["annotated"], false);
+    }
+
+    #[tokio::test]
+    async fn native_element_capture_preserves_the_caller_snapshot_ref_pair() {
+        let backend = FakeBrowserBackend::default();
+        let service = service(backend.clone());
+
+        let result = service
+            .browser_screenshot(Parameters(ScreenshotParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                mode: ScreenshotMode::Element,
+                snapshot_id: Some("s7-3".into()),
+                element_ref: Some("e9".into()),
+                annotate: true,
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            backend.element_capture_args.lock().unwrap().as_slice(),
+            [("s7-3".into(), "e9".into(), true)]
+        );
+        assert_eq!(result.structured_content.unwrap()["annotated"], true);
+        assert!(backend.operations.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn extended_actions_validate_and_return_typed_post_action_results() {
+        let backend = FakeBrowserBackend::default();
+        let service = service(backend.clone());
+        let coordinate = service
+            .browser_click_coordinates(Parameters(ClickCoordinatesParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                snapshot_id: "s1-1".into(),
+                x: 10.0,
+                y: 20.0,
+                button: MouseButton::Left,
+                click_count: 1,
+                highlight: None,
+            }))
+            .await
+            .unwrap()
+            .0;
+        assert!(!coordinate.input_trusted);
+        assert_eq!(coordinate.snapshot.snapshot_id, "s2-1");
+
+        let evaluated = service
+            .browser_evaluate(Parameters(EvaluateParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                script: "null".into(),
+            }))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(evaluated.value, serde_json::Value::Null);
+
+        let upload = service
+            .browser_upload_file(Parameters(UploadParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                snapshot_id: "s1-1".into(),
+                element_ref: "e1".into(),
+                paths: vec!["/tmp/fixture.txt".into()],
+            }))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(upload.files[0].name, "fixture.txt");
+        assert!(!upload.input_trusted);
+        assert_eq!(
+            backend.upload_paths.lock().unwrap().as_slice(),
+            &[vec!["/tmp/fixture.txt".to_string()]]
+        );
+
+        let empty = service
+            .browser_evaluate(Parameters(EvaluateParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                script: String::new(),
+            }))
+            .await
+            .err()
+            .expect("empty script should be rejected");
+        assert_eq!(error_code(empty), "invalid_argument");
+        let dialog = service
+            .browser_handle_dialog(Parameters(DialogParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                action: DialogAction::Accept,
+                prompt_text: Some("ok".into()),
+            }))
+            .await
+            .unwrap()
+            .0;
+        assert!(dialog.configured);
+    }
+
+    #[tokio::test]
+    async fn upload_and_dialog_boundary_validation_prevent_dispatch() {
+        let backend = FakeBrowserBackend::default();
+        let service = service(backend.clone());
+        let upload = service
+            .browser_upload_file(Parameters(UploadParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                snapshot_id: "s1-1".into(),
+                element_ref: "e1".into(),
+                paths: vec!["relative.txt".into()],
+            }))
+            .await
+            .err()
+            .expect("relative upload path should be rejected");
+        assert_eq!(error_code(upload), "invalid_argument");
+        assert!(backend.upload_paths.lock().unwrap().is_empty());
+        let dialog = service
+            .browser_handle_dialog(Parameters(DialogParams {
+                document_id: "document-1".into(),
+                page_node_id: "page-1".into(),
+                action: DialogAction::Dismiss,
+                prompt_text: Some("not allowed".into()),
+            }))
+            .await
+            .err()
+            .expect("dismiss prompt text should be rejected");
+        assert_eq!(error_code(dialog), "invalid_argument");
     }
 }

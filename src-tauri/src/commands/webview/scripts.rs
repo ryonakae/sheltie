@@ -48,7 +48,10 @@ pub const SCROLL_DETECTION_SCRIPT: &str = r#"(function() {
 mod tests {
     use crate::{
         commands::webview::page_automation::PAGE_AUTOMATION_SCRIPT,
-        mcp::page_automation::protocol::PAGE_AUTOMATION_FRAME_RESPONSE_TIMEOUT_MS,
+        mcp::page_automation::protocol::{
+            PAGE_AUTOMATION_EVALUATE_TIMEOUT_MS, PAGE_AUTOMATION_FRAME_RESPONSE_TIMEOUT_MS,
+            PAGE_AUTOMATION_HIGHLIGHT_FADE_MS,
+        },
     };
 
     #[test]
@@ -65,14 +68,31 @@ mod tests {
                 "missing {required}"
             );
         }
-        for forbidden in ["document.cookie", "localStorage", "sessionStorage", "eval("] {
+        for forbidden in [
+            "document.cookie",
+            "localStorage",
+            "sessionStorage",
+            "window.eval",
+            "new Function",
+        ] {
             assert!(
                 !PAGE_AUTOMATION_SCRIPT.contains(forbidden),
                 "contains forbidden source {forbidden}"
             );
         }
-        assert!(PAGE_AUTOMATION_SCRIPT.contains(&format!(
-            "const FRAME_RESPONSE_TIMEOUT_MS = {PAGE_AUTOMATION_FRAME_RESPONSE_TIMEOUT_MS};"
-        )));
+        assert_eq!(
+            PAGE_AUTOMATION_SCRIPT.matches("(0, eval)(source)").count(),
+            1,
+            "the typed Evaluate operation must use exactly one indirect evaluation site"
+        );
+        for expected in [
+            format!(
+                "const FRAME_RESPONSE_TIMEOUT_MS = {PAGE_AUTOMATION_FRAME_RESPONSE_TIMEOUT_MS};"
+            ),
+            format!("const EVALUATE_TIMEOUT_MS = {PAGE_AUTOMATION_EVALUATE_TIMEOUT_MS};"),
+            format!("const HIGHLIGHT_FADE_MS = {PAGE_AUTOMATION_HIGHLIGHT_FADE_MS};"),
+        ] {
+            assert!(PAGE_AUTOMATION_SCRIPT.contains(&expected));
+        }
     }
 }

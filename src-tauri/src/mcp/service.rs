@@ -234,7 +234,7 @@ fn decode_document_result<T: DeserializeOwned>(
     decode_renderer_result(value)
 }
 
-fn image_result<T: Serialize>(
+pub(crate) fn image_result<T: Serialize>(
     metadata: &T,
     images: impl IntoIterator<Item = (String, String)>,
 ) -> CallToolResult {
@@ -550,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn lists_phase_two_tools_with_document_schemas_and_annotations() {
+    fn lists_phase_three_tools_with_document_schemas_and_annotations() {
         let service = service_with_responses([]);
         let tools = service.tool_router.list_all();
         assert_eq!(
@@ -561,17 +561,22 @@ mod tests {
             vec![
                 "batch_edit_board",
                 "browser_click",
+                "browser_click_coordinates",
+                "browser_evaluate",
                 "browser_fill",
                 "browser_fill_form",
                 "browser_go_back",
                 "browser_go_forward",
+                "browser_handle_dialog",
                 "browser_hover",
                 "browser_navigate",
                 "browser_press_key",
                 "browser_reload",
+                "browser_screenshot",
                 "browser_scroll",
                 "browser_select_option",
                 "browser_snapshot",
+                "browser_upload_file",
                 "browser_wait",
                 "focus_nodes",
                 "get_board",
@@ -615,6 +620,38 @@ mod tests {
             assert_eq!(annotations.destructive_hint, Some(false), "{name}");
             assert_eq!(annotations.open_world_hint, Some(false), "{name}");
         }
+        for name in [
+            "browser_click_coordinates",
+            "browser_evaluate",
+            "browser_upload_file",
+            "browser_handle_dialog",
+        ] {
+            let annotations = service
+                .tool_router
+                .get(name)
+                .unwrap()
+                .annotations
+                .as_ref()
+                .unwrap();
+            assert_eq!(annotations.read_only_hint, Some(false), "{name}");
+            assert_eq!(annotations.destructive_hint, Some(true), "{name}");
+        }
+        let screenshot = service
+            .tool_router
+            .get("browser_screenshot")
+            .unwrap()
+            .annotations
+            .as_ref()
+            .unwrap();
+        assert_eq!(screenshot.read_only_hint, Some(true));
+        assert_eq!(screenshot.destructive_hint, Some(false));
+        assert!(service
+            .tool_router
+            .get("browser_evaluate")
+            .unwrap()
+            .description
+            .as_deref()
+            .is_some_and(|description| description.contains("arbitrary page-origin JavaScript")));
         let batch = service
             .tool_router
             .get("batch_edit_board")

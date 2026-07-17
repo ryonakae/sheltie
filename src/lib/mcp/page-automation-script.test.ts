@@ -21,6 +21,27 @@ type Operation =
   | { kind: 'press_key'; key: string }
   | { kind: 'scroll'; deltaX: number; deltaY: number }
   | {
+      kind: 'click_coordinates';
+      snapshotId: string;
+      x: number;
+      y: number;
+      button: 'left' | 'middle' | 'right';
+      clickCount: 1 | 2;
+      highlight?: { x: number; y: number; width: number; height: number };
+    }
+  | { kind: 'evaluate'; script: string }
+  | {
+      kind: 'upload_files';
+      snapshotId: string;
+      elementRef: string;
+      files: Array<{ name: string; mimeType: string; size: number; bytesBase64: string }>;
+    }
+  | { kind: 'set_dialog_handler'; action: 'accept' | 'dismiss'; promptText?: string }
+  | { kind: 'screenshot_element'; snapshotId: string; elementRef: string; annotate: boolean }
+  | { kind: 'screenshot_full_page'; annotate: boolean }
+  | { kind: 'screenshot_scroll'; x: number; y: number }
+  | { kind: 'screenshot_restore'; x: number; y: number }
+  | {
       kind: 'wait';
       condition:
         | { kind: 'time'; milliseconds: number }
@@ -43,6 +64,14 @@ type BridgeResult = {
       snapshotId: string;
       frames: Array<{ frameId: string; status: string }>;
     };
+    action?: {
+      kind: string;
+      inputTrusted?: boolean;
+      value?: unknown;
+      files?: Array<{ name: string; size: number }>;
+      dialogs?: Array<{ type: string; message: string; defaultValue?: string }>;
+      geometry?: Record<string, unknown>;
+    };
     error?: { code: string };
   };
 };
@@ -61,6 +90,7 @@ type BridgeWindow = Window & {
     core: { invoke: (command: string, payload: { result: BridgeResult }) => Promise<void> };
   };
   eval: (source: string) => unknown;
+  Event: typeof Event;
   MessageEvent: typeof MessageEvent;
 };
 
@@ -274,7 +304,14 @@ describe('page automation initialization script', () => {
                     title: 'Child',
                     truncated: false,
                   }
-                : { ok: true },
+                : data.operation?.kind === 'press_key'
+                  ? {
+                      ok: true,
+                      action: {
+                        dialogs: [{ type: 'confirm', message: 'Child confirmation' }],
+                      },
+                    }
+                  : { ok: true },
           },
         }),
       );
@@ -308,6 +345,11 @@ describe('page automation initialization script', () => {
       ],
     });
     expect(childFormFilled).toBe(true);
+    const childDialog = await dispatch(bridge, { kind: 'press_key', key: 'Enter' });
+    expect(childDialog.result.action?.dialogs).toContainEqual({
+      type: 'confirm',
+      message: 'Child confirmation',
+    });
 
     const unregistered = new JSDOM('', { runScripts: 'outside-only' });
     doms.push(unregistered);
@@ -365,5 +407,217 @@ describe('page automation initialization script', () => {
     expect(otherDocument.documentToken).toBe('101112131415161718191a1b1c1d1e1f');
     expect(firstSnapshot.navigationEpoch).toBe(7);
     expect(secondSnapshot.navigationEpoch).toBe(8);
+  });
+
+  it('dispatches coordinate click events at CSS viewport coordinates and marks them untrusted', async () => {
+    const bridge = install('<button id="canvas">Canvas target</button>');
+    const target = bridge.window.document.querySelector('#canvas') as HTMLButtonElement;
+    let targetLeft = 20;
+    Object.defineProperty(target, 'getBoundingClientRect', {
+      value: () => ({ x: targetLeft, y: 30, width: 24, height: 16 }),
+    });
+    Object.defineProperty(bridge.window, 'requestAnimationFrame', {
+      value: (callback: FrameRequestCallback) => setTimeout(callback, 0),
+    });
+    const eventTypes: string[] = [];
+    const overlayStyles: string[] = [];
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      target.addEventListener(type, (event) => {
+        eventTypes.push(type);
+        expect(event.isTrusted).toBe(false);
+        if (eventTypes.length === 1) {
+          const overlay = bridge.window.document.querySelector(
+            '[data-sheltie-mcp-highlight]',
+          ) as HTMLElement;
+          overlayStyles.push(
+            overlay.style.pointerEvents,
+            overlay.style.border,
+            overlay.style.background,
+          );
+        }
+        if (type === 'click') {
+          targetLeft = 50;
+          bridge.window.dispatchEvent(new bridge.window.Event('scroll'));
+          bridge.window.dispatchEvent(new bridge.window.Event('resize'));
+        }
+      });
+    }
+    Object.defineProperty(bridge.window.document, 'elementFromPoint', {
+      value: (x: number, y: number) => {
+        expect([x, y]).toEqual([30, 40]);
+        return target;
+      },
+    });
+
+    const initial = snapshot(await dispatch(bridge, { kind: 'snapshot' }));
+    const result = await dispatch(bridge, {
+      kind: 'click_coordinates',
+      snapshotId: initial.snapshotId,
+      x: 30,
+      y: 40,
+      button: 'left',
+      clickCount: 1,
+      highlight: { x: 20, y: 30, width: 24, height: 16 },
+    });
+
+    expect(eventTypes).toEqual(['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']);
+    expect(overlayStyles).toEqual([
+      'none',
+      '2px solid rgb(99, 102, 241)',
+      'rgba(99, 102, 241, 0.14)',
+    ]);
+    expect(result.result.action).toMatchObject({ kind: 'click_coordinates', inputTrusted: false });
+    expect(
+      (bridge.window.document.querySelector('[data-sheltie-mcp-highlight]') as HTMLElement).style
+        .left,
+    ).toBe('50px');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(bridge.window.document.querySelector('[data-sheltie-mcp-highlight]')).toBeNull();
+  });
+
+  it('uses a one-time synchronous dialog policy and resets to safe defaults', async () => {
+    const bridge = install('<button>Open dialog</button>');
+
+    const configured = await dispatch(bridge, {
+      kind: 'set_dialog_handler',
+      action: 'accept',
+    });
+    expect(configured.result.action).toMatchObject({
+      kind: 'set_dialog_handler',
+      configured: true,
+    });
+    expect(configured.result.snapshot).toBeUndefined();
+    expect(bridge.window.confirm('Continue?')).toBe(true);
+    expect(bridge.window.confirm('Default dismissal')).toBe(false);
+    await dispatch(bridge, {
+      kind: 'set_dialog_handler',
+      action: 'accept',
+      promptText: 'Approved',
+    });
+    expect(bridge.window.prompt('Name?', 'Guest')).toBe('Approved');
+    expect(bridge.window.alert('Notice')).toBeUndefined();
+
+    const result = await dispatch(bridge, { kind: 'press_key', key: 'Enter' });
+    expect(result.result.action?.dialogs).toEqual([
+      { type: 'confirm', message: 'Continue?' },
+      { type: 'confirm', message: 'Default dismissal' },
+      { type: 'prompt', message: 'Name?', defaultValue: 'Guest' },
+      { type: 'alert', message: 'Notice' },
+    ]);
+  });
+
+  it('evaluates JSON-safe values through the typed operation only', async () => {
+    const bridge = install('<main>Evaluate</main>');
+
+    const value = await dispatch(bridge, {
+      kind: 'evaluate',
+      script: 'Promise.resolve({ ok: true })',
+    });
+    expect(value.result.action).toMatchObject({ kind: 'evaluate', value: { ok: true } });
+
+    const undefinedResult = await dispatch(bridge, { kind: 'evaluate', script: 'undefined' });
+    expect(undefinedResult.result.error).toMatchObject({ code: 'evaluate_not_json' });
+
+    const circularResult = await dispatch(bridge, {
+      kind: 'evaluate',
+      script: '(() => { const value = {}; value.self = value; return value; })()',
+    });
+    expect(circularResult.result.error).toMatchObject({ code: 'evaluate_not_json' });
+
+    const unknown = await dispatch(bridge, { kind: 'unknown_evaluate' } as never);
+    expect(unknown.result.error).toMatchObject({ code: 'invalid_argument' });
+
+    vi.useFakeTimers();
+    const slow = dispatch(bridge, {
+      kind: 'evaluate',
+      script: 'new Promise(() => {})',
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect((await slow).result.error).toMatchObject({ code: 'evaluate_timeout' });
+    vi.useRealTimers();
+    expect(snapshot(await dispatch(bridge, { kind: 'snapshot' })).snapshotId).toBeTruthy();
+  });
+
+  it('assigns only current file inputs and returns file metadata without bytes', async () => {
+    const bridge = install('<input id="upload" type="file"><input id="text">');
+    const input = bridge.window.document.querySelector('#upload') as HTMLInputElement;
+    const events: string[] = [];
+    input.addEventListener('input', () => events.push('input'));
+    input.addEventListener('change', () => events.push('change'));
+    class TestDataTransfer {
+      readonly files: File[] = [];
+      readonly items = { add: (file: File) => this.files.push(file) };
+    }
+    Object.defineProperty(bridge.window, 'DataTransfer', { value: TestDataTransfer });
+    Object.defineProperty(input, 'files', { configurable: true, writable: true, value: [] });
+
+    const initial = snapshot(await dispatch(bridge, { kind: 'snapshot' }));
+    const result = await dispatch(bridge, {
+      kind: 'upload_files',
+      snapshotId: initial.snapshotId,
+      elementRef: initial.elements[0]!.ref,
+      files: [{ name: '../secret.txt', mimeType: 'text/plain', size: 2, bytesBase64: 'aGk=' }],
+    });
+    expect(events).toEqual(['input', 'change']);
+    expect(result.result.action).toMatchObject({
+      kind: 'upload_files',
+      inputTrusted: false,
+      files: [{ name: 'secret.txt', size: 2 }],
+    });
+    expect(JSON.stringify(result)).not.toContain('aGk=');
+
+    const current = snapshot(await dispatch(bridge, { kind: 'snapshot' }));
+    const invalid = await dispatch(bridge, {
+      kind: 'upload_files',
+      snapshotId: current.snapshotId,
+      elementRef: current.elements.at(-1)!.ref,
+      files: [{ name: 'a.txt', mimeType: 'text/plain', size: 1, bytesBase64: 'YQ==' }],
+    });
+    expect(invalid.result.error).toMatchObject({ code: 'upload_target_not_file_input' });
+  });
+
+  it('reports full-page geometry and scroll helpers restore a saved viewport after two frames', async () => {
+    const bridge = install('<main>Long page</main>');
+    let x = 11;
+    let y = 17;
+    Object.defineProperties(bridge.window, {
+      innerWidth: { value: 320, configurable: true },
+      innerHeight: { value: 240, configurable: true },
+      pageXOffset: { get: () => x, configurable: true },
+      pageYOffset: { get: () => y, configurable: true },
+      scrollTo: {
+        value: (options: ScrollToOptions) => {
+          expect(options.behavior).toBe('instant');
+          expect(bridge.window.document.documentElement.style.scrollBehavior).toBe('auto');
+          x = options.left ?? 0;
+          y = options.top ?? 0;
+        },
+        configurable: true,
+      },
+      requestAnimationFrame: {
+        value: (callback: FrameRequestCallback) => setTimeout(callback, 0),
+        configurable: true,
+      },
+    });
+    Object.defineProperties(bridge.window.document.documentElement, {
+      scrollWidth: { value: 640, configurable: true },
+      scrollHeight: { value: 960, configurable: true },
+    });
+
+    const geometry = await dispatch(bridge, { kind: 'screenshot_full_page', annotate: false });
+    expect(geometry.result.snapshot).toBeUndefined();
+    expect(geometry.result.action?.geometry).toMatchObject({
+      viewportWidth: 320,
+      viewportHeight: 240,
+      documentWidth: 640,
+      documentHeight: 960,
+      scrollX: 11,
+      scrollY: 17,
+    });
+    await dispatch(bridge, { kind: 'screenshot_scroll', x: 0, y: 239 });
+    expect([x, y]).toEqual([0, 239]);
+    await dispatch(bridge, { kind: 'screenshot_restore', x: 11, y: 17 });
+    expect([x, y]).toEqual([11, 17]);
+    expect(bridge.window.document.documentElement.style.scrollBehavior).toBe('');
   });
 });

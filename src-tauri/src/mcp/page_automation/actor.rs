@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    future::Future,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -7,10 +8,18 @@ use std::{
     time::Duration,
 };
 
-use super::protocol::{
-    bridge_rejected, request_timeout, webview_not_ready, CompactSnapshot,
-    PageAutomationActionResult, PageAutomationBridgeRequest, PageAutomationBridgeResult,
-    PageAutomationOperation, PageAutomationSuccessResult, PageKey,
+use super::{
+    images::{
+        annotate_css_rect, crop_css_rect, decode_png, encode_capped_png,
+        stitch_vertical_tiles_at_offsets, EncodedPng,
+    },
+    protocol::{
+        bridge_rejected, invalid_argument, page_changed_during_capture, request_timeout,
+        screenshot_target_not_visible, screenshot_too_large, webview_not_ready, CompactSnapshot,
+        CssRect, PageAutomationActionResult, PageAutomationBridgeRequest,
+        PageAutomationBridgeResult, PageAutomationOperation, PageAutomationSuccessResult, PageKey,
+        PageViewportGeometry, PAGE_AUTOMATION_MAX_FULL_PAGE_TILES,
+    },
 };
 use crate::mcp::types::ToolError;
 use tokio::sync::{oneshot, watch, Mutex as AsyncMutex, OwnedMutexGuard};
@@ -210,9 +219,16 @@ impl PageAutomationState {
         let _execution = actor.execution.lock().await;
         self.ensure_actor_current(&key, &actor)?;
         let mut navigation = actor.navigation.subscribe();
-        let original_action = operation
-            .action_kind()
-            .map(|kind| PageAutomationActionResult { kind });
+        let expected_action_kind = operation.action_kind();
+        let mut action_metadata = expected_action_kind.map(|kind| PageAutomationActionResult {
+            kind,
+            input_trusted: None,
+            value: serde_json::Value::Null,
+            files: None,
+            dialogs: None,
+            configured: None,
+            geometry: None,
+        });
         let initial_progress = navigation.borrow().clone();
         let request = PageAutomationBridgeRequest {
             request_id: self.allocate_request_id()?,
@@ -242,19 +258,21 @@ impl PageAutomationState {
         if let RequestOutcome::Completed(result) = outcome {
             let success = result.success_result()?;
             if success.snapshot.navigation_epoch != request.navigation_epoch
-                || success.action.as_ref().map(|action| action.kind)
-                    != original_action.as_ref().map(|action| action.kind)
+                || success.action.as_ref().map(|action| action.kind) != expected_action_kind
             {
                 return Err(bridge_rejected());
             }
-            if original_action.is_none() && navigation.borrow().epoch == request.navigation_epoch {
+            if expected_action_kind.is_none()
+                && navigation.borrow().epoch == request.navigation_epoch
+            {
                 self.verify_snapshot_identity(&actor, &initial_progress, &success.snapshot)?;
                 return Ok(PageAutomationSuccessResult {
                     snapshot: success.snapshot,
                     action: None,
                 });
             }
-            if original_action.is_some() {
+            if expected_action_kind.is_some() {
+                action_metadata = success.action;
                 tokio::time::sleep(Duration::from_millis(
                     super::protocol::PAGE_AUTOMATION_SETTLE_DELAY_MS,
                 ))
@@ -263,7 +281,7 @@ impl PageAutomationState {
         }
 
         let allow_current_epoch =
-            original_action.is_some() && navigation.borrow().epoch == request.navigation_epoch;
+            expected_action_kind.is_some() && navigation.borrow().epoch == request.navigation_epoch;
         self.settle_snapshot_with(
             &key,
             &actor,
@@ -273,10 +291,362 @@ impl PageAutomationState {
             request.navigation_epoch,
             allow_current_epoch,
             None,
-            original_action,
+            action_metadata,
             &mut dispatch,
         )
         .await
+    }
+
+    pub async fn execute_raw_with<Dispatch>(
+        &self,
+        key: PageKey,
+        window_label: String,
+        webview_label: String,
+        operation: PageAutomationOperation,
+        mut dispatch: Dispatch,
+    ) -> Result<PageAutomationActionResult, ToolError>
+    where
+        Dispatch: FnMut(PageAutomationBridgeRequest) -> Result<(), ToolError>,
+    {
+        let actor = self.actor(&key)?;
+        let _execution = actor.execution.lock().await;
+        self.execute_raw_locked_with(
+            &key,
+            &actor,
+            &window_label,
+            &webview_label,
+            operation,
+            &mut dispatch,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn capture_element_with<Dispatch, Capture, CaptureFuture>(
+        &self,
+        key: PageKey,
+        window_label: String,
+        webview_label: String,
+        snapshot_id: String,
+        element_ref: String,
+        annotate: bool,
+        mut dispatch: Dispatch,
+        mut capture: Capture,
+    ) -> Result<EncodedPng, ToolError>
+    where
+        Dispatch: FnMut(PageAutomationBridgeRequest) -> Result<(), ToolError>,
+        Capture: FnMut() -> CaptureFuture,
+        CaptureFuture: Future<Output = Result<Vec<u8>, ToolError>>,
+    {
+        let actor = self.actor(&key)?;
+        let _execution = actor.execution.lock().await;
+        self.ensure_actor_current(&key, &actor)?;
+        let capture_epoch = actor.navigation.borrow().epoch;
+        let action = self
+            .execute_raw_locked_with(
+                &key,
+                &actor,
+                &window_label,
+                &webview_label,
+                PageAutomationOperation::ScreenshotElement {
+                    snapshot_id,
+                    element_ref,
+                    annotate,
+                },
+                &mut dispatch,
+            )
+            .await
+            .map_err(|error| self.capture_error_for_epoch(&actor, capture_epoch, error))?;
+        self.ensure_capture_epoch(&actor, capture_epoch)?;
+        let (rect, viewport) = action.screenshot_element_geometry()?;
+        if viewport.viewport_width <= 0.0
+            || viewport.viewport_height <= 0.0
+            || rect.x < 0.0
+            || rect.y < 0.0
+            || rect.x + rect.width > viewport.viewport_width
+            || rect.y + rect.height > viewport.viewport_height
+        {
+            return Err(screenshot_target_not_visible());
+        }
+        let bytes = capture()
+            .await
+            .map_err(|error| self.capture_error_for_epoch(&actor, capture_epoch, error))?;
+        self.ensure_capture_epoch(&actor, capture_epoch)?;
+        let mut image = decode_png(&bytes)?;
+        let scale = f64::from(image.width()) / viewport.viewport_width;
+        if !scale.is_finite() || scale <= 0.0 {
+            return Err(screenshot_too_large());
+        }
+        image = crop_css_rect(&image, rect, scale)?;
+        if annotate {
+            annotate_css_rect(
+                &mut image,
+                CssRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: rect.width,
+                    height: rect.height,
+                },
+                scale,
+            )?;
+        }
+        encode_capped_png(&image)
+    }
+
+    pub async fn capture_full_page_with<Dispatch, Capture, CaptureFuture>(
+        &self,
+        key: PageKey,
+        window_label: String,
+        webview_label: String,
+        annotate: bool,
+        mut dispatch: Dispatch,
+        mut capture: Capture,
+    ) -> Result<EncodedPng, ToolError>
+    where
+        Dispatch: FnMut(PageAutomationBridgeRequest) -> Result<(), ToolError>,
+        Capture: FnMut() -> CaptureFuture,
+        CaptureFuture: Future<Output = Result<Vec<u8>, ToolError>>,
+    {
+        let actor = self.actor(&key)?;
+        let _execution = actor.execution.lock().await;
+        self.ensure_actor_current(&key, &actor)?;
+        let capture_epoch = actor.navigation.borrow().epoch;
+        let geometry = self
+            .execute_raw_locked_with(
+                &key,
+                &actor,
+                &window_label,
+                &webview_label,
+                PageAutomationOperation::ScreenshotFullPage { annotate },
+                &mut dispatch,
+            )
+            .await
+            .map_err(|error| self.capture_error_for_epoch(&actor, capture_epoch, error))?
+            .screenshot_full_page_geometry()?;
+        self.ensure_capture_epoch(&actor, capture_epoch)?;
+        let original_scroll = (geometry.scroll_x, geometry.scroll_y);
+        let result = self
+            .capture_full_page_tiles_locked_with(
+                &key,
+                &actor,
+                &window_label,
+                &webview_label,
+                capture_epoch,
+                geometry,
+                &mut dispatch,
+                &mut capture,
+            )
+            .await;
+        let restore = self
+            .restore_scroll_locked_with(
+                &key,
+                &actor,
+                &window_label,
+                &webview_label,
+                original_scroll,
+                &mut dispatch,
+            )
+            .await
+            .map_err(|error| self.capture_error_for_epoch(&actor, capture_epoch, error));
+        self.ensure_capture_epoch(&actor, capture_epoch)?;
+        match result {
+            Ok(image) => {
+                restore?;
+                Ok(image)
+            }
+            Err(error) => {
+                let _ = restore;
+                Err(error)
+            }
+        }
+    }
+
+    async fn execute_raw_locked_with<Dispatch>(
+        &self,
+        key: &PageKey,
+        actor: &Arc<PageActor>,
+        window_label: &str,
+        webview_label: &str,
+        operation: PageAutomationOperation,
+        dispatch: &mut Dispatch,
+    ) -> Result<PageAutomationActionResult, ToolError>
+    where
+        Dispatch: FnMut(PageAutomationBridgeRequest) -> Result<(), ToolError>,
+    {
+        operation.validate()?;
+        let expected_action_kind = operation.raw_action_kind().ok_or_else(|| {
+            invalid_argument("The operation does not return a raw page automation result.")
+        })?;
+        self.ensure_actor_current(key, actor)?;
+        let mut navigation = actor.navigation.subscribe();
+        let initial_epoch = navigation.borrow().epoch;
+        let request = PageAutomationBridgeRequest {
+            request_id: self.allocate_request_id()?,
+            document_id: key.document_id.clone(),
+            page_node_id: key.page_node_id.clone(),
+            navigation_epoch: initial_epoch,
+            operation,
+        };
+        let (receiver, _pending) = self.register_and_dispatch(
+            key,
+            actor,
+            window_label,
+            webview_label,
+            &request,
+            dispatch,
+        )?;
+        let deadline = tokio::time::Instant::now() + self.timeout;
+        let outcome = self
+            .await_result_or_navigation(receiver, &mut navigation, initial_epoch, deadline)
+            .await?;
+        let RequestOutcome::Completed(result) = outcome else {
+            return Err(bridge_rejected());
+        };
+        if navigation.borrow().epoch != initial_epoch {
+            return Err(bridge_rejected());
+        }
+        let action = result.raw_action_result()?;
+        if action.kind != expected_action_kind {
+            return Err(bridge_rejected());
+        }
+        Ok(action)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn capture_full_page_tiles_locked_with<Dispatch, Capture, CaptureFuture>(
+        &self,
+        key: &PageKey,
+        actor: &Arc<PageActor>,
+        window_label: &str,
+        webview_label: &str,
+        capture_epoch: u64,
+        geometry: PageViewportGeometry,
+        dispatch: &mut Dispatch,
+        capture: &mut Capture,
+    ) -> Result<EncodedPng, ToolError>
+    where
+        Dispatch: FnMut(PageAutomationBridgeRequest) -> Result<(), ToolError>,
+        Capture: FnMut() -> CaptureFuture,
+        CaptureFuture: Future<Output = Result<Vec<u8>, ToolError>>,
+    {
+        let positions = full_page_tile_positions(geometry)?;
+        let mut tiles = Vec::with_capacity(positions.len());
+        let mut capture_scale: Option<f64> = None;
+        for position in positions {
+            self.ensure_capture_epoch(actor, capture_epoch)?;
+            let action = self
+                .execute_raw_locked_with(
+                    key,
+                    actor,
+                    window_label,
+                    webview_label,
+                    PageAutomationOperation::ScreenshotScroll {
+                        x: 0.0,
+                        y: position,
+                    },
+                    dispatch,
+                )
+                .await
+                .map_err(|error| self.capture_error_for_epoch(actor, capture_epoch, error))?;
+            self.ensure_capture_epoch(actor, capture_epoch)?;
+            let current = action.screenshot_full_page_geometry()?;
+            let maximum_scroll_y = (geometry.document_height - geometry.viewport_height).max(0.0);
+            let expected_scroll_y = position.min(maximum_scroll_y);
+            if current.viewport_width != geometry.viewport_width
+                || current.viewport_height != geometry.viewport_height
+                || current.document_width != geometry.document_width
+                || current.document_height != geometry.document_height
+                || current.scroll_x.abs() > 0.5
+                || (current.scroll_y - expected_scroll_y).abs() > 0.5
+            {
+                return Err(page_changed_during_capture());
+            }
+            let expected_scale = capture_scale.unwrap_or(1.0);
+            let expected_offset = css_offset_to_pixels(current.scroll_y, expected_scale)?;
+            if capture_scale.is_some()
+                && tiles
+                    .last()
+                    .is_some_and(|(_, previous_offset)| *previous_offset == expected_offset)
+            {
+                continue;
+            }
+            let bytes = capture()
+                .await
+                .map_err(|error| self.capture_error_for_epoch(actor, capture_epoch, error))?;
+            self.ensure_capture_epoch(actor, capture_epoch)?;
+            let image = decode_png(&bytes)?;
+            let scale = f64::from(image.width()) / geometry.viewport_width;
+            if !scale.is_finite() || scale <= 0.0 {
+                return Err(screenshot_too_large());
+            }
+            if let Some(previous_scale) = capture_scale {
+                if (previous_scale - scale).abs() > f64::EPSILON {
+                    return Err(screenshot_too_large());
+                }
+            } else {
+                capture_scale = Some(scale);
+            }
+            let offset = css_offset_to_pixels(current.scroll_y, scale)?;
+            if tiles
+                .last()
+                .is_some_and(|(_, previous_offset)| *previous_offset == offset)
+            {
+                continue;
+            }
+            tiles.push((image, offset));
+        }
+        let stitched = stitch_vertical_tiles_at_offsets(&tiles)?;
+        encode_capped_png(&stitched)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn restore_scroll_locked_with<Dispatch>(
+        &self,
+        key: &PageKey,
+        actor: &Arc<PageActor>,
+        window_label: &str,
+        webview_label: &str,
+        original_scroll: (f64, f64),
+        dispatch: &mut Dispatch,
+    ) -> Result<(), ToolError>
+    where
+        Dispatch: FnMut(PageAutomationBridgeRequest) -> Result<(), ToolError>,
+    {
+        let _ = self
+            .execute_raw_locked_with(
+                key,
+                actor,
+                window_label,
+                webview_label,
+                PageAutomationOperation::ScreenshotRestore {
+                    x: original_scroll.0,
+                    y: original_scroll.1,
+                },
+                dispatch,
+            )
+            .await?;
+        Ok(())
+    }
+
+    fn ensure_capture_epoch(&self, actor: &PageActor, epoch: u64) -> Result<(), ToolError> {
+        if actor.navigation.borrow().epoch == epoch {
+            Ok(())
+        } else {
+            Err(page_changed_during_capture())
+        }
+    }
+
+    fn capture_error_for_epoch(
+        &self,
+        actor: &PageActor,
+        epoch: u64,
+        error: ToolError,
+    ) -> ToolError {
+        if actor.navigation.borrow().epoch == epoch {
+            error
+        } else {
+            page_changed_during_capture()
+        }
     }
 
     pub async fn prepare_navigation_with<Dispatch>(
@@ -676,6 +1046,41 @@ fn normalize_url(url: &str) -> Result<String, String> {
         .map_err(|error| format!("invalid navigation URL: {error}"))
 }
 
+fn full_page_tile_positions(geometry: PageViewportGeometry) -> Result<Vec<f64>, ToolError> {
+    if geometry.viewport_width <= 0.0
+        || geometry.viewport_height <= 1.0
+        || geometry.document_height < geometry.viewport_height
+    {
+        return Err(bridge_rejected());
+    }
+    let maximum_scroll = (geometry.document_height - geometry.viewport_height).max(0.0);
+    let step = geometry.viewport_height - 1.0;
+    let mut positions = vec![0.0];
+    while *positions.last().expect("positions starts with zero") < maximum_scroll {
+        let next =
+            (*positions.last().expect("positions starts with zero") + step).min(maximum_scroll);
+        if next <= *positions.last().expect("positions starts with zero") {
+            return Err(bridge_rejected());
+        }
+        if positions.len() == PAGE_AUTOMATION_MAX_FULL_PAGE_TILES {
+            return Err(screenshot_too_large());
+        }
+        positions.push(next);
+    }
+    Ok(positions)
+}
+
+fn css_offset_to_pixels(offset: f64, scale: f64) -> Result<u32, ToolError> {
+    if !offset.is_finite() || offset < 0.0 || !scale.is_finite() || scale <= 0.0 {
+        return Err(bridge_rejected());
+    }
+    let pixels = (offset * scale).round();
+    if !(0.0..=f64::from(u32::MAX)).contains(&pixels) {
+        return Err(screenshot_too_large());
+    }
+    Ok(pixels as u32)
+}
+
 enum RequestOutcome {
     Completed(PageAutomationBridgeResult),
     Navigated,
@@ -684,6 +1089,7 @@ enum RequestOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::{codecs::png::PngEncoder, ColorType, ImageEncoder, Rgba, RgbaImage};
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -703,6 +1109,46 @@ mod tests {
         let mut action_result = result(request, token, url);
         action_result.result["action"] = json!({ "kind": kind });
         action_result
+    }
+
+    fn raw_action_result(
+        request: &PageAutomationBridgeRequest,
+        kind: &str,
+    ) -> PageAutomationBridgeResult {
+        serde_json::from_value(json!({
+            "requestId": request.request_id,
+            "documentId": request.document_id,
+            "pageNodeId": request.page_node_id,
+            "result": {"action": {"kind": kind, "configured": true}}
+        }))
+        .unwrap()
+    }
+
+    fn raw_geometry_result(
+        request: &PageAutomationBridgeRequest,
+        kind: &str,
+        geometry: serde_json::Value,
+    ) -> PageAutomationBridgeResult {
+        serde_json::from_value(json!({
+            "requestId": request.request_id,
+            "documentId": request.document_id,
+            "pageNodeId": request.page_node_id,
+            "result": {"action": {"kind": kind, "geometry": geometry}}
+        }))
+        .unwrap()
+    }
+
+    fn png(image: &RgbaImage) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        PngEncoder::new(&mut bytes)
+            .write_image(
+                image.as_raw(),
+                image.width(),
+                image.height(),
+                ColorType::Rgba8.into(),
+            )
+            .unwrap();
+        bytes
     }
 
     fn complete_in_thread(state: Arc<PageAutomationState>, result: PageAutomationBridgeResult) {
@@ -1280,12 +1726,14 @@ mod tests {
                 move |request| {
                     let call = dispatch_count.fetch_add(1, Ordering::SeqCst);
                     let response = if call == 0 {
-                        action_result(
+                        let mut response = action_result(
                             &request,
                             "0123456789abcdef0123456789abcdef",
                             "https://example.test",
                             "click",
-                        )
+                        );
+                        response.result["action"]["inputTrusted"] = json!(false);
+                        response
                     } else {
                         result(
                             &request,
@@ -1301,6 +1749,222 @@ mod tests {
             .unwrap();
         assert_eq!(dispatches.load(Ordering::SeqCst), 2);
         assert_eq!(success.snapshot.navigation_epoch, 0);
+        assert_eq!(success.action.unwrap().input_trusted, Some(false));
+    }
+
+    #[tokio::test]
+    async fn raw_operations_share_the_page_queue_with_semantic_actions() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        let page_key = key("page-a");
+        state.register_page(page_key.clone()).unwrap();
+        let raw_request = Arc::new(Mutex::new(None));
+        let raw_request_for_dispatch = raw_request.clone();
+        let raw_state = state.clone();
+        let raw_task = tokio::spawn(async move {
+            raw_state
+                .execute_raw_with(
+                    page_key,
+                    "document-1".into(),
+                    "page-document-1-page-a".into(),
+                    PageAutomationOperation::SetDialogHandler {
+                        action: super::super::protocol::DialogAction::Dismiss,
+                        prompt_text: None,
+                    },
+                    move |request| {
+                        *raw_request_for_dispatch.lock().unwrap() = Some(request);
+                        Ok(())
+                    },
+                )
+                .await
+        });
+        while state.pending_count() == 0 {
+            tokio::task::yield_now().await;
+        }
+
+        let semantic_dispatches = Arc::new(AtomicUsize::new(0));
+        let semantic_dispatches_for_task = semantic_dispatches.clone();
+        let semantic_state = state.clone();
+        let semantic_completion_state = semantic_state.clone();
+        let semantic_key = key("page-a");
+        let semantic_task = tokio::spawn(async move {
+            semantic_state
+                .execute_with(
+                    semantic_key,
+                    "document-1".into(),
+                    "page-document-1-page-a".into(),
+                    PageAutomationOperation::Snapshot,
+                    move |request| {
+                        semantic_dispatches_for_task.fetch_add(1, Ordering::SeqCst);
+                        complete_in_thread(
+                            semantic_completion_state.clone(),
+                            result(
+                                &request,
+                                "0123456789abcdef0123456789abcdef",
+                                "https://example.test",
+                            ),
+                        );
+                        Ok(())
+                    },
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert_eq!(semantic_dispatches.load(Ordering::SeqCst), 0);
+
+        let request = raw_request.lock().unwrap().take().unwrap();
+        state
+            .complete(
+                "document-1",
+                "page-document-1-page-a",
+                raw_action_result(&request, "set_dialog_handler"),
+            )
+            .unwrap();
+        assert!(raw_task.await.unwrap().is_ok());
+        assert!(semantic_task.await.unwrap().is_ok());
+        assert_eq!(semantic_dispatches.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn raw_operations_do_not_block_different_pages() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        state.register_page(key("page-a")).unwrap();
+        state.register_page(key("page-b")).unwrap();
+        let raw_state = state.clone();
+        let raw_task = tokio::spawn(async move {
+            raw_state
+                .execute_raw_with(
+                    key("page-a"),
+                    "document-1".into(),
+                    "page-document-1-page-a".into(),
+                    PageAutomationOperation::SetDialogHandler {
+                        action: super::super::protocol::DialogAction::Dismiss,
+                        prompt_text: None,
+                    },
+                    |_| Ok(()),
+                )
+                .await
+        });
+        while state.pending_count() == 0 {
+            tokio::task::yield_now().await;
+        }
+
+        let other_state = state.clone();
+        let other = state
+            .execute_with(
+                key("page-b"),
+                "document-1".into(),
+                "page-document-1-page-b".into(),
+                PageAutomationOperation::Snapshot,
+                move |request| {
+                    let state = other_state.clone();
+                    std::thread::spawn(move || {
+                        state
+                            .complete(
+                                "document-1",
+                                "page-document-1-page-b",
+                                result(
+                                    &request,
+                                    "fedcba9876543210fedcba9876543210",
+                                    "https://example.test",
+                                ),
+                            )
+                            .unwrap();
+                    });
+                    Ok(())
+                },
+            )
+            .await;
+        assert!(other.is_ok());
+        raw_task.abort();
+        let _ = raw_task.await;
+        assert_eq!(state.pending_count(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn raw_operation_timeout_cleans_pending_state() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        state.register_page(key("page-a")).unwrap();
+        let timeout_state = state.clone();
+        let timed_out = tokio::spawn(async move {
+            timeout_state
+                .execute_raw_with(
+                    key("page-a"),
+                    "document-1".into(),
+                    "page-document-1-page-a".into(),
+                    PageAutomationOperation::SetDialogHandler {
+                        action: super::super::protocol::DialogAction::Dismiss,
+                        prompt_text: None,
+                    },
+                    |_| Ok(()),
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert_eq!(state.pending_count(), 1);
+        tokio::time::advance(Duration::from_secs(1)).await;
+        assert_eq!(
+            timed_out.await.unwrap().unwrap_err().code,
+            "request_timeout"
+        );
+        assert_eq!(state.pending_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn raw_operations_fail_when_the_navigation_epoch_changes() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        let page_key = key("page-a");
+        state.register_page(page_key.clone()).unwrap();
+        let dispatch_state = state.clone();
+        let dispatch_key = page_key.clone();
+        let outcome = state
+            .execute_raw_with(
+                page_key,
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                PageAutomationOperation::SetDialogHandler {
+                    action: super::super::protocol::DialogAction::Dismiss,
+                    prompt_text: None,
+                },
+                move |_| {
+                    let state = dispatch_state.clone();
+                    let key = dispatch_key.clone();
+                    std::thread::spawn(move || {
+                        state
+                            .note_spa_navigation(&key, "https://example.test/new".into())
+                            .unwrap();
+                    });
+                    Ok(())
+                },
+            )
+            .await;
+        assert_eq!(outcome.unwrap_err().code, "bridge_rejected");
+        assert_eq!(state.pending_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn raw_operations_reject_an_unexpected_action_kind() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        state.register_page(key("page-a")).unwrap();
+        let dispatch_state = state.clone();
+        let outcome = state
+            .execute_raw_with(
+                key("page-a"),
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                PageAutomationOperation::SetDialogHandler {
+                    action: super::super::protocol::DialogAction::Dismiss,
+                    prompt_text: None,
+                },
+                move |request| {
+                    complete_in_thread(
+                        dispatch_state.clone(),
+                        raw_action_result(&request, "click"),
+                    );
+                    Ok(())
+                },
+            )
+            .await;
+        assert_eq!(outcome.unwrap_err().code, "bridge_rejected");
     }
 
     #[tokio::test]
@@ -1362,6 +2026,214 @@ mod tests {
         assert_eq!(dispatches.load(Ordering::SeqCst), 2);
         assert_eq!(success.snapshot.navigation_epoch, 2);
         assert_eq!(success.snapshot.url, "https://example.test/new");
+    }
+
+    #[tokio::test]
+    async fn element_capture_crops_at_the_native_scale_without_a_second_queue() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        let page_key = key("page-a");
+        state.register_page(page_key.clone()).unwrap();
+        let dispatch_state = state.clone();
+        let mut source = RgbaImage::new(8, 8);
+        for (x, y, pixel) in source.enumerate_pixels_mut() {
+            *pixel = Rgba([x as u8, y as u8, 0, 255]);
+        }
+        let source = png(&source);
+
+        let captured = state
+            .capture_element_with(
+                page_key,
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                "s0-1".into(),
+                "e1".into(),
+                false,
+                move |request| {
+                    complete_in_thread(
+                        dispatch_state.clone(),
+                        raw_geometry_result(
+                            &request,
+                            "screenshot_element",
+                            json!({
+                                "element": {"x": 1.0, "y": 1.0, "width": 2.0, "height": 2.0},
+                                "viewport": {
+                                    "viewportWidth": 4.0, "viewportHeight": 4.0,
+                                    "documentWidth": 4.0, "documentHeight": 4.0,
+                                    "scrollX": 0.0, "scrollY": 0.0
+                                }
+                            }),
+                        ),
+                    );
+                    Ok(())
+                },
+                move || std::future::ready(Ok(source.clone())),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!((captured.width, captured.height), (4, 4));
+        let cropped = decode_png(&captured.bytes).unwrap();
+        assert_eq!(cropped.get_pixel(0, 0), &Rgba([2, 2, 0, 255]));
+        assert_eq!(cropped.get_pixel(3, 3), &Rgba([5, 5, 0, 255]));
+    }
+
+    #[tokio::test]
+    async fn full_page_capture_stitches_actual_offsets_and_restores_scroll() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        let page_key = key("page-a");
+        state.register_page(page_key.clone()).unwrap();
+        let dispatch_state = state.clone();
+        let restore_count = Arc::new(AtomicUsize::new(0));
+        let restore_count_for_dispatch = restore_count.clone();
+        let tiles = Arc::new(Mutex::new(vec![
+            png(&RgbaImage::from_pixel(4, 5, Rgba([255, 0, 0, 255]))),
+            png(&RgbaImage::from_pixel(4, 5, Rgba([0, 255, 0, 255]))),
+            png(&RgbaImage::from_pixel(4, 5, Rgba([0, 0, 255, 255]))),
+        ]));
+        let tiles_for_capture = tiles.clone();
+
+        let captured = state
+            .capture_full_page_with(
+                page_key,
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                false,
+                move |request| {
+                    let (kind, geometry) = match request.operation {
+                        PageAutomationOperation::ScreenshotFullPage { .. } => (
+                            "screenshot_full_page",
+                            json!({
+                                "viewportWidth": 4.0, "viewportHeight": 5.0,
+                                "documentWidth": 4.0, "documentHeight": 12.0,
+                                "scrollX": 0.0, "scrollY": 3.0
+                            }),
+                        ),
+                        PageAutomationOperation::ScreenshotScroll { y, .. } => (
+                            "screenshot_scroll",
+                            json!({
+                                "viewportWidth": 4.0, "viewportHeight": 5.0,
+                                "documentWidth": 4.0, "documentHeight": 12.0,
+                                "scrollX": 0.0, "scrollY": y
+                            }),
+                        ),
+                        PageAutomationOperation::ScreenshotRestore { x, y } => {
+                            restore_count_for_dispatch.fetch_add(1, Ordering::SeqCst);
+                            assert_eq!((x, y), (0.0, 3.0));
+                            (
+                                "screenshot_restore",
+                                json!({
+                                    "viewportWidth": 4.0, "viewportHeight": 5.0,
+                                    "documentWidth": 4.0, "documentHeight": 12.0,
+                                    "scrollX": x, "scrollY": y
+                                }),
+                            )
+                        }
+                        _ => panic!("unexpected operation"),
+                    };
+                    complete_in_thread(
+                        dispatch_state.clone(),
+                        raw_geometry_result(&request, kind, geometry),
+                    );
+                    Ok(())
+                },
+                move || {
+                    let bytes = tiles_for_capture.lock().unwrap().remove(0);
+                    std::future::ready(Ok(bytes))
+                },
+            )
+            .await
+            .unwrap();
+
+        let stitched = decode_png(&captured.bytes).unwrap();
+        assert_eq!(stitched.dimensions(), (4, 12));
+        assert_eq!(stitched.get_pixel(0, 3), &Rgba([255, 0, 0, 255]));
+        assert_eq!(stitched.get_pixel(0, 4), &Rgba([0, 255, 0, 255]));
+        assert_eq!(stitched.get_pixel(0, 7), &Rgba([0, 0, 255, 255]));
+        assert_eq!(restore_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn full_page_capture_attempts_restore_after_navigation_or_capture_failure() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        let page_key = key("page-a");
+        state.register_page(page_key.clone()).unwrap();
+        let dispatch_state = state.clone();
+        let dispatch_key = page_key.clone();
+        let restores = Arc::new(AtomicUsize::new(0));
+        let restores_for_dispatch = restores.clone();
+
+        let error = state
+            .capture_full_page_with(
+                page_key,
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                false,
+                move |request| {
+                    match request.operation {
+                        PageAutomationOperation::ScreenshotFullPage { .. } => complete_in_thread(
+                            dispatch_state.clone(),
+                            raw_geometry_result(
+                                &request,
+                                "screenshot_full_page",
+                                json!({
+                                    "viewportWidth": 4.0, "viewportHeight": 5.0,
+                                    "documentWidth": 4.0, "documentHeight": 12.0,
+                                    "scrollX": 0.0, "scrollY": 2.0
+                                }),
+                            ),
+                        ),
+                        PageAutomationOperation::ScreenshotScroll { .. } => {
+                            let state = dispatch_state.clone();
+                            let key = dispatch_key.clone();
+                            std::thread::spawn(move || {
+                                state
+                                    .note_spa_navigation(
+                                        &key,
+                                        "https://example.test/changed".into(),
+                                    )
+                                    .unwrap();
+                            });
+                        }
+                        PageAutomationOperation::ScreenshotRestore { x, y } => {
+                            restores_for_dispatch.fetch_add(1, Ordering::SeqCst);
+                            complete_in_thread(
+                                dispatch_state.clone(),
+                                raw_geometry_result(
+                                    &request,
+                                    "screenshot_restore",
+                                    json!({
+                                        "viewportWidth": 4.0, "viewportHeight": 5.0,
+                                        "documentWidth": 4.0, "documentHeight": 12.0,
+                                        "scrollX": x, "scrollY": y
+                                    }),
+                                ),
+                            );
+                        }
+                        _ => panic!("unexpected operation"),
+                    }
+                    Ok(())
+                },
+                || std::future::ready(Err(screenshot_too_large())),
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, "page_changed_during_capture");
+        assert_eq!(restores.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn full_page_tile_limit_counts_unique_positions() {
+        let error = full_page_tile_positions(PageViewportGeometry {
+            viewport_width: 100.0,
+            viewport_height: 10.0,
+            document_width: 100.0,
+            document_height: 586.0,
+            scroll_x: 0.0,
+            scroll_y: 0.0,
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "screenshot_too_large");
     }
 
     #[tokio::test]

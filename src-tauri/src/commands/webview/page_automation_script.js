@@ -4,6 +4,8 @@
   const CHANNEL = 'sheltie-mcp-page-automation-v1';
   const FRAME_RESPONSE_TIMEOUT_MS = 750;
   const SETTLE_DELAY_MS = 250;
+  const EVALUATE_TIMEOUT_MS = 10000;
+  const HIGHLIGHT_FADE_MS = 180;
   const WAIT_POLL_MS = 50;
   const MAX_ELEMENTS = 200;
   const MAX_CHARS = 20_000;
@@ -18,6 +20,8 @@
     nextFrameId: 1,
     nextFrameRequestSequence: 1,
     pendingFrameRequests: new Map(),
+    dialogPolicy: { action: 'dismiss', promptText: null },
+    dialogs: [],
   };
 
   function createDocumentToken() {
@@ -29,6 +33,39 @@
   function complete(result) {
     if (!isTopFrame) return;
     return window.__TAURI__.core.invoke('complete_page_automation_request', { result });
+  }
+
+  function installDialogShim() {
+    function consumePolicy() {
+      const policy = state.dialogPolicy;
+      state.dialogPolicy = { action: 'dismiss', promptText: null };
+      return policy;
+    }
+    window.alert = function (message) {
+      state.dialogs.push({ type: 'alert', message: String(message) });
+      consumePolicy();
+    };
+    window.confirm = function (message) {
+      state.dialogs.push({ type: 'confirm', message: String(message) });
+      return consumePolicy().action === 'accept';
+    };
+    window.prompt = function (message, defaultValue) {
+      const dialog = { type: 'prompt', message: String(message) };
+      if (defaultValue !== undefined) dialog.defaultValue = String(defaultValue);
+      state.dialogs.push(dialog);
+      const policy = consumePolicy();
+      return policy.action === 'accept'
+        ? policy.promptText === null
+          ? String(defaultValue || '')
+          : policy.promptText
+        : null;
+    };
+  }
+
+  function takeDialogs() {
+    const dialogs = state.dialogs;
+    state.dialogs = [];
+    return dialogs;
   }
 
   function normalizeText(value) {
@@ -278,9 +315,222 @@
     return null;
   }
 
-  function runLocalOperation(operation, options) {
+  function cssRectFromElement(element) {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  }
+
+  function showHighlight(rect, target) {
+    const overlay = document.createElement('div');
+    overlay.setAttribute('data-sheltie-mcp-highlight', '');
+    overlay.style.cssText = [
+      'position:fixed',
+      'z-index:2147483647',
+      'pointer-events:none',
+      'box-sizing:border-box',
+      'border:2px solid #6366f1',
+      'background:rgba(99,102,241,.14)',
+      'border-radius:4px',
+      'transition:opacity 180ms ease-out',
+    ].join(';');
+    const update = () => {
+      const current = target ? cssRectFromElement(target) : rect;
+      overlay.style.left = `${current.x}px`;
+      overlay.style.top = `${current.y}px`;
+      overlay.style.width = `${Math.max(1, current.width)}px`;
+      overlay.style.height = `${Math.max(1, current.height)}px`;
+    };
+    let animationFrame = null;
+    const scheduleUpdate = () => {
+      if (animationFrame !== null) return;
+      animationFrame = requestAnimationFrame(() => {
+        animationFrame = null;
+        update();
+      });
+    };
+    update();
+    document.documentElement.appendChild(overlay);
+    window.addEventListener('scroll', scheduleUpdate, { capture: true, passive: true });
+    window.addEventListener('resize', scheduleUpdate, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', scheduleUpdate, true);
+      window.removeEventListener('resize', scheduleUpdate);
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+      overlay.style.opacity = '0';
+      setTimeout(() => overlay.remove(), HIGHLIGHT_FADE_MS);
+    };
+  }
+
+  function pointerButton(button) {
+    return button === 'middle' ? 1 : button === 'right' ? 2 : 0;
+  }
+
+  function dispatchCoordinateClick(operation) {
+    if (operation.snapshotId !== state.currentSnapshotId) return { failure: staleElement() };
+    const target = document.elementFromPoint(operation.x, operation.y);
+    if (!target) {
+      return {
+        failure: error(
+          'element_not_found',
+          'No page element exists at the requested CSS viewport coordinates.',
+        ),
+      };
+    }
+    const rect = operation.highlight || { x: operation.x, y: operation.y, width: 1, height: 1 };
+    const cleanupHighlight = showHighlight(rect, target);
+    const button = pointerButton(operation.button);
+    const pointerEvents = typeof PointerEvent === 'function';
+    for (let click = 0; click < operation.clickCount; click += 1) {
+      for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+        const init = {
+          bubbles: true,
+          cancelable: true,
+          clientX: operation.x,
+          clientY: operation.y,
+          button,
+          buttons: type.endsWith('down') ? 1 << button : 0,
+          detail: click + 1,
+        };
+        const EventConstructor =
+          type.startsWith('pointer') && pointerEvents ? PointerEvent : MouseEvent;
+        target.dispatchEvent(new EventConstructor(type, init));
+      }
+    }
+    return { ok: true, action: { inputTrusted: false }, cleanupHighlight };
+  }
+
+  async function evaluateForMcp(source) {
+    let timeoutId;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('evaluate_timeout')), EVALUATE_TIMEOUT_MS);
+    });
+    try {
+      const value = await Promise.race([Promise.resolve((0, eval)(source)), timeout]);
+      let json;
+      try {
+        json = JSON.stringify(value);
+      } catch (_) {
+        throw new Error('evaluate_not_json');
+      }
+      if (json === undefined) throw new Error('evaluate_not_json');
+      return JSON.parse(json);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  function sanitizeBasename(name) {
+    const value =
+      String(name || '')
+        .split(/[\\/]/)
+        .filter(Boolean)
+        .pop() || 'upload';
+    return value.replace(/[\u0000-\u001f]/g, '_');
+  }
+
+  function decodeBase64(value) {
+    const decoded = atob(value);
+    return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+  }
+
+  function uploadFiles(element, files) {
+    if (!(element instanceof HTMLInputElement) || element.type.toLowerCase() !== 'file') {
+      return {
+        failure: error(
+          'upload_target_not_file_input',
+          'The referenced element is not a current file input.',
+        ),
+      };
+    }
+    try {
+      const transfer = new DataTransfer();
+      const metadata = [];
+      for (const file of files) {
+        const name = sanitizeBasename(file.name);
+        const bytes = decodeBase64(file.bytesBase64);
+        transfer.items.add(
+          new File([bytes], name, { type: file.mimeType || 'application/octet-stream' }),
+        );
+        metadata.push({ name, size: bytes.byteLength });
+      }
+      element.files = transfer.files;
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      return { ok: true, action: { inputTrusted: false, files: metadata } };
+    } catch (_) {
+      return {
+        failure: error(
+          'upload_file_invalid',
+          'The upload files could not be assigned to the page.',
+        ),
+      };
+    }
+  }
+
+  function fullPageGeometry() {
+    const root = document.documentElement;
+    const body = document.body;
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      documentWidth: Math.max(root.scrollWidth, body ? body.scrollWidth : 0, window.innerWidth),
+      documentHeight: Math.max(root.scrollHeight, body ? body.scrollHeight : 0, window.innerHeight),
+      scrollX: window.pageXOffset,
+      scrollY: window.pageYOffset,
+    };
+  }
+
+  function afterTwoAnimationFrames() {
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
+  async function runLocalOperation(operation, options) {
     const allowSnapshot = options && options.allowSnapshot;
     if (operation.kind === 'snapshot' && allowSnapshot) return { ok: true };
+    if (operation.kind === 'set_dialog_handler') {
+      state.dialogPolicy = {
+        action: operation.action === 'accept' ? 'accept' : 'dismiss',
+        promptText: operation.promptText === undefined ? null : String(operation.promptText),
+      };
+      return { ok: true, action: { configured: true } };
+    }
+    if (operation.kind === 'click_coordinates') return dispatchCoordinateClick(operation);
+    if (operation.kind === 'evaluate') {
+      try {
+        return { ok: true, action: { value: await evaluateForMcp(operation.script) } };
+      } catch (cause) {
+        const code =
+          cause && cause.message === 'evaluate_timeout' ? 'evaluate_timeout' : 'evaluate_not_json';
+        return {
+          failure: error(
+            code,
+            code === 'evaluate_timeout'
+              ? 'Page evaluation did not finish before the timeout.'
+              : 'The evaluated value is not JSON serializable.',
+          ),
+        };
+      }
+    }
+    if (operation.kind === 'screenshot_full_page') {
+      return { ok: true, action: { geometry: fullPageGeometry() } };
+    }
+    if (operation.kind === 'screenshot_scroll' || operation.kind === 'screenshot_restore') {
+      const root = document.documentElement;
+      const previousBehavior = root.style.getPropertyValue('scroll-behavior');
+      const previousPriority = root.style.getPropertyPriority('scroll-behavior');
+      root.style.setProperty('scroll-behavior', 'auto', 'important');
+      try {
+        window.scrollTo({ left: operation.x, top: operation.y, behavior: 'instant' });
+        await afterTwoAnimationFrames();
+      } finally {
+        if (previousBehavior) {
+          root.style.setProperty('scroll-behavior', previousBehavior, previousPriority);
+        } else {
+          root.style.removeProperty('scroll-behavior');
+        }
+      }
+      return { ok: true, action: { geometry: fullPageGeometry() } };
+    }
     if (operation.kind === 'press_key') {
       const target = document.activeElement || document.body;
       for (const type of ['keydown', 'keypress', 'keyup']) {
@@ -357,23 +607,75 @@
         elements.push([record.element, field.text]);
       }
       for (const [element, text] of elements) fillElement(element, text);
-      return { ok: true };
+      const highlighted = elements[elements.length - 1][0];
+      return {
+        ok: true,
+        cleanupHighlight: showHighlight(cssRectFromElement(highlighted), highlighted),
+      };
+    }
+    if (
+      !['click', 'hover', 'fill', 'select_option', 'screenshot_element', 'upload_files'].includes(
+        operation.kind,
+      )
+    ) {
+      return {
+        failure: error('invalid_argument', 'The operation is not supported by the page bridge.'),
+      };
     }
     const resolved = resolveElement(operation);
-    if (resolved.failure || resolved.frame) return resolved;
+    if (resolved.failure) return resolved;
+    if (operation.kind === 'screenshot_element' && resolved.frame) {
+      return {
+        failure: error(
+          'invalid_argument',
+          'Element screenshots do not support descendant frame references.',
+        ),
+      };
+    }
+    if (resolved.frame) return resolved;
     const element = resolved.element;
+    if (operation.kind === 'screenshot_element') {
+      const rect = cssRectFromElement(element);
+      if (
+        rect.x < 0 ||
+        rect.y < 0 ||
+        rect.x + rect.width > window.innerWidth ||
+        rect.y + rect.height > window.innerHeight
+      ) {
+        return {
+          failure: error(
+            'screenshot_target_not_visible',
+            'The requested screenshot target is not fully visible in the native WebPage.',
+          ),
+        };
+      }
+      return { ok: true, action: { geometry: { element: rect, viewport: fullPageGeometry() } } };
+    }
+    if (operation.kind === 'upload_files') {
+      const result = uploadFiles(element, operation.files);
+      return result.failure
+        ? result
+        : { ...result, cleanupHighlight: showHighlight(cssRectFromElement(element), element) };
+    }
     if (operation.kind === 'click') {
+      const cleanupHighlight = showHighlight(cssRectFromElement(element), element);
       element.focus();
       element.click();
-      return { ok: true };
+      return { ok: true, cleanupHighlight };
     }
     if (operation.kind === 'hover') {
+      const cleanupHighlight = showHighlight(cssRectFromElement(element), element);
       for (const type of ['pointerover', 'mouseover', 'mousemove']) {
         element.dispatchEvent(new MouseEvent(type, { bubbles: true }));
       }
-      return { ok: true };
+      return { ok: true, cleanupHighlight };
     }
-    if (operation.kind === 'fill') return { failure: fillElement(element, operation.text) };
+    if (operation.kind === 'fill') {
+      const failure = fillElement(element, operation.text);
+      return failure
+        ? { failure }
+        : { ok: true, cleanupHighlight: showHighlight(cssRectFromElement(element), element) };
+    }
     if (operation.kind === 'select_option') {
       if (!(element instanceof HTMLSelectElement)) {
         return {
@@ -390,7 +692,10 @@
         option.selected = matching.includes(option) && (element.multiple || option === matching[0]);
       element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
-      return { ok: true };
+      return {
+        ok: true,
+        cleanupHighlight: showHighlight(cssRectFromElement(element), element),
+      };
     }
     return {
       failure: error('invalid_argument', 'The operation is not supported by the page bridge.'),
@@ -541,7 +846,9 @@
   }
 
   async function dispatchTopFrame(request) {
-    const frameWideAction = ['press_key', 'scroll', 'wait'].includes(request.operation.kind)
+    const frameWideAction = ['press_key', 'scroll', 'wait', 'set_dialog_handler'].includes(
+      request.operation.kind,
+    )
       ? requestFrames(
           request,
           undefined,
@@ -550,14 +857,19 @@
             : FRAME_RESPONSE_TIMEOUT_MS,
         )
       : null;
-    let operationResult = runLocalOperation(request.operation, { allowSnapshot: true });
+    let operationResult = await runLocalOperation(request.operation, { allowSnapshot: true });
     if (request.operation.kind === 'wait')
       operationResult = await waitForCondition(request.operation);
+    const childDialogs = [];
     if (frameWideAction) {
       const childResponses = await frameWideAction;
       const childSucceeded = childResponses.some(
         (response) => !response.unavailable && response.result && response.result.ok,
       );
+      for (const response of childResponses) {
+        const dialogs = response.result && response.result.action && response.result.action.dialogs;
+        if (Array.isArray(dialogs)) childDialogs.push(...dialogs);
+      }
       if (operationResult.failure && childSucceeded) operationResult = { ok: true };
     }
     if (operationResult.failure) return complete(bridgeResult(request, operationResult.failure));
@@ -585,15 +897,42 @@
       if (response.result && response.result.error) {
         return complete(bridgeResult(request, { error: response.result.error }));
       }
+      if (response.result && response.result.action) {
+        operationResult.action = { ...operationResult.action, ...response.result.action };
+      }
+    }
+    const rawResultKinds = [
+      'set_dialog_handler',
+      'screenshot_element',
+      'screenshot_full_page',
+      'screenshot_scroll',
+      'screenshot_restore',
+    ];
+    if (rawResultKinds.includes(request.operation.kind)) {
+      return complete(
+        bridgeResult(request, {
+          action: { kind: request.operation.kind, ...operationResult.action },
+        }),
+      );
     }
     if (request.operation.kind !== 'snapshot')
       await new Promise((resolve) => setTimeout(resolve, SETTLE_DELAY_MS));
     const frameResponses = await requestFrames({ ...request, operation: { kind: 'snapshot' } });
     const snapshot = createTopSnapshot(request, frameResponses);
+    const dialogs =
+      request.operation.kind === 'set_dialog_handler' ? [] : [...takeDialogs(), ...childDialogs];
     const result =
       request.operation.kind === 'snapshot'
         ? { snapshot }
-        : { action: { kind: request.operation.kind }, snapshot };
+        : {
+            action: {
+              kind: request.operation.kind,
+              ...operationResult.action,
+              ...(dialogs.length ? { dialogs } : {}),
+            },
+            snapshot,
+          };
+    if (operationResult.cleanupHighlight) operationResult.cleanupHighlight();
     return complete(bridgeResult(request, result));
   }
 
@@ -656,14 +995,22 @@
       }
 
       const operation = { ...data.operation, snapshotId: state.currentSnapshotId };
-      let result = runLocalOperation(operation, { allowSnapshot: false });
+      let result = await runLocalOperation(operation, { allowSnapshot: false });
       if (operation.kind === 'wait') result = await waitForCondition(operation);
+      const dialogs = data.operation.kind === 'set_dialog_handler' ? [] : takeDialogs();
+      if (result.cleanupHighlight) setTimeout(result.cleanupHighlight, SETTLE_DELAY_MS);
       event.source.postMessage(
         {
           channel: CHANNEL,
           type: 'frame-response',
           requestId: data.requestId,
-          result: result.failure ? { error: result.failure.error } : { ok: true },
+          result: result.failure
+            ? { error: result.failure.error }
+            : {
+                ok: true,
+                ...(result.action ? { action: result.action } : {}),
+                ...(dialogs.length ? { action: { ...result.action, dialogs } } : {}),
+              },
         },
         '*',
       );
@@ -684,6 +1031,7 @@
   }
 
   installNavigationInvalidation();
+  installDialogShim();
   if (isTopFrame) installTopFrameMessaging();
   else installChildFrameMessaging();
 

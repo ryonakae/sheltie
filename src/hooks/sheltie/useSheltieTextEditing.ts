@@ -16,6 +16,7 @@ interface TextNodeStyle {
 interface UseSheltieTextEditingParams {
   nodes: BoardNode[];
   selectedNodeIds: string[];
+  consumeMcpFocusSelection: (selectedNodeIds: string[]) => boolean;
   autoEditTextNodeId: string | null;
   onAutoEditTextNodeHandled?: () => void;
   autoEditStickyNoteId: string | null;
@@ -36,6 +37,7 @@ interface UseSheltieTextEditingParams {
 export function useSheltieTextEditing({
   nodes,
   selectedNodeIds,
+  consumeMcpFocusSelection,
   autoEditTextNodeId,
   onAutoEditTextNodeHandled,
   autoEditStickyNoteId,
@@ -83,6 +85,7 @@ export function useSheltieTextEditing({
   useEffect(() => {
     const previous = previousSelectedNodeIdsRef.current;
     previousSelectedNodeIdsRef.current = selectedNodeIds;
+    if (consumeMcpFocusSelection(selectedNodeIds)) return;
 
     const currentSet = new Set(selectedNodeIds);
     const deselected = previous.filter((id) => !currentSet.has(id));
@@ -100,7 +103,14 @@ export function useSheltieTextEditing({
     } else {
       removeNodes(emptyTextNodeIds);
     }
-  }, [editingTextNodeId, nodes, removeNode, removeNodes, selectedNodeIds]);
+  }, [
+    consumeMcpFocusSelection,
+    editingTextNodeId,
+    nodes,
+    removeNode,
+    removeNodes,
+    selectedNodeIds,
+  ]);
 
   const handleTextNodeAutoHeightChange = useCallback(
     (nodeId: string, height: number) => {

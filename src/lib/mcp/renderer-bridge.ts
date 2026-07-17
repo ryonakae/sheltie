@@ -1,3 +1,4 @@
+import { focusNodes, getEditorState } from '@/lib/mcp/editor-adapter';
 import type {
   McpToolError,
   RendererCommandHandlers,
@@ -38,6 +39,30 @@ export function registerMcpRendererCommandHandlers(handlers: RendererCommandHand
     if (currentRegistration?.token === token) {
       currentRegistration = null;
     }
+  };
+}
+
+function parseFocusNodeIds(params: unknown): string[] {
+  if (
+    typeof params !== 'object' ||
+    params === null ||
+    !('nodeIds' in params) ||
+    !Array.isArray(params.nodeIds) ||
+    params.nodeIds.some((nodeId) => typeof nodeId !== 'string' || nodeId.length === 0)
+  ) {
+    throw {
+      code: 'validation_failed',
+      message: 'focusNodes requires nodeIds to be an array of non-empty strings',
+    };
+  }
+
+  return params.nodeIds;
+}
+
+export function createBuiltInRendererCommandHandlers(): RendererCommandHandlers {
+  return {
+    getEditorState: () => getEditorState(),
+    focusNodes: (params) => focusNodes(parseFocusNodeIds(params)),
   };
 }
 
@@ -88,9 +113,10 @@ async function handleRendererRequest(request: RendererRequest): Promise<void> {
 export async function setupMcpRendererBridge(
   initialHandlers?: RendererCommandHandlers,
 ): Promise<() => void> {
-  const unregister = initialHandlers
-    ? registerMcpRendererCommandHandlers(initialHandlers)
-    : () => undefined;
+  const unregister = registerMcpRendererCommandHandlers({
+    ...createBuiltInRendererCommandHandlers(),
+    ...initialHandlers,
+  });
   const unlisten = await onMcpRendererRequest((request) => {
     void handleRendererRequest(request);
   });

@@ -48,6 +48,7 @@ export function ProjectScreen() {
   const updateViewport = useProjectStore((s) => s.updateViewport);
   const viewport = project?.viewport;
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const selectedNodeIdsRef = useRef<string[]>([]);
   const [centeredNodeId, setCenteredNodeId] = useState<string | null>(null);
   const [autoEditTextNodeId, setAutoEditTextNodeId] = useState<string | null>(null);
   const [autoEditStickyNoteId, setAutoEditStickyNoteId] = useState<string | null>(null);
@@ -55,8 +56,19 @@ export function ProjectScreen() {
   const prefersReducedMotion = useReducedMotion();
 
   const setSelection = useCallback((idsOrUpdater: string[] | ((prev: string[]) => string[])) => {
-    setSelectedNodeIds(idsOrUpdater);
+    if (typeof idsOrUpdater !== 'function') {
+      selectedNodeIdsRef.current = idsOrUpdater;
+      setSelectedNodeIds(idsOrUpdater);
+      return;
+    }
+
+    setSelectedNodeIds((previous) => {
+      const next = idsOrUpdater(previous);
+      selectedNodeIdsRef.current = next;
+      return next;
+    });
   }, []);
+  const getSelectedNodeIds = useCallback(() => [...selectedNodeIdsRef.current], []);
 
   const handleCenteredNode = useCallback((nodeId: string) => {
     setCenteredNodeId(nodeId);
@@ -238,14 +250,15 @@ export function ProjectScreen() {
     const filtered = selectedNodeIds.filter((id) => liveIds.has(id));
     if (filtered.length !== selectedNodeIds.length) {
       // effect 内での直接 setState を避けるため非同期で実行
-      queueMicrotask(() => setSelectedNodeIds(filtered));
+      queueMicrotask(() => setSelection(filtered));
     }
-  }, [selectedNodeIds, project?.nodes]);
+  }, [selectedNodeIds, project?.nodes, setSelection]);
 
   return (
     <div className="relative flex flex-1 overflow-hidden">
       <Sheltie
         selectedNodeIds={selectedNodeIds}
+        getSelectedNodeIds={getSelectedNodeIds}
         setSelection={setSelection}
         centeredNodeId={centeredNodeId}
         onCenteredNodeHandled={handleCenteredNodeHandled}

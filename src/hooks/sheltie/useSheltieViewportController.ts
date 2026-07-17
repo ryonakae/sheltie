@@ -32,6 +32,10 @@ interface UseSheltieViewportControllerParams {
   /** store の viewport（panX/panY/zoom）。project 切り替え・centering・復元の同期元 */
   storeViewport: FlowViewport;
   updateViewport: (viewport: Partial<Viewport>) => void;
+  getSelectedNodeIds: () => string[];
+  setSelection: (nodeIds: string[]) => void;
+  clearEdgeSelection: () => void;
+  prepareMcpFocusSelection: (nodeIds: string[]) => void;
   // useSheltieDisplayEngine と連携する操作種別ハンドラ
   cancelZoomRestore: () => void;
   scheduleZoomRestoreAfterReflow: () => void;
@@ -53,6 +57,10 @@ export function useSheltieViewportController({
   nodes,
   storeViewport,
   updateViewport,
+  getSelectedNodeIds,
+  setSelection,
+  clearEdgeSelection,
+  prepareMcpFocusSelection,
   cancelZoomRestore,
   scheduleZoomRestoreAfterReflow,
   prepareInteractionStart,
@@ -191,9 +199,9 @@ export function useSheltieViewportController({
   );
 
   const applyViewportTarget = useCallback(
-    (target: SheltieViewportTarget) => {
+    (target: SheltieViewportTarget): boolean => {
       const instance = reactFlowInstanceRef.current;
-      if (!instance) return;
+      if (!instance) return false;
 
       const currentViewport = flowViewportRef.current;
       const zoomChanged =
@@ -204,7 +212,7 @@ export function useSheltieViewportController({
       if (zoomRestoreTimerRef.current) clearTimeout(zoomRestoreTimerRef.current);
       instance.setViewport(target, { duration: animationDurationMs });
 
-      if (!zoomChanged) return;
+      if (!zoomChanged) return true;
       zoomRestoreTimerRef.current = setTimeout(
         () => {
           zoomRestoreTimerRef.current = null;
@@ -212,8 +220,71 @@ export function useSheltieViewportController({
         },
         prefersReducedMotion ? 0 : animationDurationMs + 20,
       );
+      return true;
     },
     [cancelZoomRestore, prefersReducedMotion, scheduleZoomRestoreAfterReflow],
+  );
+
+  const getViewport = useCallback((): Viewport => {
+    const viewport = flowViewportRef.current ?? storeViewport;
+    return { zoom: viewport.zoom, panX: viewport.x, panY: viewport.y };
+  }, [storeViewport]);
+
+  const focusNodes = useCallback(
+    (nodeIds: string[]): { focusedNodeIds: string[] } => {
+      const requestedIds = Array.from(new Set(nodeIds));
+      const nodeById = new Map(nodes.map((node) => [node.id, node]));
+      const focusedNodes = requestedIds.flatMap((nodeId) => {
+        const node = nodeById.get(nodeId);
+        return node ? [node] : [];
+      });
+      if (focusedNodes.length === 0) {
+        throw {
+          code: 'validation_failed',
+          message: 'focusNodes requires at least one existing node ID',
+        };
+      }
+
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
+        throw {
+          code: 'renderer_unavailable',
+          message: 'Sheltie canvas is not ready for focus',
+          retry: 'Wait for the document renderer to finish loading, then retry',
+        };
+      }
+
+      const target = resolveFitViewport(focusedNodes, rect.width, rect.height);
+      if (!target || !applyViewportTarget(target)) {
+        throw {
+          code: 'renderer_unavailable',
+          message: 'Sheltie canvas is not ready for focus',
+          retry: 'Wait for the document renderer to finish loading, then retry',
+        };
+      }
+
+      const focusedNodeIds = focusedNodes.map((node) => node.id);
+      const currentSelection = getSelectedNodeIds();
+      const selectionChanged =
+        currentSelection.length !== focusedNodeIds.length ||
+        currentSelection.some((nodeId, index) => nodeId !== focusedNodeIds[index]);
+      if (selectionChanged) {
+        prepareMcpFocusSelection(focusedNodeIds);
+        setSelection(focusedNodeIds);
+      }
+      clearEdgeSelection();
+
+      return { focusedNodeIds };
+    },
+    [
+      applyViewportTarget,
+      clearEdgeSelection,
+      containerRef,
+      getSelectedNodeIds,
+      nodes,
+      prepareMcpFocusSelection,
+      setSelection,
+    ],
   );
 
   const handleCenterViewportAtDefaultZoom = useCallback(() => {
@@ -313,6 +384,8 @@ export function useSheltieViewportController({
     handleMoveStart,
     handleMove,
     handleMoveEnd,
+    getViewport,
+    focusNodes,
     handleFitAllNodes,
     handleResetViewport,
     handleZoomIn,

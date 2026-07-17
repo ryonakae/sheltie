@@ -36,6 +36,7 @@ import { useSheltieNodeRuntime } from '@/hooks/sheltie/useSheltieNodeRuntime';
 import { useSheltieResize } from '@/hooks/sheltie/useSheltieResize';
 import { useSheltieTextEditing } from '@/hooks/sheltie/useSheltieTextEditing';
 import { useSheltieViewportController } from '@/hooks/sheltie/useSheltieViewportController';
+import { registerMcpEditorAdapter } from '@/lib/mcp/editor-adapter';
 import { resolveActiveSelection, retainLiveSelectedIds } from '@/lib/sheltie-selection';
 import { registerUnsavedChangesDialogDisplayController } from '@/lib/unsaved-changes-dialog-display';
 import { selectProject, selectProjectWebviewRuntime, useProjectStore } from '@/store/tab-store';
@@ -44,6 +45,7 @@ import { isWebPageNode } from '@/types';
 
 interface SheltieProps {
   selectedNodeIds: string[];
+  getSelectedNodeIds: () => string[];
   setSelection: (idsOrUpdater: string[] | ((prev: string[]) => string[])) => void;
   centeredNodeId?: string | null;
   onCenteredNodeHandled?: () => void;
@@ -58,6 +60,7 @@ interface SheltieProps {
 
 export function Sheltie({
   selectedNodeIds,
+  getSelectedNodeIds,
   setSelection,
   centeredNodeId = null,
   onCenteredNodeHandled,
@@ -70,7 +73,19 @@ export function Sheltie({
   onAddTextNode,
 }: SheltieProps) {
   // controlled mode では flowEdges.selected を自前で同期する
-  const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(() => new Set());
+  const [selectedEdgeIds, setSelectedEdgeIdsState] = useState<Set<string>>(() => new Set());
+  const selectedEdgeIdsRef = useRef<Set<string>>(new Set());
+  const setSelectedEdgeIds = useCallback<React.Dispatch<React.SetStateAction<Set<string>>>>(
+    (idsOrUpdater) => {
+      const next =
+        typeof idsOrUpdater === 'function'
+          ? idsOrUpdater(selectedEdgeIdsRef.current)
+          : idsOrUpdater;
+      selectedEdgeIdsRef.current = next;
+      setSelectedEdgeIdsState(next);
+    },
+    [],
+  );
   // ノードとエッジを合わせて単独選択のときだけ、対象固有のツールバーを有効にする
   const { activeNodeId, activeEdgeId } = resolveActiveSelection(selectedNodeIds, selectedEdgeIds);
   const selectedNodeIdSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
@@ -158,6 +173,20 @@ export function Sheltie({
   const webPageNodes = useMemo(() => nodes.filter(isWebPageNode), [nodes]);
   const clearEdgeSelection = useCallback(() => {
     setSelectedEdgeIds((current) => (current.size === 0 ? current : new Set()));
+  }, [setSelectedEdgeIds]);
+  const getSelectedEdgeIds = useCallback(() => Array.from(selectedEdgeIdsRef.current), []);
+  const pendingMcpFocusSelectionRef = useRef<string[] | null>(null);
+  const prepareMcpFocusSelection = useCallback((nodeIds: string[]) => {
+    pendingMcpFocusSelectionRef.current = [...nodeIds];
+  }, []);
+  const consumeMcpFocusSelection = useCallback((nodeIds: string[]): boolean => {
+    const expected = pendingMcpFocusSelectionRef.current;
+    pendingMcpFocusSelectionRef.current = null;
+    return (
+      expected !== null &&
+      expected.length === nodeIds.length &&
+      expected.every((nodeId, index) => nodeId === nodeIds[index])
+    );
   }, []);
 
   useEffect(() => {
@@ -171,7 +200,7 @@ export function Sheltie({
         return next.size === current.size ? current : next;
       });
     });
-  }, [liveEdgeIds, selectedEdgeIds]);
+  }, [liveEdgeIds, selectedEdgeIds, setSelectedEdgeIds]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(project?.viewport.zoom ?? 1);
@@ -248,6 +277,8 @@ export function Sheltie({
     handleMoveStart,
     handleMove,
     handleMoveEnd,
+    getViewport,
+    focusNodes,
     handleFitAllNodes,
     handleResetViewport,
   } = useSheltieViewportController({
@@ -256,12 +287,29 @@ export function Sheltie({
     nodes,
     storeViewport,
     updateViewport,
+    getSelectedNodeIds,
+    setSelection,
+    clearEdgeSelection,
+    prepareMcpFocusSelection,
     cancelZoomRestore,
     scheduleZoomRestoreAfterReflow,
     prepareInteractionStart,
     handleInteractionChange,
     scheduleInteractionUpdate,
   });
+
+  useEffect(
+    () =>
+      registerMcpEditorAdapter({
+        getEditorState: () => ({
+          selectedNodeIds: getSelectedNodeIds(),
+          selectedEdgeIds: getSelectedEdgeIds(),
+          viewport: getViewport(),
+        }),
+        focusNodes: async (nodeIds) => focusNodes(nodeIds),
+      }),
+    [focusNodes, getSelectedEdgeIds, getSelectedNodeIds, getViewport],
+  );
 
   const {
     stickyResizing,
@@ -385,7 +433,7 @@ export function Sheltie({
         });
       }
     },
-    [removeEdges],
+    [removeEdges, setSelectedEdgeIds],
   );
 
   // 自己接続を禁止
@@ -511,6 +559,7 @@ export function Sheltie({
   } = useSheltieTextEditing({
     nodes,
     selectedNodeIds,
+    consumeMcpFocusSelection,
     autoEditTextNodeId,
     onAutoEditTextNodeHandled,
     autoEditStickyNoteId,

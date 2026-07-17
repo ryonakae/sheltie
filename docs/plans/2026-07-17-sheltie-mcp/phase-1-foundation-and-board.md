@@ -543,6 +543,7 @@ git commit -m "feat: add atomic MCP board batches"
 - Modify: `src/screens/Project.tsx`
 - Modify: `src/components/Sheltie/Sheltie.tsx`
 - Modify: `src/hooks/sheltie/useSheltieViewportController.ts`
+- Modify: `src/hooks/sheltie/useSheltieTextEditing.ts`
 - Modify: `src/lib/mcp/renderer-bridge.ts`
 - Modify: `docs/agents/coding-rules.md`
 
@@ -550,17 +551,17 @@ git commit -m "feat: add atomic MCP board batches"
 - Produces: `registerMcpEditorAdapter`, `getEditorState`, `focusNodes`.
 - Consumed by: Task 8.
 
-- [ ] **Step 1: Write failing adapter lifecycle tests**
+- [x] **Step 1: Write failing adapter lifecycle tests**
 
 Test that no registration returns `renderer_unavailable`; latest registration wins; cleanup restores unavailable only when cleaning the current registration; `getEditorState` forwards node and edge selections without mutation.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run: `npm run test -- src/lib/mcp/editor-adapter.test.ts`
 
 Expected: adapter does not exist.
 
-- [ ] **Step 3: Implement adapter registration**
+- [x] **Step 3: Implement adapter registration**
 
 Use the established command-handler pattern:
 
@@ -581,7 +582,7 @@ export function requireMcpEditorAdapter(): McpEditorAdapter;
 
 Register in `Sheltie`, where selected node IDs, selected edge IDs, project viewport, and viewport controller are present. `ProjectScreen` continues to own node selection; pass stable accessors rather than moving selection into persistent store.
 
-- [ ] **Step 4: Add `focusNodes` to viewport controller**
+- [x] **Step 4: Add `focusNodes` to viewport controller**
 
 Filter IDs against live nodes. Empty or entirely missing lists return `validation_failed`. Reuse `resolveFitViewport(selectedNodes, containerWidth, containerHeight)` and existing `applyViewportTarget`; after starting the viewport animation, set exactly those node IDs selected and clear edge selection. This is the only MCP path allowed to change selection.
 

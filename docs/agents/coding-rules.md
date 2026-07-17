@@ -127,6 +127,8 @@
 - batchは全operationをlocal copyへ適用し、validation error時はproject・history・runtime stateを変更しない。`tempId`は同じbatch内の先行createだけを参照できる。
 - MCP経由でSave / Save Asを呼ばず、編集後は通常のdirty判定に任せる。保存はuser操作だけで行う。
 - readとbatch editはselection/viewportを変更しない。selection/viewport変更は明示された`focus_nodes`だけに限定する。
+- editor stateのviewportはdebounce前のReact Flow live viewportを返す。`focus_nodes`は既存の`resolveFitViewport`とviewport animationを再利用し、指定されたlive nodeだけを選択してedge選択を解除する。
+- MCPのfocusによる選択変更では、通常のユーザー選択解除時に行う空text nodeの自動削除を一回だけ抑止する。focusはproject/history/dirty stateを変更しない。
 - MCPから新規edgeを作る場合も`addOrReplaceBoardEdge`の同一endpoint invariantを再利用し、独自の重複判定を作らない。
 
 ## Sheltie/Webview 変更時の必読

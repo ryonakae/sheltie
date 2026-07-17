@@ -458,7 +458,7 @@ git commit -m "feat: route MCP requests to document renderers"
 - Produces: `BoardOperation`, `applyBoardOperations`, `BatchEditBoardResult`, store action `applyMcpBoardBatch`.
 - Consumed by: Task 8 and Skill phase.
 
-- [ ] **Step 1: Define the exact discriminated union and failing pure tests**
+- [x] **Step 1: Define the exact discriminated union and failing pure tests**
 
 Use operations:
 
@@ -492,13 +492,13 @@ Tests must cover:
 - no-op batch reports `changed: false`;
 - injected deterministic `createId()` generates stable test IDs.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run: `npm run test -- src/lib/mcp/board-operations.test.ts`
 
 Expected: module/operation types do not exist.
 
-- [ ] **Step 3: Implement the pure interpreter**
+- [x] **Step 3: Implement the pure interpreter**
 
 Use this signature:
 
@@ -512,11 +512,11 @@ export function applyBoardOperations(
 
 Clone into local `nextNodes/nextEdges`, resolve temp IDs in order, and throw `BoardOperationError` with `{ operationIndex, code, message }`. Reuse `findNonOverlappingPosition`, `addOrReplaceBoardEdge`, `updateBoardEdgeStyle`, and `reverseBoardEdge`; do not duplicate their invariants. Return all created/mutated/deleted IDs and `tempIdMap`.
 
-- [ ] **Step 4: Add one Zustand action and failing history tests**
+- [x] **Step 4: Add one Zustand action and failing history tests**
 
 Add `applyMcpBoardBatch(operations): BatchEditBoardResult` to `ProjectActions`. Test successful multi-op batch produces one `history.past` entry and one Undo reverts all; invalid batch leaves `project`, `history`, and `webviewRuntime` deeply equal; deleting pages removes their runtime labels/screenshots; a no-op does not add history.
 
-- [ ] **Step 5: Confirm GREEN**
+- [x] **Step 5: Confirm GREEN**
 
 Run:
 - `npm run test -- src/lib/mcp/board-operations.test.ts`
@@ -524,7 +524,7 @@ Run:
 
 Expected: all pure and store integration cases pass.
 
-- [ ] **Step 6: Document and commit**
+- [x] **Step 6: Document and commit**
 
 Document the operation union, temp IDs, all-or-nothing behavior, one-history invariant, and no-save behavior.
 

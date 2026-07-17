@@ -11,6 +11,8 @@ import {
   MAX_ZOOM,
   MIN_ZOOM,
 } from '@/constants';
+import { applyBoardOperations } from '@/lib/mcp/board-operations';
+import type { BatchEditBoardResult, BoardOperation } from '@/lib/mcp/types';
 import {
   documentEdgeToBoardEdge,
   documentNodeToBoardNode,
@@ -47,6 +49,7 @@ interface ProjectActions {
   }) => void;
   markProjectSaved: (filePath: string, document: SheltieDocumentV2) => void;
   restoreProjectFromLastSaved: () => void;
+  applyMcpBoardBatch: (operations: readonly BoardOperation[]) => BatchEditBoardResult;
   addWebNode: (
     url?: string,
     options?: { x: number; y: number; width: number; height: number },
@@ -271,6 +274,63 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
         webviewRuntime: createEmptyProjectWebviewRuntime(),
       };
     }),
+
+  applyMcpBoardBatch: (operations) => {
+    let result: BatchEditBoardResult = {
+      ok: false,
+      changed: false,
+      error: {
+        operationIndex: -1,
+        code: 'validation_failed',
+        message: 'No project is loaded in this document renderer',
+      },
+    };
+
+    set((state) => {
+      if (!state.project) return state;
+      result = applyBoardOperations(
+        { nodes: state.project.nodes, edges: state.project.edges },
+        operations,
+        createNodeId,
+      );
+      if (!result.ok || !result.changed) return state;
+
+      const runtimeIdsToClear = new Set(result.deletedNodeIds);
+      const previousNodesById = new Map(state.project.nodes.map((node) => [node.id, node]));
+      for (const node of result.nodes) {
+        const previous = previousNodesById.get(node.id);
+        if (
+          previous &&
+          isWebPageNode(previous) &&
+          isWebPageNode(node) &&
+          previous.url !== node.url
+        ) {
+          runtimeIdsToClear.add(node.id);
+        }
+      }
+
+      return {
+        project: {
+          ...state.project,
+          nodes: result.nodes,
+          edges: result.edges,
+        },
+        history: pushHistory(state.history, {
+          nodes: state.project.nodes,
+          edges: state.project.edges,
+        }),
+        webviewRuntime: {
+          labelsByNodeId: omitKeys(state.webviewRuntime.labelsByNodeId, runtimeIdsToClear),
+          screenshotUrlsByNodeId: omitKeys(
+            state.webviewRuntime.screenshotUrlsByNodeId,
+            runtimeIdsToClear,
+          ),
+        },
+      };
+    });
+
+    return result;
+  },
 
   addWebNode: (url = '', options) => {
     let createdNode: BoardNode | null = null;

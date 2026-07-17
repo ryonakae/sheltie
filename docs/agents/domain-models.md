@@ -57,6 +57,7 @@
   - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `removeNodes`, `addStickyNoteNode`, `addTextNode`
   - ノード更新: `updateNodePosition`, `updateNodePositions`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `updateStickyNoteStyle`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
   - 複数操作の集約: `removeNodes` / `updateNodePositions` は複数ノードの削除・位置更新を 1 つの履歴エントリにまとめる。複数選択の一括削除・一括ドラッグ移動はこの経路を通し、Cmd+Z 1 回で全ての変更を巻き戻せるようにする
+  - MCP batch: `applyMcpBoardBatch` は`BoardOperation[]`を純粋interpreterで全件検証してから1回のstore更新で反映する。成功したbatch全体が履歴1件になり、失敗/no-opはproject・history・webviewRuntimeを変更しない
   - エッジ: `addEdge`, `updateEdgeStyle`, `removeEdges`, `reverseEdge`（`removeNode` 時に関連エッジも自動削除。スタイル更新・反転・同じ2接続点の置換は各1履歴として記録）
   - 順序/選択: `bringNodeToFront`, `sendNodeToBack`, `bringNodeForward`, `sendNodeBackward`, `pinWebNodeUrl`, `updateViewport`
   - 履歴: `undoProject`, `redoProject`
@@ -113,7 +114,7 @@
 - `DEFAULT_VIEWPORT = { zoom: 1, panX: 0, panY: 0 }`
 - `DEFAULT_PAGE_WIDTH = 393`
 - `DEFAULT_PAGE_HEIGHT = 852`
-- `WEB_PAGE_FRAME_PADDING = 24`（Webview の上下左右に取るフレーム余白。world 固定 px）
+- `WEB_PAGE_FRAME_PADDING = 16`（Webview の上下左右に取るフレーム余白。world 固定 px）
 - `DEFAULT_STICKY_NOTE_WIDTH = 200`
 - `DEFAULT_STICKY_NOTE_HEIGHT = 200`
 - `DEFAULT_TEXT_NODE_WIDTH = 200`
@@ -128,9 +129,16 @@
 - テキストノード: `TEXT_NODE_MIN_WIDTH = 40`, `TEXT_NODE_FONT_SIZE_PRESETS = [12, 16, 24, 36]`, `TEXT_NODE_COLORS`（HeroUI セマンティックカラー: foreground / muted / accent / success / warning / danger の 6 色を `var(--...)` で参照し、light/dark テーマに追従）
 - エッジ: `EDGE_STROKE_WIDTHS = [3, 6]`, `EDGE_LINE_STYLES = ['solid', 'dashed']`, `EDGE_COLOR_PRESETS`（Default + HeroUI セマンティックカラー 6色）、`DEFAULT_EDGE_STYLE = { strokeWidth: 3, lineStyle: 'solid', colorPreset: 'default' }`
 
-`src/store/tab-store.ts`
+`src/store/project-history.ts`
 
 - `HISTORY_LIMIT = 100`（document ごとの統合履歴保持上限）
+
+`src/lib/mcp/types.ts` / `src/lib/mcp/board-operations.ts`
+
+- `BoardOperation`: `create_node` / `update_node` / `delete_node` / `create_edge` / `update_edge` / `delete_edge` / `reverse_edge` / `reorder_node`
+- create operationはbatch内で一意な`tempId`を持ち、後続operationのnode/edge参照で利用できる。解決はoperation順で、宣言前参照・重複temp IDは`validation_failed`
+- text nodeのMCP入力はplain `text`を受け、interpreterがTiptap JSONへ変換する。空文字は空paragraphにする
+- 新規edgeのhandleは`top` / `right` / `bottom` / `left`だけを受け、WebPage同士のみ接続できる
 
 ## 不変条件
 
@@ -143,6 +151,9 @@
 - `history` はランタイム専用で永続化しない
 - `webviewRuntime` はランタイム専用で永続化しない
 - Undo/Redo は現在の document window にのみ適用する
+- `batch_edit_board`は最初のvalidation failureで全operationを破棄し、成功時だけnode/edge統合snapshotを履歴へ1件積む。store actionを個別に連結しない
+- MCPによるWebPage削除とURL変更は、staleなwebview label/screenshot runtime entryを同じstore更新で除去する
+- MCPの`reorder_node`は付箋・textだけを対象とし、WebPageは`validation_failed`にする
 - node / edge 配列を更新する操作は基本的に履歴へ記録するが、付箋の自動高さ調整は `updateNodeSizeWithoutHistory` を使って履歴を積まない
 - エッジの接続点は `(nodeId, handleId)` で識別し、同じ2接続点を順不同で比較したペアは1本だけ保持する。後から追加したエッジのID/向きへ置換し、既存の太さ・線種・色を継承する。置換全体は1履歴とする
 - `reverseEdge` はIDとスタイルを維持し、source/targetのnode IDとhandle IDを入れ替える

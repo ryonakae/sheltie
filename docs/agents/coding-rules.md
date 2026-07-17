@@ -120,6 +120,15 @@
 - エッジの削除は選択 + `Backspace` / `Delete` キー（`onEdgesChange` で `remove` タイプを処理）
 - エッジの永続化は `Project.edges` / `SheltieDocumentV2.edges` に保存。スタイル変更・方向反転・同一点置換はそれぞれ1つの統合スナップショットとしてUndo/Redoする
 
+## MCP board操作
+
+- MCPのread/write targetはfocused stateから推測せず、runtime window labelの`documentId`を必須にする。WebPage操作では`pageNodeId`も必須にする。
+- 関連する複数node/edge変更は`applyMcpBoardBatch`だけを使い、既存の個別store actionを順に呼ばない。batch全体を1回のUndoで戻せることを維持する。
+- batchは全operationをlocal copyへ適用し、validation error時はproject・history・runtime stateを変更しない。`tempId`は同じbatch内の先行createだけを参照できる。
+- MCP経由でSave / Save Asを呼ばず、編集後は通常のdirty判定に任せる。保存はuser操作だけで行う。
+- readとbatch editはselection/viewportを変更しない。selection/viewport変更は明示された`focus_nodes`だけに限定する。
+- MCPから新規edgeを作る場合も`addOrReplaceBoardEdge`の同一endpoint invariantを再利用し、独自の重複判定を作らない。
+
 ## Sheltie/Webview 変更時の必読
 
 - 表示モード遷移・スクリーンショット切替・操作中の制約は `sheltie-runtime.md` を正本とする。

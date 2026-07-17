@@ -680,11 +680,11 @@ git commit -m "feat(mcp): expose extended browser automation"
 - Consumes: final Phase 3 contracts.
 - Produces: durable guidance without duplicating Phase 1 multi-site/board overview implementation details.
 
-- [ ] **Step 1: Document MCP and architecture ownership**
+- [x] **Step 1: Document MCP and architecture ownership**
 
 In `docs/agents/mcp.md`, add the five tools, input contracts, annotations, errors, trusted-client absolute-path upload policy and byte limits, evaluation trust warning, synthetic-input warning, and dialog-shim retry behavior. In `architecture.md`, state that Phase 1 owns server/broker, Phase 2 owns the per-page actor, and Phase 3 extends that same actor/script.
 
-- [ ] **Step 2: Document IPC, runtime, screenshots, and WKWebView behavior**
+- [x] **Step 2: Document IPC, runtime, screenshots, and WKWebView behavior**
 
 In `tauri-ipc.md`, document only the additional fixed page-automation operation payloads; no renderer command may show a hidden WebView. In `sheltie-runtime.md`, state that MCP capture reads the current display mode and never changes it. In `sheltie-screenshots.md`, distinguish transient Phase 3 bytes from persisted cache and document native/cache mode behavior plus output caps. In `wkwebview-internals.md`, record all-frame script extension, synthetic `isTrusted === false`, `target=_blank`/`window.open()` in-place navigation, Wry’s normal `NSOpenPanel`, and nonblocking dialog shim.
 

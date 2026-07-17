@@ -155,6 +155,8 @@ Tauri Plugin Store / Dialog は `tauri.conf.json` ではなく `src-tauri/src/se
 - endpoint は `http://127.0.0.1:29978/mcp`。bind address、renderer event、timeout は `src-tauri/src/mcp/mod.rs` の定数を参照する。
 - Rust側はtransport・session・document routing・timeout・tool response shapingを担当し、board state自体はrenderer/Zustandを正本とする。
 - Board toolはrenderer brokerを通る。Browser toolは対象nodeをrendererで1回確認した後、page actorからchild WKWebViewへ直接dispatchする。
+- `PageAutomationState`はsemantic action、coordinate/evaluate/upload/dialog、element/full-page captureを同じpage-local mutexで直列化する。native capture、bounded PNG処理、upload file readはactor/専用helperに置き、rendererへpage内容をmirrorしない。
+- Viewport screenshot sourceの`native` / `screenshot` / `hidden`判定とcache取得はrenderer brokerを使う。非native Webviewを表示せず、element/full-page captureは`native`だけを許可する。
 - Browser actionはboardのUndo/Redo履歴とdocument dirty stateを変更しない。MCPからSave / Save Asも呼ばない。
 - `StreamableHttpService`のsession managerをrunning server stateに保持し、disable時はlistener cancellationに加えて全sessionを明示closeする。service cloneはsession単位のleaseを共有し、最終dropでmenu connection countを減算する。
 - MCP toolとrenderer間のJSON契約は`src-tauri/src/mcp/types.rs`に集約し、tool実装でad-hocなfield名を増やさない。

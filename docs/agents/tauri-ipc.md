@@ -58,6 +58,8 @@
 - `unregister_page_automation_page(pageId)` - child Webviewを閉じる前にpage actorの実行中requestとqueueを`webview_not_ready`で終了する。呼び出し元`Window.label()`を`documentId`として使う
 - `complete_page_automation_request(result)` - injected top frame専用。引数に`tauri::Webview`を受け、`requestId`、payloadの`documentId` / `pageNodeId`、呼び出し元window label / Webview labelがpending requestと一致した場合だけ完了する。一般用途のJavaScript評価には使わない
 
+MCP element/full-page captureは公開Tauri commandを増やさず、page actorからmacOS内部helper `capture_page_webview_png`を呼ぶ。bridgeでCSS geometry/scroll完了を確認してから同じactor queue内でnative PNGを取得する。
+
 ## Backend -> Renderer（イベント）
 
 - `page-navigated-{pageId}`: URL 変更通知
@@ -150,4 +152,6 @@
 - `Window` は `get_window()` で解決されるため child webview の有無に関わらず document window を返す。
 - この制約は「child webview から invoke」に限らず、「child webview が存在する window から invoke」でも同様に適用される。`close_ready`、`save_project_file`、`set_document_edited` は document window の JS から呼ぶが、WebPageNode がある状態でも解決できるよう `Window` を使う。
 - Semantic bridgeは`initialization_script_for_all_frames`でtop frameとdescendant frameへ入れる。descendantは`postMessage`でtop frameへ結果を返し、native completionを呼ぶのはtop frameだけとする。
+- Phase 3のcoordinate/evaluate/upload/dialog/capture geometryも同じtyped bridgeとcompletion IPCを使う。任意scriptを受けるTauri commandや第二のcompletion routeを追加しない。
+- `on_new_window`はpopupを`Deny`し、HTTP(S) URLを同じ`page-*` Webviewで開く。新しいpage nodeや外部browserを作らない。
 - Remote `page-*` Webviewのcapabilityは`complete_page_automation_request`だけを許可する。document UIのlocal capabilityと混ぜない。

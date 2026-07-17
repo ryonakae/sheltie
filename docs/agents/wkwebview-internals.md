@@ -27,6 +27,16 @@ Sheltie の WKWebView（macOS）に固有のワークアラウンドと注意事
 - Rustからpageへ実行する式は`window.__SHELTIE_MCP_PAGE_AUTOMATION__.dispatch(<typed JSON>)`に固定する。任意scriptを受け取るendpointは作らない
 - full navigationは`PageLoadEvent::Finished`、SPAは`\x01` URL observerでactor epochを進める。`on_navigation`はcommit前に発火するためbarrier解除に使わない
 
+## Extended automation bridge
+
+- coordinate clickはCSS viewport座標で`elementFromPoint`を解決し、`PointerEvent`と`MouseEvent`をsynthetic dispatchする。`isTrusted`を偽装せず、tool resultも`inputTrusted: false`を返す
+- optional highlightはpointer targetとは独立したfixed overlayで、薄い背景と色付き2px borderを約180msだけ描く
+- evaluateは共有bridge内の固定`evaluate` operationだけがindirect evalへ到達する。Promiseを10秒で打ち切り、結果をJSON round-tripして256KiB以内に制限する。同一event loopの同期非停止scriptはWebKit APIで強制中断できない
+- uploadはRustで検証・base64化したfileだけを`File` / `DataTransfer`でfile inputへ割り当て、synthetic `input` / `change`をdispatchする。pathはpageへ渡さない
+- dialog shimはdocument startで`alert` / `confirm` / `prompt`を置換し、各frameの次のresponse policyと発生metadataを保持する。frame間の同期one-shot共有は行わない
+- full-page capture scrollはauthorの`smooth`設定を一時的に`auto !important`へ置き換え、2 animation frame後の実offsetをRustが検証する。capture後はinline styleと元scroll位置を復元する
+- native screenshotはWKWebView snapshotのPNGだけをRustへ渡し、decode/crop/stitch/annotation/downscale/encodeをbounded helperで処理する
+
 ## CSS Viewport Units（svh/lvh）の補正
 
 `_setLayoutMode: 2` + `_setViewScale: zoom` は `vh`/`dvh` のビューポートのみに効き、

@@ -8,8 +8,8 @@ Sheltieがopen中のdocumentとWKWebViewを、local MCP clientから操作する
 - `src-tauri/src/mcp/service.rs`: board/browser tool router、schema/annotation、response/image block整形、session connection lease
 - `src-tauri/src/mcp/types.rs`: tool・renderer間のJSON契約
 - `src-tauri/src/mcp/broker.rs`: document rendererへのrequest routing
-- `src-tauri/src/mcp/page_automation/{protocol,actor}.rs`: typed page operation、compact snapshot、page単位の直列actor
-- `src-tauri/src/mcp/tools/browser.rs`: WebPage照合と13 browser tools
+- `src-tauri/src/mcp/page_automation/{protocol,actor,images,uploads}.rs`: typed page operation、compact snapshot、page単位の直列actor、bounded PNG処理、upload読込
+- `src-tauri/src/mcp/tools/browser.rs`: WebPage照合と18 browser tools
 
 ## Trust boundary
 
@@ -111,12 +111,32 @@ browser_wait
 - descendant frameはtop frameが`postMessage`結果を集約する。応答しないframeはpage全体を失敗させず`unavailable`とする
 - browser toolsはboard selection、viewport、Undo/Redo、dirty stateを変更せず、保存も実行しない
 
+## Phase 3 browser tools
+
+| Tool | Phase 2共通の必須input以外 | Effect |
+|---|---|---|
+| `browser_screenshot` | `mode`, `annotate`; element時は`snapshotId`, `elementRef` | `viewport` / `element` / `fullPage`のPNGを1 image blockで返す |
+| `browser_click_coordinates` | `snapshotId`, `x`, `y`, `button`, `clickCount`; optional `highlight` | semantic refが無い場合にCSS viewport座標へsynthetic pointer/mouse eventを送る |
+| `browser_evaluate` | `script` | page originでJavaScriptを評価し、JSON-safeな値と最新snapshotを返す |
+| `browser_upload_file` | `snapshotId`, `elementRef`, `paths` | absolute regular fileをfile inputへ割り当てる |
+| `browser_handle_dialog` | `action`; accept時はoptional `promptText` | 次のpage dialogに対するone-shot responseを設定する |
+
+- `browser_screenshot`の`viewport`は`native`ならlive captureを試し、失敗時はcacheへfallbackする。`screenshot` / `hidden`ではcacheだけを使い、Webviewを表示しない。`element` / `fullPage`はlive `native` Webviewだけを対象にする
+- PNGは最長辺4096px、16,777,216 pixels、8MiB、full-page 64 tilesを上限とする。element cropと任意annotationはCSS座標をcapture scaleへ変換し、annotationは薄いfillと色付き2px borderで描く
+- coordinate clickとupload eventの`inputTrusted`は`false`。`highlight`はpageへ約180msだけ表示するvisual aidであり、入力targetを変更しない
+- evaluateは10秒のasync timeoutと256KiBのJSON response上限を持つ。同期的にevent loopを占有するscriptはWebKitから強制中断できないため、trusted clientは非停止scriptを送らない
+- uploadはcanonical absolute regular fileを最大10件、1件25MiB、合計100MiBまでreadする。errorやresultへcanonical pathを出さない
+- dialog policyはbridgeが注入された各frameの次のdialogで消費される。`alert`は記録してreturnし、`confirm` / `prompt`は設定済みresponseまたは既定dismissを返す
+- `target="_blank"`とpopup navigationは新規Webviewを作らず、同じ`pageNodeId`のWebviewでURLを開く
+- Phase 3操作も既存page actorを共有し、第二のqueueや一般的なnative JavaScript評価endpointを作らない
+
 ## Result convention
 
 - JSON tool resultは同じobjectをMCP `structuredContent`と後方互換text contentの両方へ入れる。
 - image toolの先頭contentはbase64を含まないmetadata text。`structuredContent`も同じmetadata objectとし、その後へ`image/png` content blockを並べる。
 - `get_webpage_screenshots`のmetadataは`documentId`と`{ pageNodeId, freshness, mimeType?, width?, height?, capturedAt?, capturedUrl? }[]`。`missing`にはimage blockを付けない。
 - `get_board_screenshot`のmetadataは`documentId`, `mimeType`, `width`, `height`, `worldBounds`, `includedNodeIds`, `missingScreenshotNodeIds`。PNG base64はimage blockだけに置く。
+- `browser_screenshot`のmetadataは`documentId`, `pageNodeId`, `mode`, `source`, `mimeType`, `width`, `height`, `annotated`とoptional capture/warning field。PNG base64は唯一のimage blockだけに置く。
 - read toolは`readOnlyHint=true`、`destructiveHint=false`、`openWorldHint=false`。`batch_edit_board`だけ`destructiveHint=true`、`focus_nodes`は`idempotentHint=true`。
 
 ## Stable errors
@@ -140,6 +160,15 @@ browser_wait
 | `invalid_argument` | browser toolのURL、値、件数、文字数などが不正 |
 | `wait_timeout` | browser waitのconditionが期限内に成立しない |
 | `snapshot_too_large` | page snapshotが要素数・UTF-16文字数制限を超えた |
+| `live_webview_required` | cacheでは実行できないelement/full-page captureを非native pageへ要求した |
+| `screenshot_target_not_visible` | elementのCSS rectが現在のnative viewport内に収まらない |
+| `page_changed_during_capture` | full-page capture中にnavigation、document token、epoch、geometryが変わった |
+| `screenshot_too_large` | edge、pixel、PNG byte、tile上限内で画像を生成できない |
+| `evaluate_not_json` | evaluate結果がJSON-safeでない、またはcycleを含む |
+| `evaluate_timeout` | evaluateのasync resultが10秒以内にsettleしない |
+| `evaluate_result_too_large` | evaluateのJSON responseが256KiBを超えた |
+| `upload_file_invalid` | upload path/file type/readability/count/sizeが契約外 |
+| `upload_target_not_file_input` | element refが現在snapshotのfile inputを指さない |
 
 error resultも`{ code, message, retry? }`をstructured/textの両方へ返す。tool parameter、board/page内容、base64、local file pathをRust logへ出さない。
 
@@ -156,4 +185,4 @@ error resultも`{ code, message, retry? }`をstructured/textの両方へ返す�
 
 ## Client verification
 
-Claude Code、Codex、Cursor / VS Codeでは同じStreamable HTTP endpointを登録し、tool discoveryがPhase 1の7件とPhase 2の13件だけであることを確認する。最低限、2 documentの列挙、valid/invalid batchと1回Undo、dirty/no-auto-save、explicit focus、cached multi-site画像、offscreen board画像、disable時disconnect、foreign Host / OriginのHTTP 403を確認する。
+Claude Code、Codex、Cursor / VS Codeでは同じStreamable HTTP endpointを登録し、tool discoveryがboard 7件とbrowser 18件の計25件であることを確認する。最低限、2 documentの列挙、valid/invalid batchと1回Undo、dirty/no-auto-save、explicit focus、cached multi-site画像、offscreen board画像、semantic/ref更新、viewport/element/full-page画像、coordinate/evaluate/upload/dialog/popup、disable時disconnect、foreign Host / OriginのHTTP 403を確認する。

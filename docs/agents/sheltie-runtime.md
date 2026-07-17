@@ -183,6 +183,13 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - 同じ`documentId`でもpage actorは`pageNodeId`ごとに分かれる。同じpageの操作は直列、別pageの操作は並行する
 - Webview破棄前に`unregister_page_automation_page`を呼び、実行中requestとqueueを終了してからcloseする
 
+## MCP extended page automation
+
+- `browser_screenshot`はrendererが返す現在の`DisplayMode`とraw cacheを正本にする。`native` viewportだけlive captureを試し、`screenshot` / `hidden` viewportはcacheを返す。element/full-pageは`native`以外で`live_webview_required`
+- full-page captureは元scroll位置、document token、navigation epochを保持し、tileごとに要求CSS offsetへの到達を確認する。成功・失敗・navigation発生のいずれでも元位置へのrestoreを試みる
+- coordinate/evaluate/upload/dialogもsemantic actionと同じpage actorを共有する。action後のsnapshot以外はboard runtime stateへ反映しない
+- popup / `target="_blank"`は元WebPage node内のnavigationへ変換し、node追加・selection変更・viewport移動を行わない
+
 ## スクリーンショット
 
 撮影キュー / 永続化 / 撮影タイミング / ちらつき回避の詳細は `sheltie-screenshots.md` を参照。

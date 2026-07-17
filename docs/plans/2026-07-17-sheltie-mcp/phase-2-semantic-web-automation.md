@@ -475,11 +475,11 @@ git commit -m "feat(mcp): serialize semantic page operations"
 - Consumes: `PageAutomationState`, `PageAutomationBridgeRequest`, `PageAutomationBridgeResult`, existing `scoped_page_label`, and the Phase 1 document-ID/window-label contract.
 - Produces Tauri commands: `complete_page_automation_request(webview: Webview, result: PageAutomationBridgeResult) -> Result<(), String>` and `unregister_page_automation_page(window: Window, page_id: String) -> Result<(), String>`. Both operate directly on `PageAutomationState`; neither uses `McpRequestBrokerState` after page verification.
 
-- [ ] **Step 1: Write failing validation tests**
+- [x] **Step 1: Write failing validation tests**
 
 Extract a pure `validate_completion` helper taking `&PendingPageRequest`, `invoking_webview_label`, and `&PageAutomationBridgeResult`. Test exact success, wrong child label, wrong parent document label, wrong document ID, wrong page ID, and unknown request ID. Each failing case must produce `bridge_rejected`; it must not complete or remove a different request.
 
-- [ ] **Step 2: Run the focused Rust test and verify RED**
+- [x] **Step 2: Run the focused Rust test and verify RED**
 
 Run:
 
@@ -489,7 +489,7 @@ Run:
 
 Expected: compilation fails because the command module and helper do not exist.
 
-- [ ] **Step 3: Implement fixed native dispatch and completion**
+- [x] **Step 3: Implement fixed native dispatch and completion**
 
 Embed the script once using:
 
@@ -521,7 +521,7 @@ webview.label() == pending.webview_label
 
 Register `PageAutomationState::default()` with `.manage(...)` and add both direct page-automation commands to `tauri::generate_handler!`. Export the module from `commands/webview.rs`. `complete_page_automation_request` returns `Ok(())` only for a matched completion; malformed or unmatched calls return a Rust error string while the actor independently reports `bridge_rejected` to the MCP operation that owns the pending request. `unregister_page_automation_page` calls `remove_page(PageKey { document_id: window.label().into(), page_node_id: page_id })` before Webview close.
 
-- [ ] **Step 4: Run focused Rust tests and verify GREEN**
+- [x] **Step 4: Run focused Rust tests and verify GREEN**
 
 Run:
 
@@ -532,7 +532,7 @@ Run:
 
 Expected: completion validation and actor tests pass; no command accepts a page response without a matching pending request.
 
-- [ ] **Step 5: Commit the native bridge endpoint**
+- [x] **Step 5: Commit the native bridge endpoint**
 
 ```bash
 git add src-tauri/src/commands/webview.rs src-tauri/src/commands/webview/page_automation.rs src-tauri/src/setup.rs src/lib/tauri-bridge/webview.ts

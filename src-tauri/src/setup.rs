@@ -17,6 +17,7 @@ use crate::mcp::broker::McpRequestBrokerState;
 use crate::mcp::lifecycle::{
     apply_requested_enabled, apply_requested_runtime_only, load_mcp_enabled, McpServerState,
 };
+use crate::mcp::page_automation::actor::PageAutomationState;
 use crate::mcp::MCP_BIND_ADDRESS;
 use crate::menus::{
     app::configure_app_menu,
@@ -90,6 +91,7 @@ pub fn run() {
         .manage(DocumentManagerState::default())
         .manage(AppExitCoordinatorState::default())
         .manage(McpRequestBrokerState::default())
+        .manage(PageAutomationState::default())
         .manage(McpServerState::default())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if let Err(error) = handle_launch_args(app, &argv, Some(cwd.as_str())) {
@@ -232,6 +234,8 @@ pub fn run() {
             crate::commands::webview::navigation::go_back_page_webview,
             crate::commands::webview::navigation::go_forward_page_webview,
             crate::commands::webview::navigation::get_navigation_state_page_webview,
+            crate::commands::webview::page_automation::complete_page_automation_request,
+            crate::commands::webview::page_automation::unregister_page_automation_page,
             crate::commands::webview::bounds::update_page_webview_bounds,
             crate::commands::webview::bounds::set_page_webview_opacity,
             crate::commands::webview::bounds::batch_update_page_webview_bounds,

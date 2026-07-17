@@ -209,18 +209,19 @@ impl PageAutomationState {
             let expected = inner.pending.get(&request_id).ok_or_else(|| {
                 "page automation request is unknown or already completed".to_string()
             })?;
-            if expected.window_label != window_label || expected.webview_label != webview_label {
-                return Err("page automation completion Webview identity mismatch".to_string());
-            }
-            if result.document_id != expected.key.document_id
-                || result.page_node_id != expected.key.page_node_id
-            {
-                return Err("page automation completion payload identity mismatch".to_string());
-            }
-            inner
+            let identity_matches = expected.window_label == window_label
+                && expected.webview_label == webview_label
+                && result.document_id == expected.key.document_id
+                && result.page_node_id == expected.key.page_node_id;
+            let pending = inner
                 .pending
                 .remove(&request_id)
-                .expect("pending request exists after identity verification")
+                .expect("pending request exists after lookup");
+            if !identity_matches {
+                let _ = pending.sender.send(Err(bridge_rejected()));
+                return Err("page automation completion identity mismatch".to_string());
+            }
+            pending
         };
         pending
             .sender
@@ -869,7 +870,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_mismatched_completion_identity_without_consuming_request() {
+    async fn mismatched_completion_identity_fails_the_known_request() {
         let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
         state.register_page(key("page-a")).unwrap();
         let state_for_dispatch = state.clone();
@@ -893,15 +894,64 @@ mod tests {
                                 ),
                             )
                             .is_err());
-                        assert_eq!(state.pending_count(), 1);
-                        let mut mismatched_payload = result(
+                    });
+                    Ok(())
+                },
+            )
+            .await;
+        assert_eq!(outcome.unwrap_err().code, "bridge_rejected");
+        assert_eq!(state.pending_count(), 0);
+
+        let payload_state = state.clone();
+        let payload_outcome = state
+            .execute_with(
+                key("page-a"),
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                PageAutomationOperation::Snapshot,
+                move |request| {
+                    let state = payload_state.clone();
+                    std::thread::spawn(move || {
+                        let mut mismatched = result(
                             &request,
                             "0123456789abcdef0123456789abcdef",
                             "https://example.test",
                         );
-                        mismatched_payload.document_id = "document-2".into();
+                        mismatched.page_node_id = "page-b".into();
                         assert!(state
-                            .complete("document-1", "page-document-1-page-a", mismatched_payload,)
+                            .complete("document-1", "page-document-1-page-a", mismatched,)
+                            .is_err());
+                    });
+                    Ok(())
+                },
+            )
+            .await;
+        assert_eq!(payload_outcome.unwrap_err().code, "bridge_rejected");
+        assert_eq!(state.pending_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn unknown_and_duplicate_completions_do_not_consume_another_request() {
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+        state.register_page(key("page-a")).unwrap();
+        let dispatch_state = state.clone();
+        let outcome = state
+            .execute_with(
+                key("page-a"),
+                "document-1".into(),
+                "page-document-1-page-a".into(),
+                PageAutomationOperation::Snapshot,
+                move |request| {
+                    let state = dispatch_state.clone();
+                    std::thread::spawn(move || {
+                        let mut unknown = result(
+                            &request,
+                            "0123456789abcdef0123456789abcdef",
+                            "https://example.test",
+                        );
+                        unknown.request_id = "pa-999999".into();
+                        assert!(state
+                            .complete("document-1", "page-document-1-page-a", unknown)
                             .is_err());
                         assert_eq!(state.pending_count(), 1);
                         state

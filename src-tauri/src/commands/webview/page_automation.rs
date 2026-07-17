@@ -1,0 +1,136 @@
+use tauri::{AppHandle, Manager, Webview, Window};
+
+use super::labels::{resolve_page_webview, scoped_page_label};
+#[cfg(not(target_os = "macos"))]
+use crate::mcp::page_automation::protocol::unsupported_platform;
+
+use crate::mcp::{
+    page_automation::{
+        actor::PageAutomationState,
+        protocol::{
+            document_not_found, webview_not_ready, PageAutomationBridgeRequest,
+            PageAutomationBridgeResult, PageAutomationOperation, PageAutomationSuccessResult,
+            PageKey,
+        },
+    },
+    types::ToolError,
+};
+
+pub const PAGE_AUTOMATION_SCRIPT: &str = include_str!("page_automation_script.js");
+
+pub fn page_automation_initialization_script() -> &'static str {
+    PAGE_AUTOMATION_SCRIPT
+}
+
+fn dispatch_expression(request: &PageAutomationBridgeRequest) -> Result<String, ToolError> {
+    let request = serde_json::to_string(request).map_err(|_| {
+        ToolError::new(
+            "bridge_rejected",
+            "Failed to serialize the page automation request.",
+        )
+    })?;
+    Ok(format!(
+        "window.__SHELTIE_MCP_PAGE_AUTOMATION__.dispatch({request});"
+    ))
+}
+
+#[cfg(target_os = "macos")]
+pub async fn execute_page_automation(
+    app: &AppHandle,
+    key: PageKey,
+    operation: PageAutomationOperation,
+) -> Result<PageAutomationSuccessResult, ToolError> {
+    let documents = app.state::<crate::commands::store::DocumentManagerState>();
+    if !documents
+        .contains_document(&key.document_id)
+        .unwrap_or(false)
+    {
+        return Err(document_not_found(&key.document_id));
+    }
+
+    let webview_label = scoped_page_label(&key.document_id, &key.page_node_id);
+    let webview = resolve_page_webview(app, &key.document_id, &webview_label)
+        .map_err(|_| webview_not_ready())?;
+
+    let state = app.state::<PageAutomationState>();
+    state
+        .execute_with(
+            key.clone(),
+            key.document_id.clone(),
+            webview_label,
+            operation,
+            move |request| {
+                let expression = dispatch_expression(&request)?;
+                webview.eval(&expression).map_err(|_| webview_not_ready())
+            },
+        )
+        .await
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn execute_page_automation(
+    _app: &AppHandle,
+    _key: PageKey,
+    _operation: PageAutomationOperation,
+) -> Result<PageAutomationSuccessResult, ToolError> {
+    Err(unsupported_platform())
+}
+
+#[tauri::command]
+pub async fn complete_page_automation_request(
+    webview: Webview,
+    state: tauri::State<'_, PageAutomationState>,
+    result: PageAutomationBridgeResult,
+) -> Result<(), String> {
+    state.complete(webview.window().label(), webview.label(), result)
+}
+
+#[tauri::command]
+pub async fn unregister_page_automation_page(
+    window: Window,
+    state: tauri::State<'_, PageAutomationState>,
+    page_id: String,
+) -> Result<(), String> {
+    state.remove_page(&PageKey {
+        document_id: window.label().to_string(),
+        page_node_id: page_id,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn dispatches_only_the_fixed_bridge_entrypoint_with_serialized_data() {
+        let request: PageAutomationBridgeRequest = serde_json::from_value(json!({
+            "requestId": "pa-1",
+            "documentId": "document-1",
+            "pageNodeId": "page-1",
+            "navigationEpoch": 3,
+            "operation": {
+                "kind": "fill",
+                "snapshotId": "s3-1",
+                "elementRef": "e1",
+                "text": "'); globalThis.pwned = true; ('"
+            }
+        }))
+        .unwrap();
+
+        let expression = dispatch_expression(&request).unwrap();
+        assert!(expression.starts_with("window.__SHELTIE_MCP_PAGE_AUTOMATION__.dispatch({"));
+        assert!(expression.ends_with("});"));
+        assert!(!expression.contains("eval("));
+        assert!(expression.contains("globalThis.pwned = true"));
+        assert_eq!(expression.matches(".dispatch(").count(), 1);
+    }
+
+    #[test]
+    fn initialization_script_is_the_exact_tested_bridge_source() {
+        assert_eq!(
+            page_automation_initialization_script(),
+            include_str!("page_automation_script.js")
+        );
+    }
+}

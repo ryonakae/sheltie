@@ -802,5 +802,15 @@ describe('page automation initialization script', () => {
     await dispatch(bridge, { kind: 'screenshot_restore', x: 11, y: 17 });
     expect([x, y]).toEqual([11, 17]);
     expect(bridge.window.document.documentElement.style.scrollBehavior).toBe('');
+
+    Object.defineProperty(bridge.window, 'requestAnimationFrame', {
+      value: () => 0,
+      configurable: true,
+    });
+    vi.useFakeTimers();
+    const throttled = dispatch(bridge, { kind: 'screenshot_scroll', x: 0, y: 100 });
+    await vi.advanceTimersByTimeAsync(250);
+    await throttled;
+    expect([x, y]).toEqual([0, 100]);
   });
 });

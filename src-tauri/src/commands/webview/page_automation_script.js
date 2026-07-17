@@ -6,6 +6,7 @@
   const SETTLE_DELAY_MS = 250;
   const EVALUATE_TIMEOUT_MS = 10000;
   const HIGHLIGHT_FADE_MS = 180;
+  const SCREENSHOT_SCROLL_SETTLE_TIMEOUT_MS = 250;
   const WAIT_POLL_MS = 50;
   const MAX_ELEMENTS = 200;
   const MAX_DIALOGS = 20;
@@ -535,7 +536,21 @@
   }
 
   function afterTwoAnimationFrames() {
-    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const timeout = setTimeout(finish, SCREENSHOT_SCROLL_SETTLE_TIMEOUT_MS);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          clearTimeout(timeout);
+          finish();
+        }),
+      );
+    });
   }
 
   async function runLocalOperation(operation, options) {

@@ -35,7 +35,7 @@ Sheltie の WKWebView（macOS）に固有のワークアラウンドと注意事
 - uploadはRustで検証・base64化したfileだけを`File` / `DataTransfer`でfile inputへ割り当て、synthetic `input` / `change`をdispatchする。pathはpageへ渡さない
 - dialog shimはdocument startで`alert` / `confirm` / `prompt`を置換し、各frameの次のresponse policyと発生metadataを保持する。1 actionあたり20件、messageは512 UTF-16 code unitsへ制限し、超過時は末尾metadataを置換する。prompt default valueはmetadataへ含めない。frame間の同期one-shot共有は行わない
 - descendant-frame element captureのgeometryは各親frame bridgeが`postMessage` relayでembedding iframe座標を加算し、top viewport座標へ変換する。top frameはframe IDと割当tokenを照合してからpending requestを完了する
-- full-page capture scrollはauthorの`smooth`設定を一時的に`auto !important`へ置き換え、2 animation frame後の実offsetをRustが検証する。capture後はinline styleと元scroll位置を復元する
+- full-page capture scrollはauthorの`smooth`設定を一時的に`auto !important`へ置き換え、2 animation frame後の実offsetをRustが検証する。background/throttled WKWebViewで`requestAnimationFrame`が止まる場合は250msで待機を打ち切り、Rustのoffset検証へ進む。capture後はinline styleと元scroll位置を復元する
 - native screenshotはWKWebView snapshotのPNGだけをRustへ渡し、decode/crop/stitch/annotation/downscale/encodeをbounded helperで処理する
 
 ## CSS Viewport Units（svh/lvh）の補正

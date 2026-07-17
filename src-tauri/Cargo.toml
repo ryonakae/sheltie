@@ -35,6 +35,7 @@ tauri-plugin-single-instance = "2"
 tokio = { version = "1", features = ["macros", "net", "rt", "sync", "test-util", "time"] }
 tokio-util = "0.7"
 uuid = { version = "1", features = ["serde", "v4"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

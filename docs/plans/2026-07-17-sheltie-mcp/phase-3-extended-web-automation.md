@@ -284,7 +284,7 @@ git commit -m "feat(mcp): extend page automation protocol"
 - Consumes: `PageAutomationOperation` screenshot geometry and Phase 1 cached/native PNG bytes.
 - Produces: `encode_capped_png`, `crop_css_rect`, `stitch_vertical_tiles`, and `annotate_css_rect`.
 
-- [ ] **Step 1: Write failing inline image tests**
+- [x] **Step 1: Write failing inline image tests**
 
 Add `#[cfg(test)] mod tests` in `images.rs`, creating source PNGs in memory. Cover:
 
@@ -295,7 +295,7 @@ Add `#[cfg(test)] mod tests` in `images.rs`, creating source PNGs in memory. Cov
 5. a 5000×1000 PNG scales below the 4096px edge cap;
 6. an output over the 8 MiB encoded cap is repeatedly reduced until it fits, retaining `scale_applied`.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 Run:
 
@@ -305,7 +305,7 @@ Run:
 
 Expected: compilation fails because the image dependency and helper module do not exist.
 
-- [ ] **Step 3: Add exact dependency and image helpers**
+- [x] **Step 3: Add exact dependency and image helpers**
 
 Add exactly this `Cargo.toml` dependency and update `Cargo.lock` through Cargo:
 
@@ -317,7 +317,7 @@ Decode only PNG, use `image::imageops::FilterType::Lanczos3` for proportional do
 
 Keep all decoded/stiched/annotated images in memory. Do not call `save_webview_screenshot`, write a file, or update Phase 1 cache metadata.
 
-- [ ] **Step 4: Confirm GREEN**
+- [x] **Step 4: Confirm GREEN**
 
 Run:
 
@@ -328,7 +328,7 @@ Run:
 
 Expected: all image tests and the complete Rust library suite pass.
 
-- [ ] **Step 5: Commit image processing**
+- [x] **Step 5: Commit image processing**
 
 ```bash
 git add src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/src/mcp/page_automation/images.rs src-tauri/src/mcp/page_automation/mod.rs

@@ -44,7 +44,7 @@ export type ExpectedFixture = {
 
 const comparisonExpected: ExpectedFixture = {
   id: 'comparison',
-  requiredFinalNoteTextFragments: ['Atlas Basic costs $29', 'Beacon Basic costs $24'],
+  requiredFinalNoteTextFragments: ['$29/month', '$24/month'],
   requiredCreatedNoteCount: 2,
   requiredFinalEdgeStyle: {
     edgeId: '*',
@@ -213,6 +213,7 @@ function focusExpectation(
 
 function collectNodeText(node: Record<string, unknown>): string {
   const values: string[] = [];
+  if (typeof node.title === 'string') values.push(node.title);
   if (typeof node.content === 'string') values.push(node.content);
   if (typeof node.text === 'string') values.push(node.text);
   collectTiptapText(node.tiptapContent, values);

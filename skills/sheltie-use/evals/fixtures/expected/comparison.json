@@ -1,6 +1,6 @@
 {
   "id": "comparison",
-  "requiredFinalNoteTextFragments": ["Atlas Basic costs $29", "Beacon Basic costs $24"],
+  "requiredFinalNoteTextFragments": ["$29/month", "$24/month"],
   "requiredCreatedNoteCount": 2,
   "requiredFinalEdgeStyle": {
     "edgeId": "*",

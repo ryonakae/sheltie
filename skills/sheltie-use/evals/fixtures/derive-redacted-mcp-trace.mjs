@@ -201,7 +201,10 @@ function gatewayCalls(records) {
     const call = pending.get(message.toolCallId);
     if (!call) continue;
     const details = directRecord(message.details);
-    call.response = extractResponse(details.mcpResult ?? {});
+    const mcpResult = directRecord(details.mcpResult);
+    const responseSource =
+      mcpResult.omitted === true ? { content: message.content } : (details.mcpResult ?? {});
+    call.response = extractResponse(responseSource);
     if (message.isError === true) call.response.status = 'error';
   }
   return calls;

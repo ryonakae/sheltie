@@ -47,8 +47,8 @@ function call(
 
 const comparisonBoard: FinalBoard = {
   nodes: [
-    { id: 'note-price-a', type: 'stickynote', content: 'Atlas Basic costs $29 monthly.' },
-    { id: 'note-price-b', type: 'stickynote', content: 'Beacon Basic costs $24 monthly.' },
+    { id: 'note-price-a', type: 'stickynote', content: 'Atlas Basic costs $29/month.' },
+    { id: 'note-price-b', type: 'stickynote', content: 'Beacon Basic costs $24/month.' },
   ],
   edges: [
     {
@@ -222,15 +222,19 @@ describe('redacted trace derivation', () => {
               role: 'toolResult',
               toolCallId: 'call-1',
               toolName: 'mcp',
-              details: {
-                mode: 'call',
-                mcpResult: {
-                  structuredContent: {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
                     documentId,
                     pageNodeId: pageC,
                     snapshot: { snapshotId: 'snapshot-1', compactText: 'safe fixture state' },
-                  },
+                  }),
                 },
+              ],
+              details: {
+                mode: 'call',
+                mcpResult: { omitted: true, reason: 'bounded transcript' },
               },
             },
           },

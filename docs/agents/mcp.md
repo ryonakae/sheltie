@@ -27,6 +27,7 @@ Sheltieがopen中のdocumentとWKWebViewを、local MCP clientから操作する
 - menu toggleごとに同期的にgeneration付きdesired stateを更新し、async処理はdocument全体で1本のoperation lockを通す。古いgenerationはstore/menuを更新せず、latest intentだけを適用する。
 - start / stopの重複要求はidempotentに扱う。start処理中にdisableされた場合も即座にcancellationを通知し、bind済みlistenerをcancelして`Disabled`へ戻す。
 - macOS以外ではserverをstartしない。
+- Settingsの`MCP Server`切り替えがlatest intentとして成功した時だけ、操作時点でfocusedだったdocument windowへ`mcp-lifecycle-changed`（`started` / `stopped`）を送り、HeroUI success toastを表示する。起動時の設定復元、stale intent、失敗時、focused document windowが無い場合は成功toastを出さない。
 
 ## Endpoint
 
@@ -58,7 +59,7 @@ macOSの`Sheltie > Settings`に次を置く。
 - `MCP Server`: checked item。変更時に設定を永続化してserverをstart / stopする。
 - `MCP Connections: N`: disabled item。active session数を表示する。
 
-Theme項目とMCP項目はseparatorで分ける。setup時はplugin store初期化後に`mcpEnabled`を読み、checked stateとserver lifecycleを復元する。
+Theme項目とMCP項目はseparatorで分ける。setup時はplugin store初期化後に`mcpEnabled`を読み、checked stateとserver lifecycleを復元する。lifecycle toastは既存のPin通知と同じapp-level Toast Providerを使い、右上へテキストに応じた可変幅で表示し、画面幅を超える場合だけ折り返す。
 
 ## Renderer broker
 

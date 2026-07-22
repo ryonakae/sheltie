@@ -6,6 +6,7 @@ import App from '@/App';
 import { setupAppExitCoordinator } from '@/lib/app-exit';
 import { runEditCommand } from '@/lib/edit-commands';
 import { runFileCommand } from '@/lib/file-commands';
+import { setupMcpLifecycleToastListener } from '@/lib/mcp/lifecycle-notifications';
 import { setupMcpRendererBridge } from '@/lib/mcp/renderer-bridge';
 import { onEditCommand, onFileCommand, onViewCommand } from '@/lib/tauri-bridge';
 import { runViewCommand } from '@/lib/view-commands';
@@ -24,6 +25,8 @@ let isAppExitCoordinatorInitialized = false;
 let appExitCoordinatorCleanupPromise: Promise<() => void> | null = null;
 let isMcpRendererBridgeInitialized = false;
 let mcpRendererBridgeCleanupPromise: Promise<() => void> | null = null;
+let isMcpLifecycleToastListenerInitialized = false;
+let mcpLifecycleToastUnlistenPromise: Promise<() => void> | null = null;
 type HotModule = { dispose: (callback: () => void) => void };
 
 function setupEditCommandListener(): void {
@@ -86,6 +89,24 @@ function setupViewCommandListener(): void {
   }
 }
 
+function setupMcpLifecycleNotificationListener(): void {
+  if (isMcpLifecycleToastListenerInitialized) return;
+  isMcpLifecycleToastListenerInitialized = true;
+
+  mcpLifecycleToastUnlistenPromise = setupMcpLifecycleToastListener();
+
+  const hot = (import.meta as ImportMeta & { hot?: HotModule }).hot;
+  if (hot) {
+    hot.dispose(() => {
+      if (mcpLifecycleToastUnlistenPromise) {
+        void mcpLifecycleToastUnlistenPromise.then((unlisten) => unlisten());
+      }
+      mcpLifecycleToastUnlistenPromise = null;
+      isMcpLifecycleToastListenerInitialized = false;
+    });
+  }
+}
+
 function setupMcpRendererBridgeListener(): void {
   if (isMcpRendererBridgeInitialized) return;
   isMcpRendererBridgeInitialized = true;
@@ -128,6 +149,7 @@ setupThemeListener();
 setupEditCommandListener();
 setupFileCommandListener();
 setupViewCommandListener();
+setupMcpLifecycleNotificationListener();
 setupMcpRendererBridgeListener();
 setupAppExitCoordinatorListener();
 // 非同期で初期テーマを適用（React マウントをブロックしない）

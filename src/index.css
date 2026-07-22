@@ -25,6 +25,19 @@
   }
 }
 
+/* HeroUI の固定幅を外し、右上を基準に各トーストを内容幅で表示する */
+[data-app-toast-region] {
+  width: 0;
+  min-width: 0;
+}
+
+[data-app-toast-region] [data-slot='toast'] {
+  right: 0;
+  left: auto;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+}
+
 /* スクリーンショット画像は常時背面に置き、hidden の時だけ隠す */
 [data-display-mode='hidden'] [data-screenshot-img] {
   display: none;

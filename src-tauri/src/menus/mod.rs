@@ -15,6 +15,7 @@ use crate::commands::store::focused_document_window_label;
 
 pub const EVENT_EDIT_COMMAND: &str = "edit-command";
 pub const EVENT_FILE_COMMAND: &str = "file-command";
+pub const EVENT_MCP_LIFECYCLE_CHANGED: &str = "mcp-lifecycle-changed";
 pub const EVENT_VIEW_COMMAND: &str = "view-command";
 pub const EVENT_THEME_COMMAND: &str = "theme-command";
 

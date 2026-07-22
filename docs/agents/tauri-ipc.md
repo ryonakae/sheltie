@@ -70,6 +70,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
 - `view-command`: メニューバー `View` 操作のビューコマンド通知（payload は `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out`）
 - `theme-command`: ネイティブテーマメニュー（`show_theme_menu`）で選択されたテーマ通知（payload は `light` / `dark` / `system`）
+- `mcp-lifecycle-changed`: Settingsの`MCP Server`切り替えがlatest intentとして成功した時、操作時点でfocusedだったdocument windowだけへ送る通知（payloadは`started` / `stopped`）。起動時の設定復元、stale intent、失敗時、focused document windowが無い場合は送らない
 - `mcp-renderer-request`: Rust brokerが明示された`documentId`のwindowだけへ送るrequest。payloadは`{ requestId, command, params }`で、rendererは成功/失敗にかかわらず`complete_mcp_renderer_request`を1回呼ぶ
 
 ## Renderer <-> Renderer（window-local app quit coordination）
@@ -101,6 +102,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - `loadProjectFile`, `saveProjectFile`
 - `loadTheme`, `saveTheme`, `getPlatformInfo`
 - `onAppExitRequested`
+- `onMcpLifecycleChanged`
 - `onMcpRendererRequest`
 - `onEditCommand`
 - `onFileCommand`
@@ -127,6 +129,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - `save_project_file` は常に拡張子を `.sheltie` に正規化する
 - window-local な IPC では `main` のような固定 label を前提にしない
 - MCP renderer requestはdocumentごとのasync mutexで直列化し、異なるdocumentだけを並行実行する。timeoutは10秒で、disable時はpending requestを`server_stopped`で全て終了する
+- MCP lifecycle成功通知は`src/lib/mcp/lifecycle-notifications.ts`でHeroUI success toastへ変換し、`src/components/Common/AppToastProvider.tsx`の共通Providerで右上へテキストに応じた可変幅で表示する
 - `Cmd+Q` / `Quit` は macOS app menu の既定 `Quit` を custom `app.quit` item に差し替え、その menu event から renderer 側 coordinator を起動する
 
 ## プラットフォーム差分

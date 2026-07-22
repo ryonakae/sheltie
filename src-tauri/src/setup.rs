@@ -9,7 +9,7 @@ use crate::commands::{
     store::{
         configure_macos_window_tabbing_policy, create_untitled_document_window,
         focus_document_window, focused_document_window_label, handle_launch_args,
-        DocumentManagerState,
+        strictly_focused_document_window_label, DocumentManagerState,
     },
     theme::{load_persisted_theme, MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM},
 };
@@ -23,7 +23,10 @@ use crate::menus::{
     app::configure_app_menu,
     edit::{configure_edit_menu, emit_edit_command},
     file::{configure_file_menu, emit_file_command},
-    mcp::{mcp_menu_is_checked, update_mcp_check_state, update_mcp_connection_count},
+    mcp::{
+        emit_mcp_lifecycle_changed, mcp_menu_is_checked, update_mcp_check_state,
+        update_mcp_connection_count,
+    },
     theme::{emit_theme_command, update_theme_check_state},
     view::{configure_view_menu, emit_view_command},
     MENU_ID_APP_QUIT, MENU_ID_EDIT_DELETE, MENU_ID_EDIT_REDO, MENU_ID_EDIT_UNDO,
@@ -32,7 +35,21 @@ use crate::menus::{
     MENU_ID_VIEW_RESET_ZOOM, MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
 };
 
-fn request_mcp_enabled(app: tauri::AppHandle, enabled: bool) {
+fn mcp_lifecycle_notification_window<'a>(
+    notification_window_label: Option<&'a str>,
+    apply_result: &Result<bool, String>,
+) -> Option<&'a str> {
+    if !matches!(apply_result, Ok(true)) {
+        return None;
+    }
+    notification_window_label
+}
+
+fn request_mcp_enabled(
+    app: tauri::AppHandle,
+    enabled: bool,
+    notification_window_label: Option<String>,
+) {
     let state = app.state::<McpServerState>();
     let generation = match state.request_enabled(enabled) {
         Ok(generation) => generation,
@@ -45,7 +62,12 @@ fn request_mcp_enabled(app: tauri::AppHandle, enabled: bool) {
     update_mcp_check_state(&app, enabled);
 
     tauri::async_runtime::spawn(async move {
-        match apply_requested_enabled(app.clone(), generation, enabled).await {
+        let apply_result = apply_requested_enabled(app.clone(), generation, enabled).await;
+        let notification_window_label =
+            mcp_lifecycle_notification_window(notification_window_label.as_deref(), &apply_result)
+                .map(str::to_owned);
+
+        match apply_result {
             Ok(true) => update_mcp_check_state(&app, enabled),
             Ok(false) => {}
             Err(error) => {
@@ -79,6 +101,10 @@ fn request_mcp_enabled(app: tauri::AppHandle, enabled: bool) {
                         .show(|_| {});
                 }
             }
+        }
+
+        if let Some(window_label) = notification_window_label {
+            emit_mcp_lifecycle_changed(&app, &window_label, enabled);
         }
     });
 }
@@ -155,7 +181,7 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             if initial_mcp_enabled {
-                request_mcp_enabled(app.handle().clone(), true);
+                request_mcp_enabled(app.handle().clone(), true, None);
             }
 
             let launch_args: Vec<String> = std::env::args().collect();
@@ -189,7 +215,11 @@ pub fn run() {
                     emit_theme_command(app, "system");
                 }
                 MENU_ID_MCP_ENABLED => {
-                    request_mcp_enabled(app.clone(), mcp_menu_is_checked(app));
+                    request_mcp_enabled(
+                        app.clone(),
+                        mcp_menu_is_checked(app),
+                        strictly_focused_document_window_label(app),
+                    );
                 }
                 MENU_ID_OPEN_DEVTOOLS =>
                 {
@@ -291,4 +321,30 @@ pub fn run() {
             _ => {}
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lifecycle_notification_requires_applied_result_and_target_window() {
+        let applied = Ok(true);
+        let stale = Ok(false);
+        let failed = Err("bind failed".to_string());
+
+        assert_eq!(
+            mcp_lifecycle_notification_window(Some("document-1"), &applied),
+            Some("document-1")
+        );
+        assert_eq!(mcp_lifecycle_notification_window(None, &applied), None);
+        assert_eq!(
+            mcp_lifecycle_notification_window(Some("document-1"), &stale),
+            None
+        );
+        assert_eq!(
+            mcp_lifecycle_notification_window(Some("document-1"), &failed),
+            None
+        );
+    }
 }

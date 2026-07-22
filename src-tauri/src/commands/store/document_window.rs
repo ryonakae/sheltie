@@ -159,7 +159,9 @@ fn launch_paths_from_args(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
     paths
 }
 
-pub fn focused_document_window_label<R: tauri::Runtime>(app: &AppHandle<R>) -> Option<String> {
+pub fn strictly_focused_document_window_label<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+) -> Option<String> {
     // webview_windows() ではなく windows() を使う。
     // add_child() で子 Webview を追加すると webview_windows() が
     // document window を返さなくなるため。
@@ -179,7 +181,11 @@ pub fn focused_document_window_label<R: tauri::Runtime>(app: &AppHandle<R>) -> O
         })
         .collect();
 
-    if let Some(label) = labels.pop() {
+    labels.pop()
+}
+
+pub fn focused_document_window_label<R: tauri::Runtime>(app: &AppHandle<R>) -> Option<String> {
+    if let Some(label) = strictly_focused_document_window_label(app) {
         return Some(label);
     }
 

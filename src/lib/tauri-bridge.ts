@@ -4,6 +4,7 @@ export {
   onAppExitRequested,
   onEditCommand,
   onFileCommand,
+  onMcpLifecycleChanged,
   onMcpRendererRequest,
   onViewCommand,
 } from '@/lib/tauri-bridge/events';
@@ -15,6 +16,7 @@ export type {
   AppExitStateResponse,
   AppExitStateSnapshot,
   FileCommand,
+  McpLifecycleStatus,
   McpRendererRequest,
   McpRendererResponse,
   ViewCommand,

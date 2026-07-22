@@ -2,6 +2,8 @@ export type FileCommand = 'new-tab' | 'new-window' | 'open' | 'save' | 'save-as'
 
 export type ViewCommand = 'fit-view' | 'reset-zoom' | 'zoom-in' | 'zoom-out';
 
+export type McpLifecycleStatus = 'started' | 'stopped';
+
 export type SaveProjectStatus = 'saved' | 'cancelled' | 'error';
 
 export type WindowContext = {

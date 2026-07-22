@@ -238,7 +238,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 - Consumes: Task 1 local server and verifier, Task 2 Skill and prompts.
 - Produces: comparable paired runs, timing data, machine-checked evidence, human-reviewable outputs, and a benchmark.
 
-- [ ] **Step 1: Start a clean local evaluation session.**
+- [x] **Step 1: Start a clean local evaluation session.**
 
   Create only the required run directories as work begins, not all future iterations. Start `serve-local-sites.mjs`, launch the completed Sheltie app, turn on **Sheltie > Settings > MCP Server**, load `comparison-board.sheltie`, and create the setup described for each eval in a fresh document window. Record the exact endpoint, server process ID, and assigned `documentId` in the relevant run’s `setup.md`; do not record tokens, cookies, or page content not in fixtures.
 
@@ -246,7 +246,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Create one `eval_metadata.json` per `eval-N` directory with its numeric `eval_id`, descriptive `eval_name`, prompt, and an empty `assertions` array. Directory names must be exactly `eval-0`, `eval-1`, and `eval-2` because `aggregate_benchmark.py` discovers only `eval-*`; preserve the descriptive names in metadata and the fixed mapping above.
 
-- [ ] **Step 2: Launch three paired repetitions without configuration-order bias.**
+- [x] **Step 2: Launch three paired repetitions without configuration-order bias.**
 
   Run three independent repetitions for every prompt/configuration so the aggregator can report nonzero variability when behavior differs. For each `RUN_NUMBER` from 1 through 3, launch the six calls for all three evals in one tool turn: each eval gets one Agent with `skills/sheltie-use` and one without a Skill. Wait for that six-run wave to finish and persist its evidence before starting the next run number. Never run all with-Skill calls before baselines. Give all 18 runs their own fresh fixture board/document so no run changes another run’s page or Undo history.
 
@@ -273,7 +273,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Agent calls are used here rather than a shell command because they must independently decide how to operate the real MCP client; shell commands only serve static fixtures and normalize/validate their results. The executor must not create evidence by calling an export or save tool; neither tool exists.
 
-- [ ] **Step 3: Draft discriminating assertions while the first six-run wave executes.**
+- [x] **Step 3: Draft discriminating assertions while the first six-run wave executes.**
 
   Update both `evals/evals.json` and each iteration’s `eval_metadata.json` with these objective assertions, adjusted only for finalized Phase 1–3 tool names:
 
@@ -283,7 +283,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Explain to the user that the viewer will show the actual outputs and per-assertion proof, while the benchmark tab compares pass rate, time, tokens, and variability. Do not mark a prose claim as passed without verifier or trace evidence.
 
-- [ ] **Step 4: Capture Agent results, final board reads, and timing at completion.**
+- [x] **Step 4: Capture Agent results, final board reads, and timing at completion.**
 
   As each Agent completion notification arrives, immediately write the notification values into that exact `eval-N/{with_skill|without_skill}/run-N/` directory’s `timing.json`:
 
@@ -299,7 +299,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Next, call `get_subagent_result` with that run’s Agent ID and `verbose: true`, and save the returned complete result at `$RUN_DIR/agent-result.verbose.json`. Run `derive-redacted-mcp-trace.mjs` to write `$RUN_DIR/outputs/redacted-mcp-trace.json`. Through the configured Sheltie MCP client, call `get_board` with the `documentId` recorded in `setup.md` and `includeEdges: true`; serialize only its `structuredContent` to `$RUN_DIR/outputs/final-board.json`. Run `verify-run.mjs` with those two files and `$RUN_DIR/outputs/executor-notes.md` so it creates `verification.json` and the grader-facing `user_notes.md` before grading. The verbose Agent result is the durable source for tool calls; `get_board` is the only final-board-state source.
 
-- [ ] **Step 5: Grade outputs and aggregate iteration 1.**
+- [x] **Step 5: Grade outputs and aggregate iteration 1.**
 
   For each of the 18 runs, launch a grader Agent with `/Users/ryo.nakae/.agents/skills/skill-creator/agents/grader.md`, the exact expectations, persisted verbose Agent result, and outputs directory. Require `grading.json` beside `outputs/`; its `expectations` entries must use exactly `text`, `passed`, and `evidence`. The grader must read `agent-result.verbose.json`, `verification.json`, the derived redacted trace, `get_board` result in `final-board.json`, metrics, timing, and `user_notes.md`, and must flag weak assertions in `eval_feedback`.
 
@@ -314,7 +314,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: the script discovers all three `eval-*` directories and all 18 `run-*` grading files. `benchmark.json` and `benchmark.md` compare `with_skill` with `without_skill` and include pass-rate, timing, token, min/max, standard-deviation, and delta statistics.
 
-- [ ] **Step 6: Perform the analyst pass and open the prescribed reviewer.**
+- [x] **Step 6: Perform the analyst pass and open the prescribed reviewer.**
 
   Launch an analyst Agent with the benchmark-data section of `/Users/ryo.nakae/.agents/skills/skill-creator/agents/analyzer.md`. It must read `benchmark.json` and write `analysis.json` as a JSON string array that identifies non-discriminating assertions, persistent failures, per-eval variance, and time/token outliers without proposing changes yet.
 
@@ -346,7 +346,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 - Consumes: iteration 1 review feedback, grading results, benchmark, and analyst notes.
 - Produces: revised Skill source, reproducible paired iteration(s), and documented rationale for retaining or removing instructions.
 
-- [ ] **Step 1: Ingest feedback and close the previous reviewer.**
+- [x] **Step 1: Ingest feedback and close the previous reviewer.**
 
   After the user submits reviews, copy the downloaded `feedback.json` into `skills/sheltie-use-workspace/iteration-1/feedback.json`, read all non-empty comments, and associate each comment with its output and formal grade. Stop the viewer:
 
@@ -356,13 +356,13 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: user-specific issues, grader evidence, and analyst observations are available together; no running viewer process remains.
 
-- [ ] **Step 2: Revise for general behavior rather than fixture-specific wording.**
+- [x] **Step 2: Revise for general behavior rather than fixture-specific wording.**
 
   Change the Skill only where feedback or trace evidence identifies a causal gap. Examples of acceptable generalizations are: make the overview-first reason clearer if agents skip cross-site evidence; explain snapshot replacement if they reuse stale refs; clarify typed-action preference if they jump to evaluate; move a large detail into a reference if the main body caused unnecessary work. Do not add brittle strings from fixture labels, hard-code local URLs, or turn every suggestion into an absolute rule.
 
   Add a short entry to the workspace `revision-notes.md` naming the evidence, source file changed, and expected behavioral effect. Keep this file ignored.
 
-- [ ] **Step 3: Rerun all three paired evaluations as iteration N.**
+- [x] **Step 3: Rerun all three paired evaluations as iteration N.**
 
   Repeat Task 3’s three six-Agent waves, setup isolation, timing capture, verifier, grader, aggregation, and analyst pass. Preserve the `iteration-N/eval-*/{with_skill,without_skill}/run-*/` layout. For a new Skill, baseline always remains `without_skill`; never replace it with a prior iteration. Populate new `eval_metadata.json` files even when prompts have not changed.
 
@@ -380,7 +380,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: the reviewer exposes current output, previous output, prior user feedback, and the new benchmark. Continue only while feedback identifies a meaningful issue or a revision improves a discriminating metric; stop when the user is satisfied, feedback is empty, or another revision makes no meaningful progress.
 
-- [ ] **Step 4: Commit accepted source-only revisions.**
+- [x] **Step 4: Commit accepted source-only revisions.**
 
   Do not add workspace files. When an iteration produces an accepted source change, run:
 
@@ -388,6 +388,8 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
   git add skills/sheltie-use/SKILL.md skills/sheltie-use/references skills/sheltie-use/evals/evals.json
   git commit -m "refactor(skill): improve sheltie MCP guidance"
   ```
+
+  User review accepted iteration 1 without changes. The documented stop condition was met, so no iteration 2 workspace or additional source-only revision commit was required.
 
 ### Task 5: Optimize and validate the Skill trigger description with 20 reviewed queries
 
@@ -402,11 +404,11 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 - Consumes: finalized Skill body and user-reviewed trigger cases.
 - Produces: 20-query test set, selected held-out-test description, and before/after scores.
 
-- [ ] **Step 1: Create a balanced 20-query trigger set.**
+- [x] **Step 1: Create a balanced 20-query trigger set.**
 
   Write 8–10 should-trigger and 8–10 should-not-trigger queries in `trigger-evals.json`. Each query must be realistic, concrete, and multi-step. Cover direct phrases such as “compare the pages open on my Sheltie board,” indirect requests such as “turn these three product pages into linked notes,” authenticated-in-app research, cached screenshot comparison, form completion in a named WebPage, canvas fallback, and “show me the notes you added.” Use near-miss negatives: building the MCP server, changing a React Flow board UI, controlling Chrome with Playwright, general web research with no Sheltie board, writing a design-tool Skill, and merely opening a `.sheltie` file. Include informal Japanese and English wording, typos, different lengths, and contexts that mention MCP but should select another tool.
 
-- [ ] **Step 2: Present the set for user review using the supplied template.**
+- [x] **Step 2: Present the set for user review using the supplied template.**
 
   Read `/Users/ryo.nakae/.agents/skills/skill-creator/assets/eval_review.html`, replace `__EVAL_DATA_PLACEHOLDER__`, `__SKILL_NAME_PLACEHOLDER__`, and `__SKILL_DESCRIPTION_PLACEHOLDER__`, then write and open the review file:
 
@@ -416,7 +418,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: the user can edit queries, toggle expected triggering, add/remove cases, and export their reviewed set. Copy the most recently exported `~/Downloads/eval_set*.json` into `skills/sheltie-use/evals/trigger-evals.json` before starting the optimization. Preserve exactly 20 reviewed queries.
 
-- [ ] **Step 3: Run the exact Skill Creator optimization loop in the background.**
+- [x] **Step 3: Run the exact Skill Creator optimization loop in the background.**
 
   Set `MODEL_ID` to the exact model identifier powering the active session; do not substitute a convenient model. Then run:
 
@@ -432,7 +434,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Start it in the background and periodically inspect its output. Expected: it uses a 60% train / 40% held-out split, evaluates each query three times, reports per-iteration scores, and chooses `best_description` by held-out performance rather than training score.
 
-- [ ] **Step 4: Apply only a held-out winner and commit it.**
+- [x] **Step 4: Apply only a held-out winner and commit it.**
 
   Record the before/after descriptions and train/test scores in the ignored workspace. Update the frontmatter only if `best_description` improves the held-out score or resolves user-approved false positives/negatives without a held-out regression. Then run the full test set once more with the selected description and commit source changes:
 
@@ -440,6 +442,8 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
   git add skills/sheltie-use/SKILL.md skills/sheltie-use/evals/trigger-evals.json
   git commit -m "refactor(skill): tune sheltie skill trigger description"
   ```
+
+  The external Claude Code runner completed five iterations with a 12/8 train/held-out split and three repetitions per query. The original description remained the held-out winner (`4/8`, train `6/12`), so the generated final candidate was not applied and no description-only commit was needed. Results are retained in the ignored trigger workspace.
 
 ### Task 6: Package the accepted Skill and run repository validation
 
@@ -453,7 +457,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 - Consumes: accepted Skill source and final evaluation evidence.
 - Produces: validated `.skill` archive and a concise release handoff with benchmark/review summary.
 
-- [ ] **Step 1: Perform source and package validation.**
+- [x] **Step 1: Perform source and package validation.**
 
   Run:
 
@@ -468,7 +472,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: packaging validation succeeds, archive integrity is valid, and the final command produces no `evals/` entries. The archive remains available for installation at the ignored release path; the repository-tracked `skills/sheltie-use/` directory is the source of truth.
 
-- [ ] **Step 2: Run project and harness checks.**
+- [x] **Step 2: Run project and harness checks.**
 
   Run:
 
@@ -482,7 +486,7 @@ For evaluation steps, use this fixed mapping: `eval-0` → `cross-site-price-com
 
   Expected: lint, format, typecheck, and all tests pass. `git status --short` contains only intended committed source changes or no output; it must not list `skills/sheltie-use-workspace/`.
 
-- [ ] **Step 3: Complete a release checkpoint.**
+- [x] **Step 3: Complete a release checkpoint.**
 
   Confirm all of the following before handing off:
 

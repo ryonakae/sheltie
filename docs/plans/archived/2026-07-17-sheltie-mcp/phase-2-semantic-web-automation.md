@@ -744,9 +744,9 @@ node scripts/mcp-fixtures/serve-semantic-fixtures.mjs
 
 Expected: Prettier exits 0; the server reports both `http://127.0.0.1:1420` and `http://127.0.0.1:1421`; both same-origin and cross-origin child URLs return the fixture; no fixture refers to an external host. Stop the fixture server after this check.
 
-- [ ] **Step 3: Run manual macOS Tauri/MCP checks**
+- [x] **Step 3: Run manual macOS Tauri/MCP checks**
 
-Blocked in the agent sandbox: the debug app aborts while initializing `tauri-plugin-log` with `Operation not permitted`; the release app starts, but Agent Safehouse denies the Application Support write needed to enable the persisted MCP setting, and macOS `System Events` is unavailable. Run this matrix outside Agent Safehouse before release.
+Verified with an isolated release validation build and the real Streamable HTTP endpoint. The run covered password-value exclusion, current-ref fill/select/click, atomic invalid fill-form rejection, stale refs, key/scroll, finished navigate/click/back/forward/reload epochs, same- and cross-origin iframe aggregation/action, and later queue recovery. Actor removal/concurrency negative paths remain additionally fixed by Rust tests.
 
 1. In separate terminals run `node scripts/mcp-fixtures/serve-semantic-fixtures.mjs` and `npm run dev`. Open a document, create one WebPage for `http://127.0.0.1:1420/mcp-fixtures/semantic-controls.html`, and enable MCP Server from the persisted Settings menu added in Phase 1.
 2. Connect an MCP inspector or configured local client to Phase 1's loopback endpoint. Call `browser_snapshot` with the `documentId` from `list_documents` and the WebPage node ID from `get_board`. Confirm controls have readable names, password values are absent, and the response has `snapshotId`, `navigationEpoch`, and a valid `documentToken`.

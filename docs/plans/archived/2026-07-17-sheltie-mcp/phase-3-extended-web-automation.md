@@ -704,7 +704,9 @@ npm run test
 
 Expected: every command exits 0.
 
-- [ ] **Step 4: Run manual macOS/WKWebView checks**
+- [x] **Step 4: Run manual macOS/WKWebView checks**
+
+Verified through isolated release validation builds and the real MCP endpoint. The matrix covered explicit cross-document routing; native/cached viewport provenance; annotated element and bounded full-page capture with scroll restoration; hidden live-capture rejection; native-pixel to CSS-coordinate conversion; untrusted coordinate activation; evaluate JSON/non-JSON/timeout queue recovery; dialog prompt metadata/redaction; absolute-path upload; in-place popup navigation; and unchanged Phase 1 overview/board capture. Rust/TypeScript tests cover capture navigation races, upload negative limits, non-native no-dispatch, and platform boundaries.
 
 1. Open two document windows and two WebPages. Call each tool with explicit IDs; verify it never touches the focused-but-unaddressed page.
 2. Put one page in native mode and another outside the board’s native area (`screenshot` or `hidden`). Call `browser_screenshot(mode: "viewport")` for both. Verify the native page can capture and the non-native page returns only its cache; the hidden WebView never flashes, moves, resizes, or becomes visible.

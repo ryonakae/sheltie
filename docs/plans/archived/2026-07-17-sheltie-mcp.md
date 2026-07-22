@@ -21,10 +21,10 @@
 
 ## Progress
 
-- [ ] [Phase 1 — MCP foundation, board tools, and multi-site overview](2026-07-17-sheltie-mcp/phase-1-foundation-and-board.md)
-- [ ] [Phase 2 — Semantic WKWebView automation](2026-07-17-sheltie-mcp/phase-2-semantic-web-automation.md)
-- [ ] [Phase 3 — Visual fallback and extended Web operations](2026-07-17-sheltie-mcp/phase-3-extended-web-automation.md)
-- [ ] [Phase 4 — Distributable Sheltie Skill and evaluation](2026-07-17-sheltie-mcp/phase-4-skill.md)
+- [x] [Phase 1 — MCP foundation, board tools, and multi-site overview](2026-07-17-sheltie-mcp/phase-1-foundation-and-board.md)
+- [x] [Phase 2 — Semantic WKWebView automation](2026-07-17-sheltie-mcp/phase-2-semantic-web-automation.md)
+- [x] [Phase 3 — Visual fallback and extended Web operations](2026-07-17-sheltie-mcp/phase-3-extended-web-automation.md)
+- [x] [Phase 4 — Distributable Sheltie Skill and evaluation](2026-07-17-sheltie-mcp/phase-4-skill.md)
 
 ## Completion
 

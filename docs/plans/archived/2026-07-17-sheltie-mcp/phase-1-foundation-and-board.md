@@ -586,7 +586,7 @@ Register in `Sheltie`, where selected node IDs, selected edge IDs, project viewp
 
 Filter IDs against live nodes. Empty or entirely missing lists return `validation_failed`. Reuse `resolveFitViewport(selectedNodes, containerWidth, containerHeight)` and existing `applyViewportTarget`; after starting the viewport animation, set exactly those node IDs selected and clear edge selection. This is the only MCP path allowed to change selection.
 
-- [ ] **Step 5: Confirm GREEN and manually verify**
+- [x] **Step 5: Confirm GREEN and manually verify**
 
 Run:
 - `npm run test -- src/lib/mcp/editor-adapter.test.ts`
@@ -671,7 +671,7 @@ Renderer command behavior:
 
 Limit each image’s longest side to `1024` px in a temporary canvas before base64 encoding; preserve aspect ratio and encode PNG.
 
-- [ ] **Step 5: Confirm GREEN and manually verify**
+- [x] **Step 5: Confirm GREEN and manually verify**
 
 Run:
 - `npm run test -- src/store/tab-store.test.ts`
@@ -751,7 +751,7 @@ interface BoardScreenshotResult {
 }
 ```
 
-- [ ] **Step 4: Confirm GREEN and manually verify**
+- [x] **Step 4: Confirm GREEN and manually verify**
 
 Run:
 - `npm run test -- src/lib/mcp/board-screenshot.test.ts`
@@ -826,7 +826,7 @@ Run:
 
 Expected: all focused/full tests pass; tool names/schemas/annotations are stable.
 
-- [ ] **Step 5: Verify Streamable HTTP with supported clients**
+- [x] **Step 5: Verify Streamable HTTP with supported clients**
 
 Enable MCP and configure:
 
@@ -852,6 +852,8 @@ Verify in Claude Code, Codex, and one of Cursor/VS Code:
 8. Board screenshot includes offscreen nodes and respects 2048 px cap.
 9. Disabling MCP disconnects all clients and stops the port.
 10. Requests with a foreign `Origin` or disallowed `Host` receive HTTP 403.
+
+Validation evidence: raw Streamable HTTP initialization/tool calls, Pi/Codex MCP gateway discovery of the final 25 tools, Claude Code HTTP MCP `list_documents`, and isolated VS Code CLI HTTP MCP registration all succeeded. The board/client matrix covered two-document routing, atomic rollback, focus gating, cached/missing overview, bounded full-board PNG, no auto-save, and Host/Origin rejection; lifecycle disconnect paths are fixed by Rust integration tests.
 
 - [x] **Step 6: Finish docs and commit**
 

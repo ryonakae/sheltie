@@ -1,0 +1,220 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-macos:
+    name: Build signed macOS release
+    runs-on: macos-latest
+    timeout-minutes: 60
+    environment: release
+    permissions:
+      contents: write # Required to create the draft release and upload its assets.
+    env:
+      APPLE_SIGNING_IDENTITY: 'Developer ID Application: Ryo Nakae (ELFWBE4NMA)'
+      APPLE_TEAM_ID: 'ELFWBE4NMA'
+      APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
+      APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+      APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey_${{ vars.APPLE_API_KEY }}.p8
+      APPLE_CERTIFICATE_PATH: ${{ runner.temp }}/sheltie-developer-id.p12
+      BUILD_KEYCHAIN_PATH: ${{ runner.temp }}/sheltie-build.keychain-db
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Validate release version
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Unsupported release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          TAURI_VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          CARGO_VERSION="$(awk '
+            /^\[package\]$/ { in_package = 1; next }
+            /^\[/ { in_package = 0 }
+            in_package && /^version[[:space:]]*=/ {
+              value = $0
+              sub(/^[^=]*=[[:space:]]*\"/, "", value)
+              sub(/\"[[:space:]]*$/, "", value)
+              print value
+              exit
+            }
+          ' src-tauri/Cargo.toml)"
+
+          for entry in \
+            "package.json:$PACKAGE_VERSION" \
+            "src-tauri/tauri.conf.json:$TAURI_VERSION" \
+            "src-tauri/Cargo.toml:$CARGO_VERSION"; do
+            file="${entry%%:*}"
+            value="${entry#*:}"
+            if [[ -z "$value" || "$value" != "$TAG_VERSION" ]]; then
+              echo "$file version '$value' does not match tag version '$TAG_VERSION'" >&2
+              exit 1
+            fi
+          done
+
+          echo "VERSION=$TAG_VERSION" >> "$GITHUB_ENV"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Rust targets
+        run: |
+          rustup target add aarch64-apple-darwin
+          rustup target add x86_64-apple-darwin
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test --lib
+
+      - name: Prepare Apple signing credentials
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          for name in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_API_KEY_BASE64 \
+            APPLE_API_KEY \
+            APPLE_API_ISSUER; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing release environment value: $name" >&2
+              exit 1
+            fi
+          done
+
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$APPLE_CERTIFICATE_PATH"
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$APPLE_API_KEY_PATH"
+          chmod 600 "$APPLE_CERTIFICATE_PATH" "$APPLE_API_KEY_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$BUILD_KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$BUILD_KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$BUILD_KEYCHAIN_PATH"
+          security import "$APPLE_CERTIFICATE_PATH" \
+            -k "$BUILD_KEYCHAIN_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$BUILD_KEYCHAIN_PATH"
+          security list-keychains -d user -s \
+            "$BUILD_KEYCHAIN_PATH" \
+            "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -d user -s "$BUILD_KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$BUILD_KEYCHAIN_PATH" \
+            | grep -F "$APPLE_SIGNING_IDENTITY"
+
+      - name: Build signed universal DMG
+        run: npm run build -- --bundles dmg --target universal-apple-darwin
+
+      - name: Notarize and verify DMG
+        run: |
+          set -euo pipefail
+
+          DMG_PATH="$GITHUB_WORKSPACE/src-tauri/target/universal-apple-darwin/release/bundle/dmg/Sheltie_${VERSION}_universal.dmg"
+          if [[ ! -f "$DMG_PATH" ]]; then
+            echo "Expected DMG was not created: $DMG_PATH" >&2
+            exit 1
+          fi
+
+          xcrun notarytool submit "$DMG_PATH" \
+            --key "$APPLE_API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          spctl --assess \
+            --type open \
+            --context context:primary-signature \
+            --verbose=4 \
+            "$DMG_PATH"
+
+          DMG_NAME="$(basename "$DMG_PATH")"
+          CHECKSUM_PATH="$DMG_PATH.sha256"
+          (
+            cd "$(dirname "$DMG_PATH")"
+            shasum -a 256 "$DMG_NAME" > "$(basename "$CHECKSUM_PATH")"
+          )
+
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+          echo "CHECKSUM_PATH=$CHECKSUM_PATH" >> "$GITHUB_ENV"
+
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if IS_DRAFT="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ "$IS_DRAFT" != "true" ]]; then
+              echo "Release $GITHUB_REF_NAME is already published; refusing to replace assets." >&2
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" \
+              "$DMG_PATH" \
+              "$CHECKSUM_PATH" \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "$DMG_PATH" \
+              "$CHECKSUM_PATH" \
+              --draft \
+              --generate-notes \
+              --title "Sheltie $GITHUB_REF_NAME" \
+              --verify-tag
+          fi
+
+      - name: Remove temporary signing credentials
+        if: ${{ always() }}
+        run: |
+          set +e
+          security default-keychain -d user -s "$HOME/Library/Keychains/login.keychain-db"
+          security delete-keychain "$BUILD_KEYCHAIN_PATH"
+          rm -f \
+            "$APPLE_CERTIFICATE_PATH" \
+            "$RUNNER_TEMP"/AuthKey_*.p8

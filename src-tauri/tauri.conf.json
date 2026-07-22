@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Sheltie",
   "version": "1.0.0",
-  "identifier": "com.sheltie.app",
+  "identifier": "jp.brdr.app.sheltie",
   "build": {
     "beforeDevCommand": "vite",
     "beforeBuildCommand": "vite build",

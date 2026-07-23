@@ -52,13 +52,14 @@ fn insert_settings_submenu<R: tauri::Runtime>(
 ) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, PredefinedMenuItem, SubmenuBuilder};
 
+    use super::mcp::{mcp_action_title, mcp_connections_title};
     use super::{MENU_ID_MCP_CONNECTIONS, MENU_ID_MCP_ENABLED, MENU_ID_SETTINGS};
     use crate::commands::theme::{MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM};
 
     // メニュー構築時点ではまだ tauri_plugin_store の State が manage されていないため、
-    // 初期チェックは全て off とし、setup フェーズで `update_theme_check_state` を呼んで反映する。
-    // セクションタイトル「Theme」は muda 経由では section header スタイルが使えないため、
-    // setup 後に `apply_settings_theme_section_header` で NSMenuItem.sectionHeaderWithTitle: を挿入する
+    // Themeの初期チェックは全てoff、MCP actionはdisabled時の文言で作り、setupで復元する。
+    // セクションタイトルは muda 経由では section header スタイルが使えないため、
+    // setup 後に `apply_settings_section_headers` で NSMenuItem.sectionHeaderWithTitle: を挿入する
     let system_item = CheckMenuItem::with_id(
         app,
         MENU_ID_THEME_SYSTEM,
@@ -72,18 +73,17 @@ fn insert_settings_submenu<R: tauri::Runtime>(
     let dark_item =
         CheckMenuItem::with_id(app, MENU_ID_THEME_DARK, "Dark", true, false, None::<&str>)?;
     let section_separator = PredefinedMenuItem::separator(app)?;
-    let mcp_enabled_item = CheckMenuItem::with_id(
+    let mcp_enabled_item = tauri::menu::MenuItem::with_id(
         app,
         MENU_ID_MCP_ENABLED,
-        "MCP Server",
+        mcp_action_title(false),
         cfg!(target_os = "macos"),
-        false,
         None::<&str>,
     )?;
     let mcp_connections_item = tauri::menu::MenuItem::with_id(
         app,
         MENU_ID_MCP_CONNECTIONS,
-        "MCP Connections: 0",
+        mcp_connections_title(0),
         false,
         None::<&str>,
     )?;

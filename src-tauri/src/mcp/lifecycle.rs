@@ -145,6 +145,13 @@ impl McpServerState {
         Ok(Some(inner.desired_generation))
     }
 
+    pub fn desired_enabled(&self) -> Result<bool, String> {
+        self.inner
+            .lock()
+            .map(|inner| inner.desired_enabled)
+            .map_err(|_| "failed to acquire MCP lifecycle lock".to_string())
+    }
+
     pub fn is_current_intent(&self, generation: u64, enabled: bool) -> Result<bool, String> {
         self.inner
             .lock()
@@ -544,6 +551,18 @@ mod tests {
         shutdown_running_server(running).await;
 
         assert!(sessions.sessions.read().await.is_empty());
+    }
+
+    #[test]
+    fn desired_enabled_tracks_latest_requested_state() {
+        let state = McpServerState::default();
+        assert!(!state.desired_enabled().unwrap());
+
+        state.request_enabled(true).unwrap();
+        assert!(state.desired_enabled().unwrap());
+
+        state.request_enabled(false).unwrap();
+        assert!(!state.desired_enabled().unwrap());
     }
 
     #[test]

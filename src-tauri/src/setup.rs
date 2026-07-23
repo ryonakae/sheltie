@@ -23,10 +23,7 @@ use crate::menus::{
     app::configure_app_menu,
     edit::{configure_edit_menu, emit_edit_command},
     file::{configure_file_menu, emit_file_command},
-    mcp::{
-        emit_mcp_lifecycle_changed, mcp_menu_is_checked, update_mcp_check_state,
-        update_mcp_connection_count,
-    },
+    mcp::{emit_mcp_lifecycle_changed, update_mcp_connection_count, update_mcp_menu_action},
     theme::{emit_theme_command, update_theme_check_state},
     view::{configure_view_menu, emit_view_command},
     MENU_ID_APP_QUIT, MENU_ID_EDIT_DELETE, MENU_ID_EDIT_REDO, MENU_ID_EDIT_UNDO,
@@ -36,13 +33,46 @@ use crate::menus::{
 };
 
 fn mcp_lifecycle_notification_window<'a>(
+    state: &McpServerState,
+    generation: u64,
+    enabled: bool,
     notification_window_label: Option<&'a str>,
     apply_result: &Result<bool, String>,
 ) -> Option<&'a str> {
-    if !matches!(apply_result, Ok(true)) {
+    if !matches!(apply_result, Ok(true))
+        || !state
+            .is_current_intent(generation, enabled)
+            .unwrap_or(false)
+    {
         return None;
     }
     notification_window_label
+}
+
+fn should_sync_mcp_menu_state(state: &McpServerState, generation: u64, enabled: bool) -> bool {
+    state
+        .is_current_intent(generation, enabled)
+        .unwrap_or(false)
+}
+
+fn apply_mcp_menu_state(app: &tauri::AppHandle, enabled: bool) {
+    update_mcp_menu_action(app, enabled);
+    #[cfg(target_os = "macos")]
+    if let Err(error) = crate::menus::macos::update_settings_mcp_section(enabled) {
+        log::warn!("failed to update MCP section in Settings: {error}");
+    }
+}
+
+fn sync_mcp_menu_state(app: &tauri::AppHandle, generation: u64, enabled: bool) {
+    let app_for_update = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        let state = app_for_update.state::<McpServerState>();
+        if should_sync_mcp_menu_state(&state, generation, enabled) {
+            apply_mcp_menu_state(&app_for_update, enabled);
+        }
+    }) {
+        log::warn!("failed to schedule MCP menu state update: {error}");
+    }
 }
 
 fn request_mcp_enabled(
@@ -55,20 +85,17 @@ fn request_mcp_enabled(
         Ok(generation) => generation,
         Err(error) => {
             log::error!("failed to register MCP enablement intent: {error}");
-            update_mcp_check_state(&app, load_mcp_enabled(&app));
+            apply_mcp_menu_state(&app, load_mcp_enabled(&app));
             return;
         }
     };
-    update_mcp_check_state(&app, enabled);
+    sync_mcp_menu_state(&app, generation, enabled);
 
     tauri::async_runtime::spawn(async move {
         let apply_result = apply_requested_enabled(app.clone(), generation, enabled).await;
-        let notification_window_label =
-            mcp_lifecycle_notification_window(notification_window_label.as_deref(), &apply_result)
-                .map(str::to_owned);
 
-        match apply_result {
-            Ok(true) => update_mcp_check_state(&app, enabled),
+        match &apply_result {
+            Ok(true) => sync_mcp_menu_state(&app, generation, enabled),
             Ok(false) => {}
             Err(error) => {
                 log::error!("failed to update MCP server lifecycle: {error}");
@@ -79,7 +106,7 @@ fn request_mcp_enabled(
                     .ok()
                     .flatten();
                 if let Some(recovery_generation) = recovery_generation {
-                    update_mcp_check_state(&app, recovery_enabled);
+                    sync_mcp_menu_state(&app, recovery_generation, recovery_enabled);
                     if let Err(recovery_error) =
                         apply_requested_enabled(app.clone(), recovery_generation, recovery_enabled)
                             .await
@@ -104,7 +131,23 @@ fn request_mcp_enabled(
         }
 
         if let Some(window_label) = notification_window_label {
-            emit_mcp_lifecycle_changed(&app, &window_label, enabled);
+            let app_for_notification = app.clone();
+            if let Err(error) = app.run_on_main_thread(move || {
+                let state = app_for_notification.state::<McpServerState>();
+                if mcp_lifecycle_notification_window(
+                    &state,
+                    generation,
+                    enabled,
+                    Some(&window_label),
+                    &apply_result,
+                )
+                .is_some()
+                {
+                    emit_mcp_lifecycle_changed(&app_for_notification, &window_label, enabled);
+                }
+            }) {
+                log::warn!("failed to schedule MCP lifecycle notification: {error}");
+            }
         }
     });
 }
@@ -168,15 +211,14 @@ pub fn run() {
             let initial_theme = load_persisted_theme(app.handle());
             update_theme_check_state(app.handle(), &initial_theme);
             update_mcp_connection_count(app.handle(), 0);
-            let initial_mcp_enabled = load_mcp_enabled(app.handle());
-            update_mcp_check_state(
-                app.handle(),
-                cfg!(target_os = "macos") && initial_mcp_enabled,
-            );
+            let initial_mcp_enabled = cfg!(target_os = "macos") && load_mcp_enabled(app.handle());
+            update_mcp_menu_action(app.handle(), initial_mcp_enabled);
 
             #[cfg(target_os = "macos")]
-            if let Err(error) = crate::menus::macos::apply_settings_theme_section_header() {
-                log::warn!("failed to insert Theme section header in Settings: {error}");
+            if let Err(error) =
+                crate::menus::macos::apply_settings_section_headers(initial_mcp_enabled)
+            {
+                log::warn!("failed to insert Settings section headers: {error}");
             }
 
             #[cfg(target_os = "macos")]
@@ -215,9 +257,16 @@ pub fn run() {
                     emit_theme_command(app, "system");
                 }
                 MENU_ID_MCP_ENABLED => {
+                    let enabled = match app.state::<McpServerState>().desired_enabled() {
+                        Ok(enabled) => !enabled,
+                        Err(error) => {
+                            log::error!("failed to read MCP enablement intent: {error}");
+                            return;
+                        }
+                    };
                     request_mcp_enabled(
                         app.clone(),
-                        mcp_menu_is_checked(app),
+                        enabled,
                         strictly_focused_document_window_label(app),
                     );
                 }
@@ -328,22 +377,65 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lifecycle_notification_requires_applied_result_and_target_window() {
+    fn menu_sync_accepts_only_current_intent() {
+        let state = McpServerState::default();
+        let enable_generation = state.request_enabled(true).unwrap();
+        let disable_generation = state.request_enabled(false).unwrap();
+
+        assert!(!should_sync_mcp_menu_state(&state, enable_generation, true));
+        assert!(should_sync_mcp_menu_state(
+            &state,
+            disable_generation,
+            false
+        ));
+    }
+
+    #[test]
+    fn lifecycle_notification_requires_current_applied_result_and_target_window() {
+        let state = McpServerState::default();
+        let generation = state.request_enabled(true).unwrap();
         let applied = Ok(true);
         let stale = Ok(false);
         let failed = Err("bind failed".to_string());
 
         assert_eq!(
-            mcp_lifecycle_notification_window(Some("document-1"), &applied),
+            mcp_lifecycle_notification_window(
+                &state,
+                generation,
+                true,
+                Some("document-1"),
+                &applied,
+            ),
             Some("document-1")
         );
-        assert_eq!(mcp_lifecycle_notification_window(None, &applied), None);
         assert_eq!(
-            mcp_lifecycle_notification_window(Some("document-1"), &stale),
+            mcp_lifecycle_notification_window(&state, generation, true, None, &applied),
             None
         );
         assert_eq!(
-            mcp_lifecycle_notification_window(Some("document-1"), &failed),
+            mcp_lifecycle_notification_window(&state, generation, true, Some("document-1"), &stale,),
+            None
+        );
+        assert_eq!(
+            mcp_lifecycle_notification_window(
+                &state,
+                generation,
+                true,
+                Some("document-1"),
+                &failed,
+            ),
+            None
+        );
+
+        state.request_enabled(false).unwrap();
+        assert_eq!(
+            mcp_lifecycle_notification_window(
+                &state,
+                generation,
+                true,
+                Some("document-1"),
+                &applied,
+            ),
             None
         );
     }

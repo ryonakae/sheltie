@@ -70,7 +70,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
 - `view-command`: メニューバー `View` 操作のビューコマンド通知（payload は `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out`）
 - `theme-command`: ネイティブテーマメニュー（`show_theme_menu`）で選択されたテーマ通知（payload は `light` / `dark` / `system`）
-- `mcp-lifecycle-changed`: Settingsの`MCP Server`切り替えがlatest intentとして成功した時、操作時点でfocusedだったdocument windowだけへ送る通知（payloadは`started` / `stopped`）。起動時の設定復元、stale intent、失敗時、focused document windowが無い場合は送らない
+- `mcp-lifecycle-changed`: Settingsの`Enable MCP Server` / `Disable MCP Server` actionがlatest intentとして成功した時、操作時点でfocusedだったdocument windowだけへ送る通知（payloadは`started` / `stopped`）。起動時の設定復元、stale intent、失敗時、focused document windowが無い場合は送らない
 - `mcp-renderer-request`: Rust brokerが明示された`documentId`のwindowだけへ送るrequest。payloadは`{ requestId, command, params }`で、rendererは成功/失敗にかかわらず`complete_mcp_renderer_request`を1回呼ぶ
 
 ## Renderer <-> Renderer（window-local app quit coordination）
@@ -122,6 +122,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - `Edit` メニューは `src/lib/edit-commands.ts` と `src/main.tsx` を経由して renderer に流す
 - `File` メニューは `src/lib/file-commands.ts` と `src/main.tsx` を経由して renderer に流す
 - `View` メニューは `src/lib/view-commands.ts` と `src/main.tsx` を経由して renderer に流す。`fit-view`（Shift+1）はテキスト編集中に editable フォーカスをチェックしてスキップする
+- SettingsのMCPセクションはdesired enablement stateを正本に、`MCP: Enabled / Disabled`見出し、`Enable / Disable MCP Server` action、enabled時だけ表示する`Connections: N`をRust側で同期する
 - macOS の `File > New Tab` は現在 window の native tab group に untitled document を追加する
 - macOS の document window は native tab group ごとに `tabbingIdentifier` を共有する。`File > New Window` は新しい standalone document window / group を作り、既存 window の tab bar 状態は変更しない
 - `File > Open` は既存 window を置き換えず、対象 `.sheltie` 用の document window を開く

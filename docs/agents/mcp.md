@@ -21,13 +21,13 @@ Sheltieがopen中のdocumentとWKWebViewを、local MCP clientから操作する
 ## Lifecycle
 
 - serverは既定で無効。`sheltie.json`の`mcpEnabled` booleanを正本にする。値が無い場合やboolean以外の場合は`false`として扱う。
-- enable時はsocket bindが成功してからlifecycleを`Running`へ進める。port競合などでstartに失敗した場合は設定とmenu checkを`false`へ戻し、native error dialogを表示する。
+- enable時はsocket bindが成功してからlifecycleを`Running`へ進める。port競合などでstartに失敗した場合は設定とmenu表示をdisabledへ戻し、native error dialogを表示する。
 - disable時はStreamable HTTP serverのcancellation tokenをcancelし、`LocalSessionManager`の全sessionを明示closeしてからlistener taskを終了する。session serviceの最終cloneがdropされるとconnection leaseも減算される。document windowは閉じない。
 - store saveはtransactionalに扱い、失敗時はin-memory値を直前値へ戻す。設定変更に失敗したgenerationがまだcurrentなら直前のenabled stateへmenu/runtimeを復帰し、より新しいuser intentがあれば古いfailureは何も変更しない。
-- menu toggleごとに同期的にgeneration付きdesired stateを更新し、async処理はdocument全体で1本のoperation lockを通す。古いgenerationはstore/menuを更新せず、latest intentだけを適用する。
+- menu action選択ごとに同期的にgeneration付きdesired stateを更新し、async処理はdocument全体で1本のoperation lockを通す。古いgenerationはstore/menuを更新せず、latest intentだけを適用する。
 - start / stopの重複要求はidempotentに扱う。start処理中にdisableされた場合も即座にcancellationを通知し、bind済みlistenerをcancelして`Disabled`へ戻す。
 - macOS以外ではserverをstartしない。
-- Settingsの`MCP Server`切り替えがlatest intentとして成功した時だけ、操作時点でfocusedだったdocument windowへ`mcp-lifecycle-changed`（`started` / `stopped`）を送り、HeroUI success toastを表示する。起動時の設定復元、stale intent、失敗時、focused document windowが無い場合は成功toastを出さない。
+- Settingsの`Enable MCP Server` / `Disable MCP Server` actionがlatest intentとして成功した時だけ、操作時点でfocusedだったdocument windowへ`mcp-lifecycle-changed`（`started` / `stopped`）を送り、HeroUI success toastを表示する。起動時の設定復元、stale intent、失敗時、focused document windowが無い場合は成功toastを出さない。
 
 ## Endpoint
 
@@ -56,10 +56,11 @@ Client設定例:
 
 macOSの`Sheltie > Settings`に次を置く。
 
-- `MCP Server`: checked item。変更時に設定を永続化してserverをstart / stopする。
-- `MCP Connections: N`: disabled item。active session数を表示する。
+- section header: `MCP: Enabled` / `MCP: Disabled`。desired enablement stateに追従する。
+- action: disabled時は`Enable MCP Server`、enabled時は`Disable MCP Server`。選択時にdesired stateを反転し、設定永続化とserver start / stopを行う。
+- `Connections: N`: disabled item。MCP enabled時だけ表示し、active session数を表示する。
 
-Theme項目とMCP項目はseparatorで分ける。setup時はplugin store初期化後に`mcpEnabled`を読み、checked stateとserver lifecycleを復元する。lifecycle toastは既存のPin通知と同じapp-level Toast Providerを使い、右上へテキストに応じた可変幅で表示し、画面幅を超える場合だけ折り返す。
+Theme項目とMCP項目はseparatorで分け、どちらもmacOS native section headerを使う。setup時はplugin store初期化後に`mcpEnabled`を読み、MCP見出し・action・Connections表示とserver lifecycleを復元する。lifecycle toastは既存のPin通知と同じapp-level Toast Providerを使い、右上へテキストに応じた可変幅で表示し、画面幅を超える場合だけ折り返す。
 
 ## Renderer broker
 

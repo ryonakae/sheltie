@@ -102,7 +102,7 @@ src/
 - `mcp/types.rs`: MCP toolの入出力、renderer request/response envelope、安定したerror codeの型契約。JSON fieldはrendererと共有するcamelCaseを正本にする
 - `mcp/service.rs`: board toolsとbrowser toolsのrouter、schema/annotation、structured/text結果、image content block、session connection leaseを担当する。board内容は保持しない
 - `mcp/broker.rs`: Phase 1のrenderer requestを扱う。document存在確認、document単位直列化、window-local event、10秒timeout、completion照合を担当する
-- `mcp/page_automation/{protocol,actor}.rs`: Phase 2のtyped page operationとcompact snapshot契約、page単位の直列actor、request ID照合、navigation epochを管理する。異なるpageのactorは並行動作する
+- `mcp/page_automation/{protocol,actor,capture}.rs`: Phase 2のtyped page operationとcompact snapshot契約、page単位の直列actor、request ID照合、navigation epochを管理する。撮影系は`capture.rs`、`ToolError`ファクトリは`protocol/errors.rs`に分ける。異なるpageのactorは並行動作する
 - `mcp/tools/browser.rs`: `documentId`と`pageNodeId`を検証し、WKWebViewのsemantic snapshot・DOM action・navigationをpage actorへ渡す
 - `mcp/lifecycle.rs`: default-off設定、loopback listener、Host/Origin制限、session managerと全session shutdownを担当する
 - `setup.rs`: `pub fn run()` 本体、`invoke_handler` 登録、menu event 配信

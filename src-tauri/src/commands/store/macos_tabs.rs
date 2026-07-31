@@ -41,6 +41,31 @@ where
         .map_err(|_| "failed to receive result from the main thread".to_string())?
 }
 
+/// 非同期コマンドから main thread の処理結果を待つ版。
+/// 同期版は setup など await できない経路のために残す。同期版を async command から
+/// 呼ぶと、ユーザー操作が終わるまで tokio worker を 1 本占有してしまう。
+#[cfg(target_os = "macos")]
+pub(super) async fn run_on_app_main_thread_async<R, T, F>(
+    app: &AppHandle<R>,
+    operation: F,
+) -> Result<T, String>
+where
+    R: Runtime,
+    T: Send + 'static,
+    F: FnOnce(AppHandle<R>) -> Result<T, String> + Send + 'static,
+{
+    let app_handle = app.clone();
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(operation(app_handle));
+    })
+    .map_err(|error| format!("failed to switch to the main thread: {error}"))?;
+
+    receiver
+        .await
+        .map_err(|_| "failed to receive result from the main thread".to_string())?
+}
+
 #[cfg(target_os = "macos")]
 fn ns_window_class() -> Result<&'static AnyClass, String> {
     AnyClass::get(c"NSWindow").ok_or("NSWindow class not found".to_string())
@@ -213,13 +238,14 @@ pub async fn set_document_edited(window: Window, edited: bool) -> Result<(), Str
         let label = window.label().to_string();
         let app = window.app_handle();
 
-        run_on_app_main_thread(app, move |app| {
+        run_on_app_main_thread_async(app, move |app| {
             let window = app
                 .get_window(&label)
                 .ok_or_else(|| format!("window '{label}' not found"))?;
             let ns_window = get_ns_window_object(&window)?;
             set_ns_document_edited(ns_window, edited)
         })
+        .await
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -341,7 +367,7 @@ pub async fn present_document_window(
         let attach_child_label = child_label.clone();
         let attach_tabbing_identifier = tabbing_identifier.clone();
 
-        let result = run_on_app_main_thread(app, move |app| {
+        let result = run_on_app_main_thread_async(app, move |app| {
             log::info!(
                 "[new-tab] main-thread entered: host_label={attach_host_label}, child_label={attach_child_label}, tabbing_identifier={attach_tabbing_identifier}"
             );
@@ -383,7 +409,8 @@ pub async fn present_document_window(
                 "[new-tab] main-thread exit: host_label={attach_host_label}, child_label={attach_child_label}, tabbing_identifier={attach_tabbing_identifier}"
             );
             Ok(())
-        });
+        })
+        .await;
 
         match result {
             Ok(()) => {

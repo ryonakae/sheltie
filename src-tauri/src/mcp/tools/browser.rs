@@ -1,13 +1,10 @@
 use std::{future::Future, pin::Pin};
 
 use base64::Engine as _;
-use rmcp::schemars;
-use rmcp::schemars::JsonSchema;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     tool, tool_router, Json,
 };
-use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 #[cfg(not(target_os = "macos"))]
@@ -29,11 +26,10 @@ use crate::{
         broker::McpRequestBrokerState,
         page_automation::protocol::{
             invalid_argument, page_not_found, webview_not_ready, CachedPageScreenshot,
-            CompactSnapshot, CssRect, DialogAction, FillField, MouseButton,
-            PageAutomationActionResult, PageAutomationOperation, PageAutomationSuccessResult,
-            PageDialog, PageDisplayMode, PageKey, PageScreenshotRequest, PageScreenshotSource,
-            ScreenshotMode, UploadFilePayload, WaitCondition, PAGE_AUTOMATION_MAX_FILL_CHARS,
-            PAGE_AUTOMATION_MAX_WAIT_TIMEOUT_MS,
+            CompactSnapshot, DialogAction, PageAutomationActionResult, PageAutomationOperation,
+            PageAutomationSuccessResult, PageDisplayMode, PageKey, PageScreenshotRequest,
+            PageScreenshotSource, ScreenshotMode, UploadFilePayload,
+            PAGE_AUTOMATION_MAX_FILL_CHARS, PAGE_AUTOMATION_MAX_WAIT_TIMEOUT_MS,
         },
         service::{image_result, structured_error, SheltieMcpService},
         types::{RendererCommand, ToolError},
@@ -43,6 +39,10 @@ use crate::{
 use crate::mcp::page_automation::images::{decode_png, encode_capped_png, EncodedPng};
 #[cfg(target_os = "macos")]
 use crate::mcp::page_automation::uploads::read_upload_files;
+
+mod types;
+
+use types::*;
 
 pub(crate) type BrowserFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, ToolError>> + Send + 'a>>;
@@ -306,318 +306,6 @@ impl BrowserBackend for AppBrowserBackend {
             }
         })
     }
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct PageParams {
-    document_id: String,
-    page_node_id: String,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct NavigateParams {
-    document_id: String,
-    page_node_id: String,
-    url: String,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct ElementParams {
-    document_id: String,
-    page_node_id: String,
-    snapshot_id: String,
-    element_ref: String,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct FillParams {
-    document_id: String,
-    page_node_id: String,
-    snapshot_id: String,
-    element_ref: String,
-    text: String,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct FillFormParams {
-    document_id: String,
-    page_node_id: String,
-    snapshot_id: String,
-    fields: Vec<FillField>,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct SelectOptionParams {
-    document_id: String,
-    page_node_id: String,
-    snapshot_id: String,
-    element_ref: String,
-    values: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct PressKeyParams {
-    document_id: String,
-    page_node_id: String,
-    key: String,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct ScrollParams {
-    document_id: String,
-    page_node_id: String,
-    delta_x: i64,
-    delta_y: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct WaitParams {
-    document_id: String,
-    page_node_id: String,
-    condition: WaitCondition,
-    #[serde(default)]
-    timeout_ms: Option<u64>,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct ScreenshotParams {
-    document_id: String,
-    page_node_id: String,
-    mode: ScreenshotMode,
-    #[serde(default)]
-    snapshot_id: Option<String>,
-    #[serde(default)]
-    element_ref: Option<String>,
-    #[serde(default)]
-    annotate: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct ClickCoordinatesParams {
-    document_id: String,
-    page_node_id: String,
-    snapshot_id: String,
-    x: f64,
-    y: f64,
-    #[serde(default = "default_mouse_button")]
-    button: MouseButton,
-    #[serde(default = "default_click_count")]
-    click_count: u8,
-    #[serde(default)]
-    highlight: Option<CssRect>,
-}
-
-fn default_mouse_button() -> MouseButton {
-    MouseButton::Left
-}
-
-fn default_click_count() -> u8 {
-    1
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct EvaluateParams {
-    document_id: String,
-    page_node_id: String,
-    script: String,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct UploadParams {
-    document_id: String,
-    page_node_id: String,
-    snapshot_id: String,
-    element_ref: String,
-    paths: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-struct DialogParams {
-    document_id: String,
-    page_node_id: String,
-    action: DialogAction,
-    #[serde(default)]
-    prompt_text: Option<String>,
-}
-
-#[derive(Clone, Copy, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum BrowserActionKind {
-    Click,
-    Hover,
-    Fill,
-    FillForm,
-    SelectOption,
-    PressKey,
-    Scroll,
-    Wait,
-    ScreenshotElement,
-    ScreenshotFullPage,
-    ScreenshotScroll,
-    ScreenshotRestore,
-    ClickCoordinates,
-    Evaluate,
-    UploadFiles,
-    SetDialogHandler,
-    Navigate,
-}
-
-impl From<crate::mcp::page_automation::protocol::PageAutomationActionKind> for BrowserActionKind {
-    fn from(kind: crate::mcp::page_automation::protocol::PageAutomationActionKind) -> Self {
-        match kind {
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::Click => Self::Click,
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::Hover => Self::Hover,
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::Fill => Self::Fill,
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::FillForm => {
-                Self::FillForm
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::SelectOption => {
-                Self::SelectOption
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::PressKey => {
-                Self::PressKey
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::Scroll => Self::Scroll,
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::Wait => Self::Wait,
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::ScreenshotElement => {
-                Self::ScreenshotElement
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::ScreenshotFullPage => {
-                Self::ScreenshotFullPage
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::ScreenshotScroll => {
-                Self::ScreenshotScroll
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::ScreenshotRestore => {
-                Self::ScreenshotRestore
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::ClickCoordinates => {
-                Self::ClickCoordinates
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::Evaluate => {
-                Self::Evaluate
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::UploadFiles => {
-                Self::UploadFiles
-            }
-            crate::mcp::page_automation::protocol::PageAutomationActionKind::SetDialogHandler => {
-                Self::SetDialogHandler
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct BrowserActionResult {
-    pub kind: BrowserActionKind,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dialogs: Option<Vec<PageDialog>>,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct BrowserPageResult {
-    pub document_id: String,
-    pub page_node_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub action: Option<BrowserActionResult>,
-    pub snapshot: CompactSnapshot,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowserScreenshotResult {
-    document_id: String,
-    page_node_id: String,
-    mime_type: String,
-    width: u32,
-    height: u32,
-    css_viewport_width: u32,
-    css_viewport_height: u32,
-    scale_applied: f64,
-    source: ScreenshotSource,
-    mode: ScreenshotMode,
-    annotated: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    warning: Option<String>,
-}
-
-#[derive(Clone, Copy, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "lowercase")]
-enum ScreenshotSource {
-    Native,
-    Cached,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CoordinateResult {
-    document_id: String,
-    page_node_id: String,
-    input_trusted: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dialogs: Option<Vec<PageDialog>>,
-    snapshot: CompactSnapshot,
-}
-
-fn json_value_output_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-    serde_json::Map::new().into()
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct EvaluateResult {
-    document_id: String,
-    page_node_id: String,
-    #[schemars(schema_with = "json_value_output_schema")]
-    value: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dialogs: Option<Vec<PageDialog>>,
-    snapshot: CompactSnapshot,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct UploadedFileResult {
-    name: String,
-    size: u64,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct UploadResult {
-    document_id: String,
-    page_node_id: String,
-    files: Vec<UploadedFileResult>,
-    input_trusted: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dialogs: Option<Vec<PageDialog>>,
-    snapshot: CompactSnapshot,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DialogResult {
-    document_id: String,
-    page_node_id: String,
-    configured: bool,
 }
 
 fn encode_cached_screenshot(cached: CachedPageScreenshot) -> Result<EncodedPng, ToolError> {
@@ -1392,7 +1080,8 @@ mod tests {
     use super::*;
     use crate::mcp::{
         page_automation::protocol::{
-            PageAutomationActionResult, PageAutomationSuccessResult, SnapshotFrame,
+            FillField, MouseButton, PageAutomationActionResult, PageAutomationSuccessResult,
+            SnapshotFrame,
         },
         service::{McpBackendFuture, McpServiceBackend},
         types::DocumentSummary,

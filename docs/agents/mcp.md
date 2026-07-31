@@ -8,8 +8,10 @@ Sheltieがopen中のdocumentとWKWebViewを、local MCP clientから操作する
 - `src-tauri/src/mcp/service.rs`: board/browser tool router、schema/annotation、response/image block整形、session connection lease
 - `src-tauri/src/mcp/types.rs`: tool・renderer間のJSON契約
 - `src-tauri/src/mcp/broker.rs`: document rendererへのrequest routing
-- `src-tauri/src/mcp/page_automation/{protocol,actor,images,uploads}.rs`: typed page operation、compact snapshot、page単位の直列actor、bounded PNG処理、upload読込
-- `src-tauri/src/mcp/tools/browser.rs`: WebPage照合と18 browser tools
+- `src-tauri/src/mcp/page_automation/{protocol,actor,capture,images,uploads}.rs`: typed page operation、compact snapshot、page単位の直列actor、screenshot撮影、bounded PNG処理、upload読込
+  - `protocol.rs`は型契約とバリデーション、`protocol/errors.rs`は`ToolError`ファクトリ
+  - `actor.rs`はrequest直列化とnavigation epoch管理、`capture.rs`は要素/フルページ撮影とスクロール復帰
+- `src-tauri/src/mcp/tools/browser.rs`: WebPage照合と18 browser tools。params / result型は`tools/browser/types.rs`
 
 ## Trust boundary
 

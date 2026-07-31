@@ -46,7 +46,7 @@ fn build_alert_texts(
 fn show_nsalert_sheet(
     params: &UnsavedChangesDialogParams,
     ns_window: *mut objc2::runtime::AnyObject,
-    tx: std::sync::Arc<std::sync::Mutex<Option<std::sync::mpsc::Sender<String>>>>,
+    tx: std::sync::Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<String>>>>,
 ) {
     use block2::RcBlock;
     use objc2::runtime::{AnyClass, AnyObject};
@@ -144,7 +144,8 @@ pub async fn show_unsaved_changes_dialog(
         // usize は Send なのでポインタ値としてクロージャに渡す
         let ns_window_addr = ns_window_raw as usize;
 
-        let (sender, receiver) = std::sync::mpsc::channel::<String>();
+        // 同期 recv() だと、ユーザーがダイアログを閉じるまで tokio worker を 1 本占有する
+        let (sender, receiver) = tokio::sync::oneshot::channel::<String>();
         let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(sender)));
 
         window
@@ -155,7 +156,7 @@ pub async fn show_unsaved_changes_dialog(
             .map_err(|e| format!("failed to switch to the main thread: {e}"))?;
 
         receiver
-            .recv()
+            .await
             .map_err(|_| "failed to receive dialog result".to_string())
     }
 

@@ -63,7 +63,7 @@
 **Interfaces:**
 - Produces: `write_atomically(path: &Path, contents: &str) -> Result<(), String>`（同ファイル内 private）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src-tauri/src/commands/store/file_io.rs` の末尾に追加する。
 
@@ -120,12 +120,12 @@ mod atomic_write_tests {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd src-tauri && cargo test --lib atomic_write_tests`
 Expected: コンパイルエラー `cannot find function \`write_atomically\` in this scope`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src-tauri/src/commands/store/file_io.rs` の先頭 `use` を差し替える。
 
@@ -178,12 +178,12 @@ fn write_atomically(path: &Path, contents: &str) -> Result<(), String> {
     write_atomically(&normalized_path, &contents)?;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd src-tauri && cargo test --lib atomic_write_tests`
 Expected: `test result: ok. 2 passed`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src-tauri/src/commands/store/file_io.rs
@@ -205,7 +205,7 @@ git commit -m "fix(store): save project files atomically"
 - Produces: `showErrorDialog(messageText: string): Promise<void>`（`src/lib/error-dialog.ts`）
 - Consumes: `api.closeReady()`（`src/lib/tauri-bridge`、`src/lib/project-close.ts:44` と同じ）
 
-- [ ] **Step 1: 共通エラーダイアログ helper を作る**
+- [x] **Step 1: 共通エラーダイアログ helper を作る**
 
 `src/lib/error-dialog.ts` を新規作成する。
 
@@ -229,7 +229,7 @@ import { showErrorDialog } from '@/lib/error-dialog';
 
 `import { message, open, save } from '@tauri-apps/plugin-dialog';` から `message` を外す。
 
-- [ ] **Step 2: fail-closed を実装する**
+- [x] **Step 2: fail-closed を実装する**
 
 `src/store/tab-persistence.ts` を次の内容に差し替える。
 
@@ -299,12 +299,12 @@ export function setupProjectPersistence(): void {
 }
 ```
 
-- [ ] **Step 3: Run automated validation**
+- [x] **Step 3: Run automated validation**
 
 Run: `npm run typecheck && npm run test && npm run lint`
 Expected: いずれも成功（`tab-persistence.ts` に既存テストは無いため、既存 271 件が引き続き通ること）
 
-- [ ] **Step 4: 手動確認（このタスクの完了判定に必須）**
+- [x] **Step 4: 手動確認（このタスクの完了判定に必須）**
 
 `npm run dev` で起動し、次を確認する。
 
@@ -314,7 +314,7 @@ Expected: いずれも成功（`tab-persistence.ts` に既存テストは無い�
 4. 正常なファイルを保存し直して同じパスを再度開く → **`filePath` 登録がリークしていないこと**（`ensure_window_can_use_file_path` に阻まれず開ける）。開けない場合は `close_ready` の後処理に document manager の登録解放を追加する必要がある
 5. 正常なファイルが従来どおり開けること
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/error-dialog.ts src/lib/file-commands.ts src/store/tab-persistence.ts
@@ -334,7 +334,7 @@ git commit -m "fix(store): fail closed when a project file cannot be loaded"
 **Interfaces:**
 - Produces: `isAllowedPageUrl(value: string): boolean` — Task 4 と Phase 2 の MCP 検証が消費する
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src/lib/url-utils.test.ts` を新規作成する。
 
@@ -400,12 +400,12 @@ describe('isAllowedPageUrl', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/lib/url-utils.test.ts`
 Expected: `isAllowedPageUrl` が存在しないため import エラーで失敗する
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src/lib/url-utils.ts` の末尾に追加する。
 
@@ -428,12 +428,12 @@ export function isAllowedPageUrl(value: string): boolean {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/lib/url-utils.test.ts`
 Expected: `Test Files 1 passed`, 全ケース green
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/url-utils.ts src/lib/url-utils.test.ts
@@ -453,7 +453,7 @@ git commit -m "feat(url): add a page URL scheme allowlist"
 **Interfaces:**
 - Consumes: `isAllowedPageUrl`（Task 3）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src/lib/project-document.test.ts` の `describe('parseProjectDocument', ...)` 相当のブロックに追加する（既存の describe 名に合わせて配置する）。
 
@@ -520,12 +520,12 @@ git commit -m "feat(url): add a page URL scheme allowlist"
   });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/lib/project-document.test.ts`
 Expected: 最初の 2 ケースが `expected [Function] to throw error matching /url/` で失敗する
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src/lib/project-document.ts` の import に追加する。
 
@@ -556,12 +556,12 @@ webpage 分岐（49-54 行）を差し替える。
         : parsePageUrl(rawNode.addedUrl, `nodes[${index}].addedUrl`);
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/lib/project-document.test.ts`
 Expected: 全ケース green
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/project-document.ts src/lib/project-document.test.ts
@@ -581,7 +581,7 @@ git commit -m "fix(document): reject non-http page URLs when parsing a project f
 **Interfaces:**
 - Consumes: `STICKY_NOTE_COLORS`, `TEXT_NODE_COLORS`, `TEXT_NODE_FONT_SIZE_PRESETS`（`@/constants`）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src/lib/project-document.test.ts` に追加する。
 
@@ -657,12 +657,12 @@ git commit -m "fix(document): reject non-http page URLs when parsing a project f
   });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/lib/project-document.test.ts`
 Expected: 追加した 4 ケースがすべて「throw しない」ことで失敗する
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src/lib/project-document.ts` の import を差し替える。
 
@@ -743,12 +743,12 @@ text 分岐（93-105 行）の 2 箇所を差し替える。
 
 > `fontSizePreset` / `textColorIndex` の戻り値型は `TextNodeFontSizePreset` 等の union が期待される箇所がある。型エラーが出る場合は既存のキャスト方針（`as` による narrowing）に合わせる。範囲は実行時に保証済み。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/lib/project-document.test.ts && npm run typecheck`
 Expected: 全ケース green、型エラーなし
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/project-document.ts src/lib/project-document.test.ts
@@ -764,7 +764,7 @@ git commit -m "fix(document): validate preset indices and finite geometry"
 **Files:**
 - Modify: `src-tauri/src/commands/store/file_io.rs`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src-tauri/src/commands/store/file_io.rs` の `atomic_write_tests` に追加する。
 
@@ -782,12 +782,12 @@ git commit -m "fix(document): validate preset indices and finite geometry"
     }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd src-tauri && cargo test --lib atomic_write_tests`
 Expected: `cannot find function \`ensure_project_file_size\``
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src-tauri/src/commands/store/file_io.rs` に追加する。
 
@@ -817,12 +817,12 @@ pub async fn load_project_file(path: String) -> Result<String, String> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd src-tauri && cargo test --lib atomic_write_tests`
 Expected: `test result: ok. 3 passed`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src-tauri/src/commands/store/file_io.rs
@@ -839,7 +839,7 @@ git commit -m "fix(store): cap the project file size before reading it"
 - Create: `src/components/Common/BoardErrorBoundary.tsx`
 - Modify: `src/screens/Project.tsx`
 
-- [ ] **Step 1: Error Boundary を作る**
+- [x] **Step 1: Error Boundary を作る**
 
 `src/components/Common/BoardErrorBoundary.tsx` を新規作成する。
 
@@ -890,7 +890,7 @@ export class BoardErrorBoundary extends Component<
 }
 ```
 
-- [ ] **Step 2: ボードを包む**
+- [x] **Step 2: ボードを包む**
 
 `src/screens/Project.tsx` で `<Sheltie ... />` のレンダリング箇所を `<BoardErrorBoundary>` で包む。import を追加する。
 
@@ -898,16 +898,16 @@ export class BoardErrorBoundary extends Component<
 import { BoardErrorBoundary } from '@/components/Common/BoardErrorBoundary';
 ```
 
-- [ ] **Step 3: Run automated validation**
+- [x] **Step 3: Run automated validation**
 
 Run: `npm run typecheck && npm run lint && npm run test`
 Expected: いずれも成功
 
-- [ ] **Step 4: 手動確認**
+- [x] **Step 4: 手動確認**
 
 `npm run dev` で起動し、通常のボード操作（ノード追加、ドラッグ、リサイズ、テキスト編集）が従来どおり動くことを確認する。境界の表示自体は意図的に到達困難なため、一時的に `StickyNoteNode` で `throw new Error('boundary check')` を入れて表示を確認したあと、必ず元へ戻す。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/Common/BoardErrorBoundary.tsx src/screens/Project.tsx

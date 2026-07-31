@@ -76,7 +76,7 @@
 **Interfaces:**
 - Produces: `normalize_navigation_url(url: &str) -> Result<String, String>`（scheme 検証込み。既存シグネチャを維持）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src-tauri/src/commands/webview/page_automation.rs` の `#[cfg(test)] mod tests` に追加する（存在しなければ末尾に作る）。
 
@@ -101,12 +101,12 @@
     }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd src-tauri && cargo test --lib normalize_navigation_url_allows_only_http_and_https`
 Expected: `must reject file:///Users/victim/.ssh/id_rsa` で assertion 失敗
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src-tauri/src/commands/webview/page_automation.rs:37-41` を差し替える。
 
@@ -152,12 +152,12 @@ pub fn normalize_navigation_url(url: &str) -> Result<String, String> {
         .map_err(|e| format!("failed to parse URL: {e}"))?;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd src-tauri && cargo test --lib && cargo clippy --all-targets 2>&1 | tail -5`
 Expected: 全テスト green。clippy は既知の `items_after_test_module` 1 件のみ（Phase 3 で解消）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src-tauri/src/commands/webview/page_automation.rs src-tauri/src/commands/webview/bounds.rs src-tauri/src/commands/webview/navigation.rs
@@ -177,7 +177,7 @@ git commit -m "fix(webview): allow only http and https page URLs"
 **Interfaces:**
 - Consumes: `isAllowedPageUrl`（Phase 1 Task 3）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src/lib/mcp/board-operations.test.ts` に追加する。この関数は `applyBoardOperations(snapshot, operations, createId)`（`board-operations.ts:527`）で、既存ヘルパー `webpage(id, x)` を使う。失敗結果の判定方法は既存テストが `BatchEditBoardResult` をどう検査しているかに合わせる（`ok` フラグと `error` の形）。
 
@@ -228,12 +228,12 @@ git commit -m "fix(webview): allow only http and https page URLs"
 
 > 既存テストのテスト名は日本語・英語が混在している。このファイルの近傍の記法に合わせる。`update_node` の operation 形状（`nodeId` / `patch` のキー名）は `BoardOperation` 型定義で確認する。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/lib/mcp/board-operations.test.ts`
 Expected: `expected true to be false` — 現在は任意の文字列が受理される
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src/lib/mcp/board-operations.ts` の import に追加する。
 
@@ -266,12 +266,12 @@ function requirePageUrl(value: unknown, name: string, operationIndex: number): s
       const url = requirePageUrl(patch.url, 'patch.url', operationIndex);
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/lib/mcp/board-operations.test.ts`
 Expected: 全ケース green
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/mcp/board-operations.ts src/lib/mcp/board-operations.test.ts
@@ -290,7 +290,7 @@ git commit -m "fix(mcp): reject non-http page URLs in board operations"
 **Interfaces:**
 - Produces: `page-navigated-{pid}` の payload 形状（`{ "url": string }`）は変更しない。emit のタイミングと URL の出所だけが変わる
 
-- [ ] **Step 1: `on_navigation` から URL emit を外す**
+- [x] **Step 1: `on_navigation` から URL emit を外す**
 
 `src-tauri/src/commands/webview/bounds.rs:222-236` を差し替える。
 
@@ -303,7 +303,7 @@ git commit -m "fix(mcp): reject non-http page URLs in board operations"
             })
 ```
 
-- [ ] **Step 2: `on_page_load` で commit 済み URL を emit する**
+- [x] **Step 2: `on_page_load` で commit 済み URL を emit する**
 
 `bounds.rs:237-253` を差し替える。
 
@@ -336,7 +336,7 @@ git commit -m "fix(mcp): reject non-http page URLs in board operations"
             })
 ```
 
-- [ ] **Step 3: `\x01` 通知では native の URL を読み直す**
+- [x] **Step 3: `\x01` 通知では native の URL を読み直す**
 
 `bounds.rs` の `on_document_title_changed` に `label` の clone を追加し、`\x01` 分岐を差し替える。クロージャ先頭の clone 群に次を加える。
 
@@ -379,12 +379,12 @@ git commit -m "fix(mcp): reject non-http page URLs in board operations"
 
 `\x02` 以降の分岐は変更しない。
 
-- [ ] **Step 4: Run validation**
+- [x] **Step 4: Run validation**
 
 Run: `cd src-tauri && cargo test --lib && cargo clippy --all-targets 2>&1 | tail -5`
 Expected: 全テスト green
 
-- [ ] **Step 5: 手動確認（必須）**
+- [x] **Step 5: 手動確認（必須）**
 
 `npm run dev` で起動し、次を確認する。
 
@@ -394,7 +394,7 @@ Expected: 全テスト green
 4. 偽装の確認: DevTools で `document.title = '\x01https://accounts.google.com/'` を実行 → ツールバーの URL が変わらないこと
 5. スクロール停止後のスクリーンショット更新が従来どおり動くこと
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/commands/webview/bounds.rs
@@ -411,7 +411,7 @@ git commit -m "fix(webview): trust only native URLs for page navigation events"
 - Modify: `src-tauri/src/commands/webview/page_automation_script.js:1187-1192`
 - Modify: `src-tauri/src/commands/webview/scripts.rs`（テスト追加）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src-tauri/src/commands/webview/scripts.rs` の `mod tests` 内 `page_automation_source_has_the_all_frame_bridge_contract` の直後に追加する。
 
@@ -433,12 +433,12 @@ git commit -m "fix(webview): trust only native URLs for page navigation events"
     }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd src-tauri && cargo test --lib page_automation_bridge_is_defined_as_a_non_writable_property`
 Expected: `the bridge must be installed with defineProperty` で失敗
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src-tauri/src/commands/webview/page_automation_script.js:1187-1192` を差し替える。
 
@@ -458,16 +458,16 @@ Expected: `the bridge must be installed with defineProperty` で失敗
   });
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd src-tauri && cargo test --lib`
 Expected: 全テスト green（既存の `__SHELTIE_MCP_PAGE_AUTOMATION__` を含むアサーションも通ること）
 
-- [ ] **Step 5: 手動確認**
+- [x] **Step 5: 手動確認**
 
 `npm run dev` で MCP を有効にし、任意のページで `browser_snapshot` と `browser_click` が従来どおり動くことを確認する。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/commands/webview/page_automation_script.js src-tauri/src/commands/webview/scripts.rs
@@ -484,7 +484,7 @@ git commit -m "fix(automation): install the page bridge as a non-writable proper
 - Modify: `src-tauri/src/mcp/page_automation/actor.rs:178-196, 846-850`
 - Modify: `src-tauri/src/mcp/page_automation/actor.rs` のテスト（1327 行付近）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 既存テスト `mismatched_completion_identity_fails_the_known_request`（`actor.rs:1332` 付近）は「不一致 completion が正規 request を失敗させる」という**この決定と矛盾する挙動を固定している**ため、次の内容に置き換える。既存の test helper（`key(page_node_id)`、`result(request, token, url)`、`#[cfg(test)] fn pending_count()`（`actor.rs:1057`））をそのまま使う。
 
@@ -553,12 +553,12 @@ git commit -m "fix(automation): install the page bridge as a non-writable proper
 
 > `execute_with` のクロージャ引数の型・`clone` 可否は既存テスト（`mismatched_completion_identity_fails_the_known_request` と `action_result` を使うテスト群）の書き方に合わせる。dispatch クロージャ内で `request` を別スレッドへ渡す形は既存テストと同じ。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd src-tauri && cargo test --lib page_automation`
 Expected: `the legitimate pending entry must survive` と `request IDs must not be guessable` で失敗
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `actor.rs` の `complete`（178-196 行）を差し替える。
 
@@ -612,12 +612,12 @@ fn is_page_request_id(request_id: &str) -> bool {
 
 `is_page_request_id` の既存テスト（数値 ID を有効と見なすもの）があれば、UUID を有効・不正文字を無効とする内容へ更新する。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd src-tauri && cargo test --lib && cargo clippy --all-targets 2>&1 | tail -5`
 Expected: 全テスト green
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src-tauri/src/mcp/page_automation/actor.rs
@@ -633,7 +633,7 @@ git commit -m "fix(automation): use unguessable request IDs and keep pending ent
 **Files:**
 - Modify: `src-tauri/src/commands/webview/snapshot.rs:16-50`
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 `snapshot.rs` の先頭に定数を追加する。
 
@@ -677,16 +677,16 @@ const SNAPSHOT_TIMEOUT_MS: u64 = 5_000;
 
 > `webview.hide()` 呼び出し（39-46 行）より後で `webview` を使うため、`hide` 側で move されていないことを確認する。必要なら `let webview = webview;` の位置を調整する。
 
-- [ ] **Step 2: Run validation**
+- [x] **Step 2: Run validation**
 
 Run: `cd src-tauri && cargo test --lib && cargo clippy --all-targets 2>&1 | tail -5`
 Expected: コンパイル成功、全テスト green
 
-- [ ] **Step 3: 手動確認**
+- [x] **Step 3: 手動確認**
 
 `npm run dev` で起動し、複数の WebPage ノードを配置してスクロール・ズームを繰り返す。スクリーンショットが従来どおり更新され、ページが非表示のまま残らないことを確認する。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src-tauri/src/commands/webview/snapshot.rs
@@ -705,7 +705,7 @@ git commit -m "fix(screenshot): time out native snapshot waits and restore visib
 - Modify: `src/lib/project-document.test.ts`
 - Modify: `src/store/tab-store.ts:140-158`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src/lib/project-document.test.ts` に追加する。
 
@@ -746,12 +746,12 @@ git commit -m "fix(screenshot): time out native snapshot waits and restore visib
 
 > `Project` の必須フィールドは `src/types/index.ts` の定義に合わせる。既存テストの project 生成ヘルパーがあればそれを使う。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/lib/project-document.test.ts`
 Expected: `projectId` が型・実装に存在しないため失敗する
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src/types/index.ts` の `SheltieDocumentV2` に optional フィールドを追加する。
 
@@ -826,18 +826,18 @@ function createProject(params: {
 
 `createProjectDocument` / `sanitizeProjectDocument` の呼び出し箇所（`src/lib/file-commands.ts` の `createProjectDocument(latestProject)` を含む）で `id` が渡るよう型エラーを解消する。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run && npm run typecheck`
 Expected: 全テスト green、型エラーなし
 
-- [ ] **Step 5: 手動確認**
+- [x] **Step 5: 手動確認**
 
 1. 新規ボードに WebPage ノードを 2 枚置いて保存する
 2. `ls ~/Library/Application\ Support/jp.brdr.app.sheltie/screenshots/` でディレクトリ名を記録する
 3. アプリを終了し、同じファイルを開き直す → **同じディレクトリ名が再利用され**、スクリーンショットが復元される（新しい UUID ディレクトリが増えない）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/types/index.ts src/lib/project-document.ts src/lib/project-document.test.ts src/store/tab-store.ts src/lib/file-commands.ts
@@ -859,7 +859,7 @@ git commit -m "fix(document): persist projectId to stabilize the screenshot cach
 **Interfaces:**
 - Produces: `prune_screenshot_cache` コマンド、`api.pruneScreenshotCache()`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src-tauri/src/commands/webview/screenshots.rs` のテストモジュールに追加する。
 
@@ -892,12 +892,12 @@ git commit -m "fix(document): persist projectId to stabilize the screenshot cach
 
 > `filetime` crate が依存に無い場合は、テストでは mtime 変更の代わりに「TTL を 0 秒にして全削除される」「TTL を十分長くして何も削除されない」の 2 ケースで検証する形へ置き換える（依存追加はしない）。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd src-tauri && cargo test --lib prunes_only_directories_older_than_the_ttl`
 Expected: `cannot find function \`prune_screenshot_cache_dir\``
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `screenshots.rs` に追加する。
 
@@ -982,12 +982,12 @@ void api.pruneScreenshotCache().catch(() => {
 });
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd src-tauri && cargo test --lib && npm run typecheck`
 Expected: 全テスト green、型エラーなし
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src-tauri/src/commands/webview/screenshots.rs src-tauri/src/lib.rs src/lib/tauri-bridge/webview.ts src/main.tsx
@@ -1006,7 +1006,7 @@ git commit -m "feat(screenshot): prune stale screenshot cache directories on lau
 - Modify: `index.html`
 - Modify: `src-tauri/tauri.conf.json`
 
-- [ ] **Step 1: inline script を外部化する**
+- [x] **Step 1: inline script を外部化する**
 
 `public/theme-init.js` を新規作成する。
 
@@ -1020,7 +1020,7 @@ git commit -m "feat(screenshot): prune stale screenshot cache directories on lau
 })();
 ```
 
-- [ ] **Step 2: inline style を外部化する**
+- [x] **Step 2: inline style を外部化する**
 
 `public/initial-background.css` を新規作成する。
 
@@ -1040,7 +1040,7 @@ body {
 }
 ```
 
-- [ ] **Step 3: `index.html` を差し替える**
+- [x] **Step 3: `index.html` を差し替える**
 
 `<head>` の inline `<style>` と inline `<script>` を次で置き換える。`<link>` と classic `<script>`（`type="module"` を付けない）はどちらも head でブロッキング実行されるため、実行順は維持される。
 
@@ -1049,7 +1049,7 @@ body {
     <script src="/theme-init.js"></script>
 ```
 
-- [ ] **Step 4: CSP を設定する**
+- [x] **Step 4: CSP を設定する**
 
 `src-tauri/tauri.conf.json` の `app.security.csp` を差し替える。
 
@@ -1059,12 +1059,12 @@ body {
 
 `style-src` の `'unsafe-inline'` は Tailwind v4 / HeroUI / React Flow がランタイムで style を注入・inline style 属性を使うため外せない。
 
-- [ ] **Step 5: Run validation**
+- [x] **Step 5: Run validation**
 
 Run: `npm run build`
 Expected: ビルド成功
 
-- [ ] **Step 6: 手動確認（このタスクの完了判定に必須）**
+- [x] **Step 6: 手動確認（このタスクの完了判定に必須）**
 
 `npm run build` した成果物（`npm run dev` ではなくリリース相当のビルド）を起動し、次を確認する。CSP 違反はコンソールにのみ出るため、DevTools の Console を必ず開いて確認する。
 
@@ -1078,7 +1078,7 @@ Expected: ビルド成功
 
 違反が出た場合は、該当ディレクティブだけを最小限緩める（`'unsafe-inline'` を `script-src` に足す対応は取らない。原因の inline を外部化する）。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add public/theme-init.js public/initial-background.css index.html src-tauri/tauri.conf.json
@@ -1094,7 +1094,7 @@ git commit -m "feat(security): enable a content security policy"
 **Files:**
 - Modify: `src-tauri/capabilities/default.json`
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 実測で使用が確認できたのは `setTitle`（`src/App.tsx:37`）、webview の `show` / `hide` / `close`（`src/lib/tauri-bridge/webview.ts:136,139,146`）、dialog の `message` / `open` / `save`（`src/lib/file-commands.ts`）だけ。`data-tauri-drag-region` は未使用、ウインドウクローズは独自コマンド `close_ready` 経由。
 
@@ -1122,12 +1122,12 @@ git commit -m "feat(security): enable a content security policy"
 
 `core:window:default` / `core:webview:default` を外したうえで必要な個別権限だけを残している。**`core:default` に含まれる権限セットの中身を確認し**、`event:allow-listen` / `event:allow-emit` など既存機能が依存するものが失われていないことを確かめる。失われる場合は個別に足す。
 
-- [ ] **Step 2: Run validation**
+- [x] **Step 2: Run validation**
 
 Run: `npm run build`
 Expected: ビルド成功（capability の schema 検証を通ること）
 
-- [ ] **Step 3: 手動確認（このタスクの完了判定に必須）**
+- [x] **Step 3: 手動確認（このタスクの完了判定に必須）**
 
 権限不足は実行時にしか現れないため、ビルドした成果物で次をすべて確認する。失敗時はコンソールに `not allowed` 系のエラーが出る。
 
@@ -1140,7 +1140,7 @@ Expected: ビルド成功（capability の schema 検証を通ること）
 7. 新規タブ・新規ウインドウが開ける
 8. MCP を有効にしてボード読み取り・`batch_edit_board`・ページ自動化が動く
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src-tauri/capabilities/default.json

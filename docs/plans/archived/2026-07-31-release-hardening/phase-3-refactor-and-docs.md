@@ -71,7 +71,7 @@
 - Modify: `src/store/tab-store.ts:688-693, 734-739, 741-746`
 - Modify: `src/store/tab-store.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src/store/tab-store.test.ts` に追加する。このファイルはテスト名が日本語、履歴長は `useProjectStore.getState().history.past` で確認する記法なので、それに合わせる。既存の `beforeEach` は `nodes: []` で初期化するため、このブロック用に付箋 / テキストノードを持つ document で上書きする。
 
@@ -154,12 +154,12 @@ describe('style / content actions の no-op 契約', () => {
 
 > document node の必須フィールドは `src/types/index.ts` の `SheltieDocumentNode` 定義に合わせる。`tiptapContent` の型が `object` なので、上記のリテラルで通らない場合は既存の text ノードテストの作り方に揃える。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/store/tab-store.test.ts`
 Expected: 履歴長が 1 増えていることで失敗する
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `src/store/tab-store.ts` の 3 箇所を差し替える。
 
@@ -213,12 +213,12 @@ function isSameStyle<T extends object>(node: T, style: Partial<T>): boolean {
 
 > `updateTextNodeContent` の `tiptapContent` は Tiptap の JSON なので浅い比較では判定できない。呼び出しは編集終了時（blur / Escape）に限られるため `JSON.stringify` 比較で十分。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/store/tab-store.test.ts && npm run typecheck`
 Expected: 全ケース green
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/store/tab-store.ts src/store/tab-store.test.ts
@@ -234,7 +234,7 @@ git commit -m "fix(store): skip history entries for unchanged node styles and co
 **Files:**
 - Modify: `src/hooks/sheltie/useSheltieDrag.ts:191-269`
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 現在の `handleTitlePointerDown` は `pointermove` / `pointerup` を `window` に登録し、`handleUp` 内でのみ解除している。解除関数を ref に保持し、`useEffect` のクリーンアップでも解除する。
 
@@ -267,16 +267,16 @@ git commit -m "fix(store): skip history entries for unchanged node styles and co
 
 `handleUp` 内の `removeEventListener` 呼び出しを `release()` に置き換える。
 
-- [ ] **Step 2: Run validation**
+- [x] **Step 2: Run validation**
 
 Run: `npm run typecheck && npm run lint && npm run test`
 Expected: いずれも成功
 
-- [ ] **Step 3: 手動確認**
+- [x] **Step 3: 手動確認**
 
 `npm run dev` で起動し、WebPage ノードのタイトル段をドラッグして移動できること、複数ノード選択時に一緒に動くこと、ドラッグ中に別ウインドウへ切り替えても状態が壊れないことを確認する。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/hooks/sheltie/useSheltieDrag.ts
@@ -293,7 +293,7 @@ git commit -m "fix(sheltie): release title drag listeners on unmount"
 - Modify: `src/constants/sheltie.ts:75-100`
 - Modify: `src/components/ReactFlowNodes/StickyNoteToolbar.tsx:73`
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 `src/constants/sheltie.ts` の `STICKY_NOTE_COLORS` の各要素に `label` を追加する（既存コメントの色名に対応させる）。
 
@@ -336,16 +336,16 @@ export const STICKY_NOTE_COLORS = [
                 title={color.label}
 ```
 
-- [ ] **Step 2: Run validation**
+- [x] **Step 2: Run validation**
 
 Run: `npm run typecheck && npm run test`
 Expected: 成功（`STICKY_NOTE_COLORS` の長さは変わらないため Phase 1 の検証も影響を受けない）
 
-- [ ] **Step 3: 手動確認**
+- [x] **Step 3: 手動確認**
 
 付箋ノードを選択し、色スウォッチにホバーして `Yellow` / `Pink` / `Cyan` / `Green` が出ることを確認する。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/constants/sheltie.ts src/components/ReactFlowNodes/StickyNoteToolbar.tsx
@@ -364,15 +364,15 @@ git commit -m "fix(toolbar): show human readable sticky note color names"
 - Modify: `src/hooks/sheltie/display-engine/state-machine.ts:1`
 - Modify: `eslint.config.mjs`
 
-- [ ] **Step 1: 未使用 marker class を削除する**
+- [x] **Step 1: 未使用 marker class を削除する**
 
 `WebPageFlowNode.tsx` の `sheltie-web-resize-line` / `sheltie-web-resize-handle`、`StickyNoteFlowNode.tsx` の `sheltie-sticky-resize-line` / `sheltie-sticky-resize-handle` を className から削除する。`index.css` に対応セレクタは無く、見た目は inline style で付与されているため CSS 追加は不要。`TextFlowNode.tsx` は元から持たない。
 
-- [ ] **Step 2: 到達不能な分岐を削除する**
+- [x] **Step 2: 到達不能な分岐を削除する**
 
 `useScreenshotCaptureQueue.ts:18` の `SCREENSHOT_CLIPPING_ENABLED` 定数を削除し、`:246` と `:268` の条件分岐を「クリッピング有効」側の処理だけ残す形に単純化する。
 
-- [ ] **Step 3: 親相対 import を直す**
+- [x] **Step 3: 親相対 import を直す**
 
 `src/hooks/sheltie/display-engine/state-machine.ts:1` を差し替える。
 
@@ -380,7 +380,7 @@ git commit -m "fix(toolbar): show human readable sticky note color names"
 import type { InteractionType } from '@/hooks/sheltie/types';
 ```
 
-- [ ] **Step 4: lint で再発を止める**
+- [x] **Step 4: lint で再発を止める**
 
 `eslint.config.mjs` のルール定義に追加する（既存の rules オブジェクトへマージする）。
 
@@ -398,16 +398,16 @@ import type { InteractionType } from '@/hooks/sheltie/types';
       ],
 ```
 
-- [ ] **Step 5: Run validation**
+- [x] **Step 5: Run validation**
 
 Run: `npm run lint && npm run typecheck && npm run test`
 Expected: lint がエラーなしで通り（新ルールで既存コードが引っかからないこと）、テストも green
 
-- [ ] **Step 6: 手動確認**
+- [x] **Step 6: 手動確認**
 
 WebPage / 付箋ノードのリサイズ（辺・四隅）とカーソル形状が従来どおりであること、スクロール後のスクリーンショット更新とクリッピングが従来どおりであることを確認する。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/ReactFlowNodes/WebPageFlowNode.tsx src/components/ReactFlowNodes/StickyNoteFlowNode.tsx src/hooks/sheltie/useScreenshotCaptureQueue.ts src/hooks/sheltie/display-engine/state-machine.ts eslint.config.mjs
@@ -423,16 +423,16 @@ git commit -m "refactor: remove dead markers and forbid parent-relative imports"
 **Files:**
 - Modify: `src-tauri/src/menus/mcp.rs:74-93`
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 `find_menu_item_in_items`（93 行以降）を `#[cfg(test)] mod tests`（74-91 行）より前へ移動する。実装は変えない。
 
-- [ ] **Step 2: Run validation**
+- [x] **Step 2: Run validation**
 
 Run: `cd src-tauri && cargo clippy --all-targets 2>&1 | tail -5 && cargo test --lib`
 Expected: `warning` が 0 件、全テスト green
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src-tauri/src/menus/mcp.rs
@@ -450,7 +450,7 @@ git commit -m "style(menus): move helper before the test module"
 - Create: `src/lib/project-display-name.test.ts`
 - Modify: `src-tauri/src/menus/helpers.rs`
 
-- [ ] **Step 1: ダイアログ表示状態機械のテストを書く**
+- [x] **Step 1: ダイアログ表示状態機械のテストを書く**
 
 `src/lib/unsaved-changes-dialog-display.test.ts` を新規作成する。
 
@@ -558,7 +558,7 @@ describe('unsaved changes dialog display', () => {
 });
 ```
 
-- [ ] **Step 2: 表示名のテストを書く**
+- [x] **Step 2: 表示名のテストを書く**
 
 `src/lib/project-display-name.test.ts` を新規作成する。
 
@@ -626,7 +626,7 @@ describe('getProjectDisplayName', () => {
 });
 ```
 
-- [ ] **Step 3: Rust helper のテストを書く**
+- [x] **Step 3: Rust helper のテストを書く**
 
 `src-tauri/src/menus/helpers.rs` の末尾に追加する。
 
@@ -646,12 +646,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 4: Run validation**
+- [x] **Step 4: Run validation**
 
 Run: `npx vitest run src/lib/unsaved-changes-dialog-display.test.ts src/lib/project-display-name.test.ts && (cd src-tauri && cargo test --lib normalizes_menu_text)`
 Expected: すべて green
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/unsaved-changes-dialog-display.test.ts src/lib/project-display-name.test.ts src-tauri/src/menus/helpers.rs
@@ -667,11 +667,11 @@ git commit -m "test: cover dialog display state, display names, and menu text no
 **Files:**
 - Modify: `docs/agents/architecture.md`, `coding-rules.md`, `sheltie-runtime.md`, `sheltie-screenshots.md`, `mcp.md`, `tauri-ipc.md`, `domain-models.md`, `wkwebview-internals.md`
 
-- [ ] **Step 1: `WEB_PAGE_FRAME_PADDING` の誤記を直す**
+- [x] **Step 1: `WEB_PAGE_FRAME_PADDING` の誤記を直す**
 
 「24px world 固定」を「16px world 固定」へ修正する（実装は `src/constants/project.ts:18` の `16`）。対象は `architecture.md:29,32`、`coding-rules.md:37,53,201`、`sheltie-runtime.md:122` の 6 箇所。`domain-models.md:117` は既に正しいので変更しない。
 
-- [ ] **Step 2: `.sheltie` の契約を反映する**
+- [x] **Step 2: `.sheltie` の契約を反映する**
 
 `architecture.md` の「`.sheltie` とローカル状態」節に追記する。
 
@@ -684,14 +684,14 @@ git commit -m "test: cover dialog display state, display names, and menu text no
 
 `domain-models.md` に `SheltieDocumentV2.projectId` と各検証の不変条件を追記する。
 
-- [ ] **Step 3: URL scheme 契約を反映する**
+- [x] **Step 3: URL scheme 契約を反映する**
 
 `tauri-ipc.md` を修正する。`on_new_window` の記述（160 行付近）は「HTTP(S) URL を同じ page-* Webview で開く」と書かれているが実装に allowlist が無かった。Phase 2 で `normalize_navigation_url` が `http` / `https` のみを許可するようになったため、次を明記する。
 
 - `create_page_webview` / `reload_page_webview` / `on_new_window` は `normalize_navigation_url` を通し、`http` / `https` 以外を拒否する
 - `page-navigated-{pageId}` は **commit 後**（`on_page_load` の `Finished`）と SPA 通知の 2 経路で emit し、URL は常に native の webview から取得する。`document.title` の `\x01` は「URL を読み直す契機」であり、その文字列を URL として信頼しない
 
-- [ ] **Step 4: MCP の露出範囲とブリッジの位置づけを正確化する**
+- [x] **Step 4: MCP の露出範囲とブリッジの位置づけを正確化する**
 
 `mcp.md` の Trust boundary 節を修正する。
 
@@ -700,7 +700,7 @@ git commit -m "test: cover dialog display state, display names, and menu text no
 - page automation ブリッジはページと同一 JS realm に注入されるため、**password / OTP フィールドへの入力拒否は事故防止のガードレールであり、敵対的ページに対するセキュリティ境界ではない**。`Object.defineProperty` による硬化は単純な再代入を防ぐだけで、`Function.prototype` の差し替えや DOM prototype 汚染は防げない
 - page automation の request ID は UUID であり、identity 不一致の completion では pending entry を消費しない
 
-- [ ] **Step 5: 制約とガードレールを追記する**
+- [x] **Step 5: 制約とガードレールを追記する**
 
 `sheltie-runtime.md` に追記する。
 
@@ -715,12 +715,12 @@ git commit -m "test: cover dialog display state, display names, and menu text no
 - `projectId` は `.sheltie` に保存した安定 ID である（従来の「ローカルワークスペース上の `Project.id`」という記述は、開くたびに再生成されて lazy restore が機能しない状態だったため実装とともに改める）
 - 起動時に、最終更新から 30 日を超えた project ディレクトリを削除する（TTL GC）
 
-- [ ] **Step 6: Run validation**
+- [x] **Step 6: Run validation**
 
 Run: `npm run format && grep -rn "24px world" docs/agents/ | wc -l`
 Expected: format で差分が出ないこと、grep の結果が `0`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add docs/agents
@@ -736,7 +736,7 @@ git commit -m "docs(agents): align documents with the hardened document and trus
 **Files:**
 - Modify: `package.json`, `package-lock.json`
 
-- [ ] **Step 1: 分類を直して未使用依存を削除する**
+- [x] **Step 1: 分類を直して未使用依存を削除する**
 
 `@tailwindcss/vite` はビルド時の Vite プラグインなので `devDependencies` へ移す。`@tauri-apps/plugin-store` は JS から未 import（Rust は `StoreExt` を直接使う）で、Phase 2 Task 10 で capability からも外したため削除する。
 
@@ -747,7 +747,7 @@ npm uninstall @tauri-apps/plugin-store
 npm install
 ```
 
-- [ ] **Step 2: 非破壊の transitive 更新を当てる**
+- [x] **Step 2: 非破壊の transitive 更新を当てる**
 
 ```bash
 npm audit fix
@@ -755,12 +755,12 @@ npm audit fix
 
 `--force` は使わない。Vite / Vitest のメジャー更新はこのフェーズの対象外。
 
-- [ ] **Step 3: Run validation**
+- [x] **Step 3: Run validation**
 
 Run: `npm run lint && npm run typecheck && npm run test && npm run build && npm audit --omit=dev`
 Expected: lint / typecheck / test / build すべて成功。`npm audit --omit=dev` の残件が `@tiptap/pm` 経由の `prosemirror-markdown → markdown-it → linkify-it` のみであること（`@tiptap/pm/markdown` は import していないためバンドルには入らない）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add package.json package-lock.json
@@ -778,7 +778,7 @@ git commit -m "chore(deps): fix dependency classification and apply non-breaking
 - Modify: `src/components/ReactFlowNodes/{StickyNoteToolbar,TextNodeToolbar,WebPageToolbar}.tsx`
 - Modify: `src/components/ReactFlowEdges/ArrowToolbar.tsx`
 
-- [ ] **Step 1: 共通モジュールを作る**
+- [x] **Step 1: 共通モジュールを作る**
 
 既存の `selectionChromeStyles.ts` / `floatingControlStyles.ts` と同じ方針で `src/components/ReactFlowNodes/nodeToolbarStyles.ts` を作る。**各ファイルの現在の文字列を正確にコピーする**（差異があれば統合前に差分を確認し、意図的な差異は共通化対象から外す）。
 
@@ -797,16 +797,16 @@ export const TOOLBAR_DIVIDER_CLASSNAME = 'mx-0.5 h-4 w-px bg-white/20';
 export const TOOLBAR_SWATCH_CLASSNAME = 'nodrag size-7 rounded-sm';
 ```
 
-- [ ] **Step 2: 4 ファイルを置き換える**
+- [x] **Step 2: 4 ファイルを置き換える**
 
 各ファイルのローカル定数（`buttonBase` / `activeClass` 等）を削除し、共通定数を import して使う。**1 ファイルずつ置き換え、そのたびに見た目を確認する**。
 
-- [ ] **Step 3: Run validation**
+- [x] **Step 3: Run validation**
 
 Run: `npm run lint && npm run typecheck && npm run test && npm run format`
 Expected: すべて成功。`eslint-plugin-better-tailwindcss` の警告が増えないこと
 
-- [ ] **Step 4: 手動確認（必須）**
+- [x] **Step 4: 手動確認（必須）**
 
 DOM 依存でテスト免除の領域なので、次をすべて目視する。
 
@@ -816,7 +816,7 @@ DOM 依存でテスト免除の領域なので、次をすべて目視する。
 4. エッジツールバー: 太さ、実線 / 破線、方向反転、7 色
 5. いずれもアクティブ状態のハイライト、区切り線の位置、hover の見た目が変更前と同じであること
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/ReactFlowNodes/nodeToolbarStyles.ts src/components/ReactFlowNodes/StickyNoteToolbar.tsx src/components/ReactFlowNodes/TextNodeToolbar.tsx src/components/ReactFlowNodes/WebPageToolbar.tsx src/components/ReactFlowEdges/ArrowToolbar.tsx
@@ -834,7 +834,7 @@ git commit -m "refactor(toolbar): share node toolbar styles"
 - Modify: `src/components/ReactFlowNodes/StickyNoteFlowNode.tsx:53-122`
 - Modify: `src/components/ReactFlowNodes/TextFlowNode.tsx:44-99`
 
-- [ ] **Step 1: 共通コンポーネントを作る**
+- [x] **Step 1: 共通コンポーネントを作る**
 
 差分は `minWidth` とテキスト側のダブルクリック復帰ハンドラだけなので、それらを props にする。実装は現在の `StickyNoteFlowNode.tsx:53-122` の構成（左右辺 2 本の Line + 四隅 4 個の Handle）をそのまま移し、inline style も維持する。ハンドラの型は両ファイルが既に使っている React Flow の `ResizeDragEvent` / `ResizeParams` に合わせる。
 
@@ -854,23 +854,23 @@ interface NodeWidthResizeControlsProps {
 
 `WebPageFlowNode.tsx:76-119` は 8 方向版で構成が異なるため、**このタスクでは統合しない**（無理に共通化すると分岐が増えて可読性が落ちる）。
 
-- [ ] **Step 2: 2 ファイルを置き換える**
+- [x] **Step 2: 2 ファイルを置き換える**
 
 `StickyNoteFlowNode` → `TextFlowNode` の順に 1 ファイルずつ差し替え、そのたびに手動確認する。
 
-- [ ] **Step 3: Run validation**
+- [x] **Step 3: Run validation**
 
 Run: `npm run lint && npm run typecheck && npm run test`
 Expected: すべて成功
 
-- [ ] **Step 4: 手動確認（必須）**
+- [x] **Step 4: 手動確認（必須）**
 
 1. 付箋: 左右辺と四隅からのリサイズ、`STICKY_NOTE_MIN_WIDTH` / `MIN_HEIGHT` の下限
 2. テキスト: 左右辺と四隅からのリサイズ、`TEXT_NODE_MIN_WIDTH` の下限、**辺のダブルクリックで auto 幅へ戻る挙動**
 3. ズーム率を変えてもハンドルの当たり判定と見た目が変わらないこと
 4. リサイズが Undo / Redo で正しく戻ること
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/ReactFlowNodes/NodeWidthResizeControls.tsx src/components/ReactFlowNodes/StickyNoteFlowNode.tsx src/components/ReactFlowNodes/TextFlowNode.tsx
@@ -890,12 +890,12 @@ git commit -m "refactor(nodes): share width resize controls between sticky notes
 **Interfaces:**
 - Produces: `run_on_app_main_thread_async`（await 可能版）。既存の同期版は同期呼び出し元のために残す
 
-- [ ] **Step 1: 現在の呼び出し元を洗い出す**
+- [x] **Step 1: 現在の呼び出し元を洗い出す**
 
 Run: `cd src-tauri && grep -rn "run_on_app_main_thread" src/`
 `macos_tabs.rs` 内の各コマンド（`set_document_edited` / `new_document_tab` / `present_document_window` / `configure_macos_document_window` 等）と、同期の初期化経路（`setup.rs` など）を区別する。**同期呼び出し元が 1 つでもあるなら、同期版を消さずに async 版を追加する。**
 
-- [ ] **Step 2: async 版を追加する**
+- [x] **Step 2: async 版を追加する**
 
 `macos_tabs.rs` に、`std::sync::mpsc` ではなく `tokio::sync::oneshot` を使う版を追加する。参考実装は `src-tauri/src/commands/webview/navigation.rs:44-77`（`get_navigation_state_impl`）と `snapshot.rs:16-45`。
 
@@ -922,23 +922,23 @@ where
 
 `macos_tabs.rs` の各非同期コマンドを `run_on_app_main_thread_async(...).await` へ切り替える。
 
-- [ ] **Step 3: ダイアログを非ブロッキングにする**
+- [x] **Step 3: ダイアログを非ブロッキングにする**
 
 `dialog.rs` の `show_unsaved_changes_dialog`（130, 157-159 行）で、`std::sync::mpsc` を `tokio::sync::oneshot` に置き換え、`receiver.recv()` を `rx.await` にする。`show_nsalert_sheet` 側の sender も oneshot に合わせる。
 
-- [ ] **Step 4: Run validation**
+- [x] **Step 4: Run validation**
 
 Run: `cd src-tauri && cargo test --lib && cargo clippy --all-targets 2>&1 | tail -5`
 Expected: 全テスト green、警告 0 件
 
-- [ ] **Step 5: 手動確認（必須）**
+- [x] **Step 5: 手動確認（必須）**
 
 1. 未保存の状態でウインドウを閉じる → 確認シートが出て、保存 / 破棄 / キャンセルすべてが正しく動く
 2. 複数ウインドウを未保存にして `Cmd+Q` → 各ウインドウの確認が順に出て、最後に終了する
 3. ネイティブタブの新規作成、タブの edited インジケータ、ウインドウ生成が従来どおり動く
 4. 確認シートを開いたまま数十秒放置しても、MCP のボード操作（別ウインドウ）が応答すること
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/commands/store/macos_tabs.rs src-tauri/src/commands/dialog.rs
@@ -959,7 +959,7 @@ git commit -m "refactor(commands): await main thread results without blocking to
 - Modify: `src-tauri/src/mcp/tools/browser.rs`
 - Modify: `src-tauri/src/mcp/page_automation/protocol.rs`
 
-- [ ] **Step 1: `actor.rs` から撮影系を切り出す**
+- [x] **Step 1: `actor.rs` から撮影系を切り出す**
 
 `capture.rs` へ移すのは `capture_element_with` / `capture_full_page_with` / `capture_full_page_tiles_locked_with` / `restore_scroll_locked_with` / `full_page_tile_positions` / `tile_axis_positions` / `css_offset_to_pixels`。`impl PageAutomationState` の分割になるため、`capture.rs` 側にも `impl PageAutomationState` ブロックを置く（同一 crate 内なら可）。`actor.rs` はリクエスト直列化と navigation epoch 管理に専念させる。移動した関数に紐づくテストも一緒に移す。
 
@@ -971,7 +971,7 @@ git add src-tauri/src/mcp/page_automation/
 git commit -m "refactor(automation): extract capture routines from the page actor"
 ```
 
-- [ ] **Step 2: `browser.rs` から型と backend を切り出す**
+- [x] **Step 2: `browser.rs` から型と backend を切り出す**
 
 `browser.rs` を `browser.rs` + `browser/` サブディレクトリ構成にする（Rust 2018 以降で可）。
 
@@ -989,7 +989,7 @@ git add src-tauri/src/mcp/tools/
 git commit -m "refactor(mcp): split browser tool types and backend into modules"
 ```
 
-- [ ] **Step 3: `protocol.rs` からエラーファクトリを切り出す**
+- [x] **Step 3: `protocol.rs` からエラーファクトリを切り出す**
 
 `protocol.rs` を `protocol.rs` + `protocol/errors.rs` 構成にし、851-1032 行の `ToolError` ファクトリ（約 20 個）を移す。型契約（struct / enum / 定数）は `protocol.rs` に残す。`pub use` で既存の import パスを壊さないようにする。
 
@@ -1001,7 +1001,7 @@ git add src-tauri/src/mcp/page_automation/
 git commit -m "refactor(automation): move protocol error factories into their own module"
 ```
 
-- [ ] **Step 4: 手動確認（必須）**
+- [x] **Step 4: 手動確認（必須）**
 
 分割は振る舞いを変えないが、MCP のツール面が広いので通しで確認する。MCP を有効にして次を実行する。
 
@@ -1011,7 +1011,7 @@ git commit -m "refactor(automation): move protocol error factories into their ow
 4. `browser_screenshot`（element / fullPage 両方）
 5. `get_webpage_screenshots` / `get_board_screenshot`
 
-- [ ] **Step 5: ドキュメントの実装入口リストを更新する**
+- [x] **Step 5: ドキュメントの実装入口リストを更新する**
 
 `docs/agents/mcp.md` の「実装の主入口」に、追加したモジュール（`capture.rs`、`tools/browser/{types,backend}.rs`、`protocol/errors.rs`）を反映する。
 

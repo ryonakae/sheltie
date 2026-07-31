@@ -160,6 +160,50 @@ describe('applyBoardOperations', () => {
     expect(snapshot).toEqual(before);
   });
 
+  it('rejects page URLs that are not http or https', () => {
+    const created = applyBoardOperations(
+      { nodes: [], edges: [] },
+      [
+        {
+          op: 'create_node',
+          tempId: 'page',
+          node: { type: 'webpage', url: 'file:///etc/passwd' },
+        },
+      ],
+      () => 'page-id',
+    );
+    expect(created).toMatchObject({
+      ok: false,
+      error: { operationIndex: 0, code: 'validation_failed' },
+    });
+    expect(JSON.stringify(created)).toMatch(/url/);
+
+    const updated = applyBoardOperations(
+      { nodes: [webpage('a')], edges: [] },
+      [
+        {
+          op: 'update_node',
+          nodeId: 'a',
+          patch: { type: 'webpage', url: 'javascript:alert(1)' },
+        },
+      ],
+      () => 'unused',
+    );
+    expect(updated).toMatchObject({
+      ok: false,
+      error: { operationIndex: 0, code: 'validation_failed' },
+    });
+  });
+
+  it('allows an empty page URL as a URL-less node', () => {
+    const result = applyBoardOperations(
+      { nodes: [], edges: [] },
+      [{ op: 'create_node', tempId: 'page', node: { type: 'webpage', url: '' } }],
+      () => 'page-id',
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it('rejects type-incompatible patches and missing IDs', () => {
     const incompatible = applyBoardOperations(
       { nodes: [sticky('sticky-1')], edges: [] },

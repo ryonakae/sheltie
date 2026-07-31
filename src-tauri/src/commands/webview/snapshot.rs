@@ -12,6 +12,11 @@ pub async fn capture_webview_png_bytes(app: &AppHandle, label: &str) -> Result<V
     capture_webview_png_bytes_with_options(app, label, false).await
 }
 
+/// WKWebView の snapshot callback が返らないケース（WebContent プロセスの hang / crash）で
+/// capture queue が永久に詰まらないための上限。
+#[cfg(target_os = "macos")]
+const SNAPSHOT_TIMEOUT_MS: u64 = 5_000;
+
 #[cfg(target_os = "macos")]
 pub async fn capture_webview_png_bytes_with_options(
     app: &AppHandle,
@@ -45,8 +50,29 @@ pub async fn capture_webview_png_bytes_with_options(
         }
     }
 
-    rx.await
-        .map_err(|_| "screenshot channel closed".to_string())?
+    let outcome =
+        tokio::time::timeout(std::time::Duration::from_millis(SNAPSHOT_TIMEOUT_MS), rx).await;
+
+    // hide したまま復帰しないと、ボード上でページが消えたように見える。
+    // 失敗時は必ず再表示してから error を返す。
+    let restore_visibility = |error: String| -> String {
+        if hide_after_snapshot_request {
+            if let Err(show_error) = webview.show() {
+                log::warn!(
+                    "failed to show Webview after a failed snapshot: page_id={}, error={}",
+                    label,
+                    show_error
+                );
+            }
+        }
+        error
+    };
+
+    match outcome {
+        Ok(Ok(result)) => result.map_err(restore_visibility),
+        Ok(Err(_)) => Err(restore_visibility("screenshot channel closed".to_string())),
+        Err(_) => Err(restore_visibility("screenshot timed out".to_string())),
+    }
 }
 
 #[cfg(not(target_os = "macos"))]

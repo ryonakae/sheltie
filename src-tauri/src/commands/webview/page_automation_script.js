@@ -1184,10 +1184,17 @@
   if (isTopFrame) installTopFrameMessaging();
   else installChildFrameMessaging();
 
-  window.__SHELTIE_MCP_PAGE_AUTOMATION__ = {
-    dispatch(request) {
-      if (!isTopFrame) throw new Error('Only the top frame accepts native dispatch.');
-      return dispatchTopFrame(request);
-    },
-  };
+  // ページと同一 realm で動くため、これはセキュリティ境界ではない。
+  // 単純な再代入によるブリッジ差し替えだけを防ぐ。
+  Object.defineProperty(window, '__SHELTIE_MCP_PAGE_AUTOMATION__', {
+    value: Object.freeze({
+      dispatch(request) {
+        if (!isTopFrame) throw new Error('Only the top frame accepts native dispatch.');
+        return dispatchTopFrame(request);
+      },
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
 })();

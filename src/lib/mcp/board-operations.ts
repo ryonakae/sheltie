@@ -28,6 +28,7 @@ import {
   updateBoardEdgeStyle,
 } from '@/lib/sheltie-edge';
 import { findNonOverlappingPosition } from '@/lib/sheltie-placement';
+import { isAllowedPageUrl } from '@/lib/url-utils';
 import type { BoardEdge, BoardEdgeStyle, BoardNode, TextNodeFontSizePreset } from '@/types';
 import { isWebPageNode } from '@/types';
 
@@ -49,6 +50,14 @@ function fail(operationIndex: number, message: string): never {
 function requireString(value: unknown, name: string, operationIndex: number): string {
   if (typeof value !== 'string') fail(operationIndex, `${name} must be a string`);
   return value;
+}
+
+function requirePageUrl(value: unknown, name: string, operationIndex: number): string {
+  const url = requireString(value, name, operationIndex);
+  if (!isAllowedPageUrl(url)) {
+    fail(operationIndex, `${name} must be an http or https URL`);
+  }
+  return url;
 }
 
 function optionalFiniteNumber(
@@ -119,7 +128,8 @@ function createNode(
 
   let node: BoardNode;
   if (input.type === 'webpage') {
-    const url = input.url === undefined ? '' : requireString(input.url, 'node.url', operationIndex);
+    const url =
+      input.url === undefined ? '' : requirePageUrl(input.url, 'node.url', operationIndex);
     const width = requireMinimum(
       optionalFiniteNumber(input.width, DEFAULT_PAGE_WIDTH, 'node.width', operationIndex),
       PAGE_MIN_WIDTH,
@@ -310,7 +320,7 @@ function updateNode(
 
   if (patch.type === 'webpage') {
     if (patch.url !== undefined) {
-      const url = requireString(patch.url, 'patch.url', operationIndex);
+      const url = requirePageUrl(patch.url, 'patch.url', operationIndex);
       updated.url = url;
       updated.addedUrl = url || undefined;
       if (patch.title === undefined)

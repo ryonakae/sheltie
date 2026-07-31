@@ -74,7 +74,6 @@ impl Drop for PendingRegistration<'_> {
 struct PageAutomationInner {
     actors: HashMap<PageKey, Arc<PageActor>>,
     pending: HashMap<String, PendingRequest>,
-    next_request_id: u64,
 }
 
 pub struct PageAutomationState {
@@ -188,15 +187,15 @@ impl PageAutomationState {
                 && expected.webview_label == webview_label
                 && result.document_id == expected.key.document_id
                 && result.page_node_id == expected.key.page_node_id;
-            let pending = inner
-                .pending
-                .remove(&request_id)
-                .expect("pending request exists after lookup");
+            // 不一致の completion で pending を消費すると、requestId を推測した別ページが
+            // 正規 request を失敗させられる。一致した場合だけ取り出す。
             if !identity_matches {
-                let _ = pending.sender.send(Err(bridge_rejected()));
                 return Err("page automation completion identity mismatch".to_string());
             }
-            pending
+            inner
+                .pending
+                .remove(&request_id)
+                .expect("pending request exists after lookup")
         };
         pending
             .sender
@@ -841,13 +840,10 @@ impl PageAutomationState {
         }
     }
 
+    /// requestId は推測不能にする。連番だと、completion command を持つ任意の
+    /// HTTP(S) ページが他ページ向けの ID を当てて automation を妨害できる。
     fn allocate_request_id(&self) -> Result<String, ToolError> {
-        let mut inner = self.inner.lock().map_err(|_| webview_not_ready())?;
-        inner.next_request_id = inner
-            .next_request_id
-            .checked_add(1)
-            .ok_or_else(bridge_rejected)?;
-        Ok(format!("pa-{}", inner.next_request_id))
+        Ok(format!("pa-{}", uuid::Uuid::new_v4()))
     }
 
     fn actor(&self, key: &PageKey) -> Result<Arc<PageActor>, ToolError> {
@@ -1064,9 +1060,12 @@ impl PageAutomationState {
 }
 
 fn is_page_request_id(request_id: &str) -> bool {
-    request_id
-        .strip_prefix("pa-")
-        .is_some_and(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
+    request_id.strip_prefix("pa-").is_some_and(|value| {
+        !value.is_empty()
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+    })
 }
 
 fn normalize_url(url: &str) -> Result<String, String> {
@@ -1325,8 +1324,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mismatched_completion_identity_fails_the_known_request() {
-        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(1)));
+    async fn a_mismatched_completion_leaves_the_legitimate_request_pending() {
+        // 悪意あるページが他ページ向けの requestId を推測して送っても、
+        // 正規の待ち手を失敗させたり pending entry を消費したりしてはならない。
+        let state = Arc::new(PageAutomationState::with_timeout(Duration::from_secs(5)));
         state.register_page(key("page-a")).unwrap();
         let state_for_dispatch = state.clone();
         let outcome = state
@@ -1338,6 +1339,7 @@ mod tests {
                 move |request| {
                     let state = state_for_dispatch.clone();
                     std::thread::spawn(move || {
+                        // 別 window を騙る completion
                         assert!(state
                             .complete(
                                 "document-2",
@@ -1349,24 +1351,9 @@ mod tests {
                                 ),
                             )
                             .is_err());
-                    });
-                    Ok(())
-                },
-            )
-            .await;
-        assert_eq!(outcome.unwrap_err().code, "bridge_rejected");
-        assert_eq!(state.pending_count(), 0);
+                        assert_eq!(state.pending_count(), 1);
 
-        let payload_state = state.clone();
-        let payload_outcome = state
-            .execute_with(
-                key("page-a"),
-                "document-1".into(),
-                "page-document-1-page-a".into(),
-                PageAutomationOperation::Snapshot,
-                move |request| {
-                    let state = payload_state.clone();
-                    std::thread::spawn(move || {
+                        // payload の pageNodeId を偽装した completion
                         let mut mismatched = result(
                             &request,
                             "0123456789abcdef0123456789abcdef",
@@ -1374,15 +1361,47 @@ mod tests {
                         );
                         mismatched.page_node_id = "page-b".into();
                         assert!(state
-                            .complete("document-1", "page-document-1-page-a", mismatched,)
+                            .complete("document-1", "page-document-1-page-a", mismatched)
                             .is_err());
+                        assert_eq!(state.pending_count(), 1);
+
+                        // 正規の completion だけが pending を解決する
+                        assert!(state
+                            .complete(
+                                "document-1",
+                                "page-document-1-page-a",
+                                result(
+                                    &request,
+                                    "0123456789abcdef0123456789abcdef",
+                                    "https://example.test",
+                                ),
+                            )
+                            .is_ok());
                     });
                     Ok(())
                 },
             )
             .await;
-        assert_eq!(payload_outcome.unwrap_err().code, "bridge_rejected");
+        assert!(
+            outcome.is_ok(),
+            "the legitimate request must still succeed: {outcome:?}"
+        );
         assert_eq!(state.pending_count(), 0);
+    }
+
+    #[test]
+    fn request_ids_are_not_guessable() {
+        let state = PageAutomationState::with_timeout(Duration::from_secs(1));
+        let first = state.allocate_request_id().unwrap();
+        let second = state.allocate_request_id().unwrap();
+
+        assert_ne!(first, second);
+        assert!(
+            is_page_request_id(&first),
+            "must stay a valid page request ID: {first}"
+        );
+        assert!(!first.ends_with("-1"), "must not be sequential: {first}");
+        assert_eq!(first.len(), second.len());
     }
 
     #[tokio::test]

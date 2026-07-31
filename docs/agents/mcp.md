@@ -15,7 +15,9 @@ Sheltieがopen中のdocumentとWKWebViewを、local MCP clientから操作する
 
 - 接続できたlocal MCP clientを全面的に信頼する。認証、操作ごとの確認、MCP rootsによる制限は設けない。
 - authenticated pageを含むSheltie内WebPageとboard内容は、server有効中に接続したclientから参照・操作できる。
-- bind、Host validation、Origin validationはnetwork公開とDNS rebindingを防ぐ境界であり、同じuser権限で動くlocal process間の権限分離ではない。
+- bind、Host validation、Origin validationはnetwork公開とDNS rebindingを防ぐ境界であり、local process間の権限分離ではない。macOSのloopbackはUIDで分離されないため、**同一マシンの別ログインユーザーのプロセスからも到達できる**。認証を設けない判断は、Figmaのデスクトップ MCPと同じ「URLだけの設定」で使える体験を優先したもの。
+- page automation bridgeはページと同一のJS realmへ注入される。`Object.defineProperty`で再代入は防ぐが、`Function.prototype`の差し替えやDOM prototype汚染は防げない。**password / OTP fieldへの入力拒否は事故防止のガードレールであり、敵対的ページに対するセキュリティ境界ではない**。
+- page automationのrequest IDはUUIDで、identity不一致のcompletionではpending entryを消費しない。
 - MCPはdocumentを保存しない。編集後のdirty stateとSave / Save Asはuserが管理する。
 
 ## Lifecycle

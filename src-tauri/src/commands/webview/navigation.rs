@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Manager, Window};
 
 use super::labels::resolve_page_webview;
+use super::page_automation::normalize_navigation_url;
 
 #[derive(serde::Serialize)]
 pub struct NavigationState {
@@ -92,7 +93,7 @@ async fn get_navigation_state_impl(
 #[tauri::command]
 pub async fn reload_page_webview(window: Window, label: String, url: String) -> Result<(), String> {
     let webview = resolve_page_webview(window.app_handle(), window.label(), &label)?;
-    let parsed_url = url
+    let parsed_url = normalize_navigation_url(&url)?
         .parse::<tauri::Url>()
         .map_err(|e| format!("failed to parse URL: {e}"))?;
     webview

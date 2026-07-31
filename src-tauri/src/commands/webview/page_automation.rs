@@ -34,10 +34,15 @@ fn expected_capture_label(key: &PageKey) -> String {
     scoped_page_label(&key.document_id, &key.page_node_id)
 }
 
+/// ページ Webview へ渡る URL は http / https だけを許可する。
+/// file: や custom scheme はボード上の Webview が読み込むべき対象ではない。
 pub fn normalize_navigation_url(url: &str) -> Result<String, String> {
-    tauri::Url::parse(url)
-        .map(|url| url.to_string())
-        .map_err(|error| format!("invalid page navigation URL: {error}"))
+    let parsed =
+        tauri::Url::parse(url).map_err(|error| format!("invalid page navigation URL: {error}"))?;
+    match parsed.scheme() {
+        "http" | "https" => Ok(parsed.to_string()),
+        scheme => Err(format!("unsupported page navigation URL scheme: {scheme}")),
+    }
 }
 
 fn dispatch_expression(request: &PageAutomationBridgeRequest) -> Result<String, ToolError> {
@@ -296,6 +301,25 @@ pub async fn unregister_page_automation_page(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn normalize_navigation_url_allows_only_http_and_https() {
+        assert!(normalize_navigation_url("https://example.com/").is_ok());
+        assert!(normalize_navigation_url("http://127.0.0.1:8080/x").is_ok());
+
+        for rejected in [
+            "file:///Users/victim/.ssh/id_rsa",
+            "javascript:alert(1)",
+            "data:text/html,<script>1</script>",
+            "tauri://localhost",
+            "asset://localhost/x.png",
+        ] {
+            assert!(
+                normalize_navigation_url(rejected).is_err(),
+                "must reject {rejected}"
+            );
+        }
+    }
 
     #[test]
     fn dispatches_only_the_fixed_bridge_entrypoint_with_serialized_data() {

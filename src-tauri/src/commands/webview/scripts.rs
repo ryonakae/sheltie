@@ -95,4 +95,20 @@ mod tests {
             assert!(PAGE_AUTOMATION_SCRIPT.contains(&expected));
         }
     }
+
+    #[test]
+    fn page_automation_bridge_is_defined_as_a_non_writable_property() {
+        assert!(
+            PAGE_AUTOMATION_SCRIPT.contains("Object.defineProperty(window"),
+            "the bridge must be installed with defineProperty"
+        );
+        assert!(
+            PAGE_AUTOMATION_SCRIPT.contains("writable: false"),
+            "the bridge property must not be writable"
+        );
+        assert!(
+            PAGE_AUTOMATION_SCRIPT.contains("configurable: false"),
+            "the bridge property must not be configurable"
+        );
+    }
 }

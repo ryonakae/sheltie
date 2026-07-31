@@ -172,7 +172,7 @@ pub async fn create_page_webview(
         );
     }
 
-    let parsed_url = url
+    let parsed_url = normalize_navigation_url(&url)?
         .parse::<tauri::Url>()
         .map_err(|e| format!("failed to parse URL: {e}"))?;
 
@@ -202,7 +202,10 @@ pub async fn create_page_webview(
                     let label = label.clone();
                     let new_url = new_url.to_string();
                     tauri::async_runtime::spawn(async move {
-                        let Ok(url) = tauri::Url::parse(&new_url) else {
+                        let Ok(normalized) = normalize_navigation_url(&new_url) else {
+                            return;
+                        };
+                        let Ok(url) = tauri::Url::parse(&normalized) else {
                             return;
                         };
                         let Some(webview) = app.get_webview(&label) else {
@@ -220,23 +223,16 @@ pub async fn create_page_webview(
             .initialization_script(SPA_URL_DETECTION_SCRIPT)
             .initialization_script(SCROLL_DETECTION_SCRIPT)
             .on_navigation({
-                let ah = app_handle.clone();
-                let pid = pid.clone();
-                let event_window_label = event_window_label.clone();
-                move |nav_url| {
-                    ah.emit_to(
-                        &event_window_label,
-                        &format!("page-navigated-{pid}"),
-                        serde_json::json!({ "url": nav_url.to_string() }),
-                    )
-                    .ok();
-                    // ナビゲーションを許可
-                    true
-                }
+                // policy 判定の時点では commit されていないため、ここで URL を保存すると
+                // DNS/TLS エラーやキャンセルでも保存 URL だけが進んでしまう。
+                // URL の確定は on_page_load(Finished) と SPA 通知に任せる。
+                move |_nav_url| true
             })
             .on_page_load({
                 let ah = app_handle.clone();
                 let automation_key = automation_key.clone();
+                let pid = pid.clone();
+                let event_window_label = event_window_label.clone();
                 move |_webview, payload| {
                     if payload.event() != PageLoadEvent::Finished {
                         return;
@@ -246,28 +242,44 @@ pub async fn create_page_webview(
                     };
                     if let Err(error) = ah
                         .state::<PageAutomationState>()
-                        .note_committed_navigation(&automation_key, url)
+                        .note_committed_navigation(&automation_key, url.clone())
                     {
                         log::warn!("failed to record committed page navigation: {error}");
                     }
+                    ah.emit_to(
+                        &event_window_label,
+                        &format!("page-navigated-{pid}"),
+                        serde_json::json!({ "url": url }),
+                    )
+                    .ok();
                 }
             })
             .on_document_title_changed({
                 let ah = app_handle.clone();
                 let automation_key = automation_key.clone();
                 let pid = pid.clone();
+                let label = label.clone();
                 let event_window_label = event_window_label.clone();
                 move |_webview, title| {
                     // \x01: initialization_script からの SPA URL 変更通知
                     // \x02: initialization_script からのスクロール完了通知
-                    if let Some(url) = title.strip_prefix('\u{0001}') {
-                        if let Ok(url) = normalize_navigation_url(url) {
-                            if let Err(error) = ah
-                                .state::<PageAutomationState>()
-                                .note_spa_navigation(&automation_key, url)
-                            {
-                                log::warn!("failed to record SPA page navigation: {error}");
-                            }
+                    // \x01 の値はページが自由に設定できるため URL としては信頼せず、
+                    // 「URL を読み直す契機」としてのみ扱う。
+                    if title.starts_with('\u{0001}') {
+                        let Some(webview) = ah.get_webview(&label) else {
+                            return;
+                        };
+                        let Ok(current_url) = webview.url() else {
+                            return;
+                        };
+                        let Ok(url) = normalize_navigation_url(current_url.as_str()) else {
+                            return;
+                        };
+                        if let Err(error) = ah
+                            .state::<PageAutomationState>()
+                            .note_spa_navigation(&automation_key, url.clone())
+                        {
+                            log::warn!("failed to record SPA page navigation: {error}");
                         }
                         ah.emit_to(
                             &event_window_label,

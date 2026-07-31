@@ -117,3 +117,11 @@ React Flow の `onMoveStart` が火かない（ユーザー操作が high-latenc
 - `handleMoveEnd` 冒頭で `const type = moveInteractionTypeRef.current ?? 'pan';` で確実に type を確定
 - `handleMove` もフォールバック機構を持ち、`moveInteractionTypeRef.current === null` なら `beginViewportInteraction` を呼んで type を立てる
 - これらの fallback により、start が取りこぼされた場合でも `handleInteractionChange` が呼ばれ、最終的に `computeDisplayModes()` で webview 位置が正しく復帰する
+
+## メディア権限（カメラ / マイク）
+
+Wry の `WKUIDelegate` は `requestMediaCapturePermissionForOrigin` で origin・frame・capture type をすべて無視して `WKPermissionDecision::Grant` を返す（`wry-0.54.2/src/wkwebview/class/wry_web_view_ui_delegate.rs`）。
+
+現状は `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` を持たないため、macOS の TCC が OS 層でアクセスを拒否し、この Grant には到達しない。
+
+**purpose string を追加する場合は、先に Wry の無条件 Grant を潰すこと。** purpose string だけを足すと、任意のページの `getUserMedia()` が origin 単位の確認なしで許可される状態が有効化される。

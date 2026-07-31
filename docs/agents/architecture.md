@@ -26,10 +26,10 @@ src/
 - `components/Sheltie/Sheltie.tsx`: `<ReactFlowProvider>` + `<ReactFlow>` でビューポート管理。表示制御・ビューポート・ドラッグ・リサイズ・テキスト編集・コンテキストメニュー・flowNodes 構築をそれぞれ `hooks/sheltie/useSheltie*` フックへ委譲し、Sheltie.tsx 自身は配線と `onNodesChange`/`onEdgesChange`（選択状態・計測寸法・ドラッグ中座標の同期）に専念する。flowNodes 配列は `useSheltieFlowNodes` で構築する。store に保存された viewport は `setViewport()` で React Flow 実体へ再同期する
 - `components/Sheltie/FloatingToolbar.tsx`: Web ページ/付箋/テキスト追加ボタン群
 - `components/Sheltie/ZoomIndicator.tsx`: ズーム率表示ボタン。押下で `100% + 全ノード中央寄せ`
-- `components/Node/WebPageNode.tsx`: webpage ノード本体 UI（フレーム（`bg-default` + `WEB_PAGE_FRAME_PADDING` 24px world 固定 + 角丸 16px world 固定 + 枠線 1px zoomPx）+ 内側に Webview placeholder。空のときは Globe アイコン + "Enter URL above" ヒントを表示。props インターフェース export）
+- `components/Node/WebPageNode.tsx`: webpage ノード本体 UI（フレーム（`bg-default` + `WEB_PAGE_FRAME_PADDING` 16px world 固定 + 角丸 16px world 固定 + 枠線 1px zoomPx）+ 内側に Webview placeholder。空のときは Globe アイコン + "Enter URL above" ヒントを表示。props インターフェース export）
 - `components/Node/StickyNoteNode.tsx`: 付箋ノード専用 UI（角丸 16px world 固定、props インターフェース export）
 - `components/Node/TextNode.tsx`: テキストノード専用 UI。Tiptap エディタ内蔵、編集/選択モード切り替え、透明背景
-- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`NodeToolbar` 2 段（ツールバー段=単独選択時のみ中央寄せ、タイトル段=常時左寄せ・`[Moved] Title` を truncate）+ フレーム padding 帯（24px world 固定）を `.node-drag-handle` として活用 + 8 方向 `NodeResizeControl`（フレーム外周基準）+ 上下左右 `Handle`（フレーム外周基準、青丸は単独選択時または接続中のpointer hover時に表示し、青丸中心の接続開始領域は単独選択中かつ接続開始前だけ有効））
+- `components/ReactFlowNodes/WebPageFlowNode.tsx`: React Flow 用 WebPageNode ラッパー（`nopan`、x/y=0 固定、`NodeToolbar` 2 段（ツールバー段=単独選択時のみ中央寄せ、タイトル段=常時左寄せ・`[Moved] Title` を truncate）+ フレーム padding 帯（16px world 固定）を `.node-drag-handle` として活用 + 8 方向 `NodeResizeControl`（フレーム外周基準）+ 上下左右 `Handle`（フレーム外周基準、青丸は単独選択時または接続中のpointer hover時に表示し、青丸中心の接続開始領域は単独選択中かつ接続開始前だけ有効））
 - `components/ReactFlowNodes/WebPageToolbar.tsx`: WebPage のツールバー段 UI（`bg-zinc-800` の pill。通常は 戻る/進む/リロード、空ノード/URL 編集モード時は URL 入力欄+Open ボタンに差し替え | プリセット(Mobile/Tablet/PC) | サイズ表示 | Pin（isMoved 時のみ））
 - `components/ReactFlowNodes/StickyNoteFlowNode.tsx`: React Flow 用 StickyNoteNode ラッパー（`nopan`、x/y=0 固定、ノード本体ドラッグ + `NodeToolbar` でスタイル UI、`NodeResizeControl` で幅リサイズ）
 - `components/ReactFlowNodes/StickyNoteToolbar.tsx`: 付箋ノードのスタイルツールバー（フォントサイズ/色）

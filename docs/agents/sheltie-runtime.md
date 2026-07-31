@@ -119,7 +119,7 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 
 - 新規ノード追加・センタリング・可視判定 fallback は drag 補正と同じ zoom-aware な外枠矩形を使う
 - 一方で **ネイティブ Webview の bounds 更新や safe area 判定は placeholder 矩形を使う**。外枠判定と Webview 実表示判定は責務を分ける
-- WebPage の placeholder はフレーム padding（上下左右 24px world 固定）の内側だけを指す
+- WebPage の placeholder はフレーム padding（上下左右 16px world 固定）の内側だけを指す
 
 ## 遷移ルール
 
@@ -244,6 +244,10 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - `handleGoForward`: 同様に `pendingAction[nodeId]='forward'`、`backDepth` を楽観的に +1
 - `handleNavigated`: `currentUrl` と `pendingAction[nodeId]` から `backDepth / forwardDepth` を調整（通常遷移は `backDepth + 1, forwardDepth = 0`、戻る/進むは深度を増減）
 - スクショ撮影待ち（`1000ms`）と nav 再問い合わせ待ち（`300ms`）はどちらも `nodeId` 単位で timer 管理し、削除・unmount 時に必ず clear
+
+## プラットフォーム制約
+
+- **JS ダイアログ非対応**: page webview では `alert` / `confirm` / `prompt` が動かない。Wry が `runJavaScriptAlertPanel` 系の `WKUIDelegate` メソッドを実装していないため、WKWebView 既定として無表示 / `false` / `null` になる。page automation の dialog shim も同じ既定挙動（`dismiss`）を再現しているだけで、shim を外してもダイアログは復活しない。機能として提供するには自前 UI か Wry patch が必要
 
 ## 変更時チェックリスト
 

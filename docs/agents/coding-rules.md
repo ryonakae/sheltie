@@ -34,7 +34,7 @@
 - **位置は React Flow が管理**: React Flow ノードの `position: {x, y}` には常に node の座標を設定。React Flow が `.react-flow__node` の CSS transform で絶対配置を制御
 - **ノードコンポーネントから絶対配置を削除**: `StickyNoteNode`/`WebPageNode` の root element から `position: absolute` クラスと `left`/`top` スタイルを削除。これらは React Flow が管理するため不要
 - **Flow ラッパー**: `src/components/ReactFlowNodes/{StickyNoteFlowNode,WebPageFlowNode}.tsx` で `nopan` クラスのみ設定し、React Flow 標準のドラッグを有効化する
-- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` のフレーム div（24px world 固定 padding 帯）に付ける。タイトル段は `NodeToolbar` 内（ノード DOM サブツリー外に portal 配置されるため `dragHandle` が効かない）なので、`Sheltie.tsx` の `handleTitlePointerDown` が pointer 系イベントを直接処理し `draggingNodePositions` を更新する。右クリックも同じタイトル段の `onContextMenu` で `handleNodeContextMenu` を発火する
+- **WebPage のドラッグ起点**: `dragHandle: '.node-drag-handle'` を `WebPageNode` のフレーム div（16px world 固定 padding 帯）に付ける。タイトル段は `NodeToolbar` 内（ノード DOM サブツリー外に portal 配置されるため `dragHandle` が効かない）なので、`Sheltie.tsx` の `handleTitlePointerDown` が pointer 系イベントを直接処理し `draggingNodePositions` を更新する。右クリックも同じタイトル段の `onContextMenu` で `handleNodeContextMenu` を発火する
 - **NodeToolbar 2 段構成**: WebPage のツールバーは `NodeToolbar` を 2 つ使う。ツールバー段（`align="center" isVisible={selected && isActive}`）と、タイトル段（`align="start" isVisible offset={8}`）。タイトル段は常時表示で `[Moved] Title` を Webview+フレーム幅で `truncate`
 - **ツールバーの固定サイズ**: canvas zoom 中も文字・ボタン・アイコンの画面上サイズを固定したい UI は `zoomPx()` と `AppButton scaleWithCanvasZoom` を使う。高さ、padding、gap、font-size、icon size、border 幅を world 座標へ直接ハードコードしない
 - **WebPageToolbar のモード切替時も高さ固定**: 通常モード（戻る/進む/リロード）と URL 入力モード（HeroUI `InputGroup`）で全体高さを揃える。`InputGroup` の `min-h` と内側 Input の `py` を className で打ち消し、submit ボタンも縮めて行高に収める。配色はツールバー本体（`bg-zinc-800`）に乗るためテーマ非依存で常に dark 系（`InputGroup` 背景 / 文字 / アイコン / placeholder すべて zinc 系・white 系で固定）。`resolveFitViewport` が確保する safe area top（`NATIVE_SAFE_MARGIN_PX = 25`）に収めるための前提
@@ -50,7 +50,7 @@
 ### ドラッグ機能
 
 - **ドラッグ中の位置管理**: `Sheltie.tsx` の `draggingNodePositions` state（React state）でドラッグ中の一時位置を管理。ストアへの書き込みは `onNodeDragStop` 完了時のみ（Undo/Redo 履歴の汚染防止）
-- **ハンドル指定**: WebPage はフレーム padding 帯（24px world 固定）に `dragHandle: '.node-drag-handle'` を使う。付箋はノード本体をドラッグ起点にする
+- **ハンドル指定**: WebPage はフレーム padding 帯（16px world 固定）に `dragHandle: '.node-drag-handle'` を使う。付箋はノード本体をドラッグ起点にする
 - **DisplayEngine 連携**: `onNodeDragStart` で `prepareInteractionStart('drag', nodeId)` を呼び出してスクリーンショット準備（`useSheltieDisplayEngine` 統合）
 - **重なり補正**: `onNodeDragStop` で `handleRepositionOnDragEnd` を呼び出し、禁止された重なりを単軸補正（`sheltie-runtime.md` 参照）
 
@@ -198,7 +198,7 @@
 - 可視の青い選択線は共通 `SelectionFrameOverlay` が描き、Web の line 要素は `src/index.css` で選択線をまたぐ resize hit area とカーソルを持たせる。
 - 角ハンドルは付箋ノードと同じく選択線の交点に中心が乗る配置を使う。
 - リサイズカーソルは inline style ではなく `NodeResizeControl` の class と `src/index.css` で管理する。
-- フレーム padding 帯（24px world 固定）は `dragHandle: '.node-drag-handle'` を維持し、ツールバー内のボタン類は `nodrag` で drag 開始を止める。
+- フレーム padding 帯（16px world 固定）は `dragHandle: '.node-drag-handle'` を維持し、ツールバー内のボタン類は `nodrag` で drag 開始を止める。
 
 ### StickyNoteNode（React Flow `NodeResizeControl` で左右辺 + 四隅ハンドルを表示）
 

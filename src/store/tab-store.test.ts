@@ -387,3 +387,78 @@ describe('omitKeys', () => {
     expect(omitKeys({ a: 1 }, 'x')).toEqual({ a: 1 });
   });
 });
+
+describe('style / content actions の no-op 契約', () => {
+  beforeEach(() => {
+    useProjectStore.getState().initializeProject({
+      untitledIndex: 1,
+      document: {
+        schemaVersion: 2,
+        nodes: [
+          {
+            id: 's1',
+            type: 'stickynote',
+            title: 'S1',
+            content: '',
+            colorIndex: 0,
+            fontSizePreset: 1,
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 200,
+          },
+          {
+            id: 't1',
+            type: 'text',
+            title: 'T1',
+            tiptapContent: { type: 'doc', content: [] },
+            fontSizePreset: 1,
+            fontWeight: 'normal',
+            italic: false,
+            strikethrough: false,
+            textColorIndex: 0,
+            widthMode: 'auto',
+            x: 0,
+            y: 300,
+            width: 100,
+            height: 40,
+          },
+        ],
+        edges: [],
+      },
+    });
+  });
+
+  it('同じ付箋スタイルの再適用では履歴を積まない', () => {
+    useProjectStore.getState().updateStickyNoteStyle('s1', { colorIndex: 2 });
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+
+    useProjectStore.getState().updateStickyNoteStyle('s1', { colorIndex: 2 });
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+  });
+
+  it('同じテキストスタイルの再適用では履歴を積まない', () => {
+    useProjectStore.getState().updateTextNodeStyle('t1', { fontWeight: 'bold' });
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+
+    useProjectStore.getState().updateTextNodeStyle('t1', { fontWeight: 'bold' });
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+  });
+
+  it('同じ tiptapContent の再適用では履歴を積まない', () => {
+    const next = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    useProjectStore.getState().updateTextNodeContent('t1', next);
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+
+    useProjectStore.getState().updateTextNodeContent('t1', { ...next });
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+  });
+
+  it('値が変わる場合は履歴を積む', () => {
+    useProjectStore.getState().updateStickyNoteStyle('s1', { colorIndex: 1 });
+    useProjectStore.getState().updateStickyNoteStyle('s1', { colorIndex: 3 });
+
+    expect(useProjectStore.getState().history.past).toHaveLength(2);
+  });
+});

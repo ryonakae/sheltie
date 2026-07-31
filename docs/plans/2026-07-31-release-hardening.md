@@ -47,7 +47,7 @@ npm run test
 ## Progress
 
 - [x] [Phase 1 — データ保全とドキュメント検証](2026-07-31-release-hardening/phase-1-data-integrity.md)
-- [ ] [Phase 2 — 信頼境界の明示](2026-07-31-release-hardening/phase-2-trust-boundaries.md)
+- [x] [Phase 2 — 信頼境界の明示](2026-07-31-release-hardening/phase-2-trust-boundaries.md)
 - [ ] [Phase 3 — リファクタ・テスト・ドキュメント](2026-07-31-release-hardening/phase-3-refactor-and-docs.md)
 
 ## Release Gate

@@ -350,7 +350,10 @@ mod tests {
 
         prune_screenshot_cache_dir(&root, Duration::from_secs(SCREENSHOT_CACHE_TTL_SECS)).unwrap();
 
-        assert!(!empty.exists(), "a project directory with no files is unusable cache");
+        assert!(
+            !empty.exists(),
+            "a project directory with no files is unusable cache"
+        );
 
         std::fs::remove_dir_all(&root).unwrap();
     }

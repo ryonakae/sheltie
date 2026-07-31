@@ -202,6 +202,8 @@ pub fn create_untitled_document_window<R: tauri::Runtime>(
     create_document_window_internal(app, None).map(|_| ())
 }
 
+/// DevTools メニュー（debug ビルド限定）からのみ使う
+#[cfg(debug_assertions)]
 pub fn focus_document_window<R: tauri::Runtime>(
     app: &AppHandle<R>,
     label: &str,

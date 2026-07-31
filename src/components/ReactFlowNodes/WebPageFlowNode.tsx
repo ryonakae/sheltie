@@ -78,43 +78,36 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
       key: 'top',
       position: 'top' as const,
       resizeDirection: 'vertical' as const,
-      className: 'sheltie-web-resize-line',
     },
     {
       key: 'right',
       position: 'right' as const,
       resizeDirection: 'horizontal' as const,
-      className: 'sheltie-web-resize-line',
     },
     {
       key: 'bottom',
       position: 'bottom' as const,
       resizeDirection: 'vertical' as const,
-      className: 'sheltie-web-resize-line',
     },
     {
       key: 'left',
       position: 'left' as const,
       resizeDirection: 'horizontal' as const,
-      className: 'sheltie-web-resize-line',
     },
   ];
   const resizeHandleConfigs = [
-    { key: 'top-left', position: 'top-left' as const, className: 'sheltie-web-resize-handle' },
+    { key: 'top-left', position: 'top-left' as const },
     {
       key: 'top-right',
       position: 'top-right' as const,
-      className: 'sheltie-web-resize-handle',
     },
     {
       key: 'bottom-left',
       position: 'bottom-left' as const,
-      className: 'sheltie-web-resize-handle',
     },
     {
       key: 'bottom-right',
       position: 'bottom-right' as const,
-      className: 'sheltie-web-resize-handle',
     },
   ];
 
@@ -315,14 +308,13 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
       {selected && <SelectionFrameOverlay />}
       {nodeProps.isActive && (
         <>
-          {resizeLineConfigs.map(({ key, position, resizeDirection, className }) => (
+          {resizeLineConfigs.map(({ key, position, resizeDirection }) => (
             <NodeResizeControl
               key={key}
               nodeId={id}
               position={position}
               variant={ResizeControlVariant.Line}
               resizeDirection={resizeDirection}
-              className={className}
               autoScale={false}
               minWidth={minWidth}
               minHeight={minHeight}
@@ -332,12 +324,11 @@ export const WebPageFlowNode = memo(function WebPageFlowNode({ id, data, selecte
               onResizeEnd={handleResizeEnd}
             />
           ))}
-          {resizeHandleConfigs.map(({ key, position, className }) => (
+          {resizeHandleConfigs.map(({ key, position }) => (
             <NodeResizeControl
               key={key}
               nodeId={id}
               position={position}
-              className={className}
               autoScale={false}
               minWidth={minWidth}
               minHeight={minHeight}

@@ -1,4 +1,4 @@
-import type { InteractionType } from '../types';
+import type { InteractionType } from '@/hooks/sheltie/types';
 
 // useSheltieDisplayEngine が暗黙に持っていた per-node / mode / dialog 系の ref を 1 箇所に集約した state。
 // reducer は純関数で、複合更新（INTERACTION_END で関連フラグも一括クリア等）も内部で完結させる。

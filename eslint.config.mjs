@@ -150,6 +150,18 @@ export default tseslint.config(
         'error',
         { varsIgnorePattern: '^_', argsIgnorePattern: '^_' },
       ],
+      // import は @/ エイリアスを使う（親を辿る相対パスを禁止する）
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../*'],
+              message: 'Use the @/ alias instead of parent-relative imports.',
+            },
+          ],
+        },
+      ],
     },
   },
 );

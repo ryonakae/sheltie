@@ -186,6 +186,15 @@ export function patchNode(
   return changed ? nextNodes : null;
 }
 
+/**
+ * patch に含まれるキーだけを現在値と浅く比較する。
+ * patchNode の no-op 契約（変更が無ければ null）を満たし、
+ * 同じスタイルの再適用で履歴を増やさないために使う。
+ */
+function isSameStyle<T extends object>(node: T, style: Partial<T>): boolean {
+  return (Object.keys(style) as (keyof T)[]).every((key) => node[key] === style[key]);
+}
+
 /** record から指定キー（単一 id または id 集合）を取り除いた新しい record を返す */
 export function omitKeys<T>(
   record: Record<string, T>,
@@ -693,7 +702,9 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   updateStickyNoteStyle: (nodeId, style) =>
     set((state) =>
       replaceProjectNodes(state, (nodes) =>
-        patchNode(nodes, nodeId, (node) => ({ ...node, ...style })),
+        patchNode(nodes, nodeId, (node) =>
+          isSameStyle(node, style) ? null : { ...node, ...style },
+        ),
       ),
     ),
 
@@ -739,14 +750,22 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
   updateTextNodeContent: (nodeId, tiptapContent) =>
     set((state) =>
       replaceProjectNodes(state, (nodes) =>
-        patchNode(nodes, nodeId, (node) => ({ ...node, tiptapContent })),
+        patchNode(nodes, nodeId, (node) =>
+          // Tiptap JSON は入れ子構造なので浅い比較では判定できない。
+          // 呼び出しは編集終了時（blur / Escape）に限られるため直列化で足りる。
+          JSON.stringify(node.tiptapContent) === JSON.stringify(tiptapContent)
+            ? null
+            : { ...node, tiptapContent },
+        ),
       ),
     ),
 
   updateTextNodeStyle: (nodeId, style) =>
     set((state) =>
       replaceProjectNodes(state, (nodes) =>
-        patchNode(nodes, nodeId, (node) => ({ ...node, ...style })),
+        patchNode(nodes, nodeId, (node) =>
+          isSameStyle(node, style) ? null : { ...node, ...style },
+        ),
       ),
     ),
 

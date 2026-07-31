@@ -186,6 +186,18 @@ export function useSheltieDrag({
     [clearEdgeSelection, setSelection],
   );
 
+  // ドラッグ中にアンマウントされると pointerup が来ないため、window リスナーが残って
+  // 古い nodes / selectedNodeIds を参照し続ける。解除関数を保持して確実に外す
+  const releaseTitleDragListenersRef = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      releaseTitleDragListenersRef.current?.();
+      releaseTitleDragListenersRef.current = null;
+    },
+    [],
+  );
+
   // タイトル段ドラッグ。React Flow の NodeToolbar はノード DOM サブツリー外に portal 配置されるため
   // dragHandle が効かない。ここで pointer 系イベントを直接取り、draggingNodePositions を更新する
   const handleTitlePointerDown = useCallback(
@@ -231,9 +243,14 @@ export function useSheltieDrag({
         });
       };
 
-      const handleUp = (ev: PointerEvent) => {
+      const release = () => {
         window.removeEventListener('pointermove', handleMove);
         window.removeEventListener('pointerup', handleUp);
+        releaseTitleDragListenersRef.current = null;
+      };
+
+      const handleUp = (ev: PointerEvent) => {
+        release();
 
         if (!dragStarted) return;
 
@@ -264,8 +281,10 @@ export function useSheltieDrag({
         }
       };
 
+      releaseTitleDragListenersRef.current?.();
       window.addEventListener('pointermove', handleMove);
       window.addEventListener('pointerup', handleUp);
+      releaseTitleDragListenersRef.current = release;
     },
     [
       nodes,

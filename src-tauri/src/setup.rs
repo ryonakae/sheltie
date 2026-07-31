@@ -1,18 +1,17 @@
-use tauri::{
-    menu::{Menu, MenuItemBuilder, SubmenuBuilder},
-    Manager, RunEvent,
-};
+use tauri::{menu::Menu, Manager, RunEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::app_exit::{emit_app_exit_requested, AppExitCoordinatorState};
 use crate::commands::{
     store::{
-        configure_macos_window_tabbing_policy, create_untitled_document_window,
-        focus_document_window, focused_document_window_label, handle_launch_args,
+        configure_macos_window_tabbing_policy, create_untitled_document_window, handle_launch_args,
         strictly_focused_document_window_label, DocumentManagerState,
     },
     theme::{load_persisted_theme, MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM},
 };
+// DevTools メニューは debug ビルドだけに存在するため、その中でしか使わない
+#[cfg(debug_assertions)]
+use crate::commands::store::{focus_document_window, focused_document_window_label};
 use crate::mcp::broker::McpRequestBrokerState;
 use crate::mcp::lifecycle::{
     apply_requested_enabled, apply_requested_runtime_only, load_mcp_enabled, McpServerState,
@@ -31,6 +30,8 @@ use crate::menus::{
     MENU_ID_FILE_SAVE_AS, MENU_ID_MCP_ENABLED, MENU_ID_OPEN_DEVTOOLS, MENU_ID_VIEW_FIT,
     MENU_ID_VIEW_RESET_ZOOM, MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
 };
+#[cfg(debug_assertions)]
+use tauri::menu::{MenuItemBuilder, SubmenuBuilder};
 
 fn mcp_lifecycle_notification_window<'a>(
     state: &McpServerState,

@@ -70,7 +70,7 @@ export const StickyNoteToolbar = memo(function StickyNoteToolbar({
             'nodrag flex size-7 items-center justify-center rounded-sm transition-colors hover:bg-white/20',
             currentColorIndex === index ? 'bg-white/25' : '',
           )}
-          title={color.bgClass}
+          title={color.label}
           onClick={() => handleColor(index)}
         >
           <span

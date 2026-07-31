@@ -51,29 +51,25 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
   );
 
   const resizeLineConfigs = [
-    { key: 'left', position: 'left' as const, className: 'sheltie-sticky-resize-line' },
-    { key: 'right', position: 'right' as const, className: 'sheltie-sticky-resize-line' },
+    { key: 'left', position: 'left' as const },
+    { key: 'right', position: 'right' as const },
   ];
   const resizeHandleConfigs = [
     {
       key: 'top-left',
       position: 'top-left' as const,
-      className: 'sheltie-sticky-resize-handle',
     },
     {
       key: 'bottom-left',
       position: 'bottom-left' as const,
-      className: 'sheltie-sticky-resize-handle',
     },
     {
       key: 'top-right',
       position: 'top-right' as const,
-      className: 'sheltie-sticky-resize-handle',
     },
     {
       key: 'bottom-right',
       position: 'bottom-right' as const,
-      className: 'sheltie-sticky-resize-handle',
     },
   ];
 
@@ -89,7 +85,7 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
       {/* 複数選択中（isActive=false）はリサイズハンドルを出さない */}
       {nodeProps.isActive && (
         <>
-          {resizeLineConfigs.map(({ key, position, className }) => (
+          {resizeLineConfigs.map(({ key, position }) => (
             <NodeResizeControl
               key={key}
               nodeId={id}
@@ -99,12 +95,11 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
               autoScale={false}
               minWidth={STICKY_NOTE_MIN_WIDTH}
               style={{ opacity: 0 }}
-              className={className}
               onResize={handleResize}
               onResizeEnd={handleResizeEnd}
             />
           ))}
-          {resizeHandleConfigs.map(({ key, position, className }) => (
+          {resizeHandleConfigs.map(({ key, position }) => (
             <NodeResizeControl
               key={key}
               nodeId={id}
@@ -113,7 +108,6 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
               autoScale={false}
               minWidth={STICKY_NOTE_MIN_WIDTH}
               style={selectionHandleBaseStyle}
-              className={className}
               onResize={handleResize}
               onResizeEnd={handleResizeEnd}
             />

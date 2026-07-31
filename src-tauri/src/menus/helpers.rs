@@ -162,3 +162,17 @@ fn find_check_in_items<R: tauri::Runtime>(
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_menu_text;
+
+    #[test]
+    fn normalizes_menu_text() {
+        assert_eq!(normalize_menu_text("Edit"), "edit");
+        assert_eq!(normalize_menu_text("&Edit"), "edit");
+        assert_eq!(normalize_menu_text("  Quit Sheltie  "), "quit sheltie");
+        assert_eq!(normalize_menu_text("&Save &As..."), "save as...");
+        assert_eq!(normalize_menu_text(""), "");
+    }
+}

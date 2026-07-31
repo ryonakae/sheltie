@@ -74,24 +74,28 @@ export const TEXT_NODE_COLORS = [
 // 付箋色
 export const STICKY_NOTE_COLORS = [
   {
+    label: 'Yellow',
     bgClass: 'bg-yellow-100',
     borderClass: 'border-yellow-300',
     textClass: 'text-yellow-500',
     dividerColor: 'var(--color-yellow-300)',
   }, // 薄黄色
   {
+    label: 'Pink',
     bgClass: 'bg-pink-100',
     borderClass: 'border-pink-300',
     textClass: 'text-pink-500',
     dividerColor: 'var(--color-pink-300)',
   }, // 薄ピンク
   {
+    label: 'Cyan',
     bgClass: 'bg-cyan-100',
     borderClass: 'border-cyan-300',
     textClass: 'text-cyan-500',
     dividerColor: 'var(--color-cyan-300)',
   }, // 薄水色
   {
+    label: 'Green',
     bgClass: 'bg-emerald-100',
     borderClass: 'border-emerald-300',
     textClass: 'text-emerald-500',

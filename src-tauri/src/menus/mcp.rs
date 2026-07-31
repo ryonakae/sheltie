@@ -70,26 +70,6 @@ pub fn update_mcp_connection_count(app: &tauri::AppHandle, count: usize) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lifecycle_notification_status_matches_enabled_state() {
-        assert_eq!(lifecycle_notification_status(true), "started");
-        assert_eq!(lifecycle_notification_status(false), "stopped");
-    }
-
-    #[test]
-    fn menu_labels_match_mcp_state() {
-        assert_eq!(mcp_section_title(true), "MCP: Enabled");
-        assert_eq!(mcp_section_title(false), "MCP: Disabled");
-        assert_eq!(mcp_action_title(true), "Disable MCP Server");
-        assert_eq!(mcp_action_title(false), "Enable MCP Server");
-        assert_eq!(mcp_connections_title(3), "Connections: 3");
-    }
-}
-
 fn find_menu_item_in_items<R: tauri::Runtime>(
     items: &[MenuItemKind<R>],
     id: &str,
@@ -109,4 +89,24 @@ fn find_menu_item_in_items<R: tauri::Runtime>(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lifecycle_notification_status_matches_enabled_state() {
+        assert_eq!(lifecycle_notification_status(true), "started");
+        assert_eq!(lifecycle_notification_status(false), "stopped");
+    }
+
+    #[test]
+    fn menu_labels_match_mcp_state() {
+        assert_eq!(mcp_section_title(true), "MCP: Enabled");
+        assert_eq!(mcp_section_title(false), "MCP: Disabled");
+        assert_eq!(mcp_action_title(true), "Disable MCP Server");
+        assert_eq!(mcp_action_title(false), "Enable MCP Server");
+        assert_eq!(mcp_connections_title(3), "Connections: 3");
+    }
 }

@@ -14,9 +14,6 @@ import {
   isDragOrResizeActive,
 } from './display-engine/state-machine';
 
-/** 検証用フラグ: false にするとスクリーンショットクリッピング機能を完全に無効化する */
-const SCREENSHOT_CLIPPING_ENABLED = true;
-
 export interface CaptureScreenshotOptions {
   forceDuringInteraction?: boolean;
   hideAfterSnapshotRequest?: boolean;
@@ -243,8 +240,6 @@ export function useScreenshotCaptureQueue({
 
   const ensureScreenshotReady = useCallback(
     async (nodeId: string, options?: CaptureScreenshotOptions) => {
-      if (!SCREENSHOT_CLIPPING_ENABLED) return false;
-
       if (hasDisplayableScreenshot(nodeId)) {
         void captureScreenshotRef.current?.(nodeId, {
           ...options,
@@ -265,7 +260,6 @@ export function useScreenshotCaptureQueue({
 
   const captureScreenshot = useCallback(
     async (nodeId: string, options?: CaptureScreenshotOptions) => {
-      if (!SCREENSHOT_CLIPPING_ENABLED) return false;
       const label = getWebviewLabel(nodeId);
       if (!label) {
         warnMissingWebviewLabel(nodeId, 'saveScreenshot');

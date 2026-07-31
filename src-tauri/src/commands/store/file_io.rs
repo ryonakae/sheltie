@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use tauri::{State, Window};
@@ -47,10 +48,58 @@ pub(super) fn normalize_existing_project_file_path(
         .map_err(|error| format!("failed to normalize file path: {error}"))
 }
 
+/// `.sheltie` は nodes / edges の JSON のみでスクリーンショットを含まないため、
+/// 1000 ノード規模でも数 MB に収まる。正当なファイルを弾かない寛容な上限を置く。
+const MAX_PROJECT_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+fn ensure_project_file_size(path: &Path, limit: u64) -> Result<(), String> {
+    let metadata =
+        std::fs::metadata(path).map_err(|error| format!("failed to read file: {error}"))?;
+    if metadata.len() > limit {
+        return Err("the file is too large to open".to_string());
+    }
+    Ok(())
+}
+
+/// 保存中の異常終了で元ファイルを壊さないため、同一ディレクトリの一時ファイルへ書いて
+/// fsync 後に atomic rename する。rename は元ファイルのメタデータを引き継がないため、
+/// 上書き時だけ permissions を明示的にコピーする（xattr / Finder タグは対象外）。
+fn write_atomically(path: &Path, contents: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "destination has no parent directory".to_string())?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "destination has no file name".to_string())?;
+    let temp_path = parent.join(format!(".{}.tmp", file_name.to_string_lossy()));
+
+    let existing_permissions = std::fs::metadata(path).ok().map(|meta| meta.permissions());
+
+    {
+        let mut file = std::fs::File::create(&temp_path)
+            .map_err(|error| format!("failed to create a temporary file: {error}"))?;
+        file.write_all(contents.as_bytes())
+            .map_err(|error| format!("failed to write a temporary file: {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("failed to flush a temporary file: {error}"))?;
+    }
+
+    if let Some(permissions) = existing_permissions {
+        std::fs::set_permissions(&temp_path, permissions)
+            .map_err(|error| format!("failed to carry over file permissions: {error}"))?;
+    }
+
+    std::fs::rename(&temp_path, path).map_err(|error| {
+        let _ = std::fs::remove_file(&temp_path);
+        format!("failed to replace the destination file: {error}")
+    })
+}
+
 #[tauri::command]
 pub async fn load_project_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(Path::new(&path))
-        .map_err(|error| format!("failed to read file: {error}"))
+    let path = Path::new(&path);
+    ensure_project_file_size(path, MAX_PROJECT_FILE_BYTES)?;
+    std::fs::read_to_string(path).map_err(|error| format!("failed to read file: {error}"))
 }
 
 #[tauri::command]
@@ -70,8 +119,7 @@ pub async fn save_project_file(
         }
     }
 
-    std::fs::write(&normalized_path, contents)
-        .map_err(|error| format!("failed to save file: {error}"))?;
+    write_atomically(&normalized_path, &contents)?;
 
     let canonical_path = normalized_path
         .canonicalize()
@@ -135,5 +183,68 @@ mod tests {
         // parent "sub" は存在しないので canonicalize は fallback して base/sub のまま
         let result = normalize_project_file_path("sub/project", Some(&base)).unwrap();
         assert_eq!(result, base.join("sub").join("project.sheltie"));
+    }
+}
+
+#[cfg(test)]
+mod atomic_write_tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sheltie-atomic-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn writes_a_new_file_and_leaves_no_temporary_file() {
+        let dir = temp_dir("new-file");
+        let path = dir.join("board.sheltie");
+
+        write_atomically(&path, "{\"schemaVersion\":2}").unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "{\"schemaVersion\":2}"
+        );
+        let leftovers: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .filter(|name| name != "board.sheltie")
+            .collect();
+        assert!(leftovers.is_empty(), "unexpected leftovers: {leftovers:?}");
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn overwriting_preserves_the_existing_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = temp_dir("permissions");
+        let path = dir.join("board.sheltie");
+        std::fs::write(&path, "old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        write_atomically(&path, "new").unwrap();
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "permissions must survive the atomic replace");
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn rejects_a_file_larger_than_the_limit() {
+        let dir = temp_dir("size-limit");
+        let path = dir.join("huge.sheltie");
+        std::fs::write(&path, "x").unwrap();
+
+        assert!(ensure_project_file_size(&path, 0).is_err());
+        assert!(ensure_project_file_size(&path, MAX_PROJECT_FILE_BYTES).is_ok());
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

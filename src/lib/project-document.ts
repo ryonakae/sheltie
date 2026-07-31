@@ -1,4 +1,10 @@
-import { EDGE_COLOR_PRESETS } from '@/constants';
+import {
+  EDGE_COLOR_PRESETS,
+  STICKY_NOTE_COLORS,
+  TEXT_NODE_COLORS,
+  TEXT_NODE_FONT_SIZE_PRESETS,
+} from '@/constants';
+import { isAllowedPageUrl } from '@/lib/url-utils';
 import {
   isStickyNoteNode,
   isTextNode,
@@ -26,11 +32,39 @@ function parseNumber(value: unknown, field: string): number {
   return value;
 }
 
+function parseFiniteNumber(value: unknown, field: string): number {
+  const parsed = parseNumber(value, field);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${field} must be a finite number`);
+  }
+  return parsed;
+}
+
+/**
+ * プリセット配列の添字として使う値を検証する。範囲外だと描画時に
+ * `undefined` を参照して render が throw するため、読み込み時に弾く。
+ */
+function parsePresetIndex(value: unknown, field: string, presetCount: number): number {
+  const parsed = parseNumber(value, field);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed >= presetCount) {
+    throw new Error(`${field} must be an integer from 0 to ${presetCount - 1}`);
+  }
+  return parsed;
+}
+
 function parseString(value: unknown, field: string): string {
   if (typeof value !== 'string') {
     throw new Error(`${field} must be a string`);
   }
   return value;
+}
+
+function parsePageUrl(value: unknown, field: string): string {
+  const parsed = parseString(value, field);
+  if (!isAllowedPageUrl(parsed)) {
+    throw new Error(`${field} must be an http or https URL`);
+  }
+  return parsed;
 }
 
 function parseNode(rawNode: unknown, index: number): SheltieDocumentNode {
@@ -41,17 +75,17 @@ function parseNode(rawNode: unknown, index: number): SheltieDocumentNode {
   const type = parseString(rawNode.type, `nodes[${index}].type`);
   const id = parseString(rawNode.id, `nodes[${index}].id`);
   const title = parseString(rawNode.title, `nodes[${index}].title`);
-  const x = parseNumber(rawNode.x, `nodes[${index}].x`);
-  const y = parseNumber(rawNode.y, `nodes[${index}].y`);
-  const width = parseNumber(rawNode.width, `nodes[${index}].width`);
-  const height = parseNumber(rawNode.height, `nodes[${index}].height`);
+  const x = parseFiniteNumber(rawNode.x, `nodes[${index}].x`);
+  const y = parseFiniteNumber(rawNode.y, `nodes[${index}].y`);
+  const width = parseFiniteNumber(rawNode.width, `nodes[${index}].width`);
+  const height = parseFiniteNumber(rawNode.height, `nodes[${index}].height`);
 
   if (type === 'webpage') {
-    const url = parseString(rawNode.url, `nodes[${index}].url`);
+    const url = parsePageUrl(rawNode.url, `nodes[${index}].url`);
     const addedUrl =
       rawNode.addedUrl === undefined
         ? undefined
-        : parseString(rawNode.addedUrl, `nodes[${index}].addedUrl`);
+        : parsePageUrl(rawNode.addedUrl, `nodes[${index}].addedUrl`);
 
     return {
       id,
@@ -68,10 +102,15 @@ function parseNode(rawNode: unknown, index: number): SheltieDocumentNode {
 
   if (type === 'stickynote') {
     const content = parseString(rawNode.content ?? '', `nodes[${index}].content`);
-    const colorIndex = parseNumber(rawNode.colorIndex ?? 0, `nodes[${index}].colorIndex`);
-    const fontSizePreset = parseNumber(
+    const colorIndex = parsePresetIndex(
+      rawNode.colorIndex ?? 0,
+      `nodes[${index}].colorIndex`,
+      STICKY_NOTE_COLORS.length,
+    );
+    const fontSizePreset = parsePresetIndex(
       rawNode.fontSizePreset ?? 1,
       `nodes[${index}].fontSizePreset`,
+      TEXT_NODE_FONT_SIZE_PRESETS.length,
     );
 
     return {
@@ -90,18 +129,20 @@ function parseNode(rawNode: unknown, index: number): SheltieDocumentNode {
 
   if (type === 'text') {
     const tiptapContent = rawNode.tiptapContent as object | undefined;
-    const fontSizePreset = parseNumber(
+    const fontSizePreset = parsePresetIndex(
       rawNode.fontSizePreset ?? 1,
       `nodes[${index}].fontSizePreset`,
+      TEXT_NODE_FONT_SIZE_PRESETS.length,
     );
     const fontWeight = parseString(rawNode.fontWeight ?? 'normal', `nodes[${index}].fontWeight`) as
       | 'normal'
       | 'bold';
     const italic = rawNode.italic === true;
     const strikethrough = rawNode.strikethrough === true;
-    const textColorIndex = parseNumber(
+    const textColorIndex = parsePresetIndex(
       rawNode.textColorIndex ?? 0,
       `nodes[${index}].textColorIndex`,
+      TEXT_NODE_COLORS.length,
     );
     const widthMode = parseString(rawNode.widthMode ?? 'auto', `nodes[${index}].widthMode`) as
       | 'auto'

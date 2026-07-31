@@ -24,7 +24,7 @@
 - `complete_app_exit(windowLabels)` - 集約済み app quit を確定し、対象 document window をまとめて destroy した後にアプリ終了を再開する
 - `abort_app_exit` - 集約中の app quit を中止し、次の `Cmd+Q` / `Quit` を再度受け付ける
 - `close_ready` - 現在の document window を破棄する
-- `load_project_file(path)` - `.sheltie` ファイルを UTF-8 文字列として読む
+- `load_project_file(path)` - `.sheltie` ファイルを UTF-8 文字列として読む。読み込み前に byte サイズを検査し、64 MiB を超えるファイルは拒否する
 - `save_project_file(path, contents)` - `.sheltie` ファイルを書き込み、実際の保存パスを返す。child Webview 作成後も呼べるよう command context は `Window` を使う
 - `complete_mcp_renderer_request(response)` - Rustから対象document rendererへ送ったMCP requestを完了する。呼び出し元`Window.label()`がpending requestの`documentId`と一致する場合だけ受理し、unknown / late / 別windowの`requestId`は拒否する
 
@@ -128,6 +128,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - `File > Open` は既存 window を置き換えず、対象 `.sheltie` 用の document window を開く
 - `Save` は保存先 `filePath` 未設定時に `Save As` へフォールバックする
 - `save_project_file` は常に拡張子を `.sheltie` に正規化する
+- `save_project_file` は同一ディレクトリの一時ファイルへ書いて `sync_all` 後に atomic rename する。保存中の異常終了で元ファイルを壊さないため、宛先へ直接 truncate 書き込みはしない。上書き時は元ファイルの permissions を引き継ぐ
 - window-local な IPC では `main` のような固定 label を前提にしない
 - MCP renderer requestはdocumentごとのasync mutexで直列化し、異なるdocumentだけを並行実行する。timeoutは10秒で、disable時はpending requestを`server_stopped`で全て終了する
 - MCP lifecycle成功通知は`src/lib/mcp/lifecycle-notifications.ts`でHeroUI success toastへ変換し、`src/components/Common/AppToastProvider.tsx`の共通Providerで右上へテキストに応じた可変幅で表示する

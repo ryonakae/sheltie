@@ -1,5 +1,6 @@
 import { message, open, save } from '@tauri-apps/plugin-dialog';
 
+import { showErrorDialog } from '@/lib/error-dialog';
 import { getProjectDisplayName } from '@/lib/project-display-name';
 import { createProjectDocument, serializeProjectDocument } from '@/lib/project-document';
 import { api, type FileCommand, type SaveProjectStatus } from '@/lib/tauri-bridge';
@@ -53,13 +54,6 @@ async function showInfo(messageText: string): Promise<void> {
   });
 }
 
-async function showError(messageText: string): Promise<void> {
-  await message(messageText, {
-    title: 'Sheltie',
-    kind: 'error',
-  });
-}
-
 async function runOpenProjectFromDialog(): Promise<void> {
   const selected = await open({
     title: 'Open Sheltie Project',
@@ -72,7 +66,7 @@ async function runOpenProjectFromDialog(): Promise<void> {
   try {
     await api.openDocumentWindow(normalizeSheltiePath(selected));
   } catch (error) {
-    await showError(error instanceof Error ? error.message : 'Could not open the file');
+    await showErrorDialog(error instanceof Error ? error.message : 'Could not open the file');
   }
 }
 
@@ -80,7 +74,7 @@ async function runNewDocumentTab(): Promise<void> {
   try {
     await api.newDocumentTab();
   } catch (error) {
-    await showError(error instanceof Error ? error.message : 'Could not open a new tab');
+    await showErrorDialog(error instanceof Error ? error.message : 'Could not open a new tab');
   }
 }
 
@@ -88,7 +82,7 @@ async function runNewDocumentWindow(): Promise<void> {
   try {
     await api.newDocumentWindow();
   } catch (error) {
-    await showError(error instanceof Error ? error.message : 'Could not open a new window');
+    await showErrorDialog(error instanceof Error ? error.message : 'Could not open a new window');
   }
 }
 
@@ -132,7 +126,7 @@ async function runSaveCurrentProject(
     useProjectStore.getState().markProjectSaved(savedPath, document);
     return { status: 'saved', filePath: savedPath };
   } catch (error) {
-    await showError(error instanceof Error ? error.message : 'Failed to save the file');
+    await showErrorDialog(error instanceof Error ? error.message : 'Failed to save the file');
     return { status: 'error' };
   }
 }

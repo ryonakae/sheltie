@@ -289,6 +289,130 @@ describe('parseProjectDocument', () => {
     });
     expect(() => parseProjectDocument(json)).toThrow(/not supported/);
   });
+
+  it('webpage の url が http/https 以外なら例外', () => {
+    const json = JSON.stringify({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: 'w1',
+          type: 'webpage',
+          title: 'Local file',
+          url: 'file:///Users/victim/.ssh/id_rsa',
+          x: 0,
+          y: 0,
+          width: 800,
+          height: 600,
+        },
+      ],
+    });
+    expect(() => parseProjectDocument(json)).toThrow(/url/);
+  });
+
+  it('addedUrl が http/https 以外なら例外', () => {
+    const json = JSON.stringify({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: 'w1',
+          type: 'webpage',
+          title: 'Example',
+          url: 'https://example.com/',
+          addedUrl: 'javascript:alert(1)',
+          x: 0,
+          y: 0,
+          width: 800,
+          height: 600,
+        },
+      ],
+    });
+    expect(() => parseProjectDocument(json)).toThrow(/addedUrl/);
+  });
+
+  it('空の url は URL 未入力ノードとして許可する', () => {
+    const json = JSON.stringify({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: 'w1',
+          type: 'webpage',
+          title: 'Untitled',
+          url: '',
+          x: 0,
+          y: 0,
+          width: 800,
+          height: 600,
+        },
+      ],
+    });
+    expect(parseProjectDocument(json).nodes).toHaveLength(1);
+  });
+
+  it('付箋の colorIndex がパレット範囲外なら例外', () => {
+    const json = JSON.stringify({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: 's1',
+          type: 'stickynote',
+          title: 'Note',
+          content: 'hello',
+          colorIndex: 999999,
+          fontSizePreset: 1,
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 200,
+        },
+      ],
+    });
+    expect(() => parseProjectDocument(json)).toThrow(/colorIndex/);
+  });
+
+  it('小数の fontSizePreset は例外', () => {
+    const json = JSON.stringify({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: 's1',
+          type: 'stickynote',
+          title: 'Note',
+          content: 'hello',
+          colorIndex: 0,
+          fontSizePreset: 1.5,
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 200,
+        },
+      ],
+    });
+    expect(() => parseProjectDocument(json)).toThrow(/fontSizePreset/);
+  });
+
+  it('テキストの textColorIndex がパレット範囲外なら例外', () => {
+    const json = JSON.stringify({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: 't1',
+          type: 'text',
+          title: 'Text',
+          textColorIndex: 42,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 40,
+        },
+      ],
+    });
+    expect(() => parseProjectDocument(json)).toThrow(/textColorIndex/);
+  });
+
+  it('有限でない座標は例外', () => {
+    const json = `{"schemaVersion":2,"nodes":[{"id":"w1","type":"webpage","title":"Example","url":"https://example.com/","x":1e400,"y":0,"width":800,"height":600}]}`;
+    expect(() => parseProjectDocument(json)).toThrow(/x must be a finite number/);
+  });
 });
 
 describe('sanitizeProjectDocument', () => {

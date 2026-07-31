@@ -1,6 +1,7 @@
 import { animate, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { BoardErrorBoundary } from '@/components/Common/BoardErrorBoundary';
 import { Sheltie } from '@/components/Sheltie/Sheltie';
 import {
   DEFAULT_PAGE_HEIGHT,
@@ -256,20 +257,22 @@ export function ProjectScreen() {
 
   return (
     <div className="relative flex flex-1 overflow-hidden">
-      <Sheltie
-        selectedNodeIds={selectedNodeIds}
-        getSelectedNodeIds={getSelectedNodeIds}
-        setSelection={setSelection}
-        centeredNodeId={centeredNodeId}
-        onCenteredNodeHandled={handleCenteredNodeHandled}
-        autoEditTextNodeId={autoEditTextNodeId}
-        onAutoEditTextNodeHandled={handleAutoEditTextNodeHandled}
-        autoEditStickyNoteId={autoEditStickyNoteId}
-        onAutoEditStickyNoteHandled={handleAutoEditStickyNoteHandled}
-        onAddWebNode={handleAddWebNode}
-        onAddStickyNote={handleAddStickyNote}
-        onAddTextNode={handleAddTextNode}
-      />
+      <BoardErrorBoundary>
+        <Sheltie
+          selectedNodeIds={selectedNodeIds}
+          getSelectedNodeIds={getSelectedNodeIds}
+          setSelection={setSelection}
+          centeredNodeId={centeredNodeId}
+          onCenteredNodeHandled={handleCenteredNodeHandled}
+          autoEditTextNodeId={autoEditTextNodeId}
+          onAutoEditTextNodeHandled={handleAutoEditTextNodeHandled}
+          autoEditStickyNoteId={autoEditStickyNoteId}
+          onAutoEditStickyNoteHandled={handleAutoEditStickyNoteHandled}
+          onAddWebNode={handleAddWebNode}
+          onAddStickyNote={handleAddStickyNote}
+          onAddTextNode={handleAddTextNode}
+        />
+      </BoardErrorBoundary>
     </div>
   );
 }

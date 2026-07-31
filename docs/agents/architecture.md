@@ -52,6 +52,8 @@ src/
 - `lib/project-close.ts`: dirty 判定・保存/破棄確認・現在 window の close orchestration を担当する
 - `lib/app-exit.ts`: macOS の custom `app.quit` から始まる集約 quit coordinator。各 document window の dirty 状態収集、集約ダイアログ、順次保存、最終 `complete_app_exit` を担当する
 - `lib/project-display-name.ts`: `filePath` または `untitledIndex` から表示名を導出する
+- `lib/error-dialog.ts`: ネイティブのエラーダイアログ表示を共通化する（`file-commands.ts` と `tab-persistence.ts` が使う）
+- `components/Common/BoardErrorBoundary.tsx`: ボード描画の例外を局所化する。ツリー全体がアンマウントされるとメモリ上の未保存ボードへ到達できなくなるため、白画面にせずエラー表示に留める
 - `main.tsx`: `edit-command` / `file-command` / `app-exit-requested` と app-exit coordinator listener を起動時に 1 回だけ登録する
 
 ## `.sheltie` とローカル状態
@@ -62,6 +64,8 @@ src/
 - Rust 側の document manager は各 window の `filePath` と `untitledIndex` を管理する
 - renderer の Zustand store は現在の document の `nodes`, `viewport`, `lastSavedDocument`, `webviewRuntime` をメモリ上で保持する
 - 起動時は window context を読み、`filePath` があれば `.sheltie` を読み込み、無ければ空 document を初期化する
+- 読み込みまたはパースに失敗した場合は fail-closed にする。エラーダイアログを出して `closeReady()` で window を閉じ、`Project` を初期化しない。読み取り専用モードや回復用 Save As は提供しない
+- 保存は同一ディレクトリの一時ファイルへ書いて `sync_all` 後に atomic rename する。上書き時は元ファイルの permissions を引き継ぐ（xattr / Finder タグは対象外）
 - window close 時の未保存確認は renderer 側の HeroUI ダイアログで処理し、最終的な window 破棄だけ `close_ready` を使う
 - `Cmd+Q` / app menu `Quit` は Rust の custom `app.quit` menu event から renderer coordinator を起動し、集約確認と順次保存の完了後に `complete_app_exit` でまとめて終了する
 - 一般的な Mac アプリと同様、全ウインドウを閉じてもプロセスは終了しない。`setup.rs` の `RunEvent::ExitRequested` 受信時に `AppExitCoordinatorState` で `Cmd+Q` 起源かを判定し、それ以外の発火（最後の window クローズ等）は `api.prevent_exit()` で抑止する

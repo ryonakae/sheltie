@@ -74,6 +74,11 @@
   - `title` は保存しない
   - `schemaVersion: 1` は読み込み互換用に受けるが、書き出しは `schemaVersion: 2` に統一する
   - 保存名は `.sheltie` の外側、つまりファイル名で表現する
+- 共有ファイルは信頼できない入力として扱う。`parseProjectDocument` が唯一の検証点で、1 つでも違反があれば文書全体を読み込み失敗にする
+  - `url` / `addedUrl` は `http` / `https` / 空文字のみ許可する（空文字は URL 未入力の WebPage ノード）
+  - `colorIndex` / `textColorIndex` / `fontSizePreset` は対応するプリセット配列長で範囲検証する
+  - `x` / `y` / `width` / `height` は有限数のみ許可する（`Infinity` を拒否）
+  - node / edge の件数、文字列長、Tiptap JSON の深さに上限は設けない。ファイル自体の byte 上限だけを Rust 側で見る
 - ローカル状態は document window の再起動復元用
   - `Project` は renderer のメモリ上で `nodes`, `filePath`, `viewport`, `untitledIndex`, `lastSavedDocument` を保持する
   - backend から受ける window context は `filePath` と `untitledIndex` のみ
@@ -166,4 +171,5 @@
 - 同一 `filePath` の `.sheltie` を複数のローカル document に関連付けない
 - `.sheltie` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.sheltie` へは書き出さない
+- 読み込みに失敗した `.sheltie` は `Project` を初期化しない。`filePath` を保持したまま空文書で開くと、ユーザーが気付かず保存した時点で元ファイルを空文書で上書きしてしまう
 

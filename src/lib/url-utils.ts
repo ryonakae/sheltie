@@ -20,3 +20,20 @@ export function normalizeUrl(input: string): string | null {
     return null;
   }
 }
+
+/**
+ * 文書ファイル・MCP 経由で受け取る WebPage URL の許可判定。
+ * ネイティブ Webview へ渡る値なので http / https だけを許可する。
+ * 空文字は URL 未入力の WebPage ノードという正当な状態なので許可する。
+ * URL バー用の normalizeUrl とは違い、ドットを含まないホスト名は拒否しない。
+ */
+export function isAllowedPageUrl(value: string): boolean {
+  if (value === '') return true;
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}

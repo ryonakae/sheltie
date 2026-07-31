@@ -1,8 +1,6 @@
 import {
-  NodeResizeControl,
   NodeToolbar,
   Position,
-  ResizeControlVariant,
   type NodeProps,
   type ResizeDragEvent,
   type ResizeParams,
@@ -10,7 +8,7 @@ import {
 import { memo, useCallback } from 'react';
 
 import { StickyNoteNode } from '@/components/Node/StickyNoteNode';
-import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionChromeStyles';
+import { NodeWidthResizeControls } from '@/components/ReactFlowNodes/NodeWidthResizeControls';
 import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
 import { StickyNoteToolbar } from '@/components/ReactFlowNodes/StickyNoteToolbar';
 import { STICKY_NOTE_MIN_HEIGHT, STICKY_NOTE_MIN_WIDTH } from '@/constants';
@@ -50,29 +48,6 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
     [id, nodeProps.node.height, onResizeEnd],
   );
 
-  const resizeLineConfigs = [
-    { key: 'left', position: 'left' as const },
-    { key: 'right', position: 'right' as const },
-  ];
-  const resizeHandleConfigs = [
-    {
-      key: 'top-left',
-      position: 'top-left' as const,
-    },
-    {
-      key: 'bottom-left',
-      position: 'bottom-left' as const,
-    },
-    {
-      key: 'top-right',
-      position: 'top-right' as const,
-    },
-    {
-      key: 'bottom-right',
-      position: 'bottom-right' as const,
-    },
-  ];
-
   return (
     <div className="nopan relative size-full">
       <NodeToolbar isVisible={!!selected && nodeProps.isActive} position={Position.Top}>
@@ -84,35 +59,12 @@ export const StickyNoteFlowNode = memo(function StickyNoteFlowNode({
       {/* 左右辺と四隅は FigJam 風の見た目に寄せつつ、実際の操作は左右幅リサイズだけに制限する */}
       {/* 複数選択中（isActive=false）はリサイズハンドルを出さない */}
       {nodeProps.isActive && (
-        <>
-          {resizeLineConfigs.map(({ key, position }) => (
-            <NodeResizeControl
-              key={key}
-              nodeId={id}
-              position={position}
-              variant={ResizeControlVariant.Line}
-              resizeDirection="horizontal"
-              autoScale={false}
-              minWidth={STICKY_NOTE_MIN_WIDTH}
-              style={{ opacity: 0 }}
-              onResize={handleResize}
-              onResizeEnd={handleResizeEnd}
-            />
-          ))}
-          {resizeHandleConfigs.map(({ key, position }) => (
-            <NodeResizeControl
-              key={key}
-              nodeId={id}
-              position={position}
-              resizeDirection="horizontal"
-              autoScale={false}
-              minWidth={STICKY_NOTE_MIN_WIDTH}
-              style={selectionHandleBaseStyle}
-              onResize={handleResize}
-              onResizeEnd={handleResizeEnd}
-            />
-          ))}
-        </>
+        <NodeWidthResizeControls
+          nodeId={id}
+          minWidth={STICKY_NOTE_MIN_WIDTH}
+          onResize={handleResize}
+          onResizeEnd={handleResizeEnd}
+        />
       )}
     </div>
   );

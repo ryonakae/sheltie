@@ -19,6 +19,13 @@ import {
 import { twMerge } from 'tailwind-merge';
 
 import { NodeTabletIcon } from '@/components/Node/NodeTabletIcon';
+import {
+  TOOLBAR_BUTTON_ACTIVE_CLASSNAME,
+  TOOLBAR_BUTTON_BASE_CLASSNAME,
+  TOOLBAR_BUTTON_INACTIVE_CLASSNAME,
+  TOOLBAR_CONTAINER_CLASSNAME,
+  TOOLBAR_DIVIDER_CLASSNAME,
+} from '@/components/ReactFlowNodes/nodeToolbarStyles';
 import { SIZE_PRESETS } from '@/constants';
 import { normalizeUrl } from '@/lib/url-utils';
 
@@ -65,20 +72,14 @@ export const WebPageToolbar = memo(function WebPageToolbar({
   onResizePreset,
   onUrlSubmit,
 }: WebPageToolbarProps) {
-  const buttonBase =
-    'nodrag flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-xs font-medium transition-colors';
-  const enabledHover = 'hover:bg-white/20';
-  const enabledColor = 'text-white/70';
-  const activeClass = 'bg-white/25 text-white';
+  // 無効状態のボタンがあるため hover は共通 base に含めず条件付きで足す
+  const enabledClass = `${TOOLBAR_BUTTON_INACTIVE_CLASSNAME} hover:bg-white/20`;
   const disabledClass = 'cursor-not-allowed text-white/30';
 
   const showUrlInput = isEmpty || isEditingUrl;
 
   return (
-    <div
-      data-selection-toolbar={nodeId}
-      className="flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg"
-    >
+    <div data-selection-toolbar={nodeId} className={TOOLBAR_CONTAINER_CLASSNAME}>
       {showUrlInput ? (
         <WebPageToolbarUrlInput
           key={isEditingUrl ? `editing:${currentUrl}` : 'empty'}
@@ -90,8 +91,8 @@ export const WebPageToolbar = memo(function WebPageToolbar({
           <button
             type="button"
             className={twMerge(
-              buttonBase,
-              canGoBack ? `${enabledColor} ${enabledHover}` : disabledClass,
+              TOOLBAR_BUTTON_BASE_CLASSNAME,
+              canGoBack ? enabledClass : disabledClass,
             )}
             disabled={!canGoBack}
             title="Go Back"
@@ -102,8 +103,8 @@ export const WebPageToolbar = memo(function WebPageToolbar({
           <button
             type="button"
             className={twMerge(
-              buttonBase,
-              canGoForward ? `${enabledColor} ${enabledHover}` : disabledClass,
+              TOOLBAR_BUTTON_BASE_CLASSNAME,
+              canGoForward ? enabledClass : disabledClass,
             )}
             disabled={!canGoForward}
             title="Go Forward"
@@ -113,7 +114,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
           </button>
           <button
             type="button"
-            className={twMerge(buttonBase, `${enabledColor} ${enabledHover}`)}
+            className={twMerge(TOOLBAR_BUTTON_BASE_CLASSNAME, enabledClass)}
             title="Reload Page"
             onClick={onReload}
           >
@@ -122,7 +123,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
         </>
       )}
 
-      <div className="mx-0.5 h-4 w-px bg-white/20" />
+      <div className={TOOLBAR_DIVIDER_CLASSNAME} />
 
       {SIZE_PRESETS.map((preset) => {
         const isActive = width === preset.width && height === preset.height;
@@ -132,8 +133,8 @@ export const WebPageToolbar = memo(function WebPageToolbar({
             key={preset.label}
             type="button"
             className={twMerge(
-              buttonBase,
-              isActive ? activeClass : `${enabledColor} ${enabledHover}`,
+              TOOLBAR_BUTTON_BASE_CLASSNAME,
+              isActive ? TOOLBAR_BUTTON_ACTIVE_CLASSNAME : enabledClass,
             )}
             title={`Resize to ${preset.label} (${preset.width}×${preset.height})`}
             onClick={() => onResizePreset(preset.width, preset.height)}
@@ -143,7 +144,7 @@ export const WebPageToolbar = memo(function WebPageToolbar({
         );
       })}
 
-      <div className="mx-0.5 h-4 w-px bg-white/20" />
+      <div className={TOOLBAR_DIVIDER_CLASSNAME} />
 
       <span className="px-1.5 text-xs text-white/70 tabular-nums">
         {width} × {height}
@@ -151,10 +152,10 @@ export const WebPageToolbar = memo(function WebPageToolbar({
 
       {isMoved && (
         <>
-          <div className="mx-0.5 h-4 w-px bg-white/20" />
+          <div className={TOOLBAR_DIVIDER_CLASSNAME} />
           <button
             type="button"
-            className={twMerge(buttonBase, `${enabledColor} ${enabledHover}`)}
+            className={twMerge(TOOLBAR_BUTTON_BASE_CLASSNAME, enabledClass)}
             title="Pin Current Page as Default"
             onClick={onPinUrl}
           >

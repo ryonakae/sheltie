@@ -1,6 +1,15 @@
 import { memo, useCallback } from 'react';
 import { twMerge } from 'tailwind-merge';
 
+import {
+  TOOLBAR_BUTTON_ACTIVE_CLASSNAME,
+  TOOLBAR_BUTTON_CLASSNAME,
+  TOOLBAR_BUTTON_INACTIVE_CLASSNAME,
+  TOOLBAR_CONTAINER_CLASSNAME,
+  TOOLBAR_DIVIDER_CLASSNAME,
+  TOOLBAR_SWATCH_ACTIVE_CLASSNAME,
+  TOOLBAR_SWATCH_CLASSNAME,
+} from '@/components/ReactFlowNodes/nodeToolbarStyles';
 import { STICKY_NOTE_COLORS, TEXT_NODE_FONT_SIZE_PRESETS } from '@/constants';
 import type { StickyNoteNode, TextNodeFontSizePreset } from '@/types';
 
@@ -38,21 +47,18 @@ export const StickyNoteToolbar = memo(function StickyNoteToolbar({
     [node.id, onStyleChange],
   );
 
-  const buttonBase =
-    'nodrag flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-xs font-medium transition-colors hover:bg-white/20';
-  const activeClass = 'bg-white/25 text-white';
-  const inactiveClass = 'text-white/70';
-
   return (
-    <div
-      data-selection-toolbar={node.id}
-      className="flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg"
-    >
+    <div data-selection-toolbar={node.id} className={TOOLBAR_CONTAINER_CLASSNAME}>
       {FONT_SIZE_LABELS.map((label, index) => (
         <button
           key={label}
           type="button"
-          className={twMerge(buttonBase, currentSizePreset === index ? activeClass : inactiveClass)}
+          className={twMerge(
+            TOOLBAR_BUTTON_CLASSNAME,
+            currentSizePreset === index
+              ? TOOLBAR_BUTTON_ACTIVE_CLASSNAME
+              : TOOLBAR_BUTTON_INACTIVE_CLASSNAME,
+          )}
           title={`${TEXT_NODE_FONT_SIZE_PRESETS[index]}px`}
           onClick={() => handleFontSize(index as TextNodeFontSizePreset)}
         >
@@ -60,15 +66,15 @@ export const StickyNoteToolbar = memo(function StickyNoteToolbar({
         </button>
       ))}
 
-      <div className="mx-0.5 h-4 w-px bg-white/20" />
+      <div className={TOOLBAR_DIVIDER_CLASSNAME} />
 
       {STICKY_NOTE_COLORS.map((color, index) => (
         <button
           key={color.bgClass}
           type="button"
           className={twMerge(
-            'nodrag flex size-7 items-center justify-center rounded-sm transition-colors hover:bg-white/20',
-            currentColorIndex === index ? 'bg-white/25' : '',
+            TOOLBAR_SWATCH_CLASSNAME,
+            currentColorIndex === index ? TOOLBAR_SWATCH_ACTIVE_CLASSNAME : '',
           )}
           title={color.label}
           onClick={() => handleColor(index)}

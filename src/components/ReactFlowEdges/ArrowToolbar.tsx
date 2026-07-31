@@ -2,6 +2,15 @@ import ArrowRightArrowLeft from '@gravity-ui/icons/ArrowRightArrowLeft';
 import { memo, useCallback } from 'react';
 import { twMerge } from 'tailwind-merge';
 
+import {
+  TOOLBAR_BUTTON_ACTIVE_CLASSNAME,
+  TOOLBAR_BUTTON_CLASSNAME,
+  TOOLBAR_BUTTON_INACTIVE_CLASSNAME,
+  TOOLBAR_CONTAINER_CLASSNAME,
+  TOOLBAR_DIVIDER_CLASSNAME,
+  TOOLBAR_SWATCH_ACTIVE_CLASSNAME,
+  TOOLBAR_SWATCH_CLASSNAME,
+} from '@/components/ReactFlowNodes/nodeToolbarStyles';
 import { EDGE_COLOR_PRESETS, EDGE_LINE_STYLES, EDGE_STROKE_WIDTHS } from '@/constants';
 import type { BoardEdge, BoardEdgeStyle, EdgeLineStyle, EdgeStrokeWidth } from '@/types';
 
@@ -12,12 +21,6 @@ interface ArrowToolbarProps {
   onStyleChange: (edgeId: string, style: Partial<BoardEdgeStyle>) => void;
   onReverse: (edgeId: string) => void;
 }
-
-const buttonBase =
-  'nodrag flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-xs font-medium transition-colors hover:bg-white/20';
-const activeClass = 'bg-white/25 text-white';
-const inactiveClass = 'text-white/70';
-const separatorClass = 'mx-0.5 h-4 w-px bg-white/20';
 
 function LineStylePreview({ lineStyle }: { lineStyle: EdgeLineStyle }) {
   return (
@@ -54,7 +57,7 @@ export const ArrowToolbar = memo(function ArrowToolbar({
   return (
     <div
       data-selection-toolbar={edge.id}
-      className="nodrag nopan flex items-center gap-0.5 rounded-lg bg-zinc-800 px-1 py-0.5 shadow-lg"
+      className={twMerge('nodrag nopan', TOOLBAR_CONTAINER_CLASSNAME)}
       style={{ transform: `translateY(-${EDGE_TOOLBAR_OFFSET_PX}px)` }}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -65,8 +68,10 @@ export const ArrowToolbar = memo(function ArrowToolbar({
           aria-label={`${strokeWidth}px stroke`}
           aria-pressed={edge.strokeWidth === strokeWidth}
           className={twMerge(
-            buttonBase,
-            edge.strokeWidth === strokeWidth ? activeClass : inactiveClass,
+            TOOLBAR_BUTTON_CLASSNAME,
+            edge.strokeWidth === strokeWidth
+              ? TOOLBAR_BUTTON_ACTIVE_CLASSNAME
+              : TOOLBAR_BUTTON_INACTIVE_CLASSNAME,
           )}
           onClick={() => handleStrokeWidth(strokeWidth)}
         >
@@ -78,7 +83,7 @@ export const ArrowToolbar = memo(function ArrowToolbar({
         </button>
       ))}
 
-      <div className={separatorClass} />
+      <div className={TOOLBAR_DIVIDER_CLASSNAME} />
 
       {EDGE_LINE_STYLES.map((lineStyle) => (
         <button
@@ -87,8 +92,10 @@ export const ArrowToolbar = memo(function ArrowToolbar({
           aria-label={lineStyle === 'solid' ? 'Solid line' : 'Dashed line'}
           aria-pressed={edge.lineStyle === lineStyle}
           className={twMerge(
-            buttonBase,
-            edge.lineStyle === lineStyle ? activeClass : inactiveClass,
+            TOOLBAR_BUTTON_CLASSNAME,
+            edge.lineStyle === lineStyle
+              ? TOOLBAR_BUTTON_ACTIVE_CLASSNAME
+              : TOOLBAR_BUTTON_INACTIVE_CLASSNAME,
           )}
           onClick={() => handleLineStyle(lineStyle)}
         >
@@ -96,18 +103,18 @@ export const ArrowToolbar = memo(function ArrowToolbar({
         </button>
       ))}
 
-      <div className={separatorClass} />
+      <div className={TOOLBAR_DIVIDER_CLASSNAME} />
 
       <button
         type="button"
         aria-label="Reverse direction"
-        className={twMerge(buttonBase, inactiveClass)}
+        className={twMerge(TOOLBAR_BUTTON_CLASSNAME, TOOLBAR_BUTTON_INACTIVE_CLASSNAME)}
         onClick={handleReverse}
       >
         <ArrowRightArrowLeft width={14} height={14} />
       </button>
 
-      <div className={separatorClass} />
+      <div className={TOOLBAR_DIVIDER_CLASSNAME} />
 
       {EDGE_COLOR_PRESETS.map((preset) => (
         <button
@@ -116,8 +123,8 @@ export const ArrowToolbar = memo(function ArrowToolbar({
           aria-label={`${preset.key} color`}
           aria-pressed={edge.colorPreset === preset.key}
           className={twMerge(
-            'nodrag flex size-7 items-center justify-center rounded-sm transition-colors hover:bg-white/20',
-            edge.colorPreset === preset.key ? 'bg-white/25' : '',
+            TOOLBAR_SWATCH_CLASSNAME,
+            edge.colorPreset === preset.key ? TOOLBAR_SWATCH_ACTIVE_CLASSNAME : '',
           )}
           onClick={() => onStyleChange(edge.id, { colorPreset: preset.key })}
         >

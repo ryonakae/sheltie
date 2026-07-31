@@ -1,8 +1,6 @@
 import {
-  NodeResizeControl,
   NodeToolbar,
   Position,
-  ResizeControlVariant,
   type NodeProps,
   type ResizeDragEvent,
   type ResizeParams,
@@ -10,7 +8,7 @@ import {
 import { memo, useCallback } from 'react';
 
 import { TextNode } from '@/components/Node/TextNode';
-import { selectionHandleBaseStyle } from '@/components/ReactFlowNodes/selectionChromeStyles';
+import { NodeWidthResizeControls } from '@/components/ReactFlowNodes/NodeWidthResizeControls';
 import { SelectionFrameOverlay } from '@/components/ReactFlowNodes/SelectionFrameOverlay';
 import { TextNodeToolbar } from '@/components/ReactFlowNodes/TextNodeToolbar';
 import type { TextFlowNodeData } from '@/components/ReactFlowNodes/types';
@@ -41,17 +39,6 @@ export const TextFlowNode = memo(function TextFlowNode({ id, data, selected }: N
     nodeProps.onWidthModeChange(id, 'auto');
   }, [id, nodeProps]);
 
-  const resizeLineConfigs = [
-    { key: 'left', position: 'left' as const },
-    { key: 'right', position: 'right' as const },
-  ];
-  const resizeHandleConfigs = [
-    { key: 'top-left', position: 'top-left' as const },
-    { key: 'bottom-left', position: 'bottom-left' as const },
-    { key: 'top-right', position: 'top-right' as const },
-    { key: 'bottom-right', position: 'bottom-right' as const },
-  ];
-
   return (
     <div className="nopan relative size-full">
       <NodeToolbar isVisible={!!selected && nodeProps.isActive} position={Position.Top}>
@@ -63,39 +50,13 @@ export const TextFlowNode = memo(function TextFlowNode({ id, data, selected }: N
       {selected && <SelectionFrameOverlay />}
 
       {nodeProps.isActive && (
-        <>
-          {resizeLineConfigs.map(({ key, position }) => (
-            <NodeResizeControl
-              key={key}
-              nodeId={id}
-              position={position}
-              variant={ResizeControlVariant.Line}
-              resizeDirection="horizontal"
-              autoScale={false}
-              minWidth={TEXT_NODE_MIN_WIDTH}
-              style={{ opacity: 0 }}
-              onResize={handleResize}
-              onResizeEnd={handleResizeEnd}
-            >
-              <div className="absolute inset-0" onDoubleClick={handleRevertToAutoWidth} />
-            </NodeResizeControl>
-          ))}
-          {resizeHandleConfigs.map(({ key, position }) => (
-            <NodeResizeControl
-              key={key}
-              nodeId={id}
-              position={position}
-              resizeDirection="horizontal"
-              autoScale={false}
-              minWidth={TEXT_NODE_MIN_WIDTH}
-              style={selectionHandleBaseStyle}
-              onResize={handleResize}
-              onResizeEnd={handleResizeEnd}
-            >
-              <div className="absolute inset-0" onDoubleClick={handleRevertToAutoWidth} />
-            </NodeResizeControl>
-          ))}
-        </>
+        <NodeWidthResizeControls
+          nodeId={id}
+          minWidth={TEXT_NODE_MIN_WIDTH}
+          onResize={handleResize}
+          onResizeEnd={handleResizeEnd}
+          onDoubleClickRevert={handleRevertToAutoWidth}
+        />
       )}
     </div>
   );

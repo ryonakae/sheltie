@@ -266,6 +266,9 @@ export const webviewApi = {
     );
   },
 
+  /** 起動時に、最終更新から TTL を超えたスクリーンショットキャッシュを回収する */
+  pruneScreenshotCache: (): Promise<void> => invoke('prune_screenshot_cache'),
+
   deleteScreenshot: (pageId: string, projectId: string): Promise<void> =>
     invokeOrWarn('delete_screenshot', { pageId, projectId }, { pageId, projectId }),
 

@@ -413,6 +413,26 @@ describe('parseProjectDocument', () => {
     const json = `{"schemaVersion":2,"nodes":[{"id":"w1","type":"webpage","title":"Example","url":"https://example.com/","x":1e400,"y":0,"width":800,"height":600}]}`;
     expect(() => parseProjectDocument(json)).toThrow(/x must be a finite number/);
   });
+
+  it('projectId を読み込む', () => {
+    const json = JSON.stringify({
+      schemaVersion: 2,
+      projectId: 'fixed-project-id',
+      nodes: [],
+      edges: [],
+    });
+    expect(parseProjectDocument(json).projectId).toBe('fixed-project-id');
+  });
+
+  it('projectId が無いドキュメントも読み込める', () => {
+    const json = JSON.stringify({ schemaVersion: 2, nodes: [], edges: [] });
+    expect(parseProjectDocument(json).projectId).toBeUndefined();
+  });
+
+  it('projectId が文字列でなければ例外', () => {
+    const json = JSON.stringify({ schemaVersion: 2, projectId: 42, nodes: [], edges: [] });
+    expect(() => parseProjectDocument(json)).toThrow(/projectId/);
+  });
 });
 
 describe('sanitizeProjectDocument', () => {
@@ -451,6 +471,24 @@ describe('isProjectDirty', () => {
       lastSavedDocument: createProjectDocument({ nodes, edges: [] }),
     };
     expect(isProjectDirty(project)).toBe(false);
+  });
+
+  it('projectId の有無は dirty 判定に影響しない', () => {
+    const nodes = [webpageNode()];
+    const project: Pick<Project, 'nodes' | 'edges' | 'lastSavedDocument'> = {
+      nodes,
+      edges: [],
+      // ファイルに projectId が無い場合でも、保存対象には付与されるため
+      // これを差分として扱うと開いた直後に dirty になってしまう
+      lastSavedDocument: createProjectDocument({ nodes, edges: [] }),
+    };
+    const withId: Pick<Project, 'nodes' | 'edges' | 'lastSavedDocument'> = {
+      nodes,
+      edges: [],
+      lastSavedDocument: createProjectDocument({ id: 'some-id', nodes, edges: [] }),
+    };
+    expect(isProjectDirty(project)).toBe(false);
+    expect(isProjectDirty(withId)).toBe(false);
   });
 
   it('ノードが追加されていれば dirty=true', () => {

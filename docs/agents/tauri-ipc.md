@@ -130,6 +130,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - `create_page_webview` / `reload_page_webview` / `on_new_window` は `normalize_navigation_url` を通し、`http` / `https` 以外の scheme を拒否する
 - `page-navigated-{pageId}` は commit 後（`on_page_load` の `Finished`）と SPA 通知の 2 経路で emit する。URL は常に native の webview から取得し、`document.title` の `\x01` は「URL を読み直す契機」としてのみ扱う。ページが与えた文字列を URL として信頼しない
 - `on_navigation` は policy 判定だけを行い URL を emit しない。未 commit のナビゲーションを保存すると、DNS/TLS エラーやキャンセルでも保存 URL だけが進んでしまう
+- `prune_screenshot_cache()` - 最終更新から 30 日を超えたスクリーンショットキャッシュの project directory を削除する。起動時に 1 回だけ呼ぶ
 - `save_project_file` は常に拡張子を `.sheltie` に正規化する
 - `save_project_file` は同一ディレクトリの一時ファイルへ書いて `sync_all` 後に atomic rename する。保存中の異常終了で元ファイルを壊さないため、宛先へ直接 truncate 書き込みはしない。上書き時は元ファイルの permissions を引き継ぐ
 - window-local な IPC では `main` のような固定 label を前提にしない

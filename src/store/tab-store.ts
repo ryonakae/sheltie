@@ -144,15 +144,20 @@ function createProject(params: {
 }): Project {
   const nodes = params.document?.nodes.map(documentNodeToBoardNode) ?? [];
   const edges = params.document?.edges?.map(documentEdgeToBoardEdge) ?? [];
+  // 文書に保存された ID を再利用することで、スクリーンショットキャッシュが
+  // セッションを超えて復元でき、開くたびに orphan ディレクトリが増えなくなる。
+  const id = params.document?.projectId ?? crypto.randomUUID();
+  const document =
+    params.document === undefined ? undefined : { ...params.document, projectId: id };
 
   return {
-    id: crypto.randomUUID(),
+    id,
     filePath: params.filePath,
     untitledIndex: params.untitledIndex,
     nodes,
     edges,
     viewport: DEFAULT_VIEWPORT,
-    lastSavedDocument: sanitizeProjectDocument(params.document, { nodes, edges }),
+    lastSavedDocument: sanitizeProjectDocument(document, { id, nodes, edges }),
   };
 }
 

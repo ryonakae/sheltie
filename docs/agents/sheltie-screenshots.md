@@ -10,7 +10,7 @@ Sheltie の Webview スクリーンショット撮影・永続化・差し替え
 
 ## 永続化
 
-PNGファイルとして保存する（macOSのみ）。保存先は`~/Library/Application Support/jp.brdr.app.sheltie/screenshots/{projectId}/{pageId}.png`、撮影時メタデータは同じ場所の`{pageId}.json`。`projectId`はローカルワークスペース上の`Project.id`、`pageId`はnode ID（WebPage系Webview IPCでは歴史的に`pageId`命名）。sidecarのschemaは`{ schemaVersion: 1, capturedAt, capturedUrl }`で、`capturedAt`はRFC 3339とする。
+PNGファイルとして保存する（macOSのみ）。保存先は`~/Library/Application Support/jp.brdr.app.sheltie/screenshots/{projectId}/{pageId}.png`、撮影時メタデータは同じ場所の`{pageId}.json`。`projectId`は`.sheltie`に保存した安定IDで、`Project.id`として読み戻す（文書に無い場合だけ新規生成する）。開くたびに再生成しないことで、lazy restoreがセッションを超えて機能する、`pageId`はnode ID（WebPage系Webview IPCでは歴史的に`pageId`命名）。sidecarのschemaは`{ schemaVersion: 1, capturedAt, capturedUrl }`で、`capturedAt`はRFC 3339とする。
 
 **撮影時**:
 
@@ -25,6 +25,8 @@ PNGファイルとして保存する（macOSのみ）。保存先は`~/Library/A
 - sidecarが無いlegacy PNGやsidecarが壊れているPNGは、ファイル更新時刻を`capturedAt`、`capturedUrl: null`として復元する
 - sidecarの`capturedUrl`が現在のnode URLと異なるPNGは復元せず削除する。in-memory entryより古いdisk entryは上書きしない
 - 復元URLは`convertFileSrc(filePath) + '?t=restored'`。復元後に`computeDisplayModes()`を再実行して正しいmode判定に収束させる
+
+**GC**: 起動時に`prune_screenshot_cache`を1回だけ呼び、最終更新から30日を超えたproject directoryを削除する。開いていない`.sheltie`も正当に存在しうるため、開いている文書と照合して消す方式は採らない。
 
 **削除**: ページ削除時に`cleanupPageArtifacts()` → `delete_screenshot(pageId, projectId)`でPNGとsidecarを両方削除する。
 

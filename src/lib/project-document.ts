@@ -247,8 +247,12 @@ function parseProjectDocumentValue(value: unknown): SheltieDocumentV2 {
     ? rawEdges.map((edge, index) => parseEdge(edge, index))
     : [];
 
+  const projectId =
+    value.projectId === undefined ? undefined : parseString(value.projectId, 'projectId');
+
   return {
     schemaVersion: 2,
+    projectId,
     nodes: rawNodes.map((node, index) => parseNode(node, index)),
     edges,
   };
@@ -379,10 +383,11 @@ export function documentNodeToBoardNode(node: SheltieDocumentNode): BoardNode {
 }
 
 export function createProjectDocument(
-  project: Pick<Project, 'nodes' | 'edges'>,
+  project: Pick<Project, 'nodes' | 'edges'> & Partial<Pick<Project, 'id'>>,
 ): SheltieDocumentV2 {
   return {
     schemaVersion: 2,
+    ...(project.id === undefined ? {} : { projectId: project.id }),
     nodes: project.nodes.map(boardNodeToDocumentNode),
     edges: project.edges.map(boardEdgeToDocumentEdge),
   };
@@ -406,7 +411,7 @@ export function parseProjectDocument(contents: string): SheltieDocumentV2 {
 
 export function sanitizeProjectDocument(
   rawDocument: unknown,
-  fallbackProject: Pick<Project, 'nodes' | 'edges'>,
+  fallbackProject: Pick<Project, 'nodes' | 'edges'> & Partial<Pick<Project, 'id'>>,
 ): SheltieDocumentV2 {
   if (rawDocument === undefined) {
     return createProjectDocument(fallbackProject);
@@ -419,11 +424,22 @@ export function sanitizeProjectDocument(
   }
 }
 
+/**
+ * projectId はスクリーンショットキャッシュのキーであってボード内容ではない。
+ * dirty 判定に含めると、projectId を持たないファイルを開いた直後に
+ * 未保存扱いになってしまうため、比較から外す。
+ */
+function withoutProjectId(document: SheltieDocument): SheltieDocument {
+  if (!('projectId' in document)) return document;
+  const { projectId: _projectId, ...rest } = document;
+  return rest;
+}
+
 export function isProjectDirty(
   project: Pick<Project, 'nodes' | 'edges' | 'lastSavedDocument'>,
 ): boolean {
   return (
-    serializeProjectDocument(createProjectDocument(project)) !==
-    serializeProjectDocument(project.lastSavedDocument)
+    serializeProjectDocument(withoutProjectId(createProjectDocument(project))) !==
+    serializeProjectDocument(withoutProjectId(project.lastSavedDocument))
   );
 }

@@ -8,7 +8,7 @@ import { runEditCommand } from '@/lib/edit-commands';
 import { runFileCommand } from '@/lib/file-commands';
 import { setupMcpLifecycleToastListener } from '@/lib/mcp/lifecycle-notifications';
 import { setupMcpRendererBridge } from '@/lib/mcp/renderer-bridge';
-import { onEditCommand, onFileCommand, onViewCommand } from '@/lib/tauri-bridge';
+import { onEditCommand, onFileCommand, onViewCommand, webviewApi } from '@/lib/tauri-bridge';
 import { runViewCommand } from '@/lib/view-commands';
 import { setupProjectPersistence } from '@/store/tab-persistence';
 import { setupThemeListener, useThemeStore } from '@/store/theme-store';
@@ -145,6 +145,10 @@ function setupAppExitCoordinatorListener(): void {
 
 // React マウント前に永続化・テーマをセットアップ
 setupProjectPersistence();
+// 起動ごとに 1 回だけ、TTL を超えたスクリーンショットキャッシュを回収する
+void webviewApi.pruneScreenshotCache().catch(() => {
+  // キャッシュ回収の失敗は起動を妨げない
+});
 setupThemeListener();
 setupEditCommandListener();
 setupFileCommandListener();

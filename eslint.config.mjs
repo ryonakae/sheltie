@@ -94,6 +94,16 @@ export default tseslint.config(
     },
   },
 
+  // index.html から直接読む静的スクリプト（バンドルを通さないブラウザ環境）
+  {
+    files: ['public/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+
   // 評価フィクスチャの Node.js スクリプト
   {
     files: ['skills/sheltie-use/evals/fixtures/**/*.mjs'],

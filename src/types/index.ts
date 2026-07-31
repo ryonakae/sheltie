@@ -109,6 +109,8 @@ export interface SheltieDocumentEdge extends BoardEdgeStyle {
 
 export interface SheltieDocumentV2 {
   schemaVersion: 2;
+  /** スクリーンショットキャッシュのディレクトリキー。古いファイルには存在しない */
+  projectId?: string;
   nodes: SheltieDocumentNode[];
   edges?: SheltieDocumentEdge[];
 }

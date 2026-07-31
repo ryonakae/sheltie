@@ -4,33 +4,13 @@
     <meta charset="UTF-8" />
     <title>Sheltie</title>
     <!--
-      Tailwind/HeroUI の CSS が適用される前の Webview 初回 paint で
-      NSWindow のデフォルト白が見えるのを防ぐ。OS テーマに合わせて HTML/body の
-      背景色を即時確定させ、CSS/JS ロード後の bg-background と整合させる。
+      初回 paint の背景色とテーマクラス付与は、どちらも Tailwind/HeroUI の CSS より
+      先に適用される必要がある。head の blocking な link / classic script なので
+      body の module script より前に実行され、実行順は維持される。
+      CSP の script-src 'self' を成立させるため inline にはしない。
     -->
-    <style>
-      html,
-      body {
-        background-color: #ffffff;
-      }
-      @media (prefers-color-scheme: dark) {
-        html,
-        body {
-          background-color: #18181b;
-        }
-      }
-    </style>
-    <!--
-      Tailwind の dark variant が CSS パース時から正しい色を出せるよう、
-      OS テーマに応じた light/dark クラスを最初の paint 前に同期付与する。
-      Theme メニューでの上書きは React マウント後に theme-store が反映する。
-    -->
-    <script>
-      (function () {
-        var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.classList.add(isDark ? 'dark' : 'light');
-      })();
-    </script>
+    <link rel="stylesheet" href="/initial-background.css" />
+    <script src="/theme-init.js"></script>
   </head>
   <body class="h-full overflow-hidden bg-background text-foreground">
     <div id="root" class="h-full"></div>

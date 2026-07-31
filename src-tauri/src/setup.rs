@@ -322,6 +322,7 @@ pub fn run() {
             crate::commands::webview::screenshots::save_webview_screenshot,
             crate::commands::webview::screenshots::get_existing_screenshot_paths,
             crate::commands::webview::screenshots::delete_screenshot,
+            crate::commands::webview::screenshots::prune_screenshot_cache,
             crate::commands::dialog::show_unsaved_changes_dialog,
             crate::mcp::broker::complete_mcp_renderer_request,
         ])

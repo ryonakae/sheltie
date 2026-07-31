@@ -43,6 +43,7 @@
   - `text` は `id`, `type`, `title`, `tiptapContent?`, `fontSizePreset`, `fontWeight`, `italic`, `strikethrough`, `textColorIndex`, `widthMode`, `x`, `y`, `width`, `height`
 - `SheltieDocumentV2`
   - `schemaVersion: 2`
+  - `projectId?`（スクリーンショットキャッシュのディレクトリキー。古いファイルには無い）
   - `nodes`, `edges?`（後方互換: `edges` が無い場合は空配列として扱う）
 - `Project`
   - 1 document window 分のローカル状態
@@ -171,5 +172,6 @@
 - 同一 `filePath` の `.sheltie` を複数のローカル document に関連付けない
 - `.sheltie` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.sheltie` へは書き出さない
+- `projectId` は dirty 判定に含めない。ボード内容ではなくキャッシュキーなので、`projectId` を持たないファイルを開いた直後に未保存扱いになってはいけない
 - 読み込みに失敗した `.sheltie` は `Project` を初期化しない。`filePath` を保持したまま空文書で開くと、ユーザーが気付かず保存した時点で元ファイルを空文書で上書きしてしまう
 

@@ -1,4 +1,5 @@
 use std::path::{Component, Path, PathBuf};
+use std::time::Duration;
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,10 @@ use super::labels::resolve_page_webview;
 use super::snapshot;
 
 const SIDECAR_SCHEMA_VERSION: u8 = 1;
+
+/// キャッシュの保持期間。キャッシュは失われても撮り直せるため、
+/// ディスクを無制限に消費しないことを優先する。
+const SCREENSHOT_CACHE_TTL_SECS: u64 = 60 * 60 * 24 * 30;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -237,6 +242,63 @@ pub async fn delete_screenshot(
     delete_screenshot_artifacts(&dir, &page_id)
 }
 
+/// project ディレクトリ単位で、最終更新から TTL を超えたものを削除する。
+/// 開いていない `.sheltie` も正当に存在しうるため、「開いている文書と照合して消す」方式は採らない。
+fn prune_screenshot_cache_dir(root: &Path, ttl: Duration) -> Result<(), String> {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("failed to read the screenshot cache: {error}")),
+    };
+
+    let now = std::time::SystemTime::now();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let mut newest: Option<std::time::SystemTime> = None;
+        if let Ok(files) = std::fs::read_dir(&path) {
+            for file in files.flatten() {
+                if let Ok(modified) = file.metadata().and_then(|meta| meta.modified()) {
+                    if newest.is_none_or(|current| modified > current) {
+                        newest = Some(modified);
+                    }
+                }
+            }
+        }
+
+        let is_stale = match newest {
+            Some(modified) => now
+                .duration_since(modified)
+                .map(|elapsed| elapsed > ttl)
+                .unwrap_or(false),
+            None => true,
+        };
+
+        if is_stale {
+            if let Err(error) = std::fs::remove_dir_all(&path) {
+                log::warn!("failed to prune a screenshot cache directory: {error}");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn prune_screenshot_cache(app: AppHandle) -> Result<(), String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to obtain app_data_dir: {error}"))?;
+    prune_screenshot_cache_dir(
+        &data_dir.join("screenshots"),
+        Duration::from_secs(SCREENSHOT_CACHE_TTL_SECS),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,6 +308,51 @@ mod tests {
             std::env::temp_dir().join(format!("sheltie-screenshot-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn prunes_only_project_directories_older_than_the_ttl() {
+        let root = temp_dir();
+        let fresh = root.join("fresh-project");
+        let stale = root.join("stale-project");
+        std::fs::create_dir_all(&fresh).unwrap();
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(fresh.join("a.png"), b"fresh").unwrap();
+        std::fs::write(stale.join("a.png"), b"stale").unwrap();
+
+        let old = std::time::SystemTime::now() - Duration::from_secs(60 * 60 * 24 * 31);
+        std::fs::File::options()
+            .write(true)
+            .open(stale.join("a.png"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+
+        prune_screenshot_cache_dir(&root, Duration::from_secs(SCREENSHOT_CACHE_TTL_SECS)).unwrap();
+
+        assert!(fresh.exists(), "recently used cache must stay");
+        assert!(!stale.exists(), "stale cache must be removed");
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn pruning_an_absent_cache_directory_succeeds() {
+        let root = temp_dir().join("never-created");
+        assert!(prune_screenshot_cache_dir(&root, Duration::from_secs(1)).is_ok());
+    }
+
+    #[test]
+    fn prunes_an_empty_project_directory() {
+        let root = temp_dir();
+        let empty = root.join("empty-project");
+        std::fs::create_dir_all(&empty).unwrap();
+
+        prune_screenshot_cache_dir(&root, Duration::from_secs(SCREENSHOT_CACHE_TTL_SECS)).unwrap();
+
+        assert!(!empty.exists(), "a project directory with no files is unusable cache");
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

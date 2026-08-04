@@ -2,6 +2,7 @@
   "name": "sheltie",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "build": "tauri build",
     "dev": "tauri dev",

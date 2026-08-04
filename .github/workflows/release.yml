@@ -25,14 +25,21 @@ jobs:
       APPLE_TEAM_ID: 'ELFWBE4NMA'
       APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
       APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
-      APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey_${{ vars.APPLE_API_KEY }}.p8
-      APPLE_CERTIFICATE_PATH: ${{ runner.temp }}/sheltie-developer-id.p12
-      BUILD_KEYCHAIN_PATH: ${{ runner.temp }}/sheltie-build.keychain-db
     steps:
       - name: Check out release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
+      # The runner context is unavailable in job-level env, so resolve
+      # RUNNER_TEMP-based paths in a step instead.
+      - name: Resolve signing file paths
+        run: |
+          {
+            echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
+            echo "APPLE_CERTIFICATE_PATH=$RUNNER_TEMP/sheltie-developer-id.p12"
+            echo "BUILD_KEYCHAIN_PATH=$RUNNER_TEMP/sheltie-build.keychain-db"
+          } >> "$GITHUB_ENV"
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6

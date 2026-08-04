@@ -1,155 +1,77 @@
 # Sheltie
 
-Tauri v2 で構築されたデスクトップアプリケーション。複数の Web ページをキャンバス上に配置して、インタラクティブにデザイン・プレビューできるツールです。
+![A Sheltie comparing web pages arranged on a visual board](.github/assets/readme-hero.png)
 
-## セットアップ
+Sheltie is a macOS app that arranges live web pages on an infinite canvas, so you can review a whole site the way you would review artboards in a design tool.
 
-### 前提環件
+<!-- README-I18N:START -->
 
-- Node.js 18+
-- Rust 1.93.1（`mise.toml` で固定）
-- macOS / Windows / Linux
+**English** | [日本語](./README.ja.md)
 
-### インストール
+<!-- README-I18N:END -->
+
+## Why I built Sheltie
+
+More teams now use AI coding agents to prototype in code from the start and iterate on the running app. Designers who don't write code are building web apps themselves, with an AI doing the coding.
+
+A browser, though, shows one page at a time. Visual tone across screens, spacing, typography, and the flow between pages are hard to judge without stepping back. Checking them one page at a time takes effort, and for this part of the review you still end up back in Figma or Sketch.
+
+I built Sheltie to fill that gap. It sits somewhere between a browser and a design tool: you arrange web pages on a canvas, zoom out to see the whole picture, and zoom in to work with any page directly.
+
+## What you can do
+
+- **Put running pages on the board:** Each website on the board is a native webview (WebKit, the same engine as Safari). You can scroll and click, the same as in a browser.
+- **Step back and compare:** Pan and zoom across the board to spot inconsistencies in spacing, typography, and color across screens.
+- **Sketch the flow:** Connect pages with arrows to diagram how screens lead to each other, and leave notes with sticky notes and text.
+- **Save and share boards:** A board saves to a `.sheltie` file, so you can track it in Git like any other file. Boards open as native macOS windows and tabs.
+- **Pair it with a coding agent:** Sheltie has a built-in local MCP server. Ask an agent like Claude Code to fix a screen, then compare the result right on the board. An Agent Skill is also available to teach agents how to use Sheltie.
+
+## Install
+
+Download the latest `Sheltie_<version>_universal.dmg` from [GitHub Releases](https://github.com/ryonakae/sheltie/releases), open it, and drag Sheltie into Applications. The app is a universal binary (Apple Silicon and Intel), signed and notarized.
+
+Sheltie currently supports macOS only.
+
+## Quick start
+
+1. Launch Sheltie and create a new board.
+2. Add a web page and enter a URL, either your local dev server (`http://localhost:3000`) or a live site.
+3. Add more pages, drag them into place, and zoom out to look at the flow.
+4. Connect pages with arrows and drop sticky notes where something needs attention.
+5. Save the board as a `.sheltie` file to continue later.
+
+## Use with coding agents (MCP)
+
+Sheltie can also run as an MCP server, so local AI agents can work with the board and its pages. Enable it from **Sheltie › Settings › Enable MCP Server**, then register the endpoint in your MCP client:
+
+```json
+{
+  "mcpServers": {
+    "sheltie": {
+      "type": "http",
+      "url": "http://127.0.0.1:29978/mcp"
+    }
+  }
+}
+```
+
+A connected agent can read the board, operate the pages, and take screenshots.
+
+Note that there is no authentication. The server listens on localhost only, but it trusts any local client that connects, so enable it only on machines you trust.
+
+## Development
+
+Sheltie is built with Tauri v2, React, TypeScript, and Tailwind CSS v4.
 
 ```bash
-git clone <repository>
+git clone https://github.com/ryonakae/sheltie.git
 cd sheltie
 npm install
-mise exec -- cargo fetch  # Rust 依存関係をダウンロード
+npm run dev
 ```
 
-## 開発
+Requires Node.js 22 and Rust (version pinned in `mise.toml`). See [AGENTS.md](AGENTS.md) and [docs/agents/](docs/agents/) for architecture notes and contribution guidelines.
 
-```bash
-npm run dev        # 開発モードで起動（Tauri CLI + Vite HMR）
-npm run lint       # ESLint によるコード検査
-npm run lint:fix   # ESLint 自動修正
-npm run format     # Prettier によるフォーマット
-npm run typecheck  # TypeScript の型チェック
-```
+## License
 
-## ビルド
-
-```bash
-npm run build      # アプリをビルド・パッケージング
-```
-
-アプリケーションは Tauri v2 の統合ビルドシステムで構築されます。
-- Rust バックエンド: `src-tauri/`
-- React フロントエンド: `src/renderer/`
-- Cargo バイナリターゲット: `Sheltie`（`src-tauri/src/main.rs`）
-- 出力: プラットフォーム固有の `Sheltie` バイナリ + インストーラー（`src-tauri/target/release/bundle/` 配下）
-
-## アーキテクチャ
-
-### 全体構成
-
-```
-src-tauri/              # Rust バックエンド
-  ├── src/
-  │   ├── main.rs       # エントリーポイント
-  │   ├── lib.rs        # Builder 設定・コマンド登録
-  │   └── commands/     # Rust コマンド実装（IPC）
-  ├── Cargo.toml        # Rust 依存関係
-  └── tauri.conf.json   # Tauri 設定
-
-src/renderer/           # React フロントエンド
-  ├── components/       # React コンポーネント
-  │   ├── Artboard/     # ページレンダリング・操作制御
-  │   ├── Canvas/       # キャンバス・サイドバー管理
-  │   ├── TabBar/       # プロジェクトタブバー
-  │   └── HomeScreen/   # プロジェクト一覧
-  ├── store/            # Zustand 状態管理
-  ├── hooks/            # React カスタムフック
-  ├── lib/
-  │   └── tauri-bridge.ts  # IPC ブリッジ層
-  ├── types/            # TypeScript 型定義
-  └── main.tsx          # React エントリーポイント
-
-shared/
-  └── types.ts          # 共有型定義
-```
-
-### Webview ハイブリッド管理
-
-- React DOM にプレースホルダー `<div data-webview-placeholder>` を配置
-- Rust 側で Tauri native Webview を作成・管理
-- JS から `Webview.getByLabel(label)` で操作（位置・サイズ・表示制御）
-- ドラッグ・リサイズ・ズーム操作中は全 Webview を非表示 → 操作完了時に座標同期して表示
-
-### 状態管理
-
-**Zustand ストア** (`src/renderer/store/tab-store.ts`):
-- プロジェクト・ページのライフサイクル管理
-- ページ位置・サイズ・ビューポート状態
-- タイトルバーのドラッグ領域制御
-
-**永続化** (`src/renderer/store/tab-persistence.ts`):
-- tauri-plugin-store で プロジェクト状態をファイルシステムに保存
-- アプリ再起動時に自動復元
-
-### セキュリティ
-
-Tauri v2 のセキュリティベストプラクティスを適用：
-- すべての IPC は Rust コマンド経由でサンドボックス化
-- `src-tauri/capabilities/default.json` で権限を細密制御
-- macOS の document window は native tabs を使い、OS 標準の title / tab bar を表示する
-
-## 開発ガイド
-
-詳細は **AGENTS.md** を参照してください。
-
-### インポート規約
-
-すべてのインポートで `@/` パスエイリアスを使用します（`tsconfig.json` + `vite.config.mts` で定義）。
-
-```typescript
-// OK
-import { useProjectStore } from '@/store/tab-store';
-
-// NG（相対パス使用禁止）
-import { useProjectStore } from '../store/tab-store';
-```
-
-### コンポーネント
-
-Hero UI v3 を優先的に使用します。不足時のみ独自実装してください。
-
-### IPC ブリッジ
-
-すべての IPC は `src/renderer/lib/tauri-bridge.ts` に集約されています。新しい IPC が必要な場合：
-
-1. Rust 側で `src-tauri/src/commands/` にコマンドを実装
-2. `src/renderer/lib/tauri-bridge.ts` でラッパー関数を追加
-3. React から ブリッジ経由で呼び出し
-
-## トラブルシューティング
-
-### 型チェックエラー
-
-```bash
-npm run typecheck
-```
-
-TypeScript が strict mode で実行されます。未使用変数は禁止。
-
-### ESLint エラー
-
-```bash
-npm run lint:fix
-```
-
-Tailwind CSS クラスの自動整列を含みます。
-
-### Rust コンパイルエラー
-
-```bash
-mise exec -- cargo check
-```
-
-Rust 依存関係をチェック。mise で Rust 環境が管理されています。
-
-## ライセンス
-
-[LICENSE](LICENSE)
+[MIT](LICENSE)

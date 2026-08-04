@@ -14,6 +14,12 @@
       "skillPath": "skills/heroui-react/SKILL.md",
       "computedHash": "c9e1bb41fbc3cee782faae08bd465ae05cd685a6ed7cc3392464fdf29b3ab467"
     },
+    "natural-japanese": {
+      "source": "coji/natural-japanese",
+      "sourceType": "github",
+      "skillPath": "skills/natural-japanese/SKILL.md",
+      "computedHash": "51fcd50152720e4834519112193edd25f03ee8bff6120338736830e372aa6b58"
+    },
     "react-flow": {
       "source": "framara/react-flow-skill",
       "sourceType": "github",

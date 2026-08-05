@@ -1,0 +1,82 @@
+[
+  {
+    "query": "My Sheltie board has three vendor pages already open. Compare their annual prices from the cached previews, tell me which screenshot is missing, and add linked notes for the two best options without moving the canvas.",
+    "should_trigger": true
+  },
+  {
+    "query": "Sheltieで開いている採用ページを3つ比較して、条件の差を付箋にして元のWebPageへ矢印でつないで。最後に保存はしないで。",
+    "should_trigger": true
+  },
+  {
+    "query": "The authenticated billing portal is already a WebPage node in my open Sheltie document. Read the visible plan state, select the Team plan, confirm the result, and add one unsaved board note with what changed.",
+    "should_trigger": true
+  },
+  {
+    "query": "can you turn these three product pages on my sheltie board into linked notes? use the board overview first because two are offscreen and i don't want the viewport touched",
+    "should_trigger": true
+  },
+  {
+    "query": "In the WebPage node called Event registration, choose the Pro ticket, fill the labelled company field, submit it, and verify the confirmation using the latest page state before noting it on the board.",
+    "should_trigger": true
+  },
+  {
+    "query": "このSheltieのキャンバスだけで描かれた地図を操作したい。まずセマンティックな要素がないか確認して、無ければスクリーンショットのCSS座標でピンをクリックし、結果をボードに記録して見せて。",
+    "should_trigger": true
+  },
+  {
+    "query": "Research the two open policy sites inside my Sheltie board, compare the cancellation clauses, create two linked findings atomically, then show me only the notes you added.",
+    "should_trigger": true
+  },
+  {
+    "query": "I need help navigating the existing Sheltie WebPage node for our staging dashboard to its HTTPS reports URL, inspect the semantic controls, and capture the dashboard result in a board note. Keep all work in the current document.",
+    "should_trigger": true
+  },
+  {
+    "query": "sheltieのopen中webページ、古いrefは使わずにフォームの名前とプランを更新して確認して。関連するメモも一回のbatchで追加してほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "These cached screenshots on my Sheltie board disagree with what the live WebPage nodes might show. Compare the available evidence, state the limitation rather than forcing hidden pages on screen, and organize my findings as notes.",
+    "should_trigger": true
+  },
+  {
+    "query": "Implement the Sheltie MCP server in Rust, add a new browser tool schema, and update the Tauri menu lifecycle tests.",
+    "should_trigger": false
+  },
+  {
+    "query": "React Flow のSheltieボードUIを変更して、ノードのリサイズハンドルと選択枠をコンポーネントとして実装して。",
+    "should_trigger": false
+  },
+  {
+    "query": "Use Playwright to log into Chrome with my test profile, compare three external ecommerce sites, and export the prices to CSV.",
+    "should_trigger": false
+  },
+  {
+    "query": "Research current laptop prices on the web, cite sources, and give me a recommendation. I do not have a Sheltie board open.",
+    "should_trigger": false
+  },
+  {
+    "query": "Create a reusable Figma design-tool skill that turns product research into a polished comparison layout for our design team.",
+    "should_trigger": false
+  },
+  {
+    "query": "この .sheltie ファイルを開けるようにして。中のWebページを比較したり編集したりはまだしない。",
+    "should_trigger": false
+  },
+  {
+    "query": "Our MCP client needs OAuth scopes and remote-host support. Design the protocol changes, but do not operate any existing Sheltie document.",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you write a browser automation skill for Safari that fills payroll forms across any site? It should work outside our desktop app.",
+    "should_trigger": false
+  },
+  {
+    "query": "I have screenshots from a board meeting in Downloads; extract the action items and make a Markdown summary. They are not in Sheltie.",
+    "should_trigger": false
+  },
+  {
+    "query": "MCP経由でChrome DevToolsの既存タブを操作して、canvas上のグラフをクリックする方法を調べて。Sheltieは使わない。",
+    "should_trigger": false
+  }
+]

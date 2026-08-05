@@ -1,0 +1,35 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Sheltie",
+  "version": "1.0.0",
+  "identifier": "jp.brdr.app.sheltie",
+  "build": {
+    "beforeDevCommand": "vite",
+    "beforeBuildCommand": "vite build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-src 'none'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/screenshots/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "fileAssociations": [
+      {
+        "ext": ["sheltie"],
+        "name": "Sheltie Document",
+        "mimeType": "application/x-sheltie"
+      }
+    ],
+    "icon": ["icons/Assets.car", "icons/icon.icns", "icons/icon.png"]
+  }
+}

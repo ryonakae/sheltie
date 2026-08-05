@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plan confirmation fixture</title>
+    <style>
+      body {
+        max-width: 36rem;
+        margin: 3rem auto;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      label {
+        display: block;
+        margin-top: 1rem;
+      }
+      button {
+        margin-top: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Choose a local test plan</h1>
+      <form id="plan-form">
+        <label for="customer-name">Customer name</label>
+        <input id="customer-name" name="customerName" type="text" autocomplete="off" required />
+        <label for="plan">Plan</label>
+        <select id="plan" name="plan">
+          <option value="starter">Starter</option>
+          <option value="pro">Pro</option>
+          <option value="team">Team</option>
+        </select>
+        <button type="submit">Confirm plan</button>
+      </form>
+      <p id="confirmation" role="status" aria-live="polite">No plan has been confirmed.</p>
+    </main>
+    <script>
+      document.querySelector('#plan-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const name = document.querySelector('#customer-name').value.trim() || 'Anonymous';
+        const plan = document.querySelector('#plan').selectedOptions[0].text;
+        document.querySelector('#confirmation').textContent = `${plan} plan confirmed for ${name}.`;
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+<!doctype html>
+<html class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sheltie</title>
+    <!--
+      初回 paint の背景色とテーマクラス付与は、どちらも Tailwind/HeroUI の CSS より
+      先に適用される必要がある。head の blocking な link / classic script なので
+      body の module script より前に実行され、実行順は維持される。
+      CSP の script-src 'self' を成立させるため inline にはしない。
+    -->
+    <link rel="stylesheet" href="/initial-background.css" />
+    <script src="/theme-init.js"></script>
+  </head>
+  <body class="h-full overflow-hidden bg-background text-foreground">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

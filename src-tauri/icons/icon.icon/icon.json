@@ -1,0 +1,49 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.99608,0.96078,0.89412,1.00000",
+      "srgb:0.97647,0.91373,0.83137,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "sheltie.png",
+          "name" : "sheltie",
+          "position" : {
+            "scale" : 1.05,
+            "translation-in-points" : [
+              0,
+              -28
+            ]
+          }
+        },
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "shadow.png",
+          "name" : "shadow"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

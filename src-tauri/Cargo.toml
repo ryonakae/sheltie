@@ -1,0 +1,48 @@
+[package]
+name = "sheltie"
+version = "1.0.0"
+description = "Sheltie - Artboard app for the web"
+authors = []
+license = "MIT"
+repository = "https://github.com/ryonakae/sheltie"
+edition = "2021"
+rust-version = "1.93.1"
+
+[lib]
+name = "sheltie_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "Sheltie"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.5.4", features = [] }
+
+[dependencies]
+axum = "0.8"
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+rmcp = { version = "=2.2.0", features = ["transport-streamable-http-server"] }
+tauri = { version = "2", features = ["unstable", "protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+tauri-plugin-store = "2"
+tauri-plugin-prevent-default = "4"
+tauri-plugin-single-instance = "2"
+tokio = { version = "1", features = ["macros", "net", "rt", "sync", "test-util", "time"] }
+tokio-util = "0.7"
+uuid = { version = "1", features = ["serde", "v4"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+[target."cfg(target_os = \"macos\")".dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSColor", "NSResponder", "NSView", "NSWindow", "NSWindowTab", "std"] }
+objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
+block2 = "0.6"

@@ -1,0 +1,21 @@
+{
+  "id": "comparison",
+  "requiredFinalNoteTextFragments": ["$29/month", "$24/month"],
+  "requiredCreatedNoteCount": 2,
+  "requiredFinalEdgeStyle": {
+    "edgeId": "*",
+    "strokeWidth": 6,
+    "lineStyle": "dashed",
+    "colorPreset": "warning"
+  },
+  "requiredToolCategories": [
+    "list_documents",
+    "get_editor_state",
+    "get_webpage_screenshots",
+    "get_board_screenshot",
+    "batch_edit_board"
+  ],
+  "forbiddenToolCategories": ["save"],
+  "requiredBrowserEvidence": ["2 cached and 1 missing screenshot records"],
+  "focusNodes": "forbidden"
+}

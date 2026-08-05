@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Semantic iframe parent fixture</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+      }
+      main {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+      }
+      iframe {
+        width: 100%;
+        min-height: 14rem;
+        border: 1px solid #777;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Frame aggregation fixture</h1>
+    <main aria-label="Frame fixtures">
+      <section aria-labelledby="same-heading">
+        <h2 id="same-heading">Same-origin frame</h2>
+        <iframe
+          title="Same-origin semantic child"
+          src="/mcp-fixtures/semantic-iframe-child.html?frame=same"
+        ></iframe>
+      </section>
+      <section aria-labelledby="cross-heading">
+        <h2 id="cross-heading">Cross-origin frame</h2>
+        <iframe
+          title="Cross-origin semantic child"
+          src="http://127.0.0.1:1421/mcp-fixtures/semantic-iframe-child.html?frame=cross"
+        ></iframe>
+      </section>
+    </main>
+  </body>
+</html>

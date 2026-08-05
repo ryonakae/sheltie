@@ -1,0 +1,40 @@
+[[permission]]
+identifier = "allow-local-app-commands"
+description = "Allows the existing Sheltie commands from local document UI webviews."
+commands.allow = [
+  "load_window_context",
+  "present_document_window",
+  "new_document_tab",
+  "set_document_edited",
+  "new_document_window",
+  "open_document_window",
+  "complete_app_exit",
+  "abort_app_exit",
+  "close_ready",
+  "load_project_file",
+  "save_project_file",
+  "load_theme",
+  "set_theme",
+  "get_platform_info",
+  "create_page_webview",
+  "capture_webview_screenshot",
+  "reload_page_webview",
+  "go_back_page_webview",
+  "go_forward_page_webview",
+  "get_navigation_state_page_webview",
+  "unregister_page_automation_page",
+  "update_page_webview_bounds",
+  "set_page_webview_opacity",
+  "batch_update_page_webview_bounds",
+  "batch_update_webview_positions",
+  "save_webview_screenshot",
+  "get_existing_screenshot_paths",
+  "delete_screenshot",
+  "show_unsaved_changes_dialog",
+  "complete_mcp_renderer_request",
+]
+
+[[permission]]
+identifier = "allow-page-automation-completion"
+description = "Allows an embedded page to complete only a matching semantic automation request."
+commands.allow = ["complete_page_automation_request"]

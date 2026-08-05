@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "page-automation",
+  "description": "Allows embedded macOS pages to complete matching semantic automation requests.",
+  "local": false,
+  "remote": {
+    "urls": ["http://*:*", "https://*:*"]
+  },
+  "webviews": ["page-*"],
+  "permissions": ["allow-page-automation-completion"],
+  "platforms": ["macOS"]
+}

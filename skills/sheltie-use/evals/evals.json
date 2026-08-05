@@ -1,0 +1,57 @@
+{
+  "skill_name": "sheltie-use",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Compare the two cached local product WebPages on the open Sheltie board. State that the third page has a missing screenshot, then add two finding notes and style the existing WebPage comparison edge as warning-colored, dashed, and 6 px in one atomic edit. Do not move my view. Saving remains my action, and there is no save MCP tool.",
+      "expected_output": "Reports comparison evidence and the third page's missing image, creates two source-attributed finding notes and updates the valid WebPage-to-WebPage edge in exactly one board batch, preserves the viewport, and states that the document remains unsaved.",
+      "files": [
+        "evals/fixtures/sites/compare-a/index.html",
+        "evals/fixtures/sites/compare-b/index.html",
+        "evals/fixtures/boards/comparison-board.sheltie"
+      ],
+      "expectations": [
+        "The trace starts with list_documents followed by get_editor_state for the assigned document.",
+        "The workflow calls both get_webpage_screenshots and get_board_screenshot and observes exactly two cached screenshots and one missing screenshot.",
+        "Exactly one successful batch_edit_board creates two source-attributed finding notes and styles a WebPage comparison edge as warning, dashed, and 6 px.",
+        "Every document or page operation uses explicit documentId and pageNodeId values.",
+        "The workflow never calls focus_nodes, save, or export.",
+        "The final response states the evidence limitation and that the dirty document remains for the user to save."
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "In the named local form WebPage, select the Pro plan and fill the labelled customer field with Ada. Treat the supplied snapshotId s0-stale and elementRef e999 as stale: obtain a current snapshot and use fresh refs after every state-changing action. Verify the confirmation in an action-returned snapshot, then add one board note without moving my view.",
+      "expected_output": "Uses a current semantic snapshot and fresh references for typed form actions, verifies the confirmation from a returned snapshot, and adds one note in an atomic board batch without focus or save.",
+      "files": [
+        "evals/fixtures/sites/semantic-form/index.html",
+        "evals/fixtures/boards/comparison-board.sheltie"
+      ],
+      "expectations": [
+        "The trace obtains a current browser_snapshot before interaction and never uses the supplied stale snapshot or element reference.",
+        "The workflow uses typed browser_select_option, browser_fill, and browser_click actions with references from the newest snapshot after every state change.",
+        "An action-returned snapshot contains the semantic confirmation Pro plan confirmed for Ada.",
+        "Exactly one successful batch_edit_board creates one finding note containing the confirmation.",
+        "The workflow never calls browser_click_coordinates, browser_evaluate, focus_nodes, save, or export.",
+        "Every document or page operation uses explicit documentId and pageNodeId values."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Inspect the local canvas fixture in the open Sheltie WebPage. Establish semantic context first, then operate the visually rendered target by CSS viewport coordinates only if no semantic ref exists. Record the result atomically on the board, and show me the note you created.",
+      "expected_output": "Uses a semantic snapshot before a screenshot-coordinate fallback, records the result in one board batch, and focuses only the created note because the request explicitly asks to show it.",
+      "files": [
+        "evals/fixtures/sites/canvas-fallback/index.html",
+        "evals/fixtures/boards/comparison-board.sheltie"
+      ],
+      "expectations": [
+        "A semantic browser_snapshot occurs before browser_screenshot and confirms that no semantic target exists for the painted control.",
+        "browser_click_coordinates uses CSS viewport coordinates from screenshot evidence and its returned snapshot contains Canvas target activated.",
+        "Exactly one successful batch_edit_board creates one finding note containing Canvas target activated.",
+        "Exactly one focus_nodes call names only the note created by that batch because the prompt explicitly asks to show it.",
+        "The workflow never calls browser_evaluate, save, or export.",
+        "Every document or page operation uses explicit documentId and pageNodeId values."
+      ]
+    }
+  ]
+}

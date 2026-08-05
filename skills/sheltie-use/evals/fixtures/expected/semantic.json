@@ -1,0 +1,9 @@
+{
+  "id": "semantic",
+  "requiredFinalNoteTextFragments": ["Pro plan confirmed for Ada"],
+  "requiredCreatedNoteCount": 1,
+  "requiredToolCategories": ["browser_snapshot", "typed_action", "batch_edit_board"],
+  "forbiddenToolCategories": ["browser_click_coordinates", "browser_evaluate", "save"],
+  "requiredBrowserEvidence": ["latest snapshot ref after every state-changing action"],
+  "focusNodes": "forbidden"
+}

@@ -1,0 +1,89 @@
+@import 'tailwindcss';
+@import '@heroui/styles';
+/* React Flow のベーススタイル。Tailwind v4 の後に配置して競合を防ぐ */
+@import '@xyflow/react/dist/style.css';
+
+/* アートボードのドットパターン背景。ダークモードは CSS 変数でテーマを切り替える */
+@utility sheltie-bg {
+  --sheltie-dot-scale: 1;
+  --sheltie-bg-x: 0px;
+  --sheltie-bg-y: 0px;
+  --sheltie-dot-size: 1px;
+  background-color: #f9fafb;
+  background-image: radial-gradient(
+    circle,
+    #d1d5db calc(var(--sheltie-dot-size) * var(--sheltie-dot-scale)),
+    transparent calc(var(--sheltie-dot-size) * var(--sheltie-dot-scale))
+  );
+  background-repeat: repeat;
+  background-size: calc(24px * var(--sheltie-dot-scale)) calc(24px * var(--sheltie-dot-scale));
+  background-position: var(--sheltie-bg-x) var(--sheltie-bg-y);
+
+  @variant dark {
+    background-color: #18181b;
+    background-image: radial-gradient(circle, #27272a 1px, transparent 1px);
+  }
+}
+
+/* HeroUI の固定幅を外し、右上を基準に各トーストを内容幅で表示する */
+[data-app-toast-region] {
+  width: 0;
+  min-width: 0;
+}
+
+[data-app-toast-region] [data-slot='toast'] {
+  right: 0;
+  left: auto;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+}
+
+/* スクリーンショット画像は常時背面に置き、hidden の時だけ隠す */
+[data-display-mode='hidden'] [data-screenshot-img] {
+  display: none;
+}
+
+/*
+ * Tiptap Placeholder Extension の表示。`showOnlyWhenEditable: false` と組み合わせ、
+ * 編集モードでも非編集モードでも、空のときだけプレースホルダ文字列を表示する。
+ */
+.sheltie-text-node-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #aaa;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/*
+ * マウスカーソル統一ポリシー:
+ * - リサイズハンドル: 方向別 resize カーソル（React Flow の既定 .react-flow__resize-control.handle 系を維持）
+ * - 編集中のテキスト: text (I-beam)
+ * - それ以外: default
+ *
+ * 上書き対象: HeroUI の --cursor-interactive (pointer)、React Flow の
+ * pane/handle/edge/node の grab/grabbing/pointer/crosshair、ブラウザ既定の button pointer。
+ */
+:root {
+  --cursor-interactive: default;
+}
+
+.react-flow__pane.draggable,
+.react-flow__pane.dragging,
+.react-flow__pane.selection,
+.react-flow__node.selectable,
+.react-flow__node.draggable,
+.react-flow__node.draggable.dragging,
+.react-flow__nodesselection-rect,
+.react-flow__edge.selectable,
+.react-flow__edgeupdater,
+.react-flow__handle,
+.react-flow__handle.connectionindicator {
+  cursor: default;
+}
+
+button,
+[role='button'],
+a {
+  cursor: default;
+}

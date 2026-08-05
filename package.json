@@ -1,0 +1,82 @@
+{
+  "name": "sheltie",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "tauri build",
+    "dev": "tauri dev",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "icon:macos": "sh scripts/generate-macos-icon.sh",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepare": "husky",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,html}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "@dnd-kit/react": "0.3.2",
+    "@gravity-ui/icons": "2.17.0",
+    "@heroui/react": "3.1.0",
+    "@heroui/styles": "3.1.0",
+    "@tauri-apps/api": "2.10.1",
+    "@tauri-apps/plugin-dialog": "2.6.0",
+    "@tiptap/extension-placeholder": "3.22.3",
+    "@tiptap/pm": "3.22.3",
+    "@tiptap/react": "3.22.3",
+    "@tiptap/starter-kit": "3.22.3",
+    "@xyflow/react": "12.10.1",
+    "motion": "12.34.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tailwind-merge": "3.5.0",
+    "tailwindcss": "4.2.0",
+    "zustand": "5.0.11"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "@tailwindcss/vite": "4.2.0",
+    "@tauri-apps/cli": "2.11.4",
+    "@types/jsdom": "28.0.3",
+    "@types/node": "25.4.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@typescript-eslint/parser": "8.56.1",
+    "@vitejs/plugin-react": "5.1.4",
+    "eslint": "9.39.2",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-import-resolver-typescript": "4.4.4",
+    "eslint-plugin-better-tailwindcss": "4.3.0",
+    "eslint-plugin-import": "2.32.0",
+    "eslint-plugin-react-hooks": "7.0.1",
+    "globals": "15.15.0",
+    "husky": "9.1.7",
+    "jsdom": "29.1.1",
+    "lint-staged": "16.2.7",
+    "prettier": "3.8.1",
+    "prettier-plugin-tailwindcss": "0.7.2",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.56.0",
+    "vite": "5.4.21",
+    "vitest": "2.1.9"
+  },
+  "engines": {
+    "node": "22.14.0"
+  },
+  "productName": "Sheltie"
+}

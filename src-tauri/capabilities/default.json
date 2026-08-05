@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability",
+  "webviews": ["document-*"],
+  "permissions": [
+    "allow-local-app-commands",
+    "core:default",
+    "core:window:allow-set-title",
+    "core:webview:allow-webview-close",
+    "core:webview:allow-webview-show",
+    "core:webview:allow-webview-hide",
+    "dialog:allow-message",
+    "dialog:allow-open",
+    "dialog:allow-save"
+  ]
+}

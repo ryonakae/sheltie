@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "skills": {
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
+    "heroui-react": {
+      "source": "heroui-inc/heroui",
+      "sourceType": "github",
+      "skillPath": "skills/heroui-react/SKILL.md",
+      "computedHash": "c9e1bb41fbc3cee782faae08bd465ae05cd685a6ed7cc3392464fdf29b3ab467"
+    },
+    "natural-japanese": {
+      "source": "coji/natural-japanese",
+      "sourceType": "github",
+      "skillPath": "skills/natural-japanese/SKILL.md",
+      "computedHash": "51fcd50152720e4834519112193edd25f03ee8bff6120338736830e372aa6b58"
+    },
+    "react-flow": {
+      "source": "framara/react-flow-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "f3da56cd9a3eeeb6befbbe306f8152847ac7bd60e44de2743592e1ce071ebcc5"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-best-practices/SKILL.md",
+      "computedHash": "ca7b0c0c6e5f2750043f7f0cd72d16ac4e2abc48f9b5500d047a4b77a2506212"
+    }
+  }
+}

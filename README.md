@@ -28,7 +28,15 @@ I built Sheltie to fill that gap. It sits somewhere between a browser and a desi
 
 ## Install
 
-Download the latest `Sheltie_<version>_universal.dmg` from [GitHub Releases](https://github.com/ryonakae/sheltie/releases), open it, and drag Sheltie into Applications. The app is a universal binary (Apple Silicon and Intel), signed and notarized.
+Install with Homebrew:
+
+```bash
+brew install --cask ryonakae/tap/sheltie
+```
+
+Or download the latest `Sheltie_<version>_universal.dmg` from [GitHub Releases](https://github.com/ryonakae/sheltie/releases), open it, and drag Sheltie into Applications.
+
+Either way you get the same universal binary (Apple Silicon and Intel), signed and notarized.
 
 Sheltie currently supports macOS only.
 

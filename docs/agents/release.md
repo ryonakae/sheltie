@@ -130,6 +130,46 @@ Then:
 5. Exercise the primary create, save, reopen, and Webview flows.
 6. Publish the draft release only after these checks pass.
 
+## Homebrew tap
+
+Sheltie is also installable with `brew install --cask ryonakae/tap/sheltie`. The cask lives in a separate repository, [ryonakae/homebrew-tap](https://github.com/ryonakae/homebrew-tap), as `Casks/sheltie.rb`.
+
+The cask is not submitted to the official `homebrew-cask` repository. Homebrew's [Package Acceptance Policy](https://docs.brew.sh/Package-Acceptance-Policy) requires 90 forks, 90 watchers or 225 stars for a self-submitted package, which Sheltie does not meet.
+
+Keeping the cask outside this repository is deliberate. A cask update happens after a release is published, so committing it here would push version bumps onto `main` after the release tag and make `main` diverge from `develop`.
+
+`.github/workflows/update-homebrew-cask.yml` performs the update:
+
+1. Triggers on `release: published`, and skips releases marked as a prerelease.
+2. Checks out the tap using `HOMEBREW_TAP_TOKEN`.
+3. Reads the checksum from the published `Sheltie_<version>_universal.dmg.sha256` asset.
+4. Rewrites only the `version` and `sha256` stanzas, so hand-written stanzas such as `zap` survive.
+5. Commits and pushes, or exits quietly when the tap already points at that version.
+
+The workflow runs from the released tag, so it takes effect only once it has reached `main` through the usual release pull request. Editing it on `develop` alone changes nothing until the next release.
+
+The cask builds its download URL from `version`, so it depends on the artifact contract above. Renaming the DMG requires editing the `url` stanza in the tap.
+
+### Tap token
+
+`HOMEBREW_TAP_TOKEN` is a repository secret, not an environment secret. It is deliberately kept out of the `release` environment so that this workflow cannot reach the Apple credentials.
+
+Create a fine-grained personal access token with:
+
+| Field | Value |
+|---|---|
+| Resource owner | `ryonakae` |
+| Repository access | Only select repositories → `ryonakae/homebrew-tap` |
+| Repository permissions | Contents: Read and write |
+
+```bash
+gh secret set HOMEBREW_TAP_TOKEN
+```
+
+The command prompts for the value. Do not pass the token on the command line.
+
+Fine-grained tokens expire. When the workflow fails to check out the tap, issue a new token and set the secret again.
+
 ## Workflow behavior
 
 The release job performs these stages in order:

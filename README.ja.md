@@ -28,7 +28,15 @@ AI コーディングエージェントを使って最初からコードでプ�
 
 ## インストール
 
-[GitHub Releases](https://github.com/ryonakae/sheltie/releases) から最新の `Sheltie_<version>_universal.dmg` をダウンロードして開き、Sheltie を Applications フォルダにドラッグしてください。ユニバーサルバイナリ（Apple Silicon / Intel）で、署名・公証済みです。
+Homebrew でインストールできます。
+
+```bash
+brew install --cask ryonakae/tap/sheltie
+```
+
+[GitHub Releases](https://github.com/ryonakae/sheltie/releases) から最新の `Sheltie_<version>_universal.dmg` をダウンロードして開き、Sheltie を Applications フォルダにドラッグしても構いません。
+
+どちらも中身は同じユニバーサルバイナリ（Apple Silicon / Intel）で、署名・公証済みです。
 
 対応 OS は今のところ macOS のみです。
 

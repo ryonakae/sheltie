@@ -99,6 +99,13 @@ React Flow の `onMoveStart/onMove/onMoveEnd` は pan/zoom を区別しない。
 - project 切り替え / 新規ノード追加後 centering / 右下 viewport controls / 起動時復元では store 側 `viewport` が先に変わるため、`reactFlowInstanceRef.current.setViewport(storeViewport, { duration: 0 })` で React Flow に再同期する。差分がなければ `setViewport()` をスキップして無限ループを避ける
 - container `ResizeObserver` は `computeDisplayModes()` を同期実行せず rAF 1 フレームに集約する（observer callback 内 DOM mutation を避け、zoom 中の `ResizeObserver loop completed` warning を抑制）
 
+## 開いた直後の初期フィット
+
+- `.sheltie` に viewport は保存されない。ドキュメントを開いた直後は `useSheltieViewportController` の mount 時 `useLayoutEffect` で `resolveInitialViewport()`（`resolveFitViewport` の `maxZoom: 1` 版）を適用し、全ノードが見える viewport で開く
+- 拡大方向は 100% で止める（小さなボードで等倍を超えない）。ノード 0 件（新規ドキュメント）は既定 `{ zoom: 1, panX: 0, panY: 0 }` のまま
+- store viewport が既定値のままの時だけ発動する。ユーザー操作後の error boundary 再 mount では store に操作後の viewport が残っているため発動しない
+- `--canvas-zoom` 初期化 effect より先に宣言し、Webview 作成前に `zoomRef` と store viewport をフィット値へ更新する
+
 ## 右下 viewport controls
 
 - `全体表示` / `100%` の 2 ボタンを `Sheltie.tsx` が描画する

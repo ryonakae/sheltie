@@ -211,3 +211,17 @@ export function resolveFitViewport(
 
   return getCenteredViewportWithPadding(bounds, viewportWidth, viewportHeight, zoom, padding);
 }
+
+/**
+ * ドキュメントを開いた直後の初期 viewport を求める。
+ * `.sheltie` には viewport を保存しないため、開いた時点で全ノードが見える倍率に合わせる。
+ * 拡大方向は 100% で止める（小さなボードを開いた時に等倍を超えて拡大しない）。
+ * ノードが無ければ null を返し、呼び出し側は既定 viewport を維持する。
+ */
+export function resolveInitialViewport(
+  nodes: FitTargetNode[],
+  viewportWidth: number,
+  viewportHeight: number,
+): SheltieViewportTarget | null {
+  return resolveFitViewport(nodes, viewportWidth, viewportHeight, { maxZoom: 1 });
+}

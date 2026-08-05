@@ -8,7 +8,12 @@ import {
 } from '@/constants';
 import type { BoardNode } from '@/types';
 
-import { getNodeBounds, resolveCenteredViewport, resolveFitViewport } from './sheltie-viewport';
+import {
+  getNodeBounds,
+  resolveCenteredViewport,
+  resolveFitViewport,
+  resolveInitialViewport,
+} from './sheltie-viewport';
 
 function text(x: number, y: number, width: number, height: number): BoardNode {
   return { type: 'text', x, y, width, height } as BoardNode;
@@ -141,6 +146,33 @@ describe('resolveFitViewport - padding object', () => {
       padding: { bottom: 200 },
     });
     expect(partial).toEqual(explicit);
+  });
+});
+
+describe('resolveInitialViewport', () => {
+  it('ノードが無ければ null（呼び出し側で既定 viewport を維持する）', () => {
+    expect(resolveInitialViewport([], 1000, 800)).toBeNull();
+  });
+
+  it('小さなコンテンツでも 100% を超えて拡大しない', () => {
+    // resolveFitViewport 既定では 1.5 まで拡大されるが、初期表示は 100% 止まり
+    const target = resolveInitialViewport([text(0, 0, 100, 50)], 1000, 800);
+    expect(target?.zoom).toBe(1);
+  });
+
+  it('大きなコンテンツは全体が収まる zoom まで縮小する', () => {
+    const fit = resolveFitViewport([text(0, 0, 4000, 3000)], 1000, 800);
+    const initial = resolveInitialViewport([text(0, 0, 4000, 3000)], 1000, 800);
+    expect(initial).toEqual(fit);
+    expect(initial?.zoom ?? 1).toBeLessThan(1);
+  });
+
+  it('ノード群の中心が viewport 中央に来る（原点から離れた座標でも見切れない）', () => {
+    // bounds.center = (2500, 2025)、zoom 1 で available 中心 (500, 400) に合わせる
+    const target = resolveInitialViewport([text(2450, 2000, 100, 50)], 1000, 800);
+    expect(target?.zoom).toBe(1);
+    expect(target?.x).toBeCloseTo(500 - 2500, 5);
+    expect(target?.y).toBeCloseTo(400 - 2025, 5);
   });
 });
 

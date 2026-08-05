@@ -329,6 +329,15 @@ pub fn handle_launch_args<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let paths = launch_paths_from_args(args, cwd);
     if paths.is_empty() {
+        // macOS ではドキュメントを指定した起動でも argv にパスが渡らず、
+        // ファイルは Apple Event や single-instance 転送で別経路から届く。
+        // すでに document window があるなら untitled を作らない
+        // （AppKit の applicationShouldOpenUntitledFile: と同じ判断）。
+        // window が 1 枚も無い状態からの復帰は RunEvent::Reopen が担当する
+        if app.state::<DocumentManagerState>().has_document_window() {
+            return Ok(());
+        }
+
         return create_transient_untitled_document_window(app);
     }
 

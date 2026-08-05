@@ -168,6 +168,13 @@ impl DocumentManagerState {
             .find_map(|(label, record)| record.is_replaceable().then(|| label.clone()))
     }
 
+    pub(super) fn has_document_window(&self) -> bool {
+        self.inner
+            .lock()
+            .map(|inner| !inner.windows.is_empty())
+            .unwrap_or(false)
+    }
+
     /// cascade 配置の基準になる、直近に作られた別の document window
     pub(super) fn latest_document_window_label(&self, exclude: &str) -> Option<String> {
         let inner = self.inner.lock().ok()?;
@@ -535,6 +542,18 @@ mod tests {
         assert!(state
             .set_pending_replacement(&opener, "document-999")
             .is_err());
+    }
+
+    #[test]
+    fn has_document_window_reflects_registered_windows() {
+        let state = DocumentManagerState::default();
+        assert!(!state.has_document_window());
+
+        let (label, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        assert!(state.has_document_window());
+
+        state.unregister_window(&label);
+        assert!(!state.has_document_window());
     }
 
     #[test]

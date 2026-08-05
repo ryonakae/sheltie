@@ -10,10 +10,11 @@
 
 ## ブランチ運用
 
-- `develop` が開発の default branch。日常の変更はここに入れる。
-- `main` はリリース済みの状態を指す。リリース時だけ `develop` -> `main` の PR を作り、**merge commit** でマージする（squash / rebase は履歴を分岐させるため使わない）。
+- `main` が repository の default branch で、リリース済みの状態を指す。
+- 日常の変更は `develop` に入れる。default branch が `main` のため、`gh pr create` や GitHub UI は base を `main` に既定する。feature ブランチから PR を作る時は `--base develop` を明示する。
+- リリース時だけ `develop` -> `main` の PR を作り、**merge commit** でマージする（squash / rebase は履歴を分岐させるため使わない）。
 - リリースタグは `main` のコミットに打つ。手順は `release.md` を参照。
-- `main` 向け PR では `ci.yml` の `verify` job（lint / format / typecheck / test）が走る。Rust の検証はリリースビルドが担う。
+- `main` 向け PR では `ci.yml` の 2 job が走る。`verify`（lint / format / typecheck / test / actionlint）と `rust`（`cargo test --lib`）。
 
 ## Plan 運用
 

@@ -569,7 +569,9 @@ mod tests {
         let _ = state
             .reserve_window(Some(path.clone()), &standalone(), false)
             .unwrap();
-        assert!(state.reserve_window(Some(path), &standalone(), false).is_err());
+        assert!(state
+            .reserve_window(Some(path), &standalone(), false)
+            .is_err());
     }
 
     #[test]
@@ -580,7 +582,9 @@ mod tests {
             .reserve_window(Some(path.clone()), &standalone(), false)
             .unwrap();
         state.rollback_window(&label);
-        assert!(state.reserve_window(Some(path), &standalone(), false).is_ok());
+        assert!(state
+            .reserve_window(Some(path), &standalone(), false)
+            .is_ok());
     }
 
     #[test]
@@ -644,7 +648,9 @@ mod tests {
         let state = DocumentManagerState::default();
         let path_a = PathBuf::from("/tmp/a.sheltie");
         let path_b = PathBuf::from("/tmp/b.sheltie");
-        let (label_a, _) = state.reserve_window(Some(path_a), &standalone(), false).unwrap();
+        let (label_a, _) = state
+            .reserve_window(Some(path_a), &standalone(), false)
+            .unwrap();
         let _ = state
             .reserve_window(Some(path_b.clone()), &standalone(), false)
             .unwrap();

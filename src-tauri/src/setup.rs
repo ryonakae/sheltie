@@ -4,8 +4,8 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use crate::app_exit::{emit_app_exit_requested, AppExitCoordinatorState};
 use crate::commands::{
     store::{
-        configure_macos_window_tabbing_policy, create_untitled_document_window, handle_launch_args,
-        strictly_focused_document_window_label, DocumentManagerState,
+        configure_macos_window_tabbing_policy, create_transient_untitled_document_window,
+        handle_launch_args, strictly_focused_document_window_label, DocumentManagerState,
     },
     theme::{load_persisted_theme, MENU_ID_THEME_DARK, MENU_ID_THEME_LIGHT, MENU_ID_THEME_SYSTEM},
 };
@@ -364,7 +364,7 @@ pub fn run() {
                     .keys()
                     .any(|label| label.starts_with("document-"));
                 if !has_document_window {
-                    if let Err(error) = create_untitled_document_window(app_handle) {
+                    if let Err(error) = create_transient_untitled_document_window(app_handle) {
                         log::error!("failed to create window on dock reopen: {error}");
                     }
                 }

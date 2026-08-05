@@ -126,7 +126,17 @@ fn open_or_focus_document_window_internal<R: tauri::Runtime>(
         return focus_document_window_internal(app, &label);
     }
 
-    create_document_window_internal(app, Some(path), false).map(|_| ())
+    // 置き換え対象は window 生成前に確定させる。生成後に判定すると
+    // 新しい window 自身が枚数に含まれてしまう
+    let replace_target = manager.transient_window_to_replace();
+    let label = create_document_window_internal(app, Some(path), false)?;
+    if let Some(target) = replace_target {
+        if let Err(error) = manager.set_pending_replacement(&label, &target) {
+            log::warn!("failed to reserve transient window replacement: {error}");
+        }
+    }
+
+    Ok(())
 }
 
 fn launch_paths_from_args(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
@@ -203,6 +213,14 @@ pub fn create_untitled_document_window<R: tauri::Runtime>(
     create_document_window_internal(app, None, false).map(|_| ())
 }
 
+/// 引数なし起動・Dock reopen で自動生成される untitled 用。
+/// AppKit の transient document と同様、プロジェクトを開くと置き換え対象になる
+pub fn create_transient_untitled_document_window<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+) -> Result<(), String> {
+    create_document_window_internal(app, None, true).map(|_| ())
+}
+
 /// DevTools メニュー（debug ビルド限定）からのみ使う
 #[cfg(debug_assertions)]
 pub fn focus_document_window<R: tauri::Runtime>(
@@ -227,7 +245,7 @@ pub fn handle_launch_args<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let paths = launch_paths_from_args(args, cwd);
     if paths.is_empty() {
-        return create_untitled_document_window(app);
+        return create_transient_untitled_document_window(app);
     }
 
     for path in paths {

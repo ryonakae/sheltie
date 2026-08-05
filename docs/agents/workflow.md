@@ -8,6 +8,13 @@
 4. 検証コマンドを実行する。
 5. 変更内容と確認結果を簡潔に共有する。
 
+## ブランチ運用
+
+- `develop` が開発の default branch。日常の変更はここに入れる。
+- `main` はリリース済みの状態を指す。リリース時だけ `develop` -> `main` の PR を作り、**merge commit** でマージする（squash / rebase は履歴を分岐させるため使わない）。
+- リリースタグは `main` のコミットに打つ。手順は `release.md` を参照。
+- `main` 向け PR では `ci.yml` の `verify` job（lint / format / typecheck / test）が走る。Rust の検証はリリースビルドが担う。
+
 ## Plan 運用
 
 - Active plan は `docs/plans/` 配下に置く。完了済み plan は `docs/plans/archived/` 配下に移す。
@@ -76,7 +83,7 @@ npm run test
 
 - 既存実装にテストが無い場合、まず **characterization test**（今の挙動を固定するテスト）を 1〜2 件書いてから変更に入る。
 - 「テストが書きづらい」と感じたら、それは設計のシグナル。DOM/ref 依存と純粋判定が同居しているなら、まず純粋判定を切り出すリファクタを先に行う（このリファクタ自体は挙動完全保存なのでテストは characterization で十分）。
-- 一時的な探索コード・スパイク実装は除外して良いが、main branch に入る変更は必ずテスト先行に戻す。
+- 一時的な探索コード・スパイク実装は除外して良いが、`develop` に入る変更は必ずテスト先行に戻す。
 
 ### 実務上の方針
 

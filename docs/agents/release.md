@@ -87,20 +87,25 @@ npm run test
 (cd src-tauri && cargo test --lib)
 ```
 
-3. Commit and push the release changes.
-4. Create and push the matching tag:
+3. Commit and push the release changes to `develop`.
+4. Open a pull request from `develop` into `main` titled `release: v<version>` and wait for the `CI` workflow to pass.
+5. Merge the pull request with a **merge commit**. Never squash or rebase this pull request; both rewrite the commits and make `main` diverge from `develop`.
+6. Tag the merge commit on `main` and push the tag:
 
 ```bash
 VERSION='1.0.0'
-git tag "v$VERSION"
+git fetch origin main
+git tag "v$VERSION" origin/main
 git push origin "v$VERSION"
 ```
 
 For version `1.0.0`, the tag is `v1.0.0`.
 
-5. Wait for the **Release macOS** workflow to finish.
-6. Open the generated draft GitHub Release and edit the generated notes as needed.
-7. Complete the acceptance checks below before publishing.
+> Rule: release tags must point at commits on `main`. The release workflow does not enforce this; treat it as a hard operational rule.
+
+7. Wait for the **Release macOS** workflow to finish.
+8. Open the generated draft GitHub Release and edit the generated notes as needed. Release notes are written in English. The generated "What's Changed" list may contain Japanese pull request titles; rewrite the entries that matter to release readers.
+9. Complete the acceptance checks below before publishing.
 
 ## Draft release acceptance
 

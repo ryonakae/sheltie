@@ -67,6 +67,12 @@ Sheltie can also run as an MCP server, so local AI agents can work with the boar
 
 A connected agent can read the board, operate the pages, and take screenshots.
 
+An [Agent Skill](./skills/sheltie-use) is also available that teaches agents how to work with Sheltie through these MCP tools. Install it with the [skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+npx skills add ryonakae/sheltie
+```
+
 Note that there is no authentication. The server listens on localhost only, but it trusts any local client that connects, so enable it only on machines you trust.
 
 ## Development

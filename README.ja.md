@@ -67,6 +67,12 @@ Sheltie は MCP サーバーとしても動き、ボードとページをロー�
 
 接続したエージェントは、ボードの内容を読み取り、ページを操作し、スクリーンショットを撮れます。
 
+エージェントがこれらの MCP ツールの使い方を理解するための [Agent Skill](./skills/sheltie-use) も提供しています。[skills CLI](https://github.com/vercel-labs/skills) でインストールしてください。
+
+```bash
+npx skills add ryonakae/sheltie
+```
+
 なお、認証はありません。サーバーは localhost だけで待ち受けますが、接続してきたローカルクライアントは無条件に信頼する作りです。有効にするのは、信頼できるマシンだけにしてください。
 
 ## 開発

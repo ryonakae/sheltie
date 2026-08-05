@@ -168,6 +168,52 @@ impl DocumentManagerState {
             .find_map(|(label, record)| record.is_replaceable().then(|| label.clone()))
     }
 
+    pub(super) fn set_pending_replacement(
+        &self,
+        label: &str,
+        target_label: &str,
+    ) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
+
+        if !inner.windows.contains_key(target_label) {
+            return Err(format!("window '{target_label}' state not found"));
+        }
+
+        let record = inner
+            .windows
+            .get_mut(label)
+            .ok_or_else(|| format!("window '{label}' state not found"))?;
+        record.pending_replacement_target = Some(target_label.to_string());
+        Ok(())
+    }
+
+    /// present 時に置き換え対象を取り出す。open から present までの間に
+    /// 対象が編集・保存・クローズされていた場合はデータ保護のため中止する
+    pub(super) fn take_pending_replacement(&self, label: &str) -> Result<Option<String>, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
+
+        let record = inner
+            .windows
+            .get_mut(label)
+            .ok_or_else(|| format!("window '{label}' state not found"))?;
+        let Some(target) = record.pending_replacement_target.take() else {
+            return Ok(None);
+        };
+
+        let still_eligible = inner
+            .windows
+            .get(&target)
+            .map(WindowRecord::is_replaceable)
+            .unwrap_or(false);
+        Ok(still_eligible.then_some(target))
+    }
+
     pub(super) fn rollback_window(&self, label: &str) {
         if let Ok(mut inner) = self.inner.lock() {
             if let Some(record) = inner.windows.remove(label) {
@@ -404,6 +450,80 @@ mod tests {
     fn set_window_edited_fails_for_unknown_window() {
         let state = DocumentManagerState::default();
         assert!(state.set_window_edited("document-999", true).is_err());
+    }
+
+    #[test]
+    fn take_pending_replacement_returns_target_once() {
+        let state = DocumentManagerState::default();
+        let (target, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        let (opener, _) = state
+            .reserve_window(
+                Some(PathBuf::from("/tmp/test.sheltie")),
+                &standalone(),
+                false,
+            )
+            .unwrap();
+
+        state.set_pending_replacement(&opener, &target).unwrap();
+
+        assert_eq!(
+            state.take_pending_replacement(&opener).unwrap(),
+            Some(target)
+        );
+        assert_eq!(state.take_pending_replacement(&opener).unwrap(), None);
+    }
+
+    #[test]
+    fn take_pending_replacement_aborts_when_target_was_edited() {
+        let state = DocumentManagerState::default();
+        let (target, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        let (opener, _) = state
+            .reserve_window(
+                Some(PathBuf::from("/tmp/test.sheltie")),
+                &standalone(),
+                false,
+            )
+            .unwrap();
+        state.set_pending_replacement(&opener, &target).unwrap();
+
+        // open から present までの間にユーザーが編集したケース
+        state.set_window_edited(&target, true).unwrap();
+
+        assert_eq!(state.take_pending_replacement(&opener).unwrap(), None);
+    }
+
+    #[test]
+    fn take_pending_replacement_aborts_when_target_already_closed() {
+        let state = DocumentManagerState::default();
+        let (target, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        let (opener, _) = state
+            .reserve_window(
+                Some(PathBuf::from("/tmp/test.sheltie")),
+                &standalone(),
+                false,
+            )
+            .unwrap();
+        state.set_pending_replacement(&opener, &target).unwrap();
+
+        state.unregister_window(&target);
+
+        assert_eq!(state.take_pending_replacement(&opener).unwrap(), None);
+    }
+
+    #[test]
+    fn take_pending_replacement_returns_none_without_reservation() {
+        let state = DocumentManagerState::default();
+        let (label, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        assert_eq!(state.take_pending_replacement(&label).unwrap(), None);
+    }
+
+    #[test]
+    fn set_pending_replacement_fails_for_unknown_target() {
+        let state = DocumentManagerState::default();
+        let (opener, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        assert!(state
+            .set_pending_replacement(&opener, "document-999")
+            .is_err());
     }
 
     #[test]

@@ -12,6 +12,8 @@ Sheltie is a macOS app that arranges live web pages on an infinite canvas, so yo
 
 ## Why I built Sheltie
 
+![A Sheltie board with a portfolio site's pages arranged side by side, connected by arrows and annotated with sticky notes](.github/assets/readme-screenshot.png)
+
 More teams now use AI coding agents to prototype in code from the start and iterate on the running app. Designers who don't write code are building web apps themselves, with an AI doing the coding.
 
 A browser, though, shows one page at a time. Visual tone across screens, spacing, typography, and the flow between pages are hard to judge without stepping back. Checking them one page at a time takes effort, and for this part of the review you still end up back in Figma or Sketch.

@@ -106,7 +106,7 @@ export default tseslint.config(
 
   // 評価フィクスチャの Node.js スクリプト
   {
-    files: ['skills/sheltie-use/evals/fixtures/**/*.mjs'],
+    files: ['skills/evals/fixtures/**/*.mjs'],
     languageOptions: {
       globals: {
         ...globals.node,

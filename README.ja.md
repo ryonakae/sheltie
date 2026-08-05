@@ -12,6 +12,8 @@ Sheltie は、動いている Web ページをそのまま無限キャンバス�
 
 ## Sheltie を作った理由
 
+![ポートフォリオサイトの各ページを並べ、矢印と付箋で注釈した Sheltie のボード](.github/assets/readme-screenshot.png)
+
 AI コーディングエージェントを使って最初からコードでプロトタイプを作り、動くもので検証するチームが増えています。コードを書かないデザイナーが、AI に頼んで自分で Web アプリを作ることも珍しくなくなりました。
 
 ただ、ブラウザで確認できるのは一度に1ページだけです。複数の画面にまたがるトンマナや余白感、タイポグラフィ、ページ間の導線は、俯瞰して見ないと判断できません。1ページずつ開いて確かめるのは手間がかかり、ここだけは今も Figma や Sketch のアートボードが頼りになります。
@@ -28,7 +30,15 @@ AI コーディングエージェントを使って最初からコードでプ�
 
 ## インストール
 
-[GitHub Releases](https://github.com/ryonakae/sheltie/releases) から最新の `Sheltie_<version>_universal.dmg` をダウンロードして開き、Sheltie を Applications フォルダにドラッグしてください。ユニバーサルバイナリ（Apple Silicon / Intel）で、署名・公証済みです。
+Homebrew でインストールできます。
+
+```bash
+brew install --cask ryonakae/tap/sheltie
+```
+
+[GitHub Releases](https://github.com/ryonakae/sheltie/releases) から最新の `Sheltie_<version>_universal.dmg` をダウンロードして開き、Sheltie を Applications フォルダにドラッグしても構いません。
+
+どちらも中身は同じユニバーサルバイナリ（Apple Silicon / Intel）で、署名・公証済みです。
 
 対応 OS は今のところ macOS のみです。
 
@@ -56,6 +66,12 @@ Sheltie は MCP サーバーとしても動き、ボードとページをロー�
 ```
 
 接続したエージェントは、ボードの内容を読み取り、ページを操作し、スクリーンショットを撮れます。
+
+エージェントがこれらの MCP ツールの使い方を理解するための [Agent Skill](./skills/sheltie-use) も提供しています。[skills CLI](https://github.com/vercel-labs/skills) でインストールしてください。
+
+```bash
+npx skills add ryonakae/sheltie
+```
 
 なお、認証はありません。サーバーは localhost だけで待ち受けますが、接続してきたローカルクライアントは無条件に信頼する作りです。有効にするのは、信頼できるマシンだけにしてください。
 

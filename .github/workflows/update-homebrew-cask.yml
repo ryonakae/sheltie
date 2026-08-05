@@ -1,0 +1,74 @@
+name: Update Homebrew cask
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-homebrew-cask
+  cancel-in-progress: false
+
+jobs:
+  update-cask:
+    name: Point the tap at the published release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ !github.event.release.prerelease }}
+    steps:
+      # The workspace holds the tap, not this repository, because only the cask
+      # is edited here.
+      - name: Check out the tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ryonakae/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Rewrite the cask version and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release $TAG is not a stable version tag" >&2
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          CASK='Casks/sheltie.rb'
+
+          CHECKSUM="$(gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "Sheltie_${VERSION}_universal.dmg.sha256" \
+            --output - | awk '{ print $1 }')"
+
+          if [[ ! "$CHECKSUM" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Release $TAG published an unusable checksum: '$CHECKSUM'" >&2
+            exit 1
+          fi
+
+          # The cask is edited in place so hand-written stanzas such as zap survive.
+          grep -qE '^  version "' "$CASK"
+          grep -qE '^  sha256 "' "$CASK"
+          sed -i -E "s|^  version \".*\"$|  version \"${VERSION}\"|" "$CASK"
+          sed -i -E "s|^  sha256 \".*\"$|  sha256 \"${CHECKSUM}\"|" "$CASK"
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Commit the cask update
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet; then
+            echo "The tap already points at $VERSION"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "chore: update sheltie to $VERSION"
+          git push

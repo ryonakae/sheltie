@@ -12,6 +12,8 @@ Sheltie is a macOS app that arranges live web pages on an infinite canvas, so yo
 
 ## Why I built Sheltie
 
+![A Sheltie board with a portfolio site's pages arranged side by side, connected by arrows and annotated with sticky notes](.github/assets/readme-screenshot.png)
+
 More teams now use AI coding agents to prototype in code from the start and iterate on the running app. Designers who don't write code are building web apps themselves, with an AI doing the coding.
 
 A browser, though, shows one page at a time. Visual tone across screens, spacing, typography, and the flow between pages are hard to judge without stepping back. Checking them one page at a time takes effort, and for this part of the review you still end up back in Figma or Sketch.
@@ -28,7 +30,15 @@ I built Sheltie to fill that gap. It sits somewhere between a browser and a desi
 
 ## Install
 
-Download the latest `Sheltie_<version>_universal.dmg` from [GitHub Releases](https://github.com/ryonakae/sheltie/releases), open it, and drag Sheltie into Applications. The app is a universal binary (Apple Silicon and Intel), signed and notarized.
+Install with Homebrew:
+
+```bash
+brew install --cask ryonakae/tap/sheltie
+```
+
+Or download the latest `Sheltie_<version>_universal.dmg` from [GitHub Releases](https://github.com/ryonakae/sheltie/releases), open it, and drag Sheltie into Applications.
+
+Either way you get the same universal binary (Apple Silicon and Intel), signed and notarized.
 
 Sheltie currently supports macOS only.
 
@@ -56,6 +66,12 @@ Sheltie can also run as an MCP server, so local AI agents can work with the boar
 ```
 
 A connected agent can read the board, operate the pages, and take screenshots.
+
+An [Agent Skill](./skills/sheltie-use) is also available that teaches agents how to work with Sheltie through these MCP tools. Install it with the [skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+npx skills add ryonakae/sheltie
+```
 
 Note that there is no authentication. The server listens on localhost only, but it trusts any local client that connects, so enable it only on machines you trust.
 

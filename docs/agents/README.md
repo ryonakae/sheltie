@@ -21,7 +21,7 @@
 | `sheltie-screenshots.md` | スクリーンショット撮影・永続化・ちらつき回避 | スクショ撮影タイミング・保存形式の変更時 |
 | `wkwebview-internals.md` | WKWebView 固有のワークアラウンド | WKWebView private API・macOS 固有問題の変更時 |
 | `mcp.md` | local MCP lifecycle・trust boundary・tool routing | MCP server・tool・renderer bridge変更時 |
-| `release.md` | macOS署名・公証・GitHub Release運用 | リリースworkflow・Apple証明書・GitHub Environment変更時 |
+| `release.md` | macOS署名・公証・GitHub Release・Homebrew tap運用 | リリースworkflow・Apple証明書・GitHub Environment・cask変更時 |
 
 ## メンテナンス方針
 

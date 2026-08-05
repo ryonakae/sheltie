@@ -59,7 +59,7 @@ browser_handle_dialog(documentId, pageNodeId, action, promptText?)
 Start the server in one terminal:
 
 ```bash
-node skills/sheltie-use/evals/fixtures/serve-local-sites.mjs
+node skills/evals/fixtures/serve-local-sites.mjs
 ```
 
 It prints exactly `http://127.0.0.1:4174`, serves only `sites/`, sends `Cache-Control: no-store`, and exits cleanly on `SIGINT` or `SIGTERM`. Load `boards/comparison-board.sheltie` after starting it. The board is valid schema version 2 with only synthetic URLs and has no serialized runtime screenshot state.
@@ -85,7 +85,7 @@ jq -s '.' "$AGENT_OUTPUT_PATH" > "$RUN_DIR/agent-result.verbose.json"
 The normalizer supports direct MCP tool records and Pi MCP gateway call/result pairs. Then derive the only trace used for grading:
 
 ```bash
-node skills/sheltie-use/evals/fixtures/derive-redacted-mcp-trace.mjs \
+node skills/evals/fixtures/derive-redacted-mcp-trace.mjs \
   "$RUN_DIR/agent-result.verbose.json" \
   "$RUN_DIR/outputs/redacted-mcp-trace.json"
 ```
@@ -95,11 +95,11 @@ The normalizer preserves only tool name, call ordering, explicit document/page/s
 Verify the persisted evidence without invoking MCP:
 
 ```bash
-node skills/sheltie-use/evals/fixtures/verify-run.mjs \
+node skills/evals/fixtures/verify-run.mjs \
   comparison \
   "$RUN_DIR/outputs/redacted-mcp-trace.json" \
   "$RUN_DIR/outputs/final-board.json" \
-  skills/sheltie-use/evals/fixtures/expected/comparison.json
+  skills/evals/fixtures/expected/comparison.json
 ```
 
 Replace `comparison` and its expected file with `semantic` or `visual` for those runs. The command writes `verification.json` and grader-facing `user_notes.md` beside the redacted trace. `verify-eval.ts` is pure and returns Skill Creator expectations as `{ text, passed, evidence }[]`; it never invokes a save or export tool.
@@ -107,8 +107,8 @@ Replace `comparison` and its expected file with `semantic` or `visual` for those
 ## Local checks
 
 ```bash
-npm run test -- skills/sheltie-use/evals/fixtures/verify-eval.test.ts
-node skills/sheltie-use/evals/fixtures/serve-local-sites.mjs
+npm run test -- skills/evals/fixtures/verify-eval.test.ts
+node skills/evals/fixtures/serve-local-sites.mjs
 curl --fail --silent http://127.0.0.1:4174/compare-a/ >/dev/null
 curl --fail --silent http://127.0.0.1:4174/compare-b/ >/dev/null
 curl --fail --silent http://127.0.0.1:4174/semantic-form/ >/dev/null

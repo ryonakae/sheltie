@@ -267,7 +267,7 @@ fn create_document_tab_internal<R: Runtime>(
         host_label: host_label.to_string(),
     };
     let manager = app.state::<DocumentManagerState>();
-    let (label, record) = manager.reserve_window(None, &disposition)?;
+    let (label, record) = manager.reserve_window(None, &disposition, false)?;
     let title = get_window_title(&record);
     let host_label = host_label.to_string();
     let child_label = label.clone();

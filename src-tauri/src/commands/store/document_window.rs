@@ -78,10 +78,11 @@ pub(super) fn build_document_window<R: tauri::Runtime>(
 fn create_document_window_internal<R: tauri::Runtime>(
     app: &AppHandle<R>,
     file_path: Option<PathBuf>,
+    transient: bool,
 ) -> Result<String, String> {
     let manager = app.state::<DocumentManagerState>();
     let disposition = DocumentWindowDisposition::Standalone;
-    let (label, record) = manager.reserve_window(file_path, &disposition)?;
+    let (label, record) = manager.reserve_window(file_path, &disposition, transient)?;
     let title = get_window_title(&record);
 
     match build_document_window(app, &label, &title, &record.tabbing_identifier) {
@@ -125,7 +126,7 @@ fn open_or_focus_document_window_internal<R: tauri::Runtime>(
         return focus_document_window_internal(app, &label);
     }
 
-    create_document_window_internal(app, Some(path)).map(|_| ())
+    create_document_window_internal(app, Some(path), false).map(|_| ())
 }
 
 fn launch_paths_from_args(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
@@ -199,7 +200,7 @@ pub fn focused_document_window_label<R: tauri::Runtime>(app: &AppHandle<R>) -> O
 pub fn create_untitled_document_window<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), String> {
-    create_document_window_internal(app, None).map(|_| ())
+    create_document_window_internal(app, None, false).map(|_| ())
 }
 
 /// DevTools メニュー（debug ビルド限定）からのみ使う

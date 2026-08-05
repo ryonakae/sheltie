@@ -352,6 +352,11 @@ pub fn run() {
                     }
                 }
             }
+            // Finder のダブルクリック等で届く Apple Event。macOS では argv に
+            // パスが渡らないため、この経路が唯一の入口になる
+            RunEvent::Opened { urls } => {
+                crate::commands::store::handle_opened_urls(app_handle, &urls);
+            }
             // Dock アイコンクリック等の applicationShouldHandleReopen 発火時、
             // document window が 1 枚も無ければ新規 untitled を開く。
             // 最小化など「window はあるが不可視」の場合は OS の標準復帰に任せる。

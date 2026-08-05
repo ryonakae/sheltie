@@ -6,7 +6,8 @@ pub mod macos_tabs;
 pub use document_manager::DocumentManagerState;
 pub use document_window::{
     create_transient_untitled_document_window, create_untitled_document_window,
-    focused_document_window_label, handle_launch_args, strictly_focused_document_window_label,
+    focused_document_window_label, handle_launch_args, handle_opened_urls,
+    strictly_focused_document_window_label,
 };
 // DevTools メニュー（debug ビルド限定）からのみ使う
 #[cfg(debug_assertions)]

@@ -170,6 +170,45 @@ fn launch_paths_from_args(args: &[String], cwd: Option<&str>) -> Vec<PathBuf> {
     paths
 }
 
+/// Finder のダブルクリック等で届く RunEvent::Opened の URL 群から
+/// 開くべき .sheltie パスを抽出する。関連付け外のファイルや
+/// 非 file スキームは無視する
+fn sheltie_paths_from_urls(urls: &[tauri::Url]) -> Vec<PathBuf> {
+    let mut seen = HashSet::new();
+    let mut paths = Vec::new();
+
+    for url in urls {
+        let Ok(candidate) = url.to_file_path() else {
+            continue;
+        };
+
+        let is_sheltie = candidate
+            .extension()
+            .and_then(OsStr::to_str)
+            .map(|ext| ext.eq_ignore_ascii_case("sheltie"))
+            .unwrap_or(false);
+        if !is_sheltie {
+            continue;
+        }
+
+        if seen.insert(candidate.clone()) {
+            paths.push(candidate);
+        }
+    }
+
+    paths
+}
+
+/// macOS では Finder のダブルクリックが argv ではなく Apple Event で届くため、
+/// この経路が唯一の入口になる
+pub fn handle_opened_urls<R: tauri::Runtime>(app: &AppHandle<R>, urls: &[tauri::Url]) {
+    for path in sheltie_paths_from_urls(urls) {
+        if let Err(error) = open_or_focus_document_window(app, &path.to_string_lossy()) {
+            log::error!("failed to open document from Finder: {error}");
+        }
+    }
+}
+
 pub fn strictly_focused_document_window_label<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Option<String> {
@@ -317,4 +356,45 @@ pub async fn close_ready(
     window
         .destroy()
         .map_err(|error| format!("failed to destroy window: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tauri::Url;
+
+    fn urls(inputs: &[&str]) -> Vec<Url> {
+        inputs.iter().map(|s| Url::parse(s).unwrap()).collect()
+    }
+
+    #[test]
+    fn sheltie_paths_from_urls_accepts_file_urls_with_sheltie_extension() {
+        let paths = sheltie_paths_from_urls(&urls(&["file:///tmp/board.sheltie"]));
+        assert_eq!(paths, vec![PathBuf::from("/tmp/board.sheltie")]);
+    }
+
+    #[test]
+    fn sheltie_paths_from_urls_is_case_insensitive_for_extension() {
+        let paths = sheltie_paths_from_urls(&urls(&["file:///tmp/BOARD.SHELTIE"]));
+        assert_eq!(paths, vec![PathBuf::from("/tmp/BOARD.SHELTIE")]);
+    }
+
+    #[test]
+    fn sheltie_paths_from_urls_rejects_non_file_schemes_and_other_extensions() {
+        let paths = sheltie_paths_from_urls(&urls(&[
+            "https://example.com/board.sheltie",
+            "file:///tmp/notes.txt",
+            "file:///tmp/no-extension",
+        ]));
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn sheltie_paths_from_urls_deduplicates() {
+        let paths = sheltie_paths_from_urls(&urls(&[
+            "file:///tmp/board.sheltie",
+            "file:///tmp/board.sheltie",
+        ]));
+        assert_eq!(paths.len(), 1);
+    }
 }

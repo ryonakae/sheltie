@@ -168,6 +168,17 @@ impl DocumentManagerState {
             .find_map(|(label, record)| record.is_replaceable().then(|| label.clone()))
     }
 
+    /// cascade 配置の基準になる、直近に作られた別の document window
+    pub(super) fn latest_document_window_label(&self, exclude: &str) -> Option<String> {
+        let inner = self.inner.lock().ok()?;
+        inner
+            .windows
+            .iter()
+            .filter(|(label, _)| label.as_str() != exclude)
+            .max_by_key(|(_, record)| record.creation_index)
+            .map(|(label, _)| label.clone())
+    }
+
     pub(super) fn set_pending_replacement(
         &self,
         label: &str,
@@ -524,6 +535,30 @@ mod tests {
         assert!(state
             .set_pending_replacement(&opener, "document-999")
             .is_err());
+    }
+
+    #[test]
+    fn latest_document_window_label_picks_the_newest_other_window() {
+        let state = DocumentManagerState::default();
+        let (first, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        let (second, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        let (newest, _) = state.reserve_window(None, &standalone(), false).unwrap();
+
+        // 作成直後の自分自身は基準にしない
+        assert_eq!(
+            state.latest_document_window_label(&newest),
+            Some(second.clone())
+        );
+
+        state.unregister_window(&second);
+        assert_eq!(state.latest_document_window_label(&newest), Some(first));
+    }
+
+    #[test]
+    fn latest_document_window_label_returns_none_for_the_only_window() {
+        let state = DocumentManagerState::default();
+        let (label, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        assert_eq!(state.latest_document_window_label(&label), None);
     }
 
     #[test]

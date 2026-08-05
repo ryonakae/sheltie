@@ -72,6 +72,7 @@ src/
 - Dock アイコンクリックなどの `RunEvent::Reopen { has_visible_windows: false }` で document window が 1 枚も無い場合は新規 untitled を開く。最小化等で window 自体は残っているケースは OS の標準復帰に委ねる
 - Finder のダブルクリック等は `RunEvent::Opened { urls }` で受け、`.sheltie` の file URL だけを `open_or_focus_document_window` に渡す。macOS ではダブルクリックのパスが argv に渡らないため、この経路が唯一の入口になる
 - AppKit の transient document に倣い、自動生成された untitled（引数なし起動・Dock reopen・引数なし再起動）だけを置き換え対象の候補にする。`Cmd+N` と `New Tab` で作った window は候補にしない。プロジェクトを開く時点で document window がちょうど 1 枚かつ候補が未編集なら、新しい window の present 後にその untitled を閉じてウインドウ数を 1 枚に保つ。open から present までの間に対象が編集された場合は置き換えを中止する
+- standalone な document window は生成直後・表示前に必ず配置する。位置を指定しないと OS 既定位置に全部重なるため、置き換え時は対象の frame（位置とサイズ）を継承し、それ以外は直近に作られた window から `WINDOW_CASCADE_OFFSET` だけ右下へずらす。tab は host window の frame に従うので配置しない
 
 ## Sheltie と React Flow の協業
 

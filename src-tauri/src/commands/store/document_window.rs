@@ -5,8 +5,8 @@ use std::{
 };
 
 use tauri::{
-    AppHandle, Manager, State, TitleBarStyle, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    Window,
+    AppHandle, Manager, PhysicalPosition, State, TitleBarStyle, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Window,
 };
 
 use crate::app_exit::AppExitCoordinatorState;
@@ -20,6 +20,8 @@ use super::macos_tabs::configure_macos_document_window;
 
 const DEFAULT_WINDOW_WIDTH: f64 = 1200.0;
 const DEFAULT_WINDOW_HEIGHT: f64 = 800.0;
+/// macOS 標準の cascade と同程度のずらし幅（logical pt）
+const WINDOW_CASCADE_OFFSET: f64 = 24.0;
 
 pub(super) fn get_window_title(record: &WindowRecord) -> String {
     if let Some(path) = &record.file_path {
@@ -75,10 +77,52 @@ pub(super) fn build_document_window<R: tauri::Runtime>(
         .map_err(|error| format!("failed to create document window: {error}"))
 }
 
+/// 新しい document window の初期位置を決める。位置指定なしで生成すると
+/// すべての window が同じ既定位置に重なってしまうため、表示前に必ず配置する。
+/// 失敗しても OS 既定の位置で表示できるので、エラーは無視して続行する
+fn place_document_window<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    inherit_frame_from: Option<&str>,
+) {
+    let Some(window) = app.get_window(label) else {
+        return;
+    };
+
+    let reference_label = inherit_frame_from.map(str::to_string).or_else(|| {
+        app.state::<DocumentManagerState>()
+            .latest_document_window_label(label)
+    });
+    let Some(reference) = reference_label.and_then(|label| app.get_window(&label)) else {
+        return;
+    };
+    let Ok(position) = reference.outer_position() else {
+        return;
+    };
+
+    // 置き換えでは対象と同じ frame を継承し、その window が document に
+    // 変わったように見せる
+    if inherit_frame_from.is_some() {
+        if let Ok(size) = reference.inner_size() {
+            let _ = window.set_size(size);
+        }
+        let _ = window.set_position(position);
+        return;
+    }
+
+    // 残る window とは完全に重ならないよう、macOS 標準の cascade に倣ってずらす
+    let offset = (WINDOW_CASCADE_OFFSET * reference.scale_factor().unwrap_or(1.0)).round() as i32;
+    let _ = window.set_position(PhysicalPosition::new(
+        position.x + offset,
+        position.y + offset,
+    ));
+}
+
 fn create_document_window_internal<R: tauri::Runtime>(
     app: &AppHandle<R>,
     file_path: Option<PathBuf>,
     transient: bool,
+    inherit_frame_from: Option<&str>,
 ) -> Result<String, String> {
     let manager = app.state::<DocumentManagerState>();
     let disposition = DocumentWindowDisposition::Standalone;
@@ -93,6 +137,7 @@ fn create_document_window_internal<R: tauri::Runtime>(
                 return Err(error);
             }
 
+            place_document_window(app, &label, inherit_frame_from);
             Ok(label)
         }
         Err(error) => {
@@ -129,7 +174,7 @@ fn open_or_focus_document_window_internal<R: tauri::Runtime>(
     // 置き換え対象は window 生成前に確定させる。生成後に判定すると
     // 新しい window 自身が枚数に含まれてしまう
     let replace_target = manager.transient_window_to_replace();
-    let label = create_document_window_internal(app, Some(path), false)?;
+    let label = create_document_window_internal(app, Some(path), false, replace_target.as_deref())?;
     if let Some(target) = replace_target {
         if let Err(error) = manager.set_pending_replacement(&label, &target) {
             log::warn!("failed to reserve transient window replacement: {error}");
@@ -249,7 +294,7 @@ pub fn focused_document_window_label<R: tauri::Runtime>(app: &AppHandle<R>) -> O
 pub fn create_untitled_document_window<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), String> {
-    create_document_window_internal(app, None, false).map(|_| ())
+    create_document_window_internal(app, None, false, None).map(|_| ())
 }
 
 /// 引数なし起動・Dock reopen で自動生成される untitled 用。
@@ -257,7 +302,7 @@ pub fn create_untitled_document_window<R: tauri::Runtime>(
 pub fn create_transient_untitled_document_window<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), String> {
-    create_document_window_internal(app, None, true).map(|_| ())
+    create_document_window_internal(app, None, true, None).map(|_| ())
 }
 
 /// DevTools メニュー（debug ビルド限定）からのみ使う

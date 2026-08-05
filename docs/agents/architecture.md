@@ -61,7 +61,7 @@ src/
 - `.sheltie` は共有用ドキュメント
   - `schemaVersion`, `nodes`, `edges` を保存する（`edges` は後方互換で省略可能）
   - `title` は保存しない
-- Rust 側の document manager は各 window の `filePath` と `untitledIndex` を管理する
+- Rust 側の document manager は各 window の `filePath` と `untitledIndex`、および transient 置き換えに使う `transient` / `edited` / 置き換え予約を管理する
 - renderer の Zustand store は現在の document の `nodes`, `viewport`, `lastSavedDocument`, `webviewRuntime` をメモリ上で保持する
 - 起動時は window context を読み、`filePath` があれば `.sheltie` を読み込み、無ければ空 document を初期化する
 - 読み込みまたはパースに失敗した場合は fail-closed にする。エラーダイアログを出して `closeReady()` で window を閉じ、`Project` を初期化しない。読み取り専用モードや回復用 Save As は提供しない
@@ -70,6 +70,8 @@ src/
 - `Cmd+Q` / app menu `Quit` は Rust の custom `app.quit` menu event から renderer coordinator を起動し、集約確認と順次保存の完了後に `complete_app_exit` でまとめて終了する
 - 一般的な Mac アプリと同様、全ウインドウを閉じてもプロセスは終了しない。`setup.rs` の `RunEvent::ExitRequested` 受信時に `AppExitCoordinatorState` で `Cmd+Q` 起源かを判定し、それ以外の発火（最後の window クローズ等）は `api.prevent_exit()` で抑止する
 - Dock アイコンクリックなどの `RunEvent::Reopen { has_visible_windows: false }` で document window が 1 枚も無い場合は新規 untitled を開く。最小化等で window 自体は残っているケースは OS の標準復帰に委ねる
+- Finder のダブルクリック等は `RunEvent::Opened { urls }` で受け、`.sheltie` の file URL だけを `open_or_focus_document_window` に渡す。macOS ではダブルクリックのパスが argv に渡らないため、この経路が唯一の入口になる
+- AppKit の transient document に倣い、自動生成された untitled（引数なし起動・Dock reopen・引数なし再起動）だけを置き換え対象の候補にする。`Cmd+N` と `New Tab` で作った window は候補にしない。プロジェクトを開く時点で document window がちょうど 1 枚かつ候補が未編集なら、新しい window の present 後にその untitled を閉じてウインドウ数を 1 枚に保つ。open から present までの間に対象が編集された場合は置き換えを中止する
 
 ## Sheltie と React Flow の協業
 

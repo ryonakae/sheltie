@@ -16,11 +16,11 @@
 ### プロジェクト状態
 
 - `load_window_context` - 現在の document window に紐づく `filePath` / `untitledIndex` を読む
-- `present_document_window` - renderer 初期化完了後（最初の paint 後）に呼び出され、`visible(false)` で生成された document window をユーザーに見せる。pending な macOS `New Tab` child の場合は host document window へ attach し、それ以外は `show` + `setFocus` する
-- `set_document_edited(edited)` - 呼び出し元 document window の未保存表示を更新する。macOS では `NSWindow.setDocumentEdited:` に加え、`NSWindow.tab.accessoryView` へ 20pt 領域内の 4pt tertiary circle を設定・解除する。非 macOS では no-op
+- `present_document_window` - renderer 初期化完了後（最初の paint 後）に呼び出され、`visible(false)` で生成された document window をユーザーに見せる。pending な macOS `New Tab` child の場合は host document window へ attach し、それ以外は `show` + `setFocus` する。standalone 表示時に transient 置き換え予約があれば、表示後に対象 window を destroy する（window が 1 枚も無い瞬間を作らない順序）
+- `set_document_edited(edited)` - 呼び出し元 document window の未保存表示を更新する。macOS では `NSWindow.setDocumentEdited:` に加え、`NSWindow.tab.accessoryView` へ 20pt 領域内の 4pt tertiary circle を設定・解除する。表示更新は非 macOS では no-op だが、document manager への `edited` 記録は全プラットフォームで行う（transient 置き換え判定に使う）
 - `new_document_tab` - 現在の macOS document window が解決できた時だけ、その native tab group と同じ `tabbingIdentifier` を継承した untitled document を host 限定の explicit attach で追加する。standalone window へはフォールバックしない
 - `new_document_window` - 新しい untitled standalone document window を開く
-- `open_document_window(path)` - 対象 `.sheltie` 用の document window を開く。既に開いていればその window を前面化する
+- `open_document_window(path)` - 対象 `.sheltie` 用の document window を開く。既に開いていればその window を前面化する。AppKit の transient document に倣い、document window がちょうど 1 枚でそれが自動生成（transient）の未編集 untitled なら、新しい window の present 時にその untitled を閉じる
 - `complete_app_exit(windowLabels)` - 集約済み app quit を確定し、対象 document window をまとめて destroy した後にアプリ終了を再開する
 - `abort_app_exit` - 集約中の app quit を中止し、次の `Cmd+Q` / `Quit` を再度受け付ける
 - `close_ready` - 現在の document window を破棄する

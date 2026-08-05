@@ -2,10 +2,11 @@ import { type ReactFlowInstance, type Viewport as FlowViewport } from '@xyflow/r
 import { useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { ZOOM_END_DEBOUNCE_MS, ZOOM_RESET_TARGET, ZOOM_STEPS } from '@/constants';
+import { DEFAULT_VIEWPORT, ZOOM_END_DEBOUNCE_MS, ZOOM_RESET_TARGET, ZOOM_STEPS } from '@/constants';
 import {
   resolveCenteredViewport,
   resolveFitViewport,
+  resolveInitialViewport,
   type SheltieViewportTarget,
 } from '@/lib/sheltie-viewport';
 import { registerViewCommandHandlers } from '@/lib/view-commands';
@@ -125,6 +126,33 @@ export function useSheltieViewportController({
   useEffect(() => {
     syncViewportFromStore();
   }, [syncViewportFromStore]);
+
+  // ドキュメントを開いた直後は全ノードが見える viewport で開く。
+  // `.sheltie` に viewport は保存されないため、mount 時に store が既定値のままなら
+  // 初期フィットを適用する（ユーザー操作後の error boundary 再 mount では既定値でないので発動しない）。
+  // 直後の --canvas-zoom 初期化 effect が zoomRef を読むため、この effect を先に宣言する。
+  const initialFitAppliedRef = useRef(false);
+  useLayoutEffect(() => {
+    if (initialFitAppliedRef.current) return;
+    initialFitAppliedRef.current = true;
+
+    const defaultViewport = {
+      x: DEFAULT_VIEWPORT.panX,
+      y: DEFAULT_VIEWPORT.panY,
+      zoom: DEFAULT_VIEWPORT.zoom,
+    };
+    if (!isSameViewport(storeViewport, defaultViewport)) return;
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+
+    const target = resolveInitialViewport(nodes, rect.width, rect.height);
+    if (!target) return;
+
+    zoomRef.current = target.zoom;
+    setUiZoom(target.zoom);
+    updateViewport({ zoom: target.zoom, panX: target.x, panY: target.y });
+  }, [containerRef, nodes, storeViewport, updateViewport, zoomRef]);
 
   // --canvas-zoom を mount 直後（子 useEffect より前）に初期化する。
   // syncViewportFromStore は useEffect のため子コンポーネントの useEffect より後に走り、

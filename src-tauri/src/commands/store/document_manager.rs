@@ -41,9 +41,21 @@ pub(super) struct WindowRecord {
     pub(super) untitled_index: usize,
     pub(super) tabbing_identifier: String,
     pub(super) pending_tab_host_label: Option<String>,
+    /// 自動生成された untitled（引数なし起動・Dock reopen）だけ true。
+    /// AppKit の transient document に相当し、置き換え対象の資格を表す
+    pub(super) transient: bool,
+    pub(super) edited: bool,
+    /// この window の present 時に閉じるべき置き換え対象 window のラベル
+    pub(super) pending_replacement_target: Option<String>,
 }
 
 impl WindowRecord {
+    /// 置き換え資格。transient は剥奪せず、判定時点の edited を見るため
+    /// 編集を undo で戻した window は再び置き換え対象になる
+    fn is_replaceable(&self) -> bool {
+        self.transient && !self.edited && self.file_path.is_none()
+    }
+
     fn to_context(&self) -> WindowContext {
         WindowContext {
             file_path: self
@@ -60,6 +72,7 @@ impl DocumentManagerState {
         &self,
         file_path: Option<PathBuf>,
         disposition: &DocumentWindowDisposition,
+        transient: bool,
     ) -> Result<(String, WindowRecord), String> {
         let mut inner = self
             .inner
@@ -113,6 +126,9 @@ impl DocumentManagerState {
                 DocumentWindowDisposition::Standalone => None,
                 DocumentWindowDisposition::TabInGroup { host_label } => Some(host_label.clone()),
             },
+            transient,
+            edited: false,
+            pending_replacement_target: None,
         };
 
         if let Some(path) = file_path {
@@ -121,6 +137,99 @@ impl DocumentManagerState {
         inner.windows.insert(label.clone(), record.clone());
 
         Ok((label, record))
+    }
+
+    pub(super) fn set_window_edited(&self, label: &str, edited: bool) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
+
+        let record = inner
+            .windows
+            .get_mut(label)
+            .ok_or_else(|| format!("window '{label}' state not found"))?;
+        record.edited = edited;
+        Ok(())
+    }
+
+    /// AppKit の transient document 置き換え規則:
+    /// document window がちょうど 1 枚で、それが自動生成 (transient) の
+    /// 未編集 untitled のときだけ、その window が置き換え対象になる
+    pub(super) fn transient_window_to_replace(&self) -> Option<String> {
+        let inner = self.inner.lock().ok()?;
+        if inner.windows.len() != 1 {
+            return None;
+        }
+
+        inner
+            .windows
+            .iter()
+            .find_map(|(label, record)| record.is_replaceable().then(|| label.clone()))
+    }
+
+    pub(super) fn has_document_window(&self) -> bool {
+        self.inner
+            .lock()
+            .map(|inner| !inner.windows.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// cascade 配置の基準になる、直近に作られた別の document window
+    pub(super) fn latest_document_window_label(&self, exclude: &str) -> Option<String> {
+        let inner = self.inner.lock().ok()?;
+        inner
+            .windows
+            .iter()
+            .filter(|(label, _)| label.as_str() != exclude)
+            .max_by_key(|(_, record)| record.creation_index)
+            .map(|(label, _)| label.clone())
+    }
+
+    pub(super) fn set_pending_replacement(
+        &self,
+        label: &str,
+        target_label: &str,
+    ) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
+
+        if !inner.windows.contains_key(target_label) {
+            return Err(format!("window '{target_label}' state not found"));
+        }
+
+        let record = inner
+            .windows
+            .get_mut(label)
+            .ok_or_else(|| format!("window '{label}' state not found"))?;
+        record.pending_replacement_target = Some(target_label.to_string());
+        Ok(())
+    }
+
+    /// present 時に置き換え対象を取り出す。open から present までの間に
+    /// 対象が編集・保存・クローズされていた場合はデータ保護のため中止する
+    pub(super) fn take_pending_replacement(&self, label: &str) -> Result<Option<String>, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
+
+        let record = inner
+            .windows
+            .get_mut(label)
+            .ok_or_else(|| format!("window '{label}' state not found"))?;
+        let Some(target) = record.pending_replacement_target.take() else {
+            return Ok(None);
+        };
+
+        let still_eligible = inner
+            .windows
+            .get(&target)
+            .map(WindowRecord::is_replaceable)
+            .unwrap_or(false);
+        Ok(still_eligible.then_some(target))
     }
 
     pub(super) fn rollback_window(&self, label: &str) {
@@ -293,7 +402,7 @@ mod tests {
     #[test]
     fn first_reserve_yields_document_1_and_untitled_index_1() {
         let state = DocumentManagerState::default();
-        let (label, record) = state.reserve_window(None, &standalone()).unwrap();
+        let (label, record) = state.reserve_window(None, &standalone(), false).unwrap();
         assert_eq!(label, "document-1");
         assert_eq!(record.untitled_index, 1);
         assert!(record.file_path.is_none());
@@ -301,11 +410,182 @@ mod tests {
     }
 
     #[test]
+    fn reserve_window_records_transient_flag() {
+        let state = DocumentManagerState::default();
+        let (_l1, transient_record) = state.reserve_window(None, &standalone(), true).unwrap();
+        let (_l2, normal_record) = state.reserve_window(None, &standalone(), false).unwrap();
+        assert!(transient_record.transient);
+        assert!(!normal_record.transient);
+        assert!(!transient_record.edited);
+    }
+
+    #[test]
+    fn transient_window_to_replace_returns_single_pristine_transient_untitled() {
+        let state = DocumentManagerState::default();
+        let (label, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        assert_eq!(state.transient_window_to_replace(), Some(label));
+    }
+
+    #[test]
+    fn transient_window_to_replace_ignores_non_transient_window() {
+        let state = DocumentManagerState::default();
+        let _ = state.reserve_window(None, &standalone(), false).unwrap();
+        assert_eq!(state.transient_window_to_replace(), None);
+    }
+
+    #[test]
+    fn transient_window_to_replace_ignores_edited_window_and_recovers_when_unedited() {
+        let state = DocumentManagerState::default();
+        let (label, _) = state.reserve_window(None, &standalone(), true).unwrap();
+
+        state.set_window_edited(&label, true).unwrap();
+        assert_eq!(state.transient_window_to_replace(), None);
+
+        // Undo で完全に元へ戻った場合は置き換え対象に復活する
+        state.set_window_edited(&label, false).unwrap();
+        assert_eq!(state.transient_window_to_replace(), Some(label));
+    }
+
+    #[test]
+    fn transient_window_to_replace_requires_exactly_one_window() {
+        let state = DocumentManagerState::default();
+        let _ = state.reserve_window(None, &standalone(), true).unwrap();
+        let _ = state.reserve_window(None, &standalone(), false).unwrap();
+        assert_eq!(state.transient_window_to_replace(), None);
+    }
+
+    #[test]
+    fn transient_window_to_replace_ignores_file_backed_window() {
+        let state = DocumentManagerState::default();
+        let path = PathBuf::from("/tmp/test.sheltie");
+        let _ = state
+            .reserve_window(Some(path), &standalone(), true)
+            .unwrap();
+        assert_eq!(state.transient_window_to_replace(), None);
+    }
+
+    #[test]
+    fn set_window_edited_fails_for_unknown_window() {
+        let state = DocumentManagerState::default();
+        assert!(state.set_window_edited("document-999", true).is_err());
+    }
+
+    #[test]
+    fn take_pending_replacement_returns_target_once() {
+        let state = DocumentManagerState::default();
+        let (target, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        let (opener, _) = state
+            .reserve_window(
+                Some(PathBuf::from("/tmp/test.sheltie")),
+                &standalone(),
+                false,
+            )
+            .unwrap();
+
+        state.set_pending_replacement(&opener, &target).unwrap();
+
+        assert_eq!(
+            state.take_pending_replacement(&opener).unwrap(),
+            Some(target)
+        );
+        assert_eq!(state.take_pending_replacement(&opener).unwrap(), None);
+    }
+
+    #[test]
+    fn take_pending_replacement_aborts_when_target_was_edited() {
+        let state = DocumentManagerState::default();
+        let (target, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        let (opener, _) = state
+            .reserve_window(
+                Some(PathBuf::from("/tmp/test.sheltie")),
+                &standalone(),
+                false,
+            )
+            .unwrap();
+        state.set_pending_replacement(&opener, &target).unwrap();
+
+        // open から present までの間にユーザーが編集したケース
+        state.set_window_edited(&target, true).unwrap();
+
+        assert_eq!(state.take_pending_replacement(&opener).unwrap(), None);
+    }
+
+    #[test]
+    fn take_pending_replacement_aborts_when_target_already_closed() {
+        let state = DocumentManagerState::default();
+        let (target, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        let (opener, _) = state
+            .reserve_window(
+                Some(PathBuf::from("/tmp/test.sheltie")),
+                &standalone(),
+                false,
+            )
+            .unwrap();
+        state.set_pending_replacement(&opener, &target).unwrap();
+
+        state.unregister_window(&target);
+
+        assert_eq!(state.take_pending_replacement(&opener).unwrap(), None);
+    }
+
+    #[test]
+    fn take_pending_replacement_returns_none_without_reservation() {
+        let state = DocumentManagerState::default();
+        let (label, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        assert_eq!(state.take_pending_replacement(&label).unwrap(), None);
+    }
+
+    #[test]
+    fn set_pending_replacement_fails_for_unknown_target() {
+        let state = DocumentManagerState::default();
+        let (opener, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        assert!(state
+            .set_pending_replacement(&opener, "document-999")
+            .is_err());
+    }
+
+    #[test]
+    fn has_document_window_reflects_registered_windows() {
+        let state = DocumentManagerState::default();
+        assert!(!state.has_document_window());
+
+        let (label, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        assert!(state.has_document_window());
+
+        state.unregister_window(&label);
+        assert!(!state.has_document_window());
+    }
+
+    #[test]
+    fn latest_document_window_label_picks_the_newest_other_window() {
+        let state = DocumentManagerState::default();
+        let (first, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        let (second, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        let (newest, _) = state.reserve_window(None, &standalone(), false).unwrap();
+
+        // 作成直後の自分自身は基準にしない
+        assert_eq!(
+            state.latest_document_window_label(&newest),
+            Some(second.clone())
+        );
+
+        state.unregister_window(&second);
+        assert_eq!(state.latest_document_window_label(&newest), Some(first));
+    }
+
+    #[test]
+    fn latest_document_window_label_returns_none_for_the_only_window() {
+        let state = DocumentManagerState::default();
+        let (label, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        assert_eq!(state.latest_document_window_label(&label), None);
+    }
+
+    #[test]
     fn untitled_index_increments_for_subsequent_untitled_windows() {
         let state = DocumentManagerState::default();
-        let (_l1, r1) = state.reserve_window(None, &standalone()).unwrap();
-        let (_l2, r2) = state.reserve_window(None, &standalone()).unwrap();
-        let (_l3, r3) = state.reserve_window(None, &standalone()).unwrap();
+        let (_l1, r1) = state.reserve_window(None, &standalone(), false).unwrap();
+        let (_l2, r2) = state.reserve_window(None, &standalone(), false).unwrap();
+        let (_l3, r3) = state.reserve_window(None, &standalone(), false).unwrap();
         assert_eq!(r1.untitled_index, 1);
         assert_eq!(r2.untitled_index, 2);
         assert_eq!(r3.untitled_index, 3);
@@ -314,14 +594,14 @@ mod tests {
     #[test]
     fn unregister_frees_untitled_index_for_reuse() {
         let state = DocumentManagerState::default();
-        let _ = state.reserve_window(None, &standalone()).unwrap();
-        let (label2, _) = state.reserve_window(None, &standalone()).unwrap();
-        let _ = state.reserve_window(None, &standalone()).unwrap();
+        let _ = state.reserve_window(None, &standalone(), false).unwrap();
+        let (label2, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        let _ = state.reserve_window(None, &standalone(), false).unwrap();
 
         state.unregister_window(&label2);
 
         // 最小未使用番号 (2) を採番する
-        let (_l4, r4) = state.reserve_window(None, &standalone()).unwrap();
+        let (_l4, r4) = state.reserve_window(None, &standalone(), false).unwrap();
         assert_eq!(r4.untitled_index, 2);
     }
 
@@ -330,7 +610,7 @@ mod tests {
         let state = DocumentManagerState::default();
         let path = PathBuf::from("/tmp/test.sheltie");
         let (_label, record) = state
-            .reserve_window(Some(path.clone()), &standalone())
+            .reserve_window(Some(path.clone()), &standalone(), false)
             .unwrap();
         assert_eq!(record.untitled_index, 0);
         assert_eq!(record.file_path, Some(path));
@@ -341,9 +621,11 @@ mod tests {
         let state = DocumentManagerState::default();
         let path = PathBuf::from("/tmp/test.sheltie");
         let _ = state
-            .reserve_window(Some(path.clone()), &standalone())
+            .reserve_window(Some(path.clone()), &standalone(), false)
             .unwrap();
-        assert!(state.reserve_window(Some(path), &standalone()).is_err());
+        assert!(state
+            .reserve_window(Some(path), &standalone(), false)
+            .is_err());
     }
 
     #[test]
@@ -351,18 +633,20 @@ mod tests {
         let state = DocumentManagerState::default();
         let path = PathBuf::from("/tmp/test.sheltie");
         let (label, _) = state
-            .reserve_window(Some(path.clone()), &standalone())
+            .reserve_window(Some(path.clone()), &standalone(), false)
             .unwrap();
         state.rollback_window(&label);
-        assert!(state.reserve_window(Some(path), &standalone()).is_ok());
+        assert!(state
+            .reserve_window(Some(path), &standalone(), false)
+            .is_ok());
     }
 
     #[test]
     fn tab_in_group_inherits_host_tabbing_identifier() {
         let state = DocumentManagerState::default();
-        let (host_label, host_record) = state.reserve_window(None, &standalone()).unwrap();
+        let (host_label, host_record) = state.reserve_window(None, &standalone(), false).unwrap();
         let (_child_label, child_record) = state
-            .reserve_window(None, &tab_in_group(&host_label))
+            .reserve_window(None, &tab_in_group(&host_label), false)
             .unwrap();
         assert_eq!(
             child_record.tabbing_identifier,
@@ -378,7 +662,7 @@ mod tests {
     fn tab_in_group_with_unknown_host_fails() {
         let state = DocumentManagerState::default();
         assert!(state
-            .reserve_window(None, &tab_in_group("document-999"))
+            .reserve_window(None, &tab_in_group("document-999"), false)
             .is_err());
     }
 
@@ -387,7 +671,7 @@ mod tests {
         let state = DocumentManagerState::default();
         let path = PathBuf::from("/tmp/test.sheltie");
         let (label, _) = state
-            .reserve_window(Some(path.clone()), &standalone())
+            .reserve_window(Some(path.clone()), &standalone(), false)
             .unwrap();
         assert_eq!(state.existing_window_label_for_path(&path), Some(label));
         assert_eq!(
@@ -402,7 +686,7 @@ mod tests {
         let old_path = PathBuf::from("/tmp/old.sheltie");
         let new_path = PathBuf::from("/tmp/new.sheltie");
         let (label, _) = state
-            .reserve_window(Some(old_path.clone()), &standalone())
+            .reserve_window(Some(old_path.clone()), &standalone(), false)
             .unwrap();
 
         state
@@ -418,9 +702,11 @@ mod tests {
         let state = DocumentManagerState::default();
         let path_a = PathBuf::from("/tmp/a.sheltie");
         let path_b = PathBuf::from("/tmp/b.sheltie");
-        let (label_a, _) = state.reserve_window(Some(path_a), &standalone()).unwrap();
+        let (label_a, _) = state
+            .reserve_window(Some(path_a), &standalone(), false)
+            .unwrap();
         let _ = state
-            .reserve_window(Some(path_b.clone()), &standalone())
+            .reserve_window(Some(path_b.clone()), &standalone(), false)
             .unwrap();
 
         assert!(state.update_window_file_path(&label_a, path_b).is_err());
@@ -431,7 +717,7 @@ mod tests {
         let state = DocumentManagerState::default();
         let path = PathBuf::from("/tmp/test.sheltie");
         let (label, _) = state
-            .reserve_window(Some(path.clone()), &standalone())
+            .reserve_window(Some(path.clone()), &standalone(), false)
             .unwrap();
         assert!(state.ensure_window_can_use_file_path(&label, &path).is_ok());
     }
@@ -439,9 +725,9 @@ mod tests {
     #[test]
     fn take_pending_tab_attachment_returns_value_once() {
         let state = DocumentManagerState::default();
-        let (host_label, _) = state.reserve_window(None, &standalone()).unwrap();
+        let (host_label, _) = state.reserve_window(None, &standalone(), false).unwrap();
         let (child_label, _) = state
-            .reserve_window(None, &tab_in_group(&host_label))
+            .reserve_window(None, &tab_in_group(&host_label), false)
             .unwrap();
 
         let first = state.take_pending_tab_attachment(&child_label).unwrap();
@@ -455,9 +741,9 @@ mod tests {
     #[test]
     fn document_summaries_follow_creation_order_and_mark_focus() {
         let state = DocumentManagerState::default();
-        let (first_label, _) = state.reserve_window(None, &standalone()).unwrap();
-        let (second_label, _) = state.reserve_window(None, &standalone()).unwrap();
-        let (third_label, _) = state.reserve_window(None, &standalone()).unwrap();
+        let (first_label, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        let (second_label, _) = state.reserve_window(None, &standalone(), false).unwrap();
+        let (third_label, _) = state.reserve_window(None, &standalone(), false).unwrap();
         state.unregister_window(&second_label);
 
         let summaries = state.document_summaries(Some(&third_label)).unwrap();
@@ -477,7 +763,7 @@ mod tests {
         let state = DocumentManagerState::default();
         let path = PathBuf::from("/tmp/test.sheltie");
         let (label, _) = state
-            .reserve_window(Some(path.clone()), &standalone())
+            .reserve_window(Some(path.clone()), &standalone(), false)
             .unwrap();
         let context = state.window_context(&label).unwrap();
         assert_eq!(context.file_path, Some(path.to_string_lossy().to_string()));

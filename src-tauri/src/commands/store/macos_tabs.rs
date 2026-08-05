@@ -233,6 +233,16 @@ pub(super) fn configure_macos_document_window<R: Runtime>(
 
 #[tauri::command]
 pub async fn set_document_edited(window: Window, edited: bool) -> Result<(), String> {
+    // transient 置き換え判定に使うため、表示更新の前に状態を記録する。
+    // window が既にクローズ済みなら表示更新も不要なので警告だけ残す
+    if let Err(error) = window
+        .app_handle()
+        .state::<DocumentManagerState>()
+        .set_window_edited(window.label(), edited)
+    {
+        log::warn!("failed to record edited state: {error}");
+    }
+
     #[cfg(target_os = "macos")]
     {
         let label = window.label().to_string();
@@ -267,7 +277,7 @@ fn create_document_tab_internal<R: Runtime>(
         host_label: host_label.to_string(),
     };
     let manager = app.state::<DocumentManagerState>();
-    let (label, record) = manager.reserve_window(None, &disposition)?;
+    let (label, record) = manager.reserve_window(None, &disposition, false)?;
     let title = get_window_title(&record);
     let host_label = host_label.to_string();
     let child_label = label.clone();
@@ -352,6 +362,18 @@ pub async fn present_document_window(
         window
             .set_focus()
             .map_err(|error| format!("failed to focus window '{child_label}': {error}"))?;
+        // 置き換え対象の untitled は、新しい window を見せた後に閉じて
+        // window が 1 枚も無い瞬間を作らない
+        if let Some(target_label) = state.take_pending_replacement(&child_label)? {
+            state.unregister_window(&target_label);
+            if let Some(target_window) = window.app_handle().get_window(&target_label) {
+                if let Err(error) = target_window.destroy() {
+                    log::warn!(
+                        "failed to close replaced transient window '{target_label}': {error}"
+                    );
+                }
+            }
+        }
         return Ok(());
     };
 

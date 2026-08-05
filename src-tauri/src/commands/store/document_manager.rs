@@ -50,6 +50,12 @@ pub(super) struct WindowRecord {
 }
 
 impl WindowRecord {
+    /// 置き換え資格。transient は剥奪せず、判定時点の edited を見るため
+    /// 編集を undo で戻した window は再び置き換え対象になる
+    fn is_replaceable(&self) -> bool {
+        self.transient && !self.edited && self.file_path.is_none()
+    }
+
     fn to_context(&self) -> WindowContext {
         WindowContext {
             file_path: self
@@ -131,6 +137,35 @@ impl DocumentManagerState {
         inner.windows.insert(label.clone(), record.clone());
 
         Ok((label, record))
+    }
+
+    pub(super) fn set_window_edited(&self, label: &str, edited: bool) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire document state lock".to_string())?;
+
+        let record = inner
+            .windows
+            .get_mut(label)
+            .ok_or_else(|| format!("window '{label}' state not found"))?;
+        record.edited = edited;
+        Ok(())
+    }
+
+    /// AppKit の transient document 置き換え規則:
+    /// document window がちょうど 1 枚で、それが自動生成 (transient) の
+    /// 未編集 untitled のときだけ、その window が置き換え対象になる
+    pub(super) fn transient_window_to_replace(&self) -> Option<String> {
+        let inner = self.inner.lock().ok()?;
+        if inner.windows.len() != 1 {
+            return None;
+        }
+
+        inner
+            .windows
+            .iter()
+            .find_map(|(label, record)| record.is_replaceable().then(|| label.clone()))
     }
 
     pub(super) fn rollback_window(&self, label: &str) {
@@ -318,6 +353,57 @@ mod tests {
         assert!(transient_record.transient);
         assert!(!normal_record.transient);
         assert!(!transient_record.edited);
+    }
+
+    #[test]
+    fn transient_window_to_replace_returns_single_pristine_transient_untitled() {
+        let state = DocumentManagerState::default();
+        let (label, _) = state.reserve_window(None, &standalone(), true).unwrap();
+        assert_eq!(state.transient_window_to_replace(), Some(label));
+    }
+
+    #[test]
+    fn transient_window_to_replace_ignores_non_transient_window() {
+        let state = DocumentManagerState::default();
+        let _ = state.reserve_window(None, &standalone(), false).unwrap();
+        assert_eq!(state.transient_window_to_replace(), None);
+    }
+
+    #[test]
+    fn transient_window_to_replace_ignores_edited_window_and_recovers_when_unedited() {
+        let state = DocumentManagerState::default();
+        let (label, _) = state.reserve_window(None, &standalone(), true).unwrap();
+
+        state.set_window_edited(&label, true).unwrap();
+        assert_eq!(state.transient_window_to_replace(), None);
+
+        // Undo で完全に元へ戻った場合は置き換え対象に復活する
+        state.set_window_edited(&label, false).unwrap();
+        assert_eq!(state.transient_window_to_replace(), Some(label));
+    }
+
+    #[test]
+    fn transient_window_to_replace_requires_exactly_one_window() {
+        let state = DocumentManagerState::default();
+        let _ = state.reserve_window(None, &standalone(), true).unwrap();
+        let _ = state.reserve_window(None, &standalone(), false).unwrap();
+        assert_eq!(state.transient_window_to_replace(), None);
+    }
+
+    #[test]
+    fn transient_window_to_replace_ignores_file_backed_window() {
+        let state = DocumentManagerState::default();
+        let path = PathBuf::from("/tmp/test.sheltie");
+        let _ = state
+            .reserve_window(Some(path), &standalone(), true)
+            .unwrap();
+        assert_eq!(state.transient_window_to_replace(), None);
+    }
+
+    #[test]
+    fn set_window_edited_fails_for_unknown_window() {
+        let state = DocumentManagerState::default();
+        assert!(state.set_window_edited("document-999", true).is_err());
     }
 
     #[test]

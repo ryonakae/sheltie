@@ -10,6 +10,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'skills/sheltie-use/evals/fixtures/verify-eval.test.ts'],
+    include: ['src/**/*.test.ts', 'skills/evals/fixtures/verify-eval.test.ts'],
   },
 });

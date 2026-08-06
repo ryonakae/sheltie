@@ -101,6 +101,19 @@ export function useSheltieClipboardCommands({
     [clearEdgeSelection, getViewportRect, setSelection],
   );
 
+  const writeClipboard = useCallback(async (payload: BoardClipboardPayload): Promise<boolean> => {
+    try {
+      await clipboardApi.writeBoardClipboard(
+        JSON.stringify(payload),
+        buildBoardClipboardPlainText(payload),
+      );
+      return true;
+    } catch (error) {
+      warnDev('failed to write clipboard', error);
+      return false;
+    }
+  }, []);
+
   const handleCopy = useCallback((): boolean => {
     const { project } = useProjectStore.getState();
     if (!project) return false;
@@ -109,20 +122,27 @@ export function useSheltieClipboardCommands({
     if (!payload) return false;
 
     lastPasteRef.current = null;
-    void clipboardApi
-      .writeBoardClipboard(JSON.stringify(payload), buildBoardClipboardPlainText(payload))
-      .catch((error) => warnDev('failed to write clipboard', error));
+    void writeClipboard(payload);
     return true;
-  }, [getSelectedNodeIds]);
+  }, [getSelectedNodeIds, writeClipboard]);
 
   const handleCut = useCallback((): boolean => {
-    const selectedNodeIds = getSelectedNodeIds();
-    if (!handleCopy()) return false;
+    const { project } = useProjectStore.getState();
+    if (!project) return false;
 
-    useProjectStore.getState().removeNodes(selectedNodeIds);
-    setSelection([]);
+    const selectedNodeIds = getSelectedNodeIds();
+    const payload = buildBoardClipboardPayload(project, selectedNodeIds);
+    if (!payload) return false;
+
+    lastPasteRef.current = null;
+    // クリップボードへ書けなかったときにノードだけ消えるのを防ぐため、書き込み成功を待って削除する
+    void (async () => {
+      if (!(await writeClipboard(payload))) return;
+      useProjectStore.getState().removeNodes(selectedNodeIds);
+      setSelection([]);
+    })();
     return true;
-  }, [getSelectedNodeIds, handleCopy, setSelection]);
+  }, [getSelectedNodeIds, setSelection, writeClipboard]);
 
   const handlePaste = useCallback((): boolean => {
     if (!useProjectStore.getState().project) return false;

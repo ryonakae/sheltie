@@ -77,6 +77,7 @@
   - システムクリップボードはファイル同様に信頼できない入力として扱い、`parseDocumentNode` / `parseDocumentEdge`（`parseProjectDocument` と同じ検証点）を通す。1 つでも違反があれば payload 全体を破棄する
   - `materializeBoardClipboardPayload` が ID を全て再発行し、エッジの `source` / `target` をリマップする
 - コピー対象は選択ノードと、両端が選択に含まれるエッジ。エッジ単体のコピーは対象外
+- Cut はクリップボードへの書き込み成功を待ってからノードを削除する。書き込みが失敗したときにノードだけが消えるのを防ぐ
 - ペースト位置の基準点は次の優先順で選び、いずれも「現在の viewport と交差するか」で判定する
   1. 直前ペーストしたノード群（同一 payload）→ 外接矩形左上 + 20px
   2. 生きている元ノード群 → 現在の外接矩形左上 + 20px
@@ -95,6 +96,7 @@
   - `url` / `addedUrl` は `http` / `https` / 空文字のみ許可する（空文字は URL 未入力の WebPage ノード）
   - `colorIndex` / `textColorIndex` / `fontSizePreset` は対応するプリセット配列長で範囲検証する
   - `x` / `y` / `width` / `height` は有限数のみ許可する（`Infinity` を拒否）
+  - `tiptapContent` は ProseMirror JSON の**構造**を検証する（object であること、`type` が非空文字列、`content` / `marks` が配列、`text` が文字列、入れ子も再帰的に同じ検査）。形が壊れたまま TextNode を描画すると ProseMirror が render 中に throw し、`BoardErrorBoundary` がボード全体を落として Undo にも到達できなくなる。node / mark 名の妥当性は editor の schema に委ねる
   - node / edge の件数、文字列長、Tiptap JSON の深さに上限は設けない。ファイル自体の byte 上限だけを Rust 側で見る
 - ローカル状態は document window の再起動復元用
   - `Project` は renderer のメモリ上で `nodes`, `filePath`, `viewport`, `untitledIndex`, `lastSavedDocument` を保持する

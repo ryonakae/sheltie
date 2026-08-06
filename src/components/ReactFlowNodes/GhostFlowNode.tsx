@@ -17,14 +17,17 @@ const noop = () => {};
  * Webview もツールバーも持たない描画専用ノードで、永続状態には現れない。
  * WebPage のフレームは WebPageNode の見た目を写しており、あちらの外観を変えたらここも合わせる。
  */
-export const GhostFlowNode = memo(function GhostFlowNode({ data }: NodeProps) {
+export const GhostFlowNode = memo(function GhostFlowNode({ id, data }: NodeProps) {
   const { node, screenshotUrl } = data as unknown as GhostFlowNodeData;
+  // 本体コンポーネントは `data-node-id` を出すため、元ノードと同じ id を渡すと
+  // DOM 上で同じ id が 2 つ存在する。ghost 側は flow node 側の id を使って衝突を避ける
+  const ghostNode = { ...node, id, x: 0, y: 0 };
 
   if (isStickyNoteNode(node)) {
     return (
       <div className="pointer-events-none size-full">
         <StickyNoteNode
-          node={{ ...(node as StickyNoteNodeModel), x: 0, y: 0 }}
+          node={ghostNode as StickyNoteNodeModel}
           isActive={false}
           onActivate={noop}
           onContextMenu={noop}
@@ -39,7 +42,7 @@ export const GhostFlowNode = memo(function GhostFlowNode({ data }: NodeProps) {
     return (
       <div className="pointer-events-none size-full">
         <TextNode
-          node={{ ...(node as TextNodeModel), x: 0, y: 0 }}
+          node={ghostNode as TextNodeModel}
           isActive={false}
           isEditing={false}
           onActivate={noop}

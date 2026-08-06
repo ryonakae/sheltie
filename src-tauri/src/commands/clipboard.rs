@@ -6,7 +6,7 @@ use objc2_app_kit::{NSPasteboard, NSPasteboardTypeString};
 use objc2_foundation::NSString;
 
 #[cfg(target_os = "macos")]
-use super::store::macos_tabs::run_on_app_main_thread;
+use super::store::macos_tabs::run_on_app_main_thread_async;
 
 /// Sheltie board payload 用のカスタム pasteboard type。
 /// plain text と併記することで、外部アプリには人間向けテキストだけが見える。
@@ -14,14 +14,14 @@ use super::store::macos_tabs::run_on_app_main_thread;
 const BOARD_PASTEBOARD_TYPE: &str = "com.sheltie.board-nodes";
 
 #[tauri::command]
-pub fn write_board_clipboard<R: Runtime>(
+pub async fn write_board_clipboard<R: Runtime>(
     app: AppHandle<R>,
     payload_json: String,
     plain_text: String,
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        run_on_app_main_thread(&app, move |_| {
+        run_on_app_main_thread_async(&app, move |_| {
             let pasteboard = NSPasteboard::generalPasteboard();
             let board_type = NSString::from_str(BOARD_PASTEBOARD_TYPE);
             pasteboard.clearContents();
@@ -34,6 +34,7 @@ pub fn write_board_clipboard<R: Runtime>(
             }
             Ok(())
         })
+        .await
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -43,15 +44,16 @@ pub fn write_board_clipboard<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn read_board_clipboard<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
+pub async fn read_board_clipboard<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
     #[cfg(target_os = "macos")]
     {
-        run_on_app_main_thread(&app, |_| {
+        run_on_app_main_thread_async(&app, |_| {
             let pasteboard = NSPasteboard::generalPasteboard();
             let board_type = NSString::from_str(BOARD_PASTEBOARD_TYPE);
             let value = pasteboard.stringForType(&board_type);
             Ok(value.map(|string| string.to_string()))
         })
+        .await
     }
     #[cfg(not(target_os = "macos"))]
     {

@@ -67,6 +67,48 @@ function parsePageUrl(value: unknown, field: string): string {
   return parsed;
 }
 
+/**
+ * Tiptap(ProseMirror) JSON の構造を検証する。
+ * 形が壊れたまま TextNode を描画すると ProseMirror が render 中に throw し、
+ * BoardErrorBoundary がボード全体を落として Undo にも到達できなくなる。
+ * node / mark 名の妥当性は editor の schema に委ね、ここでは形だけを見る。
+ */
+function parseTiptapNode(value: unknown, field: string): void {
+  if (!isRecord(value) || Array.isArray(value)) {
+    throw new Error(`${field} must be a Tiptap node object`);
+  }
+  if (typeof value.type !== 'string' || value.type === '') {
+    throw new Error(`${field}.type must be a non-empty string`);
+  }
+  if (value.text !== undefined && typeof value.text !== 'string') {
+    throw new Error(`${field}.text must be a string`);
+  }
+  if (value.marks !== undefined) {
+    if (!Array.isArray(value.marks)) {
+      throw new Error(`${field}.marks must be an array`);
+    }
+    value.marks.forEach((mark, markIndex) => {
+      if (!isRecord(mark) || typeof mark.type !== 'string' || mark.type === '') {
+        throw new Error(`${field}.marks[${markIndex}].type must be a non-empty string`);
+      }
+    });
+  }
+  if (value.content !== undefined) {
+    if (!Array.isArray(value.content)) {
+      throw new Error(`${field}.content must be an array`);
+    }
+    value.content.forEach((child, childIndex) =>
+      parseTiptapNode(child, `${field}.content[${childIndex}]`),
+    );
+  }
+}
+
+function parseTiptapContent(value: unknown, field: string): object | undefined {
+  if (value === undefined) return undefined;
+  parseTiptapNode(value, field);
+  return value as object;
+}
+
 export function parseDocumentNode(rawNode: unknown, index: number): SheltieDocumentNode {
   if (!isRecord(rawNode)) {
     throw new Error(`nodes[${index}] must be an object`);
@@ -128,7 +170,10 @@ export function parseDocumentNode(rawNode: unknown, index: number): SheltieDocum
   }
 
   if (type === 'text') {
-    const tiptapContent = rawNode.tiptapContent as object | undefined;
+    const tiptapContent = parseTiptapContent(
+      rawNode.tiptapContent,
+      `nodes[${index}].tiptapContent`,
+    );
     const fontSizePreset = parsePresetIndex(
       rawNode.fontSizePreset ?? 1,
       `nodes[${index}].fontSizePreset`,

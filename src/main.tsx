@@ -146,8 +146,9 @@ function setupAppExitCoordinatorListener(): void {
 // React マウント前に永続化・テーマをセットアップ
 setupProjectPersistence();
 // 起動ごとに 1 回だけ、TTL を超えたスクリーンショットキャッシュを回収する
-void webviewApi.pruneScreenshotCache().catch(() => {
-  // キャッシュ回収の失敗は起動を妨げない
+void webviewApi.pruneScreenshotCache().catch((error: unknown) => {
+  // 起動は妨げないが、握り潰すと permission 漏れのような設定ミスに気付けない
+  console.error('[screenshot-cache] failed to prune:', error);
 });
 setupThemeListener();
 setupEditCommandListener();

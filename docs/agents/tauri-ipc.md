@@ -154,6 +154,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 
 - コマンド名・引数・戻り値を変更したら、Rust 側・bridge 側・このドキュメントを同時更新する
 - イベント名を変更したら listener 側（`WebPageNode` / runtime hooks / `main.tsx`）も同時更新する
+- **コマンドを追加したら `src-tauri/permissions/app-commands.toml` の `allow-local-app-commands` にも足す**。`invoke_handler` への登録だけでは document webview から呼べず、ACL が invoke を拒否する。呼び出し側が rejection を握り潰していると「何も起きない」だけの症状になって原因に辿り着けないため、失敗は必ずログへ残す。追加後は `cargo build` して `target/debug/build/sheltie-*/out/acl-manifests.json` にコマンド名が現れるか確認できる
 - `edit-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/edit.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/edit-commands.ts` を同時更新する
 - `file-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/file.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/file-commands.ts` を同時更新する
 - `view-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/view.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/view-commands.ts` を同時更新する

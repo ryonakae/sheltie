@@ -46,6 +46,14 @@ An adversarial review of the whole range found four real defects, all fixed in `
 3. **Ghost clones duplicated `data-node-id`.** Alt-dragging a sticky or text node put two elements with the same `data-node-id` in the DOM. Ghosts now carry the flow node id.
 4. **Clipboard commands broke the crate's async convention.** They were the only sync `#[tauri::command]`s and used the blocking main-thread helper, which the helper's own doc comment warns against from async contexts. Both are now `async fn` using `run_on_app_main_thread_async`.
 
+## Fixed after the user's first GUI check
+
+The user reported alt-drag and Cmd+D working but Cmd+C/Cmd+V doing nothing. That split isolated the fault to the clipboard I/O, since Cmd+D exercises the whole payload → placement → insert → select pipeline without touching the pasteboard.
+
+Cause: `invoke_handler` registration is not sufficient. Local document webviews only reach commands listed in the `allow-local-app-commands` permission (`src-tauri/permissions/app-commands.toml`), so the ACL rejected both pasteboard calls. The dev-only `console.warn` made it look like nothing happened at all. Both commands are now listed, and clipboard failures always log. Verified headlessly by checking that the command names appear in the generated `target/debug/build/sheltie-*/out/acl-manifests.json`.
+
+The same check surfaced a pre-existing bug in a separate commit: `prune_screenshot_cache` was invoked on every launch, was never in the allowlist, and its rejection was swallowed by an empty `catch`, so screenshot cache pruning had never run.
+
 ## Outstanding: manual GUI verification
 
 The manual checklists (phase 2 Task 4 Step 4, phase 3 Task 4 Step 2) could not be run in the agent environment. `npm run dev` aborts before the window opens:

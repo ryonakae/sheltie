@@ -25,10 +25,10 @@ use crate::menus::{
     mcp::{emit_mcp_lifecycle_changed, update_mcp_connection_count, update_mcp_menu_action},
     theme::{emit_theme_command, update_theme_check_state},
     view::{configure_view_menu, emit_view_command},
-    MENU_ID_APP_QUIT, MENU_ID_EDIT_DELETE, MENU_ID_EDIT_REDO, MENU_ID_EDIT_UNDO,
-    MENU_ID_FILE_NEW_TAB, MENU_ID_FILE_NEW_WINDOW, MENU_ID_FILE_OPEN, MENU_ID_FILE_SAVE,
-    MENU_ID_FILE_SAVE_AS, MENU_ID_MCP_ENABLED, MENU_ID_OPEN_DEVTOOLS, MENU_ID_VIEW_FIT,
-    MENU_ID_VIEW_RESET_ZOOM, MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
+    MENU_ID_APP_CHECK_UPDATES, MENU_ID_APP_QUIT, MENU_ID_EDIT_DELETE, MENU_ID_EDIT_REDO,
+    MENU_ID_EDIT_UNDO, MENU_ID_FILE_NEW_TAB, MENU_ID_FILE_NEW_WINDOW, MENU_ID_FILE_OPEN,
+    MENU_ID_FILE_SAVE, MENU_ID_FILE_SAVE_AS, MENU_ID_MCP_ENABLED, MENU_ID_OPEN_DEVTOOLS,
+    MENU_ID_VIEW_FIT, MENU_ID_VIEW_RESET_ZOOM, MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
 };
 #[cfg(debug_assertions)]
 use tauri::menu::{MenuItemBuilder, SubmenuBuilder};
@@ -234,6 +234,9 @@ pub fn run() {
             }
             app.on_menu_event(|app, event| match event.id().as_ref() {
                 MENU_ID_APP_QUIT => emit_app_exit_requested(app),
+                MENU_ID_APP_CHECK_UPDATES => {
+                    crate::updater::check_for_updates_interactively(app.clone())
+                }
                 MENU_ID_FILE_NEW_TAB => emit_file_command(app, "new-tab"),
                 MENU_ID_FILE_NEW_WINDOW => emit_file_command(app, "new-window"),
                 MENU_ID_FILE_OPEN => emit_file_command(app, "open"),

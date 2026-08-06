@@ -20,6 +20,7 @@ pub const EVENT_VIEW_COMMAND: &str = "view-command";
 pub const EVENT_THEME_COMMAND: &str = "theme-command";
 
 pub const MENU_ID_APP_QUIT: &str = "app.quit";
+pub const MENU_ID_APP_CHECK_UPDATES: &str = "app.check-for-updates";
 pub const MENU_ID_FILE_NEW_TAB: &str = "file.new-tab";
 pub const MENU_ID_FILE_NEW_WINDOW: &str = "file.new-window";
 pub const MENU_ID_FILE_OPEN: &str = "file.open";

@@ -8,7 +8,7 @@ pub fn configure_app_menu<R: tauri::Runtime>(
     use tauri::menu::MenuItemBuilder;
 
     use super::helpers::{find_app_submenu, remove_default_quit, remove_submenu_item_by_id};
-    use super::{MENU_ID_APP_QUIT, MENU_ID_SETTINGS};
+    use super::{MENU_ID_APP_CHECK_UPDATES, MENU_ID_APP_QUIT, MENU_ID_SETTINGS};
 
     let Some(app_submenu) = find_app_submenu(menu)? else {
         log::warn!("default App menu not found; skipping Quit replacement");
@@ -22,6 +22,11 @@ pub fn configure_app_menu<R: tauri::Runtime>(
         .unwrap_or_else(|| app.package_info().name.clone());
 
     super::macos::replace_default_about_and_hide(app, &app_submenu, &app_name)?;
+
+    // macOS 標準の Sparkle 系アプリと同じく About 直下に置く
+    let check_updates_item =
+        MenuItemBuilder::with_id(MENU_ID_APP_CHECK_UPDATES, "Check for Updates…").build(app)?;
+    app_submenu.insert(&check_updates_item, 1)?;
 
     remove_submenu_item_by_id(&app_submenu, MENU_ID_APP_QUIT)?;
     remove_default_quit(&app_submenu)?;
@@ -97,11 +102,11 @@ fn insert_settings_submenu<R: tauri::Runtime>(
         .item(&mcp_connections_item)
         .build()?;
 
-    // App メニュー既定構成 [0] About, [1] separator, [2] Services, ...
-    // の About と Services の間に Settings サブメニュー + separator を差し込む
+    // App メニュー構成 [0] About, [1] Check for Updates…, [2] separator, [3] Services, ...
+    // の Check for Updates… と Services の間に Settings サブメニュー + separator を差し込む
     let separator = PredefinedMenuItem::separator(app)?;
-    app_submenu.insert(&settings_submenu, 2)?;
-    app_submenu.insert(&separator, 3)?;
+    app_submenu.insert(&settings_submenu, 3)?;
+    app_submenu.insert(&separator, 4)?;
 
     Ok(())
 }

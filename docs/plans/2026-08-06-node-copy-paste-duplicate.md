@@ -35,7 +35,16 @@
 - [x] [Phase 2 — Copy / Cut / Paste / Duplicate commands and placement](2026-08-06-node-copy-paste-duplicate/phase-2-copy-paste-commands.md)
 - [x] [Phase 3 — Alt-drag duplicate](2026-08-06-node-copy-paste-duplicate/phase-3-alt-drag-duplicate.md)
 
-All code is implemented and every automated check passes: `npm run lint` / `format` / `typecheck`, 364 Vitest tests (38 new), `cargo clippy --all-targets` with no warnings, and 162 Rust tests.
+All code is implemented and every automated check passes: `npm run lint` / `format` / `typecheck`, 371 Vitest tests (45 new), `cargo clippy --all-targets` with no warnings, and 162 Rust tests.
+
+## Post-implementation review fixes
+
+An adversarial review of the whole range found four real defects, all fixed in `fix(clipboard): harden cut, tiptap validation, ghost node ids, and async commands`:
+
+1. **Cut could delete nodes with nothing on the clipboard.** `handleCopy` was fire-and-forget, so a failed pasteboard write still removed the nodes and only logged in dev builds. Cut now awaits the write and skips the removal on failure.
+2. **Malformed `tiptapContent` could blank the board.** `parseDocumentNode` cast `tiptapContent` to `object` without validation, so a crafted pasteboard payload (or `.sheltie` file) made ProseMirror throw during `TextNode` render; `BoardErrorBoundary` then unmounted the board along with the keyboard handlers, leaving no reachable Undo. The document trust boundary now validates the ProseMirror JSON structure recursively (node / mark names stay the editor schema's job).
+3. **Ghost clones duplicated `data-node-id`.** Alt-dragging a sticky or text node put two elements with the same `data-node-id` in the DOM. Ghosts now carry the flow node id.
+4. **Clipboard commands broke the crate's async convention.** They were the only sync `#[tauri::command]`s and used the blocking main-thread helper, which the helper's own doc comment warns against from async contexts. Both are now `async fn` using `run_on_app_main_thread_async`.
 
 ## Outstanding: manual GUI verification
 
@@ -53,6 +62,7 @@ The highest-value item is the editable-focus assumption below — it is the only
 ## Assumptions still unverified
 
 - With focus in an editable element (URL input, Tiptap), WKWebView consumes Cmd+C/X/V before the app menu accelerator fires, so native text copy/paste keeps working after the predefined menu items are replaced. If this does not hold, the fallback is to perform the native operation from the JS handler (`document.execCommand('copy'/'cut')` and a Rust plain-text read + programmatic insert for paste).
+- Alt state during a drag is tracked with `window` keydown/keyup listeners, so releasing Alt while the window is unfocused (Cmd+Tab mid-drag, then returning to finish the drag) may drop as a duplicate instead of a move. The failure is mild and one Cmd+Z undoes it, so it was left alone rather than fixed against a guessed event shape. Worth a try during GUI verification: if it reproduces, read `altKey` off the drop event itself (guaranteed on the title-row path's `PointerEvent`; confirm what React Flow's `onNodeDragStop` actually passes before relying on it).
 
 ## Verified during implementation
 

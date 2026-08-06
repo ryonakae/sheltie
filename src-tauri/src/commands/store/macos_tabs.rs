@@ -22,7 +22,7 @@ const EDITED_INDICATOR_DIAMETER: f64 = 4.0;
 const EDITED_INDICATOR_SIZE: f64 = 20.0;
 
 #[cfg(target_os = "macos")]
-pub(super) fn run_on_app_main_thread<R, T, F>(app: &AppHandle<R>, operation: F) -> Result<T, String>
+pub(crate) fn run_on_app_main_thread<R, T, F>(app: &AppHandle<R>, operation: F) -> Result<T, String>
 where
     R: Runtime,
     T: Send + 'static,

@@ -329,6 +329,8 @@ pub fn run() {
             crate::commands::webview::screenshots::delete_screenshot,
             crate::commands::webview::screenshots::prune_screenshot_cache,
             crate::commands::dialog::show_unsaved_changes_dialog,
+            crate::commands::clipboard::write_board_clipboard,
+            crate::commands::clipboard::read_board_clipboard,
             crate::mcp::broker::complete_mcp_renderer_request,
         ])
         .build(tauri::generate_context!())

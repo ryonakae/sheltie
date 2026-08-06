@@ -44,6 +44,6 @@ tower = { version = "0.5", features = ["util"] }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["NSColor", "NSResponder", "NSView", "NSWindow", "NSWindowTab", "std"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSColor", "NSPasteboard", "NSResponder", "NSView", "NSWindow", "NSWindowTab", "std"] }
 objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
 block2 = "0.6"

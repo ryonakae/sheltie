@@ -27,6 +27,7 @@ import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Sheltie/fl
 import { FloatingToolbar } from '@/components/Sheltie/FloatingToolbar';
 import { ZoomIndicator } from '@/components/Sheltie/ZoomIndicator';
 import { DEFAULT_EDGE_STYLE, MIN_ZOOM, MAX_ZOOM } from '@/constants';
+import { useSheltieClipboardCommands } from '@/hooks/sheltie/useSheltieClipboardCommands';
 import { useSheltieContextMenus } from '@/hooks/sheltie/useSheltieContextMenus';
 import { useSheltieDisplayEngine } from '@/hooks/sheltie/useSheltieDisplayEngine';
 import { useSheltieDrag } from '@/hooks/sheltie/useSheltieDrag';
@@ -579,6 +580,14 @@ export function Sheltie({
     [clearPositionCorrectionAnimation, handleRemoveNodes],
   );
 
+  const { handleCut, handleCopy, handlePaste, handleDuplicate } = useSheltieClipboardCommands({
+    getSelectedNodeIds,
+    setSelection,
+    clearEdgeSelection,
+    containerRef,
+    getViewport,
+  });
+
   useSheltieKeyboard({
     selectedNodeIds,
     selectedEdgeIds,
@@ -587,6 +596,10 @@ export function Sheltie({
     onRemoveEdges: removeEdges,
     onUndo: undoProject,
     onRedo: redoProject,
+    onCut: handleCut,
+    onCopy: handleCopy,
+    onPaste: handlePaste,
+    onDuplicate: handleDuplicate,
     onBringNodeToFront: bringNodeToFront,
     onSendNodeToBack: sendNodeToBack,
     onBringNodeForward: bringNodeForward,

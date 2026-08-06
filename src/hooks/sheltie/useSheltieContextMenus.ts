@@ -1,6 +1,7 @@
 import { Menu, MenuItem, PredefinedMenuItem } from '@tauri-apps/api/menu';
 import { useCallback } from 'react';
 
+import { runEditCommand } from '@/lib/edit-commands';
 import type { BoardNode } from '@/types';
 import { isNodeEmpty, isStickyNoteNode, isTextNode, isWebPageNode } from '@/types';
 
@@ -79,6 +80,27 @@ export function useSheltieContextMenus({
         }
 
         const menuItems: (MenuItem | PredefinedMenuItem)[] = [];
+
+        // 登録済み編集コマンドを共用し、選択状態の解釈をショートカットと一本化する
+        menuItems.push(
+          await MenuItem.new({
+            text: 'Cut',
+            accelerator: 'CmdOrCtrl+X',
+            action: () => {
+              handleContextMenuClose();
+              runEditCommand('cut');
+            },
+          }),
+          await MenuItem.new({
+            text: 'Copy',
+            accelerator: 'CmdOrCtrl+C',
+            action: () => {
+              handleContextMenuClose();
+              runEditCommand('copy');
+            },
+          }),
+          await PredefinedMenuItem.new({ item: 'Separator' }),
+        );
 
         if (node && isWebPageNode(node) && !isNodeEmpty(node)) {
           menuItems.push(

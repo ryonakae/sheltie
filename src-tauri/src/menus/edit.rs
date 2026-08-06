@@ -1,8 +1,11 @@
 use tauri::menu::{Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 
-use super::helpers::{find_edit_submenu, remove_default_undo_redo, remove_submenu_item_by_id};
+use super::helpers::{
+    find_edit_submenu, remove_default_edit_predefined_items, remove_submenu_item_by_id,
+};
 use super::{
-    emit_window_command, EVENT_EDIT_COMMAND, MENU_ID_EDIT_DELETE, MENU_ID_EDIT_REDO,
+    emit_window_command, EVENT_EDIT_COMMAND, MENU_ID_EDIT_COPY, MENU_ID_EDIT_CUT,
+    MENU_ID_EDIT_DELETE, MENU_ID_EDIT_DUPLICATE, MENU_ID_EDIT_PASTE, MENU_ID_EDIT_REDO,
     MENU_ID_EDIT_UNDO,
 };
 
@@ -23,9 +26,14 @@ pub fn configure_edit_menu<R: tauri::Runtime>(
     remove_submenu_item_by_id(&edit_submenu, MENU_ID_EDIT_UNDO)?;
     remove_submenu_item_by_id(&edit_submenu, MENU_ID_EDIT_REDO)?;
     remove_submenu_item_by_id(&edit_submenu, MENU_ID_EDIT_DELETE)?;
+    remove_submenu_item_by_id(&edit_submenu, MENU_ID_EDIT_CUT)?;
+    remove_submenu_item_by_id(&edit_submenu, MENU_ID_EDIT_COPY)?;
+    remove_submenu_item_by_id(&edit_submenu, MENU_ID_EDIT_PASTE)?;
+    remove_submenu_item_by_id(&edit_submenu, MENU_ID_EDIT_DUPLICATE)?;
 
-    // 既定の Undo/Redo（Predefined）を除去し、アプリ内履歴コマンドに差し替える
-    remove_default_undo_redo(&edit_submenu)?;
+    // 既定の Undo/Redo/Cut/Copy/Paste（Predefined）を除去し、アプリ内コマンドに差し替える。
+    // Select All は predefined を再追加するため、この掃除でまとめて外す。
+    remove_default_edit_predefined_items(&edit_submenu)?;
 
     let undo_item = MenuItemBuilder::with_id(MENU_ID_EDIT_UNDO, "Undo")
         .accelerator("CmdOrCtrl+Z")
@@ -36,23 +44,29 @@ pub fn configure_edit_menu<R: tauri::Runtime>(
     let delete_item = MenuItemBuilder::with_id(MENU_ID_EDIT_DELETE, "Delete")
         .accelerator("Delete")
         .build(app)?;
+    let cut_item = MenuItemBuilder::with_id(MENU_ID_EDIT_CUT, "Cut")
+        .accelerator("CmdOrCtrl+X")
+        .build(app)?;
+    let copy_item = MenuItemBuilder::with_id(MENU_ID_EDIT_COPY, "Copy")
+        .accelerator("CmdOrCtrl+C")
+        .build(app)?;
+    let paste_item = MenuItemBuilder::with_id(MENU_ID_EDIT_PASTE, "Paste")
+        .accelerator("CmdOrCtrl+V")
+        .build(app)?;
+    let duplicate_item = MenuItemBuilder::with_id(MENU_ID_EDIT_DUPLICATE, "Duplicate")
+        .accelerator("CmdOrCtrl+D")
+        .build(app)?;
 
-    edit_submenu.insert(&undo_item, 0)?;
-    edit_submenu.insert(&redo_item, 1)?;
-    edit_submenu.insert(&delete_item, 2)?;
-
-    if edit_submenu.items()?.len() == 3 {
-        let separator = PredefinedMenuItem::separator(app)?;
-        edit_submenu.append(&separator)?;
-        let cut = PredefinedMenuItem::cut(app, None)?;
-        let copy = PredefinedMenuItem::copy(app, None)?;
-        let paste = PredefinedMenuItem::paste(app, None)?;
-        let select_all = PredefinedMenuItem::select_all(app, None)?;
-        edit_submenu.append(&cut)?;
-        edit_submenu.append(&copy)?;
-        edit_submenu.append(&paste)?;
-        edit_submenu.append(&select_all)?;
-    }
+    edit_submenu.append(&undo_item)?;
+    edit_submenu.append(&redo_item)?;
+    edit_submenu.append(&delete_item)?;
+    edit_submenu.append(&PredefinedMenuItem::separator(app)?)?;
+    edit_submenu.append(&cut_item)?;
+    edit_submenu.append(&copy_item)?;
+    edit_submenu.append(&paste_item)?;
+    edit_submenu.append(&duplicate_item)?;
+    edit_submenu.append(&PredefinedMenuItem::separator(app)?)?;
+    edit_submenu.append(&PredefinedMenuItem::select_all(app, None)?)?;
 
     Ok(())
 }

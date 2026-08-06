@@ -55,7 +55,8 @@
   - 単一 document window の `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `history`, `webviewRuntime`
   - 初期化: `initializeProject`, `markProjectSaved`, `restoreProjectFromLastSaved`
-  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `removeNodes`, `addStickyNoteNode`, `addTextNode`
+  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `removeNodes`, `addStickyNoteNode`, `addTextNode`, `insertBoardContent`
+  - `insertBoardContent({ nodes, edges, screenshotSeedsByNodeId? })`: 準備済みノード/エッジを末尾へ追加し、履歴 1 件・スクリーンショットシードのマージをまとめて行う。ペースト・Cmd+D・alt ドラッグ複製が共用する。ノードが空、または既存 ID と衝突する場合は no-op
   - ノード更新: `updateNodePosition`, `updateNodePositions`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `updateStickyNoteStyle`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
   - 複数操作の集約: `removeNodes` / `updateNodePositions` は複数ノードの削除・位置更新を 1 つの履歴エントリにまとめる。複数選択の一括削除・一括ドラッグ移動はこの経路を通し、Cmd+Z 1 回で全ての変更を巻き戻せるようにする
   - MCP batch: `applyMcpBoardBatch` は`BoardOperation[]`を純粋interpreterで全件検証してから1回のstore更新で反映する。成功したbatch全体が履歴1件になり、失敗/no-opはproject・history・webviewRuntimeを変更しない
@@ -67,6 +68,21 @@
   - `past`: 直前までの `ProjectSnapshot` 配列（`{ nodes: BoardNode[]; edges: BoardEdge[] }`）
   - `future`: Redo 用の `ProjectSnapshot` 配列
   - ノードとエッジを統合スナップショットとして管理し、Undo/Redo で両方が同時に復元される
+
+## クリップボード payload
+
+- `BoardClipboardPayload`（`src/lib/board-clipboard.ts`）
+  - `type: 'application/x-sheltie-board-nodes'`, `version: 1`, `sourceProjectId`, `nodes: SheltieDocumentNode[]`, `edges: SheltieDocumentEdge[]`
+  - ノード/エッジは `.sheltie` と同じ document 形式で、元の ID と座標をそのまま保持する
+  - システムクリップボードはファイル同様に信頼できない入力として扱い、`parseDocumentNode` / `parseDocumentEdge`（`parseProjectDocument` と同じ検証点）を通す。1 つでも違反があれば payload 全体を破棄する
+  - `materializeBoardClipboardPayload` が ID を全て再発行し、エッジの `source` / `target` をリマップする
+- コピー対象は選択ノードと、両端が選択に含まれるエッジ。エッジ単体のコピーは対象外
+- ペースト位置の基準点は次の優先順で選び、いずれも「現在の viewport と交差するか」で判定する
+  1. 直前ペーストしたノード群（同一 payload）→ 外接矩形左上 + 20px
+  2. 生きている元ノード群 → 現在の外接矩形左上 + 20px
+  3. payload の元座標 → そのまま（Cut / 削除後の「その場に戻す」）
+  4. どれも不可 → 外接矩形の中心を viewport 中心に合わせる
+- Webview は重ねられないため、貼り付け群に webpage が含まれる場合は群全体を剛体として右下対角へ 20px 刻みでスライドし、「webpage vs 既存全ノード」「付箋/テキスト vs 既存 webpage」の 20px gap 制約を満たす最初の位置に置く。群内部の重なりは判定しない
 
 ## `.sheltie` とローカル状態の境界
 
@@ -173,5 +189,7 @@
 - `.sheltie` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.sheltie` へは書き出さない
 - `projectId` は dirty 判定に含めない。ボード内容ではなくキャッシュキーなので、`projectId` を持たないファイルを開いた直後に未保存扱いになってはいけない
+- ペースト / Cmd+D / alt ドラッグ複製は `insertBoardContent` を通し、ノード・エッジ・スクリーンショットシードをまとめて履歴 1 件にする。操作後は新規ノード群を選択状態にする
+- 複製時のスクリーンショットシードは `payload.sourceProjectId` が現在の `project.id` と一致するときだけ行う。別 window の screenshot ファイルは prune / 削除で寿命が読めないため使い回さない
 - 読み込みに失敗した `.sheltie` は `Project` を初期化しない。`filePath` を保持したまま空文書で開くと、ユーザーが気付かず保存した時点で元ファイルを空文書で上書きしてしまう
 

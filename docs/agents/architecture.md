@@ -47,7 +47,10 @@ src/
 - `lib/mcp/renderer-bridge.ts`: window-local MCP requestを検証し、Zustand board read/batchとmounted editor adapterへdispatchしてcompletion envelopeを返す
 - `lib/mcp/editor-adapter.ts`: Project/Sheltieが所有するselection、live viewport、cache-first screenshot、offscreen board captureをwindow-localに公開する。永続stateの正本にはしない
 - `store/theme-store.ts`: テーマ状態
-- `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
+- `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる（`undo` / `redo` / `delete` / `cut` / `copy` / `paste` / `duplicate`）
+- `lib/board-clipboard.ts`: クリップボード payload の build / plain text 化 / parse / materialize。`.sheltie` の document node/edge 形式とその検証を再利用する
+- `lib/board-paste-placement.ts`: ペースト位置の決定（viewport world rect、ノード群の外接矩形、基準点の優先順位、剛体スライド）
+- `hooks/sheltie/useSheltieClipboardCommands.ts`: Cut / Copy / Paste / Duplicate の統括。クリップボード I/O → parse → materialize → 配置 → `insertBoardContent` → 選択更新を担当する
 - `lib/file-commands.ts`: File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` を処理し、`.sheltie` の入出力と window-local な store 連携を担当する
 - `lib/project-close.ts`: dirty 判定・保存/破棄確認・現在 window の close orchestration を担当する
 - `lib/app-exit.ts`: macOS の custom `app.quit` から始まる集約 quit coordinator。各 document window の dirty 状態収集、集約ダイアログ、順次保存、最終 `complete_app_exit` を担当する
@@ -95,7 +98,7 @@ src/
 
 - `useSheltieDisplayEngine`: `DisplayMode` 判定、Webview 表示/非表示、スクリーンショット管理
 - `useSheltieNodeRuntime`: webpage ノード単位のナビゲーション状態・タイトル同期・スクリーンショット契機を管理
-- `useSheltieKeyboard`: Delete/Backspace・Undo/Redo・ノード重なり順変更のショートカットを処理し、共通編集コマンドへ委譲
+- `useSheltieKeyboard`: Delete/Backspace・Undo/Redo・Cut/Copy/Paste/Duplicate・ノード重なり順変更のショートカットを処理し、共通編集コマンドへ委譲
 
 詳細仕様は `sheltie-runtime.md` を参照。
 
@@ -117,6 +120,7 @@ src/
 - `commands/store/document_window.rs`: document window 生成・前面化・window context、終了/クローズ系コマンド
 - `commands/store/file_io.rs`: `.sheltie` ファイルの load/save とパス正規化
 - `commands/store/macos_tabs.rs`: macOS NSWindow 操作（タブ attach + window 設定）
+- `commands/clipboard.rs`: macOS `NSPasteboard` へのカスタム type + plain text 書き込みと、カスタム type の読み取り
 - `commands/theme.rs`: テーマ設定、プラットフォーム情報
 - `commands/webview/labels.rs`: child webview label の解決と namespacing
 - `commands/webview/navigation.rs`: back/forward/reload とナビゲーション状態取得

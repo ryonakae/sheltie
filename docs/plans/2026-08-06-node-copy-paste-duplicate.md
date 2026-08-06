@@ -31,14 +31,32 @@
 
 ## Progress
 
-- [ ] [Phase 1 — Clipboard foundation (Rust NSPasteboard commands + payload library)](2026-08-06-node-copy-paste-duplicate/phase-1-clipboard-foundation.md)
-- [ ] [Phase 2 — Copy / Cut / Paste / Duplicate commands and placement](2026-08-06-node-copy-paste-duplicate/phase-2-copy-paste-commands.md)
-- [ ] [Phase 3 — Alt-drag duplicate](2026-08-06-node-copy-paste-duplicate/phase-3-alt-drag-duplicate.md)
+- [x] [Phase 1 — Clipboard foundation (Rust NSPasteboard commands + payload library)](2026-08-06-node-copy-paste-duplicate/phase-1-clipboard-foundation.md)
+- [x] [Phase 2 — Copy / Cut / Paste / Duplicate commands and placement](2026-08-06-node-copy-paste-duplicate/phase-2-copy-paste-commands.md)
+- [x] [Phase 3 — Alt-drag duplicate](2026-08-06-node-copy-paste-duplicate/phase-3-alt-drag-duplicate.md)
 
-## Assumptions to verify during implementation
+All code is implemented and every automated check passes: `npm run lint` / `format` / `typecheck`, 364 Vitest tests (38 new), `cargo clippy --all-targets` with no warnings, and 162 Rust tests.
 
-- With focus in an editable element (URL input, Tiptap), WKWebView consumes Cmd+C/X/V before the app menu accelerator fires, so native text copy/paste keeps working after the predefined menu items are replaced. Verify manually in Phase 2 Task 4; if it does not hold, the fallback is to perform the native operation from the JS handler (`document.execCommand('copy'/'cut')` and a Rust plain-text read + programmatic insert for paste).
-- `objc2-app-kit`'s `NSPasteboard` bindings are callable from the main thread via the existing `run_on_app_main_thread` helper.
+## Outstanding: manual GUI verification
+
+The manual checklists (phase 2 Task 4 Step 4, phase 3 Task 4 Step 2) could not be run in the agent environment. `npm run dev` aborts before the window opens:
+
+```
+Failed to setup app: error encountered during setup hook:
+failed to initialize plugin `log`: Operation not permitted (os error 1)
+```
+
+`tauri-plugin-log` (registered under `#[cfg(debug_assertions)]`, untouched by this work) cannot write to the OS log directory inside the sandbox. Run both checklists on an unsandboxed machine before merging.
+
+The highest-value item is the editable-focus assumption below — it is the only decision that could force a code change.
+
+## Assumptions still unverified
+
+- With focus in an editable element (URL input, Tiptap), WKWebView consumes Cmd+C/X/V before the app menu accelerator fires, so native text copy/paste keeps working after the predefined menu items are replaced. If this does not hold, the fallback is to perform the native operation from the JS handler (`document.execCommand('copy'/'cut')` and a Rust plain-text read + programmatic insert for paste).
+
+## Verified during implementation
+
+- `objc2-app-kit 0.3` exposes `NSPasteboard::generalPasteboard`, `clearContents`, `setString_forType`, and `stringForType` as safe functions; only the `NSPasteboardTypeString` extern static needs `unsafe`. The commands compile warning-free and run through the existing `run_on_app_main_thread` helper.
 
 ## Completion
 

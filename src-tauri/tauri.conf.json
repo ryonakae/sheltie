@@ -20,9 +20,16 @@
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE2QzY3REUzQzc1MjY2MzYKUldRMlpsTEg0MzNHcGdFeHZvdktSZ0oraXNDR3krWGxsQmljRVVmUi9IODMycmx4YmR4cSszMUMK",
+      "endpoints": ["https://github.com/ryonakae/sheltie/releases/latest/download/latest.json"]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "fileAssociations": [
       {
         "ext": ["sheltie"],

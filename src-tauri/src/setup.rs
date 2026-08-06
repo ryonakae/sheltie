@@ -175,6 +175,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .menu(|app| {
             let menu = Menu::default(app)?;
             configure_app_menu(app, &menu)?;

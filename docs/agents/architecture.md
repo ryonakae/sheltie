@@ -110,7 +110,8 @@ src/
 - `mcp/tools/browser.rs`: `documentId`と`pageNodeId`を検証し、WKWebViewのsemantic snapshot・DOM action・navigationをpage actorへ渡す
 - `mcp/lifecycle.rs`: default-off設定、loopback listener、Host/Origin制限、session managerと全session shutdownを担当する
 - `setup.rs`: `pub fn run()` 本体、`invoke_handler` 登録、menu event 配信
-- `app_exit.rs`: `AppExitCoordinatorState` とアプリ終了の集約フロー
+- `app_exit.rs`: `AppExitCoordinatorState` とアプリ終了の集約フロー（アップデート後再起動の `restart_after_exit` フラグ含む）
+- `updater.rs`: Check for Updates… の対話フロー（tauri-plugin-updater / 再起動は app_exit 経由）
 - `menus/{app,file,edit,view,theme}.rs` + `menus/{helpers,macos}.rs`: メニュー構築と `file-command` / `edit-command` / `view-command` / `theme-command` 配信
 - `commands/store/document_manager.rs`: document window 状態機械（ラベル採番・untitled index・filePath 競合チェック）
 - `commands/store/document_window.rs`: document window 生成・前面化・window context、終了/クローズ系コマンド

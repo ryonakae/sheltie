@@ -1,3 +1,4 @@
+export { clipboardApi } from '@/lib/tauri-bridge/clipboard';
 export { api } from '@/lib/tauri-bridge/project';
 export { themeApi, getPlatformInfo } from '@/lib/tauri-bridge/theme';
 export {

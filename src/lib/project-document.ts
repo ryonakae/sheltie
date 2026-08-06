@@ -67,7 +67,7 @@ function parsePageUrl(value: unknown, field: string): string {
   return parsed;
 }
 
-function parseNode(rawNode: unknown, index: number): SheltieDocumentNode {
+export function parseDocumentNode(rawNode: unknown, index: number): SheltieDocumentNode {
   if (!isRecord(rawNode)) {
     throw new Error(`nodes[${index}] must be an object`);
   }
@@ -190,7 +190,7 @@ function parseEdgeColorPreset(value: unknown, field: string): EdgeColorPreset {
   return value as EdgeColorPreset;
 }
 
-function parseEdge(rawEdge: unknown, index: number): SheltieDocumentEdge {
+export function parseDocumentEdge(rawEdge: unknown, index: number): SheltieDocumentEdge {
   if (!isRecord(rawEdge)) {
     throw new Error(`edges[${index}] must be an object`);
   }
@@ -228,7 +228,7 @@ function parseProjectDocumentValue(value: unknown): SheltieDocumentV2 {
     void title;
     return {
       schemaVersion: 2,
-      nodes: rawNodes.map((node, index) => parseNode(node, index)),
+      nodes: rawNodes.map((node, index) => parseDocumentNode(node, index)),
       edges: [],
     };
   }
@@ -244,7 +244,7 @@ function parseProjectDocumentValue(value: unknown): SheltieDocumentV2 {
 
   const rawEdges = value.edges;
   const edges = Array.isArray(rawEdges)
-    ? rawEdges.map((edge, index) => parseEdge(edge, index))
+    ? rawEdges.map((edge, index) => parseDocumentEdge(edge, index))
     : [];
 
   const projectId =
@@ -253,7 +253,7 @@ function parseProjectDocumentValue(value: unknown): SheltieDocumentV2 {
   return {
     schemaVersion: 2,
     projectId,
-    nodes: rawNodes.map((node, index) => parseNode(node, index)),
+    nodes: rawNodes.map((node, index) => parseDocumentNode(node, index)),
     edges,
   };
 }

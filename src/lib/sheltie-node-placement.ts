@@ -33,7 +33,7 @@ function rangesOverlapWithGap(
   return !(endA + gap <= startB || endB + gap <= startA);
 }
 
-function conflictsWithGap(
+export function conflictsWithGap(
   leftA: number,
   topA: number,
   widthA: number,

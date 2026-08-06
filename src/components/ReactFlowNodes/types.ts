@@ -1,7 +1,7 @@
 import type { StickyNoteNodeProps } from '@/components/Node/StickyNoteNode';
 import type { TextNodeProps } from '@/components/Node/TextNode';
 import type { WebPageNodeProps } from '@/components/Node/WebPageNode';
-import type { TextNodeFontSizePreset } from '@/types';
+import type { BoardNode, TextNodeFontSizePreset } from '@/types';
 
 /** WebPageFlowNode の data 型 */
 export type WebPageFlowNodeData = {
@@ -42,6 +42,13 @@ export type WebPageFlowNodeData = {
   ) => void;
   /** runtime / imperative 用の現在ズーム取得 */
   getZoom: () => number;
+};
+
+/** GhostFlowNode の data 型（alt ドラッグ中に元位置へ残す静的クローン） */
+export type GhostFlowNodeData = {
+  node: BoardNode;
+  /** webpage のみ。ロード待ちの白いフレームを見せないためのシード画像 */
+  screenshotUrl?: string;
 };
 
 /** StickyNoteFlowNode の data 型 */

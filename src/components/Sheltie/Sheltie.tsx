@@ -123,6 +123,7 @@ export function Sheltie({
     updateTextNodeStyle,
     updateTextNodeWidthMode,
     hydrateProjectScreenshotCache,
+    insertBoardContent,
     setProjectScreenshotCacheEntry,
     clearProjectScreenshotCacheEntry,
     addEdge: addEdgeToStore,
@@ -146,6 +147,7 @@ export function Sheltie({
       updateTextNodeWidthMode: s.updateTextNodeWidthMode,
       clearWebNodeWebviewLabel: s.clearWebNodeWebviewLabel,
       hydrateProjectScreenshotCache: s.hydrateProjectScreenshotCache,
+      insertBoardContent: s.insertBoardContent,
       redoProject: s.redoProject,
       pinWebNodeUrl: s.pinWebNodeUrl,
       removeNode: s.removeNode,
@@ -382,6 +384,7 @@ export function Sheltie({
 
   const {
     draggingNodePositions,
+    altDuplicateSourceNodes,
     positionCorrectionAnimations,
     clearPositionCorrectionAnimation,
     handlePositionCorrectionAnimationComplete,
@@ -392,6 +395,7 @@ export function Sheltie({
     trackDraggingPositions,
   } = useSheltieDrag({
     nodes,
+    edges,
     webPageNodes,
     selectedNodeIds,
     setSelection,
@@ -403,7 +407,18 @@ export function Sheltie({
     releaseNodeAfterPositionSettle,
     updateNodePosition,
     updateNodePositions,
+    insertBoardContent,
+    screenshotCacheByNodeId: projectWebviewRuntime.screenshotCacheByNodeId,
   });
+
+  const ghostNodes = useMemo(
+    () =>
+      altDuplicateSourceNodes.map((node) => ({
+        node,
+        screenshotUrl: screenshotUrls[node.id],
+      })),
+    [altDuplicateSourceNodes, screenshotUrls],
+  );
 
   const {
     handleGoBack,
@@ -683,6 +698,7 @@ export function Sheltie({
   // React Flow の flowNodes 配列を構築する
   const flowNodes = useSheltieFlowNodes({
     nodes,
+    ghostNodes,
     draggingNodePositions,
     rfMeasured,
     activeNodeId,

@@ -190,6 +190,9 @@
 - `lastSavedDocument` はローカル state 専用であり、`.sheltie` へは書き出さない
 - `projectId` は dirty 判定に含めない。ボード内容ではなくキャッシュキーなので、`projectId` を持たないファイルを開いた直後に未保存扱いになってはいけない
 - ペースト / Cmd+D / alt ドラッグ複製は `insertBoardContent` を通し、ノード・エッジ・スクリーンショットシードをまとめて履歴 1 件にする。操作後は新規ノード群を選択状態にする
+- alt ドラッグ複製ではドラッグしていた側が新ノードになる。元ノードの位置は store へ書かないため元位置に留まり、元ノードに繋がる既存エッジも元ノード側に残る。ドラッグ対象内で閉じたエッジだけを複製する
+- alt ドラッグの残像クローン（ghost node）は描画専用の runtime 表現で、`nodes` 配列にも `.sheltie` にも現れない
+- alt ドロップの重なり補正は通常ドラッグ終了と同じ規則（単独は `resolveDraggedNodePosition`、複数同時は補正なし）
 - 複製時のスクリーンショットシードは `payload.sourceProjectId` が現在の `project.id` と一致するときだけ行う。別 window の screenshot ファイルは prune / 削除で寿命が読めないため使い回さない
 - 読み込みに失敗した `.sheltie` は `Project` を初期化しない。`filePath` を保持したまま空文書で開くと、ユーザーが気付かず保存した時点で元ファイルを空文書で上書きしてしまう
 

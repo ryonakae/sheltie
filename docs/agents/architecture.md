@@ -43,6 +43,7 @@ src/
 - `components/ReactFlowEdges/arrowGeometry.ts`: 太さ別の矢印形状・破線パターン・色・選択端点リング・ベジェ境界計算と Handle サイズの共通定数/純関数
 - `components/ReactFlowEdges/edgeTypes.ts`: React Flow `edgeTypes` 定数。既定の `default` を `ArrowEdge` で上書き
 - `hooks/sheltie/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
+- `hooks/sheltie/useSheltieDrag.ts`: React Flow ネイティブドラッグと WebPage タイトル段の自前 pointer ドラッグを扱う。alt 押下状態はドラッグ中も window リスナーで追跡し、残像クローン用の元ノード（`altDuplicateSourceNodes`）を公開して、ドロップ時の alt 状態で複製確定と通常移動を振り分ける
 - `store/tab-store.ts`: 単一 document window の node・edge・ビューポート状態と統合履歴（Undo/Redo）を管理。同じ2接続点のエッジ追加は後勝ちで向きを置換して旧スタイルを継承し、`updateEdgeStyle` / `reverseEdge` も履歴へ記録する。MCP batchは`applyMcpBoardBatch`だけを使い、全operationを1 history entryとして適用する
 - `lib/mcp/renderer-bridge.ts`: window-local MCP requestを検証し、Zustand board read/batchとmounted editor adapterへdispatchしてcompletion envelopeを返す
 - `lib/mcp/editor-adapter.ts`: Project/Sheltieが所有するselection、live viewport、cache-first screenshot、offscreen board captureをwindow-localに公開する。永続stateの正本にはしない
@@ -50,6 +51,8 @@ src/
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる（`undo` / `redo` / `delete` / `cut` / `copy` / `paste` / `duplicate`）
 - `lib/board-clipboard.ts`: クリップボード payload の build / plain text 化 / parse / materialize。`.sheltie` の document node/edge 形式とその検証を再利用する
 - `lib/board-paste-placement.ts`: ペースト位置の決定（viewport world rect、ノード群の外接矩形、基準点の優先順位、剛体スライド）
+- `lib/alt-drag-duplicate.ts`: alt ドラッグのドロップ時に作る複製の組み立て（ID 再発行、内部エッジのリマップ、単独ドラッグの重なり補正）
+- `components/ReactFlowNodes/GhostFlowNode.tsx`: alt ドラッグ中に元位置へ残す静的クローン。3 種別すべてを描画専用でレンダーし、Handle / NodeToolbar / リサイズ UI を持たない
 - `hooks/sheltie/useSheltieClipboardCommands.ts`: Cut / Copy / Paste / Duplicate の統括。クリップボード I/O → parse → materialize → 配置 → `insertBoardContent` → 選択更新を担当する
 - `lib/file-commands.ts`: File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` を処理し、`.sheltie` の入出力と window-local な store 連携を担当する
 - `lib/project-close.ts`: dirty 判定・保存/破棄確認・現在 window の close orchestration を担当する

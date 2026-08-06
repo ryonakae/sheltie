@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DRAG_REPOSITION_GAP } from '@/constants';
+import { buildAltDragDuplicate } from '@/lib/alt-drag-duplicate';
 import { resolveDraggedNodePosition } from '@/lib/sheltie-node-placement';
-import type { BoardNode, WebPageNode } from '@/types';
+import type { BoardEdge, BoardNode, ScreenshotCacheEntry, WebPageNode } from '@/types';
 import { isWebPageNode } from '@/types';
 
 import type { Node, NodeChange, NodePositionChange } from '@xyflow/react';
@@ -17,6 +18,7 @@ export interface PositionCorrectionAnimation {
 
 interface UseSheltieDragParams {
   nodes: BoardNode[];
+  edges: BoardEdge[];
   webPageNodes: WebPageNode[];
   selectedNodeIds: string[];
   setSelection: (idsOrUpdater: string[] | ((prev: string[]) => string[])) => void;
@@ -30,6 +32,12 @@ interface UseSheltieDragParams {
   // store アクション
   updateNodePosition: (nodeId: string, x: number, y: number) => void;
   updateNodePositions: (updates: Array<{ nodeId: string; x: number; y: number }>) => void;
+  insertBoardContent: (params: {
+    nodes: BoardNode[];
+    edges: BoardEdge[];
+    screenshotSeedsByNodeId?: Record<string, ScreenshotCacheEntry>;
+  }) => void;
+  screenshotCacheByNodeId: Record<string, ScreenshotCacheEntry>;
 }
 
 /**
@@ -40,6 +48,7 @@ interface UseSheltieDragParams {
  */
 export function useSheltieDrag({
   nodes,
+  edges,
   webPageNodes,
   selectedNodeIds,
   setSelection,
@@ -51,6 +60,8 @@ export function useSheltieDrag({
   releaseNodeAfterPositionSettle,
   updateNodePosition,
   updateNodePositions,
+  insertBoardContent,
+  screenshotCacheByNodeId,
 }: UseSheltieDragParams) {
   // React Flow ネイティブドラッグ中のノード位置（ストアへの反映は dragStop 時のみ）
   const [draggingNodePositions, setDraggingNodePositions] = useState<
@@ -61,6 +72,81 @@ export function useSheltieDrag({
   >({});
   const positionCorrectionAnimationsRef = useRef<Record<string, PositionCorrectionAnimation>>({});
   const positionCorrectionSequenceRef = useRef(0);
+
+  // alt ドラッグ複製: ドラッグ中の対象 id と、ドロップ時判定に使う alt 押下状態。
+  // Figma と同様にドラッグ開始後の alt 押下/解放も反映する
+  const [altDragState, setAltDragState] = useState<{
+    draggedNodeIds: string[];
+    altPressed: boolean;
+  } | null>(null);
+  const altDragStateRef = useRef(altDragState);
+  altDragStateRef.current = altDragState;
+
+  const isAltDragging = altDragState !== null;
+  useEffect(() => {
+    if (!isAltDragging) return;
+
+    const handleAltKeyChange = (event: KeyboardEvent) => {
+      if (event.key !== 'Alt') return;
+      // macOS では Option 単押しでメニューへフォーカスが移るため抑止する
+      event.preventDefault();
+      const altPressed = event.type === 'keydown';
+      setAltDragState((prev) =>
+        prev === null || prev.altPressed === altPressed ? prev : { ...prev, altPressed },
+      );
+    };
+
+    window.addEventListener('keydown', handleAltKeyChange);
+    window.addEventListener('keyup', handleAltKeyChange);
+    return () => {
+      window.removeEventListener('keydown', handleAltKeyChange);
+      window.removeEventListener('keyup', handleAltKeyChange);
+    };
+  }, [isAltDragging]);
+
+  const altDuplicateSourceNodes = useMemo(() => {
+    if (!altDragState?.altPressed) return [];
+    const draggedIdSet = new Set(altDragState.draggedNodeIds);
+    return nodes.filter((node) => draggedIdSet.has(node.id));
+  }, [altDragState, nodes]);
+
+  // ドラッグ対象の決定ルールは React Flow ネイティブ経路とタイトル段経路で共通
+  const resolveDraggedNodeIds = useCallback(
+    (nodeId: string): string[] =>
+      selectedNodeIds.includes(nodeId) && selectedNodeIds.length > 1 ? selectedNodeIds : [nodeId],
+    [selectedNodeIds],
+  );
+
+  const commitAltDragDuplicate = useCallback(
+    (
+      draggedNodeIds: readonly string[],
+      droppedPositionByNodeId: Record<string, { x: number; y: number }>,
+    ) => {
+      const result = buildAltDragDuplicate({
+        nodes,
+        edges,
+        draggedNodeIds,
+        droppedPositionByNodeId,
+      });
+      if (result.nodes.length === 0) return;
+
+      const screenshotSeedsByNodeId: Record<string, ScreenshotCacheEntry> = {};
+      for (const [newId, sourceId] of Object.entries(result.sourceIdByNewId)) {
+        const entry = screenshotCacheByNodeId[sourceId];
+        if (entry) screenshotSeedsByNodeId[newId] = entry;
+      }
+
+      insertBoardContent({
+        nodes: result.nodes,
+        edges: result.edges,
+        screenshotSeedsByNodeId:
+          Object.keys(screenshotSeedsByNodeId).length > 0 ? screenshotSeedsByNodeId : undefined,
+      });
+      clearEdgeSelection();
+      setSelection(result.nodes.map((node) => node.id));
+    },
+    [nodes, edges, screenshotCacheByNodeId, insertBoardContent, clearEdgeSelection, setSelection],
+  );
 
   const clearPositionCorrectionAnimation = useCallback(
     (nodeId: string) => {
@@ -88,12 +174,21 @@ export function useSheltieDrag({
 
   // React Flow ネイティブドラッグ開始: スクリーンショット準備 + インタラクション開始
   const handleNodeDragStart = useCallback(
-    async (_event: React.MouseEvent, node: Node) => {
+    async (event: React.MouseEvent, node: Node) => {
       clearPositionCorrectionAnimation(node.id);
+      setAltDragState({
+        draggedNodeIds: resolveDraggedNodeIds(node.id),
+        altPressed: event.altKey,
+      });
       await prepareInteractionStart('drag', node.id);
       handleInteractionChange(true, 'drag');
     },
-    [clearPositionCorrectionAnimation, prepareInteractionStart, handleInteractionChange],
+    [
+      clearPositionCorrectionAnimation,
+      resolveDraggedNodeIds,
+      prepareInteractionStart,
+      handleInteractionChange,
+    ],
   );
 
   // React Flow ネイティブドラッグ終了: 位置補正後にストアへ反映
@@ -114,6 +209,18 @@ export function useSheltieDrag({
         }
         return changed ? next : prev;
       });
+
+      // alt が押されたままドロップされたら、動かしていた側を新ノードとして作る。
+      // 元ノードの store 位置は書かないので元位置に留まり、既存エッジもそのまま残る
+      const altState = altDragStateRef.current;
+      setAltDragState(null);
+      if (altState?.altPressed) {
+        commitAltDragDuplicate(
+          altState.draggedNodeIds,
+          Object.fromEntries(draggedNodes.map((dragged) => [dragged.id, dragged.position])),
+        );
+        return;
+      }
 
       // 複数ノードを同時に動かしている場合、位置補正アニメーションは複雑になるため省略し、
       // 1 つの履歴エントリに集約してコミットする
@@ -162,6 +269,7 @@ export function useSheltieDrag({
       updateNodePosition(node.id, resolvedPosition.x, resolvedPosition.y);
     },
     [
+      commitAltDragDuplicate,
       handleInteractionChange,
       holdNodeDuringPositionSettle,
       nodes,
@@ -211,8 +319,7 @@ export function useSheltieDrag({
       const startClientY = event.clientY;
       const startZoom = zoomRef.current;
 
-      const movingIds =
-        selectedNodeIds.includes(nodeId) && selectedNodeIds.length > 1 ? selectedNodeIds : [nodeId];
+      const movingIds = resolveDraggedNodeIds(nodeId);
       const startPositions = new Map<string, { x: number; y: number }>();
       for (const id of movingIds) {
         const target = nodes.find((candidate) => candidate.id === id);
@@ -229,6 +336,8 @@ export function useSheltieDrag({
         if (!dragStarted) {
           if (Math.hypot(screenDx, screenDy) < DRAG_THRESHOLD_PX) return;
           dragStarted = true;
+          // 以降の alt 押下/解放は共通の window リスナーが追跡する
+          setAltDragState({ draggedNodeIds: movingIds, altPressed: ev.altKey });
           void prepareInteractionStart('drag', nodeId);
           handleInteractionChange(true, 'drag');
         }
@@ -265,6 +374,21 @@ export function useSheltieDrag({
           return next;
         });
 
+        const altState = altDragStateRef.current;
+        setAltDragState(null);
+        if (altState?.altPressed) {
+          commitAltDragDuplicate(
+            altState.draggedNodeIds,
+            Object.fromEntries(
+              Array.from(startPositions.entries()).map(([id, start]) => [
+                id,
+                { x: start.x + dx, y: start.y + dy },
+              ]),
+            ),
+          );
+          return;
+        }
+
         if (startPositions.size > 1) {
           updateNodePositions(
             Array.from(startPositions.entries()).map(([id, start]) => ({
@@ -288,7 +412,8 @@ export function useSheltieDrag({
     },
     [
       nodes,
-      selectedNodeIds,
+      resolveDraggedNodeIds,
+      commitAltDragDuplicate,
       handleNodeActivate,
       prepareInteractionStart,
       handleInteractionChange,
@@ -344,6 +469,7 @@ export function useSheltieDrag({
 
   return {
     draggingNodePositions,
+    altDuplicateSourceNodes,
     positionCorrectionAnimations,
     clearPositionCorrectionAnimation,
     handlePositionCorrectionAnimationComplete,

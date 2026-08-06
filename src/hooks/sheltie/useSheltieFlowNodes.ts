@@ -4,6 +4,7 @@ import type { StickyNoteNodeProps } from '@/components/Node/StickyNoteNode';
 import type { TextNodeProps } from '@/components/Node/TextNode';
 import type { WebPageNodeProps } from '@/components/Node/WebPageNode';
 import type {
+  GhostFlowNodeData,
   StickyNoteFlowNodeData,
   TextFlowNodeData,
   WebPageFlowNodeData,
@@ -27,6 +28,8 @@ interface ResizingState {
 
 interface UseSheltieFlowNodesParams {
   nodes: BoardNode[];
+  /** alt ドラッグ中に元位置へ残す静的クローンの元ノード（通常時は空配列） */
+  ghostNodes: Array<{ node: BoardNode; screenshotUrl?: string }>;
   draggingNodePositions: Record<string, { x: number; y: number }>;
   rfMeasured: Record<string, { width: number; height: number }>;
   activeNodeId: string | null;
@@ -141,9 +144,23 @@ export function useSheltieFlowNodes({
   handleUrlSubmit,
   handleChangeUrlSubmit,
   handleTitlePointerDown,
+  ghostNodes,
 }: UseSheltieFlowNodesParams): Node[] {
   return useMemo((): Node[] => {
-    return nodes.map((node): Node => {
+    // alt ドラッグ中の残像は実ノードより背面に置く
+    const ghostFlowNodes: Node[] = ghostNodes.map(({ node, screenshotUrl }) => ({
+      id: `ghost-${node.id}`,
+      type: 'ghost',
+      position: { x: node.x, y: node.y },
+      draggable: false,
+      selectable: false,
+      focusable: false,
+      data: { node, screenshotUrl } satisfies GhostFlowNodeData,
+      width: getNodeFrameWidth(node),
+      height: getNodeFrameHeight(node),
+    }));
+
+    const boardFlowNodes = nodes.map((node): Node => {
       // ドラッグ中は一時位置を使用。dragStop 時にストアへ反映する
       const position = draggingNodePositions[node.id] ?? { x: node.x, y: node.y };
       if (isStickyNoteNode(node)) {
@@ -295,7 +312,10 @@ export function useSheltieFlowNodes({
         data: nodeData as unknown as Record<string, unknown>,
       };
     });
+
+    return [...ghostFlowNodes, ...boardFlowNodes];
   }, [
+    ghostNodes,
     nodes,
     draggingNodePositions,
     rfMeasured,

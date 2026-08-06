@@ -32,6 +32,8 @@ commands.allow = [
   "delete_screenshot",
   "show_unsaved_changes_dialog",
   "complete_mcp_renderer_request",
+  "write_board_clipboard",
+  "read_board_clipboard",
 ]
 
 [[permission]]

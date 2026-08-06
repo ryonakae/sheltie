@@ -22,9 +22,13 @@ interface UseSheltieClipboardCommandsParams {
   getViewport: () => Viewport;
 }
 
-function warnDev(message: string, error?: unknown): void {
-  if (!import.meta.env.DEV) return;
-  console.warn(`[clipboard] ${message}`, error ?? '');
+/**
+ * クリップボード操作の失敗はダイアログを出さない代わりに必ずログへ残す。
+ * dev 限定にすると、コマンド未登録や permission 漏れのような設定ミスが
+ * 「何も起きない」だけの症状になって原因に辿り着けない。
+ */
+function logClipboardFailure(message: string, error?: unknown): void {
+  console.error(`[clipboard] ${message}`, error ?? '');
 }
 
 /**
@@ -109,7 +113,7 @@ export function useSheltieClipboardCommands({
       );
       return true;
     } catch (error) {
-      warnDev('failed to write clipboard', error);
+      logClipboardFailure('failed to write clipboard', error);
       return false;
     }
   }, []);
@@ -149,7 +153,7 @@ export function useSheltieClipboardCommands({
 
     void (async () => {
       const json = await clipboardApi.readBoardClipboard().catch((error): null => {
-        warnDev('failed to read clipboard', error);
+        logClipboardFailure('failed to read clipboard', error);
         return null;
       });
       if (!json) return;
@@ -158,7 +162,7 @@ export function useSheltieClipboardCommands({
       try {
         payload = parseBoardClipboardPayload(json);
       } catch (error) {
-        warnDev('clipboard payload rejected', error);
+        logClipboardFailure('clipboard payload rejected', error);
         return;
       }
 

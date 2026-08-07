@@ -87,60 +87,22 @@ The signing identity `Developer ID Application: Ryo Nakae (ELFWBE4NMA)` and team
 
 ## Release procedure
 
-1. Update the same version in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
-2. Run the required checks:
+Releases are executed with the `/release-sheltie` skill. It detects where the release currently stands and resumes from there, so it can be invoked again after an interruption.
 
-```bash
-npm run lint
-npm run format
-npm run typecheck
-npm run test
-(cd src-tauri && cargo test --lib)
-```
+The skill owns everything except the draft acceptance check, which needs a real browser download to exercise macOS quarantine and Gatekeeper:
 
-3. Commit and push the release changes to `develop`.
-4. Open a pull request from `develop` into `main` titled `release: v<version>` and wait for the `CI` workflow to pass.
-5. Merge the pull request with a **merge commit**. Never squash or rebase this pull request; both rewrite the commits and make `main` diverge from `develop`.
-6. Tag the merge commit on `main` and push the tag:
-
-```bash
-VERSION='1.0.0'
-git fetch origin main
-git tag "v$VERSION" origin/main
-git push origin "v$VERSION"
-```
-
-For version `1.0.0`, the tag is `v1.0.0`.
-
-> Rule: release tags must point at commits on `main`. The release workflow does not enforce this; treat it as a hard operational rule.
-
-7. Wait for the **Release macOS** workflow to finish.
-8. Write the release notes with the `/release-note` skill, then read the result on GitHub and adjust it if needed. The workflow leaves a `Release notes pending.` placeholder in the draft, so an unwritten release is visible in the release body itself. Release notes are written in English.
-9. Complete the acceptance checks below before publishing.
-
-## Draft release acceptance
-
-Download both assets from the draft release through a browser. The browser download is required to exercise macOS quarantine and Gatekeeper behavior.
-
-Verify the checksum:
-
-```bash
-cd ~/Downloads
-VERSION='1.0.0'
-shasum -a 256 -c "Sheltie_${VERSION}_universal.dmg.sha256"
-```
-
-The command must report `OK`.
-
-Then:
-
-1. Open the downloaded DMG.
-2. Drag Sheltie to Applications.
-3. Launch Sheltie from Applications.
+1. Download the DMG and its checksum file from the draft through a browser.
+2. Verify the checksum with `shasum -a 256 -c "Sheltie_<version>_universal.dmg.sha256"`. It must report `OK`.
+3. Open the DMG, drag Sheltie to Applications, and launch it from there.
 4. Confirm macOS shows the normal first-download confirmation, not an unidentified-developer or malicious-software rejection.
 5. Exercise the primary create, save, reopen, and Webview flows.
-6. Confirm the draft contains `Sheltie_<version>_universal.app.tar.gz`, its `.sig`, and `latest.json`, and that `latest.json` has the release version in `version` and points at the same release's tarball in every `url`.
-7. Publish the draft release only after these checks pass.
+
+Tell the skill once these pass; it asks before publishing and cannot detect the answer on its own.
+
+Two rules the skill enforces, kept here because they are contracts rather than steps:
+
+- Release tags must point at commits on `main`. The release workflow does not enforce this; treat it as a hard operational rule.
+- The release pull request is merged with a **merge commit**. Squash and rebase both rewrite the commits and make `main` diverge from `develop`.
 
 ## In-app updater
 

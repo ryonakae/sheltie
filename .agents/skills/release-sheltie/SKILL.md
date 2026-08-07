@@ -28,13 +28,18 @@ Sheltie のリリースを実行する。
 ```bash
 PKG_VERSION="$(node -p "require('./package.json').version")"
 TAG="v$PKG_VERSION"
-LATEST_TAG="$(git describe --tags --abbrev=0)"
-echo "package.json: $PKG_VERSION / latest tag: $LATEST_TAG"
+LATEST_TAG="$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName')"
+echo "package.json: $PKG_VERSION / latest release: $LATEST_TAG"
 
 git ls-remote --tags origin "refs/tags/$TAG" | head -1
-gh pr list --base main --state open --json number,title,url --jq '.[]'
+gh pr list --base main --head develop --state open --json number,title,url --jq '.[]'
 gh release view "$TAG" --json isDraft,url --jq '{isDraft, url}' 2>/dev/null || echo "no release for $TAG"
 ```
+
+2つの絞り込みは必須。どちらも実際に誤判定を起こした。
+
+- **`git describe --tags` を使わない。** リリースは merge commit で `main` に入るため、リリースタグは `develop` から到達できない。`develop` で `git describe` を実行すると v1.2.0 ではなく v1.0.0 が返る
+- **PR は `--head develop` で絞る。** 付けないと Dependabot の PR（`dependabot/...` から `main` 宛）を拾い、リリース PR と誤認してマージ・タグ付けに進んでしまう
 
 判定表。上から順に評価し、最初に一致した行の手順へ進む。
 
@@ -44,7 +49,7 @@ gh release view "$TAG" --json isDraft,url --jq '{isDraft, url}' 2>/dev/null || e
 | `$TAG` の draft が存在し、本文が `Release notes pending.` 以外 | 手順7（公開） |
 | `$TAG` の draft が存在し、本文が `Release notes pending.` で始まる | 手順6（ノート生成） |
 | `$TAG` がリモートに存在し、リリースが無い | 手順5（Release workflow 待ち） |
-| リリース PR が open | 手順4（CI 待ち → マージ → タグ） |
+| `develop` から `main` への PR が open | 手順4（CI 待ち → マージ → タグ） |
 | `$PKG_VERSION` != `$LATEST_TAG` から `v` を除いた値 | 手順3（PR 作成）。ただし未 commit の変更があれば手順2から |
 | `$PKG_VERSION` == `$LATEST_TAG` から `v` を除いた値 | 手順1（バージョン決定）。リリース対象が無ければその旨を伝えて終了 |
 
@@ -57,6 +62,7 @@ gh release view "$TAG" --json isDraft,url --jq '{isDraft, url}' 2>/dev/null || e
 引数でバージョンが渡されていればそれを使う。無ければコミットから提案する。
 
 ```bash
+git fetch origin --tags --quiet
 git log "$LATEST_TAG..HEAD" --no-merges --format='%s' | sed 's/(.*)//' | awk -F: '{print $1}' | sort | uniq -c | sort -rn
 ```
 

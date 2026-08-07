@@ -242,6 +242,15 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The notes are written afterwards with the /release-note skill.
+          # Leaving the pending marker in the body makes an unwritten release
+          # visible to anyone about to publish it.
+          PLACEHOLDER_NOTES="Release notes pending. Generate them with the \`/release-note\` skill before publishing."
+          PREVIOUS_TAG="$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')"
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            PLACEHOLDER_NOTES="$PLACEHOLDER_NOTES"$'\n\n'"**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${GITHUB_REF_NAME}"
+          fi
+
           if IS_DRAFT="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null)"; then
             if [[ "$IS_DRAFT" != "true" ]]; then
               echo "Release $GITHUB_REF_NAME is already published; refusing to replace assets." >&2
@@ -262,7 +271,7 @@ jobs:
               "$TARBALL_PATH.sig" \
               "$LATEST_JSON_PATH" \
               --draft \
-              --generate-notes \
+              --notes "$PLACEHOLDER_NOTES" \
               --title "Sheltie $GITHUB_REF_NAME" \
               --verify-tag
           fi

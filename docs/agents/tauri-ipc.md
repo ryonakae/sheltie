@@ -32,6 +32,11 @@
 
 - `show_unsaved_changes_dialog(params)` - macOS NSAlert をシートスタイル（`beginSheetModalForWindow:completionHandler:`）で表示する（macOS のみ、非 macOS は即 `"cancel"` を返す）。シートはウィンドウ上部からスライドダウンし、背景にオーバーレイが表示される。戻り値は `"save"` / `"discard"` / `"cancel"`。`params.kind` が `"window-close"` の場合は `projectTitle` を使い、`"app-exit"` の場合は `projectTitles[]` を使う。実装: `src-tauri/src/commands/dialog.rs`
 
+### クリップボード
+
+- `write_board_clipboard(payloadJson, plainText)` - macOS `NSPasteboard` へ 2 表現を 1 回の `clearContents` 後に書く。カスタム type `com.sheltie.board-nodes` に board payload JSON、`public.utf8-plain-text` に人間向けテキスト。macOS 以外は Err
+- `read_board_clipboard() -> string | null` - カスタム type `com.sheltie.board-nodes` の文字列だけを読む。plain text は読まない（外部アプリからのペーストは対象外）。実装: `src-tauri/src/commands/clipboard.rs`
+
 ### テーマ
 
 - `load_theme`
@@ -66,7 +71,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 - `page-title-changed-{pageId}`: タイトル変更通知
 - `page-scroll-ended-{pageId}`: Webview 内スクロール完了通知
 - `app-exit-requested`: Rust の custom `app.quit` menu event が発火した時、focused document window に対して送る集約 quit 開始通知
-- `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete`）
+- `edit-command`: メニューバー `Edit` 操作の編集コマンド通知（payload は `undo` / `redo` / `delete` / `cut` / `copy` / `paste` / `duplicate`）
 - `file-command`: メニューバー `File` 操作のファイルコマンド通知（payload は `new-tab` / `new-window` / `open` / `save` / `save-as`）
 - `view-command`: メニューバー `View` 操作のビューコマンド通知（payload は `fit-view` / `reset-zoom` / `zoom-in` / `zoom-out`）
 - `theme-command`: ネイティブテーマメニュー（`show_theme_menu`）で選択されたテーマ通知（payload は `light` / `dark` / `system`）
@@ -119,7 +124,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 
 ## メニュー連携
 
-- `Edit` メニューは `src/lib/edit-commands.ts` と `src/main.tsx` を経由して renderer に流す
+- `Edit` メニューは `src/lib/edit-commands.ts` と `src/main.tsx` を経由して renderer に流す。Undo/Redo/Delete/Cut/Copy/Paste/Duplicate はすべて custom item で、predefined の Cut/Copy/Paste は `remove_default_edit_predefined_items` で除去してから差し替える（Select All だけ predefined を再追加する）。テキスト編集中は `runEditCommand` が `hasEditableFocus()` で false を返し、WKWebView のネイティブ編集動作に委ねる
 - `File` メニューは `src/lib/file-commands.ts` と `src/main.tsx` を経由して renderer に流す
 - `View` メニューは `src/lib/view-commands.ts` と `src/main.tsx` を経由して renderer に流す。`fit-view`（Shift+1）はテキスト編集中に editable フォーカスをチェックしてスキップする
 - SettingsのMCPセクションはdesired enablement stateを正本に、`MCP: Enabled / Disabled`見出し、`Enable / Disable MCP Server` action、enabled時だけ表示する`Connections: N`をRust側で同期する
@@ -149,6 +154,7 @@ MCP element/full-page captureは公開Tauri commandを増やさず、page actor�
 
 - コマンド名・引数・戻り値を変更したら、Rust 側・bridge 側・このドキュメントを同時更新する
 - イベント名を変更したら listener 側（`WebPageNode` / runtime hooks / `main.tsx`）も同時更新する
+- **コマンドを追加したら `src-tauri/permissions/app-commands.toml` の `allow-local-app-commands` にも足す**。`invoke_handler` への登録だけでは document webview から呼べず、ACL が invoke を拒否する。呼び出し側が rejection を握り潰していると「何も起きない」だけの症状になって原因に辿り着けないため、失敗は必ずログへ残す。追加後は `cargo build` して `target/debug/build/sheltie-*/out/acl-manifests.json` にコマンド名が現れるか確認できる
 - `edit-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/edit.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/edit-commands.ts` を同時更新する
 - `file-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/file.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/file-commands.ts` を同時更新する
 - `view-command` の payload 仕様や発火元を変更したら、`src-tauri/src/menus/view.rs`・`src-tauri/src/setup.rs`・`src/lib/tauri-bridge.ts`・`src/main.tsx`・`src/lib/view-commands.ts` を同時更新する

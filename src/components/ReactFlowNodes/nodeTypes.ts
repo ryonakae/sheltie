@@ -1,3 +1,4 @@
+import { GhostFlowNode } from './GhostFlowNode';
 import { StickyNoteFlowNode } from './StickyNoteFlowNode';
 import { TextFlowNode } from './TextFlowNode';
 import { WebPageFlowNode } from './WebPageFlowNode';
@@ -13,4 +14,5 @@ export const nodeTypes: NodeTypes = {
   webPageFlowNode: WebPageFlowNode,
   stickyNoteFlowNode: StickyNoteFlowNode,
   textFlowNode: TextFlowNode,
+  ghost: GhostFlowNode,
 };

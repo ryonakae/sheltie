@@ -389,7 +389,7 @@ pub async fn complete_app_exit(
         }
     }
 
-    app.exit(0);
+    crate::app_exit::exit_or_restart(&app, &exit_state);
     Ok(())
 }
 

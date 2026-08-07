@@ -25,10 +25,11 @@ use crate::menus::{
     mcp::{emit_mcp_lifecycle_changed, update_mcp_connection_count, update_mcp_menu_action},
     theme::{emit_theme_command, update_theme_check_state},
     view::{configure_view_menu, emit_view_command},
-    MENU_ID_APP_QUIT, MENU_ID_EDIT_DELETE, MENU_ID_EDIT_REDO, MENU_ID_EDIT_UNDO,
-    MENU_ID_FILE_NEW_TAB, MENU_ID_FILE_NEW_WINDOW, MENU_ID_FILE_OPEN, MENU_ID_FILE_SAVE,
-    MENU_ID_FILE_SAVE_AS, MENU_ID_MCP_ENABLED, MENU_ID_OPEN_DEVTOOLS, MENU_ID_VIEW_FIT,
-    MENU_ID_VIEW_RESET_ZOOM, MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
+    MENU_ID_APP_CHECK_UPDATES, MENU_ID_APP_QUIT, MENU_ID_EDIT_COPY, MENU_ID_EDIT_CUT,
+    MENU_ID_EDIT_DELETE, MENU_ID_EDIT_DUPLICATE, MENU_ID_EDIT_PASTE, MENU_ID_EDIT_REDO,
+    MENU_ID_EDIT_UNDO, MENU_ID_FILE_NEW_TAB, MENU_ID_FILE_NEW_WINDOW, MENU_ID_FILE_OPEN,
+    MENU_ID_FILE_SAVE, MENU_ID_FILE_SAVE_AS, MENU_ID_MCP_ENABLED, MENU_ID_OPEN_DEVTOOLS,
+    MENU_ID_VIEW_FIT, MENU_ID_VIEW_RESET_ZOOM, MENU_ID_VIEW_ZOOM_IN, MENU_ID_VIEW_ZOOM_OUT,
 };
 #[cfg(debug_assertions)]
 use tauri::menu::{MenuItemBuilder, SubmenuBuilder};
@@ -175,6 +176,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .menu(|app| {
             let menu = Menu::default(app)?;
             configure_app_menu(app, &menu)?;
@@ -233,6 +235,9 @@ pub fn run() {
             }
             app.on_menu_event(|app, event| match event.id().as_ref() {
                 MENU_ID_APP_QUIT => emit_app_exit_requested(app),
+                MENU_ID_APP_CHECK_UPDATES => {
+                    crate::updater::check_for_updates_interactively(app.clone())
+                }
                 MENU_ID_FILE_NEW_TAB => emit_file_command(app, "new-tab"),
                 MENU_ID_FILE_NEW_WINDOW => emit_file_command(app, "new-window"),
                 MENU_ID_FILE_OPEN => emit_file_command(app, "open"),
@@ -241,6 +246,10 @@ pub fn run() {
                 MENU_ID_EDIT_UNDO => emit_edit_command(app, "undo"),
                 MENU_ID_EDIT_REDO => emit_edit_command(app, "redo"),
                 MENU_ID_EDIT_DELETE => emit_edit_command(app, "delete"),
+                MENU_ID_EDIT_CUT => emit_edit_command(app, "cut"),
+                MENU_ID_EDIT_COPY => emit_edit_command(app, "copy"),
+                MENU_ID_EDIT_PASTE => emit_edit_command(app, "paste"),
+                MENU_ID_EDIT_DUPLICATE => emit_edit_command(app, "duplicate"),
                 MENU_ID_VIEW_FIT => emit_view_command(app, "fit-view"),
                 MENU_ID_VIEW_RESET_ZOOM => emit_view_command(app, "reset-zoom"),
                 MENU_ID_VIEW_ZOOM_IN => emit_view_command(app, "zoom-in"),
@@ -325,6 +334,8 @@ pub fn run() {
             crate::commands::webview::screenshots::delete_screenshot,
             crate::commands::webview::screenshots::prune_screenshot_cache,
             crate::commands::dialog::show_unsaved_changes_dialog,
+            crate::commands::clipboard::write_board_clipboard,
+            crate::commands::clipboard::read_board_clipboard,
             crate::mcp::broker::complete_mcp_renderer_request,
         ])
         .build(tauri::generate_context!())

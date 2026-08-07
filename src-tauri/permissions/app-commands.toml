@@ -30,8 +30,11 @@ commands.allow = [
   "save_webview_screenshot",
   "get_existing_screenshot_paths",
   "delete_screenshot",
+  "prune_screenshot_cache",
   "show_unsaved_changes_dialog",
   "complete_mcp_renderer_request",
+  "write_board_clipboard",
+  "read_board_clipboard",
 ]
 
 [[permission]]

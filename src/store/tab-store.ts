@@ -55,6 +55,11 @@ interface ProjectActions {
     url?: string,
     options?: { x: number; y: number; width: number; height: number },
   ) => BoardNode | null;
+  insertBoardContent: (params: {
+    nodes: BoardNode[];
+    edges: BoardEdge[];
+    screenshotSeedsByNodeId?: Record<string, ScreenshotCacheEntry>;
+  }) => void;
   setWebNodeUrl: (nodeId: string, url: string) => void;
   changeWebNodeUrl: (nodeId: string, url: string) => void;
   removeNode: (nodeId: string) => void;
@@ -395,6 +400,37 @@ export const useProjectStore = create<ProjectStore>()((set) => ({
 
     return createdNode;
   },
+
+  insertBoardContent: ({ nodes: newNodes, edges: newEdges, screenshotSeedsByNodeId }) =>
+    set((state) => {
+      if (!state.project) return state;
+      if (newNodes.length === 0) return state;
+
+      const existingIds = new Set(state.project.nodes.map((node) => node.id));
+      // 呼び出し側の ID 再生成が壊れていた場合に store の不変条件を守る
+      if (newNodes.some((node) => existingIds.has(node.id))) return state;
+
+      return {
+        project: {
+          ...state.project,
+          nodes: [...state.project.nodes, ...newNodes],
+          edges: [...state.project.edges, ...newEdges],
+        },
+        history: pushHistory(state.history, {
+          nodes: state.project.nodes,
+          edges: state.project.edges,
+        }),
+        webviewRuntime: screenshotSeedsByNodeId
+          ? {
+              ...state.webviewRuntime,
+              screenshotCacheByNodeId: {
+                ...state.webviewRuntime.screenshotCacheByNodeId,
+                ...screenshotSeedsByNodeId,
+              },
+            }
+          : state.webviewRuntime,
+      };
+    }),
 
   setWebNodeUrl: (nodeId, url) =>
     set((state) => ({

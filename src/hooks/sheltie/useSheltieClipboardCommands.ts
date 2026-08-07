@@ -1,0 +1,193 @@
+import { useCallback, useRef } from 'react';
+
+import { DRAG_REPOSITION_GAP } from '@/constants';
+import {
+  buildBoardClipboardPayload,
+  buildBoardClipboardPlainText,
+  materializeBoardClipboardPayload,
+  parseBoardClipboardPayload,
+  type BoardClipboardPayload,
+  type MaterializedClipboardContent,
+} from '@/lib/board-clipboard';
+import { getViewportWorldRect, resolvePastePlacement } from '@/lib/board-paste-placement';
+import { clipboardApi } from '@/lib/tauri-bridge';
+import { useProjectStore } from '@/store/tab-store';
+import type { ScreenshotCacheEntry, Viewport } from '@/types';
+
+interface UseSheltieClipboardCommandsParams {
+  getSelectedNodeIds: () => string[];
+  setSelection: (idsOrUpdater: string[] | ((prev: string[]) => string[])) => void;
+  clearEdgeSelection: () => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  getViewport: () => Viewport;
+}
+
+/**
+ * クリップボード操作の失敗はダイアログを出さない代わりに必ずログへ残す。
+ * dev 限定にすると、コマンド未登録や permission 漏れのような設定ミスが
+ * 「何も起きない」だけの症状になって原因に辿り着けない。
+ */
+function logClipboardFailure(message: string, error?: unknown): void {
+  console.error(`[clipboard] ${message}`, error ?? '');
+}
+
+/**
+ * ノードの Cut / Copy / Paste / Duplicate を担当する。
+ * クリップボード I/O はシステム pasteboard 経由なので、別 document window との
+ * やり取りでも同じ経路を通る。state は常に store の getState() から読み、
+ * クリップボード読み取り待ちの間に古い project を参照しないようにする。
+ */
+export function useSheltieClipboardCommands({
+  getSelectedNodeIds,
+  setSelection,
+  clearEdgeSelection,
+  containerRef,
+  getViewport,
+}: UseSheltieClipboardCommandsParams) {
+  // 同一 payload の連続ペーストをカスケードさせるための直前ペースト記録
+  const lastPasteRef = useRef<{ payloadJson: string; pastedNodeIds: string[] } | null>(null);
+
+  const getViewportRect = useCallback(() => {
+    const container = containerRef.current;
+    return getViewportWorldRect(
+      getViewport(),
+      container?.clientWidth ?? 0,
+      container?.clientHeight ?? 0,
+    );
+  }, [containerRef, getViewport]);
+
+  const insertMaterialized = useCallback(
+    (
+      payload: BoardClipboardPayload,
+      materialized: MaterializedClipboardContent,
+      lastPastedNodeIds: readonly string[],
+    ): string[] => {
+      const { project, webviewRuntime, insertBoardContent } = useProjectStore.getState();
+      if (!project) return [];
+
+      const positions = resolvePastePlacement({
+        existingNodes: project.nodes,
+        pastedNodes: materialized.nodes,
+        sourceNodeIds: payload.nodes.map((node) => node.id),
+        lastPastedNodeIds: [...lastPastedNodeIds],
+        viewportRect: getViewportRect(),
+        gap: DRAG_REPOSITION_GAP,
+      });
+      const positionByNodeId = new Map(positions.map(({ nodeId, x, y }) => [nodeId, { x, y }]));
+      const placedNodes = materialized.nodes.map((node) => {
+        const position = positionByNodeId.get(node.id);
+        return position ? { ...node, x: position.x, y: position.y } : node;
+      });
+
+      // 同一ドキュメント内の複製だけスクリーンショットをシードする。
+      // 別 window の screenshot ファイルは prune / 削除で寿命が読めない。
+      let screenshotSeedsByNodeId: Record<string, ScreenshotCacheEntry> | undefined;
+      if (payload.sourceProjectId === project.id) {
+        const seeds: Record<string, ScreenshotCacheEntry> = {};
+        for (const [newId, sourceId] of Object.entries(materialized.sourceIdByNewId)) {
+          const entry = webviewRuntime.screenshotCacheByNodeId[sourceId];
+          if (entry) seeds[newId] = entry;
+        }
+        if (Object.keys(seeds).length > 0) screenshotSeedsByNodeId = seeds;
+      }
+
+      insertBoardContent({
+        nodes: placedNodes,
+        edges: materialized.edges,
+        screenshotSeedsByNodeId,
+      });
+
+      const newNodeIds = placedNodes.map((node) => node.id);
+      clearEdgeSelection();
+      setSelection(newNodeIds);
+      return newNodeIds;
+    },
+    [clearEdgeSelection, getViewportRect, setSelection],
+  );
+
+  const writeClipboard = useCallback(async (payload: BoardClipboardPayload): Promise<boolean> => {
+    try {
+      await clipboardApi.writeBoardClipboard(
+        JSON.stringify(payload),
+        buildBoardClipboardPlainText(payload),
+      );
+      return true;
+    } catch (error) {
+      logClipboardFailure('failed to write clipboard', error);
+      return false;
+    }
+  }, []);
+
+  const handleCopy = useCallback((): boolean => {
+    const { project } = useProjectStore.getState();
+    if (!project) return false;
+
+    const payload = buildBoardClipboardPayload(project, getSelectedNodeIds());
+    if (!payload) return false;
+
+    lastPasteRef.current = null;
+    void writeClipboard(payload);
+    return true;
+  }, [getSelectedNodeIds, writeClipboard]);
+
+  const handleCut = useCallback((): boolean => {
+    const { project } = useProjectStore.getState();
+    if (!project) return false;
+
+    const selectedNodeIds = getSelectedNodeIds();
+    const payload = buildBoardClipboardPayload(project, selectedNodeIds);
+    if (!payload) return false;
+
+    lastPasteRef.current = null;
+    // クリップボードへ書けなかったときにノードだけ消えるのを防ぐため、書き込み成功を待って削除する
+    void (async () => {
+      if (!(await writeClipboard(payload))) return;
+      useProjectStore.getState().removeNodes(selectedNodeIds);
+      setSelection([]);
+    })();
+    return true;
+  }, [getSelectedNodeIds, setSelection, writeClipboard]);
+
+  const handlePaste = useCallback((): boolean => {
+    if (!useProjectStore.getState().project) return false;
+
+    void (async () => {
+      const json = await clipboardApi.readBoardClipboard().catch((error): null => {
+        logClipboardFailure('failed to read clipboard', error);
+        return null;
+      });
+      if (!json) return;
+
+      let payload: BoardClipboardPayload;
+      try {
+        payload = parseBoardClipboardPayload(json);
+      } catch (error) {
+        logClipboardFailure('clipboard payload rejected', error);
+        return;
+      }
+
+      const materialized = materializeBoardClipboardPayload(payload);
+      const lastPastedNodeIds =
+        lastPasteRef.current?.payloadJson === json ? lastPasteRef.current.pastedNodeIds : [];
+      const pastedNodeIds = insertMaterialized(payload, materialized, lastPastedNodeIds);
+      if (pastedNodeIds.length > 0) {
+        lastPasteRef.current = { payloadJson: json, pastedNodeIds };
+      }
+    })();
+
+    return true;
+  }, [insertMaterialized]);
+
+  const handleDuplicate = useCallback((): boolean => {
+    const { project } = useProjectStore.getState();
+    if (!project) return false;
+
+    const payload = buildBoardClipboardPayload(project, getSelectedNodeIds());
+    if (!payload) return false;
+
+    const materialized = materializeBoardClipboardPayload(payload);
+    return insertMaterialized(payload, materialized, []).length > 0;
+  }, [getSelectedNodeIds, insertMaterialized]);
+
+  return { handleCut, handleCopy, handlePaste, handleDuplicate };
+}

@@ -195,7 +195,7 @@ export function isTextNode(node: BoardNode): node is TextNode {
   return node.type === 'text';
 }
 
-function extractTiptapText(value: unknown): string {
+export function extractTiptapText(value: unknown): string {
   if (!value || typeof value !== 'object') return '';
   const record = value as { text?: unknown; content?: unknown };
   if (typeof record.text === 'string') return record.text;

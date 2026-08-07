@@ -22,7 +22,7 @@ const EDITED_INDICATOR_DIAMETER: f64 = 4.0;
 const EDITED_INDICATOR_SIZE: f64 = 20.0;
 
 #[cfg(target_os = "macos")]
-pub(super) fn run_on_app_main_thread<R, T, F>(app: &AppHandle<R>, operation: F) -> Result<T, String>
+pub(crate) fn run_on_app_main_thread<R, T, F>(app: &AppHandle<R>, operation: F) -> Result<T, String>
 where
     R: Runtime,
     T: Send + 'static,
@@ -45,7 +45,7 @@ where
 /// 同期版は setup など await できない経路のために残す。同期版を async command から
 /// 呼ぶと、ユーザー操作が終わるまで tokio worker を 1 本占有してしまう。
 #[cfg(target_os = "macos")]
-pub(super) async fn run_on_app_main_thread_async<R, T, F>(
+pub(crate) async fn run_on_app_main_thread_async<R, T, F>(
     app: &AppHandle<R>,
     operation: F,
 ) -> Result<T, String>

@@ -106,17 +106,16 @@ pub fn remove_submenu_item_by_id<R: tauri::Runtime>(
     Ok(())
 }
 
-pub fn remove_default_undo_redo<R: tauri::Runtime>(submenu: &Submenu<R>) -> tauri::Result<()> {
+/// Edit submenu の predefined item（Undo/Redo/Cut/Copy/Paste/Select All/separator）をすべて除去する。
+/// custom item への置き換え前に呼び、再初期化でも重複しないようにする。
+pub fn remove_default_edit_predefined_items<R: tauri::Runtime>(
+    submenu: &Submenu<R>,
+) -> tauri::Result<()> {
     for item in submenu.items()? {
-        let Some(predefined) = item.as_predefined_menuitem() else {
-            continue;
-        };
-        let title = normalize_menu_text(&predefined.text()?);
-        if title == "undo" || title == "redo" {
+        if let Some(predefined) = item.as_predefined_menuitem() {
             submenu.remove(predefined)?;
         }
     }
-
     Ok(())
 }
 

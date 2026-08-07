@@ -55,7 +55,8 @@
   - 単一 document window の `ProjectState` + actions + ランタイム状態
   - ランタイム状態: `isLoaded`, `history`, `webviewRuntime`
   - 初期化: `initializeProject`, `markProjectSaved`, `restoreProjectFromLastSaved`
-  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `removeNodes`, `addStickyNoteNode`, `addTextNode`
+  - ノード追加/削除: `addWebNode`, `setWebNodeUrl`, `changeWebNodeUrl`, `removeNode`, `removeNodes`, `addStickyNoteNode`, `addTextNode`, `insertBoardContent`
+  - `insertBoardContent({ nodes, edges, screenshotSeedsByNodeId? })`: 準備済みノード/エッジを末尾へ追加し、履歴 1 件・スクリーンショットシードのマージをまとめて行う。ペースト・Cmd+D・alt ドラッグ複製が共用する。ノードが空、または既存 ID と衝突する場合は no-op
   - ノード更新: `updateNodePosition`, `updateNodePositions`, `updateNodeSize`, `updateNodeBounds`, `updateNodeSizeWithoutHistory`, `updateWebNodeUrl`, `updateNodeTitle`, `updateStickyNoteContent`, `updateStickyNoteStyle`, `updateTextNodeContent`, `updateTextNodeStyle`, `updateTextNodeWidthMode`
   - 複数操作の集約: `removeNodes` / `updateNodePositions` は複数ノードの削除・位置更新を 1 つの履歴エントリにまとめる。複数選択の一括削除・一括ドラッグ移動はこの経路を通し、Cmd+Z 1 回で全ての変更を巻き戻せるようにする
   - MCP batch: `applyMcpBoardBatch` は`BoardOperation[]`を純粋interpreterで全件検証してから1回のstore更新で反映する。成功したbatch全体が履歴1件になり、失敗/no-opはproject・history・webviewRuntimeを変更しない
@@ -68,6 +69,22 @@
   - `future`: Redo 用の `ProjectSnapshot` 配列
   - ノードとエッジを統合スナップショットとして管理し、Undo/Redo で両方が同時に復元される
 
+## クリップボード payload
+
+- `BoardClipboardPayload`（`src/lib/board-clipboard.ts`）
+  - `type: 'application/x-sheltie-board-nodes'`, `version: 1`, `sourceProjectId`, `nodes: SheltieDocumentNode[]`, `edges: SheltieDocumentEdge[]`
+  - ノード/エッジは `.sheltie` と同じ document 形式で、元の ID と座標をそのまま保持する
+  - システムクリップボードはファイル同様に信頼できない入力として扱い、`parseDocumentNode` / `parseDocumentEdge`（`parseProjectDocument` と同じ検証点）を通す。1 つでも違反があれば payload 全体を破棄する
+  - `materializeBoardClipboardPayload` が ID を全て再発行し、エッジの `source` / `target` をリマップする
+- コピー対象は選択ノードと、両端が選択に含まれるエッジ。エッジ単体のコピーは対象外
+- Cut はクリップボードへの書き込み成功を待ってからノードを削除する。書き込みが失敗したときにノードだけが消えるのを防ぐ
+- ペースト位置の基準点は次の優先順で選び、いずれも「現在の viewport と交差するか」で判定する
+  1. 直前ペーストしたノード群（同一 payload）→ 外接矩形左上 + 20px
+  2. 生きている元ノード群 → 現在の外接矩形左上 + 20px
+  3. payload の元座標 → そのまま（Cut / 削除後の「その場に戻す」）
+  4. どれも不可 → 外接矩形の中心を viewport 中心に合わせる
+- Webview は重ねられないため、貼り付け群に webpage が含まれる場合は群全体を剛体として右下対角へ 20px 刻みでスライドし、「webpage vs 既存全ノード」「付箋/テキスト vs 既存 webpage」の 20px gap 制約を満たす最初の位置に置く。群内部の重なりは判定しない
+
 ## `.sheltie` とローカル状態の境界
 
 - `.sheltie` は共有用ドキュメント形式
@@ -79,6 +96,7 @@
   - `url` / `addedUrl` は `http` / `https` / 空文字のみ許可する（空文字は URL 未入力の WebPage ノード）
   - `colorIndex` / `textColorIndex` / `fontSizePreset` は対応するプリセット配列長で範囲検証する
   - `x` / `y` / `width` / `height` は有限数のみ許可する（`Infinity` を拒否）
+  - `tiptapContent` は ProseMirror JSON の**構造**を検証する（object であること、`type` が非空文字列、`content` / `marks` が配列、`text` が文字列、入れ子も再帰的に同じ検査）。形が壊れたまま TextNode を描画すると ProseMirror が render 中に throw し、`BoardErrorBoundary` がボード全体を落として Undo にも到達できなくなる。node / mark 名の妥当性は editor の schema に委ねる
   - node / edge の件数、文字列長、Tiptap JSON の深さに上限は設けない。ファイル自体の byte 上限だけを Rust 側で見る
 - ローカル状態は document window の再起動復元用
   - `Project` は renderer のメモリ上で `nodes`, `filePath`, `viewport`, `untitledIndex`, `lastSavedDocument` を保持する
@@ -173,5 +191,11 @@
 - `.sheltie` の `schemaVersion` は整数で管理し、現行実装は `2` を正本にする
 - `lastSavedDocument` はローカル state 専用であり、`.sheltie` へは書き出さない
 - `projectId` は dirty 判定に含めない。ボード内容ではなくキャッシュキーなので、`projectId` を持たないファイルを開いた直後に未保存扱いになってはいけない
+- ペースト / Cmd+D / alt ドラッグ複製は `insertBoardContent` を通し、ノード・エッジ・スクリーンショットシードをまとめて履歴 1 件にする。操作後は新規ノード群を選択状態にする
+- alt ドラッグ複製ではドラッグしていた側が新ノードになる。元ノードの位置は store へ書かないため元位置に留まり、元ノードに繋がる既存エッジも元ノード側に残る。ドラッグ対象内で閉じたエッジだけを複製する
+- alt ドラッグの残像クローン（ghost node）は描画専用の runtime 表現で、`nodes` 配列にも `.sheltie` にも現れない
+- ghost は flowNodes 配列で複製元ノードの直前に差し込む。配列順がそのまま重なり順になるため、先頭や末尾へまとめると残像だけが複製元と違う重なりになり、ドラッグ中に手前のノードへ潜って見える
+- alt ドロップの重なり補正は、単独なら通常ドラッグ終了と同じ `resolveDraggedNodePosition`（最近傍 1 軸）、複数同時なら相対レイアウトを保つためペーストと同じ `resolveNonOverlappingGroupOffset`（剛体を右下対角へ）を使う。複数選択でも webpage の重なりは許さない
+- 複製時のスクリーンショットシードは `payload.sourceProjectId` が現在の `project.id` と一致するときだけ行う。別 window の screenshot ファイルは prune / 削除で寿命が読めないため使い回さない
 - 読み込みに失敗した `.sheltie` は `Project` を初期化しない。`filePath` を保持したまま空文書で開くと、ユーザーが気付かず保存した時点で元ファイルを空文書で上書きしてしまう
 

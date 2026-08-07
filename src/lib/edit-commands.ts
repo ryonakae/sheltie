@@ -1,10 +1,6 @@
-export type EditCommand = 'undo' | 'redo' | 'delete';
+export type EditCommand = 'undo' | 'redo' | 'delete' | 'cut' | 'copy' | 'paste' | 'duplicate';
 
-interface EditCommandHandlers {
-  undo: () => boolean | void;
-  redo: () => boolean | void;
-  delete: () => boolean | void;
-}
+type EditCommandHandlers = Record<EditCommand, () => boolean | void>;
 
 let currentHandlers: EditCommandHandlers | null = null;
 
@@ -37,11 +33,5 @@ export function runEditCommand(command: EditCommand): boolean {
   if (!currentHandlers) return false;
   if (hasEditableFocus()) return false;
 
-  if (command === 'undo') {
-    return currentHandlers.undo() !== false;
-  }
-  if (command === 'redo') {
-    return currentHandlers.redo() !== false;
-  }
-  return currentHandlers.delete() !== false;
+  return currentHandlers[command]() !== false;
 }

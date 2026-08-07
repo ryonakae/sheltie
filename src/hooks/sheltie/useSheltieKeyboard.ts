@@ -1,6 +1,11 @@
 import { useEffect } from 'react';
 
-import { hasEditableFocus, registerEditCommandHandlers, runEditCommand } from '@/lib/edit-commands';
+import {
+  hasEditableFocus,
+  registerEditCommandHandlers,
+  runEditCommand,
+  type EditCommand,
+} from '@/lib/edit-commands';
 import { runViewCommand } from '@/lib/view-commands';
 
 interface UseSheltieKeyboardParams {
@@ -11,17 +16,29 @@ interface UseSheltieKeyboardParams {
   onRemoveEdges: (edgeIds: string[]) => void;
   onUndo: () => void;
   onRedo: () => void;
+  onCut: () => boolean;
+  onCopy: () => boolean;
+  onPaste: () => boolean;
+  onDuplicate: () => boolean;
   onBringNodeToFront: (nodeId: string) => void;
   onSendNodeToBack: (nodeId: string) => void;
   onBringNodeForward: (nodeId: string) => void;
   onSendNodeBackward: (nodeId: string) => void;
 }
 
+const CLIPBOARD_COMMAND_BY_KEY: Record<string, EditCommand> = {
+  c: 'copy',
+  x: 'cut',
+  v: 'paste',
+  d: 'duplicate',
+};
+
 /**
  * Sheltie の編集・ビューショートカットを処理する。
  * - Delete / Backspace: 選択中ノード削除 / 選択中エッジ削除
  * - Cmd/Ctrl + Z: Undo
  * - Cmd/Ctrl + Shift + Z: Redo
+ * - Cmd/Ctrl + C / X / V / D: Copy / Cut / Paste / Duplicate
  * - Cmd/Ctrl + =: 拡大（Cmd+Shift+= のネイティブメニュー経路を補完）
  * - Cmd/Ctrl + ]: 1つ前面へ
  * - Cmd/Ctrl + [: 1つ背面へ
@@ -36,6 +53,10 @@ export function useSheltieKeyboard({
   onRemoveEdges,
   onUndo,
   onRedo,
+  onCut,
+  onCopy,
+  onPaste,
+  onDuplicate,
   onBringNodeToFront,
   onSendNodeToBack,
   onBringNodeForward,
@@ -71,8 +92,16 @@ export function useSheltieKeyboard({
         onUndo();
         return true;
       },
+      cut: onCut,
+      copy: onCopy,
+      paste: onPaste,
+      duplicate: onDuplicate,
     });
   }, [
+    onCopy,
+    onCut,
+    onDuplicate,
+    onPaste,
     onRedo,
     onRemoveEdges,
     onRemoveNode,
@@ -93,6 +122,18 @@ export function useSheltieKeyboard({
           e.preventDefault();
         }
         return;
+      }
+
+      // Cmd+C/X/V/D: ノードのコピペ・複製。テキスト編集中は runEditCommand が false を返し、
+      // preventDefault しないことで WKWebView のネイティブ動作に委ねる
+      if (isModifierPressed && !e.altKey && !e.shiftKey) {
+        const clipboardCommand = CLIPBOARD_COMMAND_BY_KEY[lowerKey];
+        if (clipboardCommand) {
+          if (runEditCommand(clipboardCommand)) {
+            e.preventDefault();
+          }
+          return;
+        }
       }
 
       // Cmd+= は Cmd+Shift+= のネイティブメニュー経路では拾えないため JS で補完

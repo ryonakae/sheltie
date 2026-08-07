@@ -462,3 +462,78 @@ describe('style / content actions の no-op 契約', () => {
     expect(useProjectStore.getState().history.past).toHaveLength(2);
   });
 });
+
+describe('insertBoardContent', () => {
+  beforeEach(() => {
+    useProjectStore.getState().initializeProject({
+      untitledIndex: 1,
+      document: {
+        schemaVersion: 2,
+        nodes: [documentWebpage('a'), documentWebpage('b', 500)],
+        edges: [edge()],
+      },
+    });
+  });
+
+  it('ノードとエッジを末尾に追加する（新規ノードが最前面）', () => {
+    useProjectStore.getState().insertBoardContent({
+      nodes: [sticky('n1', 100), sticky('n2', 200)],
+      edges: [edge({ id: 'edge-n1-n2', source: 'n1', target: 'n2' })],
+    });
+
+    const project = useProjectStore.getState().project;
+    expect(project?.nodes.map((node) => node.id)).toEqual(['a', 'b', 'n1', 'n2']);
+    expect(project?.edges.map((item) => item.id)).toEqual(['edge-a-b', 'edge-n1-n2']);
+  });
+
+  it('Undo 1 回で追加した全ノード・エッジが消え、Redo で戻る', () => {
+    useProjectStore.getState().insertBoardContent({
+      nodes: [sticky('n1'), sticky('n2')],
+      edges: [edge({ id: 'edge-n1-n2', source: 'n1', target: 'n2' })],
+    });
+    expect(useProjectStore.getState().history.past).toHaveLength(1);
+
+    useProjectStore.getState().undoProject();
+    expect(useProjectStore.getState().project?.nodes.map((node) => node.id)).toEqual(['a', 'b']);
+    expect(useProjectStore.getState().project?.edges.map((item) => item.id)).toEqual(['edge-a-b']);
+
+    useProjectStore.getState().redoProject();
+    expect(useProjectStore.getState().project?.nodes.map((node) => node.id)).toEqual([
+      'a',
+      'b',
+      'n1',
+      'n2',
+    ]);
+    expect(useProjectStore.getState().project?.edges).toHaveLength(2);
+  });
+
+  it('スクリーンショットシードを runtime キャッシュへ反映し、既存エントリを壊さない', () => {
+    useProjectStore.getState().setProjectScreenshotCacheEntry('a', screenshotEntry('a'));
+
+    const seed = screenshotEntry('n1');
+    useProjectStore.getState().insertBoardContent({
+      nodes: [sticky('n1')],
+      edges: [],
+      screenshotSeedsByNodeId: { n1: seed },
+    });
+
+    expect(useProjectStore.getState().webviewRuntime.screenshotCacheByNodeId).toEqual({
+      a: screenshotEntry('a'),
+      n1: seed,
+    });
+  });
+
+  it('ノードが空なら no-op（履歴を積まない）', () => {
+    useProjectStore.getState().insertBoardContent({ nodes: [], edges: [] });
+
+    expect(useProjectStore.getState().project?.nodes).toHaveLength(2);
+    expect(useProjectStore.getState().history.past).toHaveLength(0);
+  });
+
+  it('既存 ID と衝突するノードは no-op にする', () => {
+    useProjectStore.getState().insertBoardContent({ nodes: [sticky('a')], edges: [] });
+
+    expect(useProjectStore.getState().project?.nodes).toHaveLength(2);
+    expect(useProjectStore.getState().history.past).toHaveLength(0);
+  });
+});

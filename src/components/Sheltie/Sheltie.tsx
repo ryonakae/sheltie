@@ -27,6 +27,7 @@ import { FLOATING_CONTROL_SOLID_BUTTON_CLASSNAME } from '@/components/Sheltie/fl
 import { FloatingToolbar } from '@/components/Sheltie/FloatingToolbar';
 import { ZoomIndicator } from '@/components/Sheltie/ZoomIndicator';
 import { DEFAULT_EDGE_STYLE, MIN_ZOOM, MAX_ZOOM } from '@/constants';
+import { useSheltieClipboardCommands } from '@/hooks/sheltie/useSheltieClipboardCommands';
 import { useSheltieContextMenus } from '@/hooks/sheltie/useSheltieContextMenus';
 import { useSheltieDisplayEngine } from '@/hooks/sheltie/useSheltieDisplayEngine';
 import { useSheltieDrag } from '@/hooks/sheltie/useSheltieDrag';
@@ -122,6 +123,7 @@ export function Sheltie({
     updateTextNodeStyle,
     updateTextNodeWidthMode,
     hydrateProjectScreenshotCache,
+    insertBoardContent,
     setProjectScreenshotCacheEntry,
     clearProjectScreenshotCacheEntry,
     addEdge: addEdgeToStore,
@@ -145,6 +147,7 @@ export function Sheltie({
       updateTextNodeWidthMode: s.updateTextNodeWidthMode,
       clearWebNodeWebviewLabel: s.clearWebNodeWebviewLabel,
       hydrateProjectScreenshotCache: s.hydrateProjectScreenshotCache,
+      insertBoardContent: s.insertBoardContent,
       redoProject: s.redoProject,
       pinWebNodeUrl: s.pinWebNodeUrl,
       removeNode: s.removeNode,
@@ -381,6 +384,7 @@ export function Sheltie({
 
   const {
     draggingNodePositions,
+    altDuplicateSourceNodes,
     positionCorrectionAnimations,
     clearPositionCorrectionAnimation,
     handlePositionCorrectionAnimationComplete,
@@ -391,6 +395,7 @@ export function Sheltie({
     trackDraggingPositions,
   } = useSheltieDrag({
     nodes,
+    edges,
     webPageNodes,
     selectedNodeIds,
     setSelection,
@@ -402,7 +407,18 @@ export function Sheltie({
     releaseNodeAfterPositionSettle,
     updateNodePosition,
     updateNodePositions,
+    insertBoardContent,
+    screenshotCacheByNodeId: projectWebviewRuntime.screenshotCacheByNodeId,
   });
+
+  const ghostNodes = useMemo(
+    () =>
+      altDuplicateSourceNodes.map((node) => ({
+        node,
+        screenshotUrl: screenshotUrls[node.id],
+      })),
+    [altDuplicateSourceNodes, screenshotUrls],
+  );
 
   const {
     handleGoBack,
@@ -579,6 +595,14 @@ export function Sheltie({
     [clearPositionCorrectionAnimation, handleRemoveNodes],
   );
 
+  const { handleCut, handleCopy, handlePaste, handleDuplicate } = useSheltieClipboardCommands({
+    getSelectedNodeIds,
+    setSelection,
+    clearEdgeSelection,
+    containerRef,
+    getViewport,
+  });
+
   useSheltieKeyboard({
     selectedNodeIds,
     selectedEdgeIds,
@@ -587,6 +611,10 @@ export function Sheltie({
     onRemoveEdges: removeEdges,
     onUndo: undoProject,
     onRedo: redoProject,
+    onCut: handleCut,
+    onCopy: handleCopy,
+    onPaste: handlePaste,
+    onDuplicate: handleDuplicate,
     onBringNodeToFront: bringNodeToFront,
     onSendNodeToBack: sendNodeToBack,
     onBringNodeForward: bringNodeForward,
@@ -670,6 +698,7 @@ export function Sheltie({
   // React Flow の flowNodes 配列を構築する
   const flowNodes = useSheltieFlowNodes({
     nodes,
+    ghostNodes,
     draggingNodePositions,
     rfMeasured,
     activeNodeId,

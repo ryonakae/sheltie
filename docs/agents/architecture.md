@@ -43,11 +43,18 @@ src/
 - `components/ReactFlowEdges/arrowGeometry.ts`: 太さ別の矢印形状・破線パターン・色・選択端点リング・ベジェ境界計算と Handle サイズの共通定数/純関数
 - `components/ReactFlowEdges/edgeTypes.ts`: React Flow `edgeTypes` 定数。既定の `default` を `ArrowEdge` で上書き
 - `hooks/sheltie/*`: 表示制御・ノードランタイム・キーボード操作を分担。ドラッグ・パン・ズーム・リサイズはすべて React Flow に委譲。
+- `hooks/sheltie/useSheltieDrag.ts`: React Flow ネイティブドラッグと WebPage タイトル段の自前 pointer ドラッグを扱う。alt 押下状態はドラッグ中も window リスナーで追跡し、残像クローン用の元ノード（`altDuplicateSourceNodes`）を公開して、ドロップ時の alt 状態で複製確定と通常移動を振り分ける
 - `store/tab-store.ts`: 単一 document window の node・edge・ビューポート状態と統合履歴（Undo/Redo）を管理。同じ2接続点のエッジ追加は後勝ちで向きを置換して旧スタイルを継承し、`updateEdgeStyle` / `reverseEdge` も履歴へ記録する。MCP batchは`applyMcpBoardBatch`だけを使い、全operationを1 history entryとして適用する
 - `lib/mcp/renderer-bridge.ts`: window-local MCP requestを検証し、Zustand board read/batchとmounted editor adapterへdispatchしてcompletion envelopeを返す
 - `lib/mcp/editor-adapter.ts`: Project/Sheltieが所有するselection、live viewport、cache-first screenshot、offscreen board captureをwindow-localに公開する。永続stateの正本にはしない
 - `store/theme-store.ts`: テーマ状態
-- `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる
+- `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる（`undo` / `redo` / `delete` / `cut` / `copy` / `paste` / `duplicate`）
+- `lib/board-clipboard.ts`: クリップボード payload の build / plain text 化 / parse / materialize。`.sheltie` の document node/edge 形式とその検証を再利用する
+- `lib/board-paste-placement.ts`: ペースト位置の決定（viewport world rect、ノード群の外接矩形、基準点の優先順位）。重なり回避そのものは `sheltie-node-placement.ts` の `resolveNonOverlappingGroupOffset` に委ねる
+- `lib/sheltie-node-placement.ts`: 単独ノードの最近傍 1 軸補正（`resolveDraggedNodePosition`）と、ノード群を剛体のまま右下対角へ逃がす `resolveNonOverlappingGroupOffset`。ペーストと alt ドラッグ複製が後者を共有する
+- `lib/alt-drag-duplicate.ts`: alt ドラッグのドロップ時に作る複製の組み立て（ID 再発行、内部エッジのリマップ、単独ドラッグの重なり補正）
+- `components/ReactFlowNodes/GhostFlowNode.tsx`: alt ドラッグ中に元位置へ残す静的クローン。3 種別すべてを描画専用でレンダーし、Handle / NodeToolbar / リサイズ UI を持たない
+- `hooks/sheltie/useSheltieClipboardCommands.ts`: Cut / Copy / Paste / Duplicate の統括。クリップボード I/O → parse → materialize → 配置 → `insertBoardContent` → 選択更新を担当する
 - `lib/file-commands.ts`: File メニューの `new-tab` / `new-window` / `open` / `save` / `save-as` を処理し、`.sheltie` の入出力と window-local な store 連携を担当する
 - `lib/project-close.ts`: dirty 判定・保存/破棄確認・現在 window の close orchestration を担当する
 - `lib/app-exit.ts`: macOS の custom `app.quit` から始まる集約 quit coordinator。各 document window の dirty 状態収集、集約ダイアログ、順次保存、最終 `complete_app_exit` を担当する
@@ -95,7 +102,7 @@ src/
 
 - `useSheltieDisplayEngine`: `DisplayMode` 判定、Webview 表示/非表示、スクリーンショット管理
 - `useSheltieNodeRuntime`: webpage ノード単位のナビゲーション状態・タイトル同期・スクリーンショット契機を管理
-- `useSheltieKeyboard`: Delete/Backspace・Undo/Redo・ノード重なり順変更のショートカットを処理し、共通編集コマンドへ委譲
+- `useSheltieKeyboard`: Delete/Backspace・Undo/Redo・Cut/Copy/Paste/Duplicate・ノード重なり順変更のショートカットを処理し、共通編集コマンドへ委譲
 
 詳細仕様は `sheltie-runtime.md` を参照。
 
@@ -110,12 +117,14 @@ src/
 - `mcp/tools/browser.rs`: `documentId`と`pageNodeId`を検証し、WKWebViewのsemantic snapshot・DOM action・navigationをpage actorへ渡す
 - `mcp/lifecycle.rs`: default-off設定、loopback listener、Host/Origin制限、session managerと全session shutdownを担当する
 - `setup.rs`: `pub fn run()` 本体、`invoke_handler` 登録、menu event 配信
-- `app_exit.rs`: `AppExitCoordinatorState` とアプリ終了の集約フロー
+- `app_exit.rs`: `AppExitCoordinatorState` とアプリ終了の集約フロー（アップデート後再起動の `restart_after_exit` フラグ含む）
+- `updater.rs`: Check for Updates… の対話フロー（tauri-plugin-updater / 再起動は app_exit 経由）
 - `menus/{app,file,edit,view,theme}.rs` + `menus/{helpers,macos}.rs`: メニュー構築と `file-command` / `edit-command` / `view-command` / `theme-command` 配信
 - `commands/store/document_manager.rs`: document window 状態機械（ラベル採番・untitled index・filePath 競合チェック）
 - `commands/store/document_window.rs`: document window 生成・前面化・window context、終了/クローズ系コマンド
 - `commands/store/file_io.rs`: `.sheltie` ファイルの load/save とパス正規化
 - `commands/store/macos_tabs.rs`: macOS NSWindow 操作（タブ attach + window 設定）
+- `commands/clipboard.rs`: macOS `NSPasteboard` へのカスタム type + plain text 書き込みと、カスタム type の読み取り
 - `commands/theme.rs`: テーマ設定、プラットフォーム情報
 - `commands/webview/labels.rs`: child webview label の解決と namespacing
 - `commands/webview/navigation.rs`: back/forward/reload とナビゲーション状態取得

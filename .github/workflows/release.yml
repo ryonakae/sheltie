@@ -155,8 +155,11 @@ jobs:
           security find-identity -v -p codesigning "$BUILD_KEYCHAIN_PATH" \
             | grep -F "$APPLE_SIGNING_IDENTITY"
 
-      - name: Build signed universal DMG
-        run: npm run build -- --bundles dmg --target universal-apple-darwin
+      - name: Build signed universal DMG and updater artifacts
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run build -- --bundles app,dmg --target universal-apple-darwin
 
       - name: Notarize and verify DMG
         run: |
@@ -191,6 +194,48 @@ jobs:
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
           echo "CHECKSUM_PATH=$CHECKSUM_PATH" >> "$GITHUB_ENV"
 
+      - name: Prepare updater artifacts
+        run: |
+          set -euo pipefail
+
+          BUNDLE_DIR="$GITHUB_WORKSPACE/src-tauri/target/universal-apple-darwin/release/bundle/macos"
+          TARBALL_SRC="$BUNDLE_DIR/Sheltie.app.tar.gz"
+          for file in "$TARBALL_SRC" "$TARBALL_SRC.sig"; do
+            if [[ ! -f "$file" ]]; then
+              echo "Expected updater artifact was not created: $file" >&2
+              exit 1
+            fi
+          done
+
+          TARBALL_PATH="$BUNDLE_DIR/Sheltie_${VERSION}_universal.app.tar.gz"
+          mv "$TARBALL_SRC" "$TARBALL_PATH"
+          mv "$TARBALL_SRC.sig" "$TARBALL_PATH.sig"
+
+          SIGNATURE="$(cat "$TARBALL_PATH.sig")"
+          if [[ -z "$SIGNATURE" ]]; then
+            echo "Updater signature file is empty" >&2
+            exit 1
+          fi
+
+          LATEST_JSON_PATH="$BUNDLE_DIR/latest.json"
+          # The binary is universal, so both architecture keys point at the same tarball.
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg signature "$SIGNATURE" \
+            --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/Sheltie_${VERSION}_universal.app.tar.gz" \
+            '{
+              version: $version,
+              pub_date: $pub_date,
+              platforms: {
+                "darwin-aarch64": { signature: $signature, url: $url },
+                "darwin-x86_64": { signature: $signature, url: $url }
+              }
+            }' > "$LATEST_JSON_PATH"
+
+          echo "TARBALL_PATH=$TARBALL_PATH" >> "$GITHUB_ENV"
+          echo "LATEST_JSON_PATH=$LATEST_JSON_PATH" >> "$GITHUB_ENV"
+
       - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -205,11 +250,17 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" \
               "$DMG_PATH" \
               "$CHECKSUM_PATH" \
+              "$TARBALL_PATH" \
+              "$TARBALL_PATH.sig" \
+              "$LATEST_JSON_PATH" \
               --clobber
           else
             gh release create "$GITHUB_REF_NAME" \
               "$DMG_PATH" \
               "$CHECKSUM_PATH" \
+              "$TARBALL_PATH" \
+              "$TARBALL_PATH.sig" \
+              "$LATEST_JSON_PATH" \
               --draft \
               --generate-notes \
               --title "Sheltie $GITHUB_REF_NAME" \

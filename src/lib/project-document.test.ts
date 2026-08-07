@@ -530,3 +530,93 @@ describe('serializeProjectDocument', () => {
     expect(text).toContain('  "schemaVersion": 2');
   });
 });
+
+describe('parseProjectDocument の tiptapContent 検証', () => {
+  function documentWithTiptapContent(tiptapContent: unknown): string {
+    return JSON.stringify({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: 't1',
+          type: 'text',
+          title: 'text',
+          tiptapContent,
+          fontSizePreset: 1,
+          fontWeight: 'normal',
+          italic: false,
+          strikethrough: false,
+          textColorIndex: 0,
+          widthMode: 'auto',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 32,
+        },
+      ],
+      edges: [],
+    });
+  }
+
+  it('正しい Tiptap JSON を受け入れる', () => {
+    const contents = documentWithTiptapContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'hello', marks: [{ type: 'bold' }] }],
+        },
+        { type: 'hardBreak' },
+      ],
+    });
+    expect(parseProjectDocument(contents).nodes).toHaveLength(1);
+  });
+
+  it('tiptapContent 未設定を受け入れる', () => {
+    expect(parseProjectDocument(documentWithTiptapContent(undefined)).nodes).toHaveLength(1);
+  });
+
+  it('オブジェクト以外の tiptapContent を拒否する', () => {
+    expect(() => parseProjectDocument(documentWithTiptapContent('doc'))).toThrow(/tiptapContent/);
+    expect(() => parseProjectDocument(documentWithTiptapContent(42))).toThrow(/tiptapContent/);
+    expect(() => parseProjectDocument(documentWithTiptapContent([]))).toThrow(/tiptapContent/);
+    expect(() => parseProjectDocument(documentWithTiptapContent(null))).toThrow(/tiptapContent/);
+  });
+
+  it('type を持たないノードを拒否する', () => {
+    expect(() => parseProjectDocument(documentWithTiptapContent({}))).toThrow(/type/);
+    expect(() => parseProjectDocument(documentWithTiptapContent({ type: '' }))).toThrow(/type/);
+  });
+
+  it('content が配列でない場合を拒否する', () => {
+    expect(() =>
+      parseProjectDocument(documentWithTiptapContent({ type: 'doc', content: 'nope' })),
+    ).toThrow(/content/);
+  });
+
+  it('入れ子のノードも検証する', () => {
+    expect(() =>
+      parseProjectDocument(
+        documentWithTiptapContent({
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ text: 'no type' }] }],
+        }),
+      ),
+    ).toThrow(/type/);
+  });
+
+  it('marks と text の形を検証する', () => {
+    expect(() =>
+      parseProjectDocument(
+        documentWithTiptapContent({
+          type: 'doc',
+          content: [{ type: 'text', text: 'x', marks: [{ name: 'bold' }] }],
+        }),
+      ),
+    ).toThrow(/marks/);
+    expect(() =>
+      parseProjectDocument(
+        documentWithTiptapContent({ type: 'doc', content: [{ type: 'text', text: 5 }] }),
+      ),
+    ).toThrow(/text/);
+  });
+});

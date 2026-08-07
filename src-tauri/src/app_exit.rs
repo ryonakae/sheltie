@@ -15,6 +15,7 @@ pub struct AppExitCoordinatorState {
 struct AppExitCoordinatorFlags {
     pending_quit: bool,
     allow_exit_once: bool,
+    restart_after_exit: bool,
 }
 
 impl AppExitCoordinatorState {
@@ -71,8 +72,46 @@ impl AppExitCoordinatorState {
             .map_err(|_| "failed to acquire app exit state lock".to_string())?;
         inner.pending_quit = false;
         inner.allow_exit_once = false;
+        // 終了をキャンセルしたら、後の通常 Quit で意図せず再起動しないようにする
+        inner.restart_after_exit = false;
         Ok(())
     }
+
+    pub fn request_restart_on_exit(&self) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire app exit state lock".to_string())?;
+        inner.restart_after_exit = true;
+        Ok(())
+    }
+
+    pub fn consume_restart_after_exit(&self) -> Result<bool, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "failed to acquire app exit state lock".to_string())?;
+        let restart = inner.restart_after_exit;
+        inner.restart_after_exit = false;
+        Ok(restart)
+    }
+}
+
+/// allow_next_exit() 済みの終了点で呼ぶ。restart 予約があれば exit の代わりに再起動する。
+/// app.restart() は非 main thread では ExitRequested を発火して consume_allow_exit の
+/// ゲートを通る（allow_next_exit 済みなので通過する）。main thread から呼ばれた場合
+/// （emit_app_exit_requested の document window なし分岐）はイベントをスキップして
+/// 直接再起動するが、window が無く保護対象もないため許容する。
+pub fn exit_or_restart<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    exit_state: &AppExitCoordinatorState,
+) {
+    match exit_state.consume_restart_after_exit() {
+        Ok(true) => app.restart(),
+        Ok(false) => {}
+        Err(error) => log::error!("failed to read restart flag: {error}"),
+    }
+    app.exit(0);
 }
 
 pub fn emit_app_exit_requested<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
@@ -104,5 +143,33 @@ pub fn emit_app_exit_requested<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         return;
     }
 
-    app.exit(0);
+    exit_or_restart(app, &exit_state);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restart_flag_is_off_by_default() {
+        let state = AppExitCoordinatorState::default();
+        assert_eq!(state.consume_restart_after_exit(), Ok(false));
+    }
+
+    #[test]
+    fn restart_request_is_consumed_once() {
+        let state = AppExitCoordinatorState::default();
+        state.request_restart_on_exit().unwrap();
+        assert_eq!(state.consume_restart_after_exit(), Ok(true));
+        assert_eq!(state.consume_restart_after_exit(), Ok(false));
+    }
+
+    #[test]
+    fn aborting_pending_quit_clears_restart_request() {
+        let state = AppExitCoordinatorState::default();
+        state.begin_pending_quit().unwrap();
+        state.request_restart_on_exit().unwrap();
+        state.abort_pending_quit().unwrap();
+        assert_eq!(state.consume_restart_after_exit(), Ok(false));
+    }
 }

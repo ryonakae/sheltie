@@ -1,6 +1,6 @@
 [package]
 name = "sheltie"
-version = "1.1.0"
+version = "1.2.0"
 description = "Sheltie - Artboard app for the web"
 authors = []
 license = "MIT"
@@ -31,6 +31,7 @@ tauri = { version = "2", features = ["unstable", "protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
 tauri-plugin-store = "2"
+tauri-plugin-updater = "2"
 tauri-plugin-prevent-default = "4"
 tauri-plugin-single-instance = "2"
 tokio = { version = "1", features = ["macros", "net", "rt", "sync", "test-util", "time"] }
@@ -43,6 +44,6 @@ tower = { version = "0.5", features = ["util"] }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["NSColor", "NSResponder", "NSView", "NSWindow", "NSWindowTab", "std"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSColor", "NSPasteboard", "NSResponder", "NSView", "NSWindow", "NSWindowTab", "std"] }
 objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
 block2 = "0.6"

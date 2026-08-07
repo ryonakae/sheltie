@@ -35,7 +35,7 @@
 - [x] [Phase 2 — Copy / Cut / Paste / Duplicate commands and placement](2026-08-06-node-copy-paste-duplicate/phase-2-copy-paste-commands.md)
 - [x] [Phase 3 — Alt-drag duplicate](2026-08-06-node-copy-paste-duplicate/phase-3-alt-drag-duplicate.md)
 
-All code is implemented and every automated check passes: `npm run lint` / `format` / `typecheck`, 371 Vitest tests (45 new), `cargo clippy --all-targets` with no warnings, and 162 Rust tests.
+All code is implemented and every automated check passes: `npm run lint` / `format` / `typecheck`, 381 Vitest tests (55 new), `cargo clippy --all-targets` with no warnings, and 162 Rust tests.
 
 ## Post-implementation review fixes
 
@@ -54,28 +54,27 @@ Cause: `invoke_handler` registration is not sufficient. Local document webviews 
 
 The same check surfaced a pre-existing bug in a separate commit: `prune_screenshot_cache` was invoked on every launch, was never in the allowlist, and its rejection was swallowed by an empty `catch`, so screenshot cache pruning had never run.
 
-## Outstanding: manual GUI verification
+## Fixed after the user's second GUI check
 
-The manual checklists (phase 2 Task 4 Step 4, phase 3 Task 4 Step 2) could not be run in the agent environment. `npm run dev` aborts before the window opens:
+Two ordering/placement bugs the automated tests could not have caught, both reported from real use:
 
-```
-Failed to setup app: error encountered during setup hook:
-failed to initialize plugin `log`: Operation not permitted (os error 1)
-```
+1. **Ghost clones rendered behind every node.** Ghosts were prepended to the flow nodes array, and array order is stacking order. Alt-dragging a node that overlapped one below it made the ghost appear to sink under that node for the duration of the drag, snapping back on drop. Each ghost now goes immediately before the node it clones (`insertGhostFlowNodes`).
+2. **Multi-node alt-drop could stack web pages.** Alt-dropping several nodes at once skipped overlap correction entirely (it matched plain multi-drag), so a selection containing a web page node could duplicate it on top of an existing node. The group now slides diagonally clear. The rigid-group slide moved out of `board-paste-placement.ts` into `sheltie-node-placement.ts` as `resolveNonOverlappingGroupOffset`, shared by paste and alt-drag.
 
-`tauri-plugin-log` (registered under `#[cfg(debug_assertions)]`, untouched by this work) cannot write to the OS log directory inside the sandbox. Run both checklists on an unsandboxed machine before merging.
+Cmd+D was reported as affected too, but reproduction tests showed it already routed through paste placement and stayed clear, including across five cascading rounds. Only alt-drag was at fault.
 
-The highest-value item is the editable-focus assumption below — it is the only decision that could force a code change.
+## Verified by the user
 
-## Assumptions still unverified
+Copy / Cut / Paste / Duplicate, alt-drag duplication (single and multi-node), ghost stacking order, and web page overlap avoidance all behave correctly in the running app.
 
-- With focus in an editable element (URL input, Tiptap), WKWebView consumes Cmd+C/X/V before the app menu accelerator fires, so native text copy/paste keeps working after the predefined menu items are replaced. If this does not hold, the fallback is to perform the native operation from the JS handler (`document.execCommand('copy'/'cut')` and a Rust plain-text read + programmatic insert for paste).
-- Alt state during a drag is tracked with `window` keydown/keyup listeners, so releasing Alt while the window is unfocused (Cmd+Tab mid-drag, then returning to finish the drag) may drop as a duplicate instead of a move. The failure is mild and one Cmd+Z undoes it, so it was left alone rather than fixed against a guessed event shape. Worth a try during GUI verification: if it reproduces, read `altKey` off the drop event itself (guaranteed on the title-row path's `PointerEvent`; confirm what React Flow's `onNodeDragStop` actually passes before relying on it).
+## Left unverified
 
-## Verified during implementation
+The agent environment could not launch the GUI (`tauri-plugin-log` hits `Operation not permitted` in the sandbox), so these were never exercised and are worth a spot-check if they ever look wrong:
 
-- `objc2-app-kit 0.3` exposes `NSPasteboard::generalPasteboard`, `clearContents`, `setString_forType`, and `stringForType` as safe functions; only the `NSPasteboardTypeString` extern static needs `unsafe`. The commands compile warning-free and run through the existing `run_on_app_main_thread` helper.
+- Editable focus: with the caret in the URL input or a Tiptap text node, Cmd+C/X/V should fall through to native text editing. The board handlers return `false` via `hasEditableFocus()` and skip `preventDefault`, so WKWebView should keep its default behavior. If it does not, run the native operation from the JS handler instead (`document.execCommand('copy'/'cut')`, plus a Rust plain-text read and programmatic insert for paste).
+- Cross-window paste, Cut → Paste restoring a node at its original coordinates, external paste showing plain text rather than JSON, and edge duplication between two copied web page nodes.
+- Alt state is tracked with `window` keydown/keyup listeners, so releasing Alt while the window is unfocused (Cmd+Tab mid-drag, then returning to finish) may drop as a duplicate instead of a move. One Cmd+Z undoes it. If it reproduces, read `altKey` off the drop event itself — guaranteed on the title-row path's `PointerEvent`; confirm what React Flow's `onNodeDragStop` actually passes before relying on it.
 
-## Completion
+## Known gap left open (needs a product decision)
 
-After all three child plans pass their validation, move this parent file and its matching child directory to `docs/plans/archived/` preserving the same structure.
+Plain multi-node dragging (no Alt) still lets a web page node land on top of another node: single drags get `resolveDraggedNodePosition`, but `updateNodePositions` commits multi-drags with no correction. This predates the feature and violates the same "webviews cannot overlap" rule. Fixing it would shift the group away from where the user dropped it, so it was left alone pending a decision.

@@ -1,0 +1,49 @@
+# Version updates target `develop`, because `main` only ever receives merge
+# commits from `develop` and a direct commit there would leave the branches
+# diverged.
+#
+# Security updates ignore `target-branch` and always open against the default
+# branch, so those still land on `main` and have to be applied on `develop` by
+# hand. See docs/agents/release.md for the branch model.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    groups:
+      patch:
+        update-types:
+          - patch
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    target-branch: develop
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      patch:
+        update-types:
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      patch:
+        update-types:
+          - patch

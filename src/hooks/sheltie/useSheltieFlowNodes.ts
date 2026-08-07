@@ -88,6 +88,40 @@ interface UseSheltieFlowNodesParams {
 }
 
 /**
+ * alt ドラッグの残像を複製元ノードの直前へ差し込む。
+ * 配列順がそのまま重なり順になるため、先頭や末尾へまとめると残像だけが
+ * 複製元と違う重なりで描かれ、ドラッグ中に手前のノードへ潜って見える。
+ */
+export function insertGhostFlowNodes(
+  boardFlowNodes: Node[],
+  ghostNodes: Array<{ node: BoardNode; screenshotUrl?: string }>,
+): Node[] {
+  if (ghostNodes.length === 0) return boardFlowNodes;
+
+  const ghostFlowNodeBySourceId = new Map<string, Node>(
+    ghostNodes.map(({ node, screenshotUrl }) => [
+      node.id,
+      {
+        id: `ghost-${node.id}`,
+        type: 'ghost',
+        position: { x: node.x, y: node.y },
+        draggable: false,
+        selectable: false,
+        focusable: false,
+        data: { node, screenshotUrl } satisfies GhostFlowNodeData,
+        width: getNodeFrameWidth(node),
+        height: getNodeFrameHeight(node),
+      },
+    ]),
+  );
+
+  return boardFlowNodes.flatMap((flowNode) => {
+    const ghost = ghostFlowNodeBySourceId.get(flowNode.id);
+    return ghost ? [ghost, flowNode] : [flowNode];
+  });
+}
+
+/**
  * ストアのノード配列と各種ランタイム状態（表示モード/スクショ/ナビ状態/リサイズ/ドラッグ位置）から
  * React Flow の controlled mode 用ノード配列を構築するフック。
  * displayModes/screenshotUrls/navStates/resizingSize の変化に追従するため useMemo 依存に含める。
@@ -147,19 +181,6 @@ export function useSheltieFlowNodes({
   ghostNodes,
 }: UseSheltieFlowNodesParams): Node[] {
   return useMemo((): Node[] => {
-    // alt ドラッグ中の残像は実ノードより背面に置く
-    const ghostFlowNodes: Node[] = ghostNodes.map(({ node, screenshotUrl }) => ({
-      id: `ghost-${node.id}`,
-      type: 'ghost',
-      position: { x: node.x, y: node.y },
-      draggable: false,
-      selectable: false,
-      focusable: false,
-      data: { node, screenshotUrl } satisfies GhostFlowNodeData,
-      width: getNodeFrameWidth(node),
-      height: getNodeFrameHeight(node),
-    }));
-
     const boardFlowNodes = nodes.map((node): Node => {
       // ドラッグ中は一時位置を使用。dragStop 時にストアへ反映する
       const position = draggingNodePositions[node.id] ?? { x: node.x, y: node.y };
@@ -313,7 +334,7 @@ export function useSheltieFlowNodes({
       };
     });
 
-    return [...ghostFlowNodes, ...boardFlowNodes];
+    return insertGhostFlowNodes(boardFlowNodes, ghostNodes);
   }, [
     ghostNodes,
     nodes,

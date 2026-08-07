@@ -115,7 +115,7 @@ For version `1.0.0`, the tag is `v1.0.0`.
 > Rule: release tags must point at commits on `main`. The release workflow does not enforce this; treat it as a hard operational rule.
 
 7. Wait for the **Release macOS** workflow to finish.
-8. Open the generated draft GitHub Release and edit the generated notes as needed. Release notes are written in English. The generated "What's Changed" list may contain Japanese pull request titles; rewrite the entries that matter to release readers.
+8. Write the release notes with the `/release-note` skill, then read the result on GitHub and adjust it if needed. The workflow leaves a `Release notes pending.` placeholder in the draft, so an unwritten release is visible in the release body itself. Release notes are written in English.
 9. Complete the acceptance checks below before publishing.
 
 ## Draft release acceptance

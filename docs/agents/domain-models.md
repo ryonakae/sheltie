@@ -195,7 +195,7 @@
 - alt ドラッグ複製ではドラッグしていた側が新ノードになる。元ノードの位置は store へ書かないため元位置に留まり、元ノードに繋がる既存エッジも元ノード側に残る。ドラッグ対象内で閉じたエッジだけを複製する
 - alt ドラッグの残像クローン（ghost node）は描画専用の runtime 表現で、`nodes` 配列にも `.sheltie` にも現れない
 - ghost は flowNodes 配列で複製元ノードの直前に差し込む。配列順がそのまま重なり順になるため、先頭や末尾へまとめると残像だけが複製元と違う重なりになり、ドラッグ中に手前のノードへ潜って見える
-- alt ドロップの重なり補正は通常ドラッグ終了と同じ規則（単独は `resolveDraggedNodePosition`、複数同時は補正なし）
+- alt ドロップの重なり補正は、単独なら通常ドラッグ終了と同じ `resolveDraggedNodePosition`（最近傍 1 軸）、複数同時なら相対レイアウトを保つためペーストと同じ `resolveNonOverlappingGroupOffset`（剛体を右下対角へ）を使う。複数選択でも webpage の重なりは許さない
 - 複製時のスクリーンショットシードは `payload.sourceProjectId` が現在の `project.id` と一致するときだけ行う。別 window の screenshot ファイルは prune / 削除で寿命が読めないため使い回さない
 - 読み込みに失敗した `.sheltie` は `Project` を初期化しない。`filePath` を保持したまま空文書で開くと、ユーザーが気付かず保存した時点で元ファイルを空文書で上書きしてしまう
 

@@ -1,7 +1,6 @@
 import { getNodeFrameRect } from '@/lib/sheltie-node-frame';
-import { conflictsWithGap } from '@/lib/sheltie-node-placement';
+import { resolveNonOverlappingGroupOffset } from '@/lib/sheltie-node-placement';
 import type { BoardNode, Viewport } from '@/types';
-import { isWebPageNode } from '@/types';
 
 export interface WorldRect {
   x: number;
@@ -55,37 +54,6 @@ export interface ResolvePastePlacementParams {
   gap: number;
 }
 
-/**
- * 貼り付けノード群（元座標のまま）を剛体として平行移動したときの衝突判定。
- * Webview は重ねられないため webpage は既存全ノードと、付箋/テキストは既存 webpage とだけ gap 制約を持つ。
- */
-function hasPlacementConflict(
-  existingNodes: BoardNode[],
-  pastedNodes: BoardNode[],
-  dx: number,
-  dy: number,
-  gap: number,
-): boolean {
-  return pastedNodes.some((pasted) => {
-    const pastedRect = getNodeFrameRect({ ...pasted, x: pasted.x + dx, y: pasted.y + dy });
-    return existingNodes.some((existing) => {
-      if (!isWebPageNode(pasted) && !isWebPageNode(existing)) return false;
-      const existingRect = getNodeFrameRect(existing);
-      return conflictsWithGap(
-        pastedRect.left,
-        pastedRect.top,
-        pastedRect.width,
-        pastedRect.height,
-        existingRect.left,
-        existingRect.top,
-        existingRect.width,
-        existingRect.height,
-        gap,
-      );
-    });
-  });
-}
-
 export function resolvePastePlacement({
   existingNodes,
   pastedNodes,
@@ -123,13 +91,14 @@ export function resolvePastePlacement({
     targetY = viewportRect.y + (viewportRect.height - pastedBounds.height) / 2;
   }
 
-  let dx = targetX - pastedBounds.x;
-  let dy = targetY - pastedBounds.y;
-  // 既存ノードの範囲は有限なので、右下対角へ進み続ければ必ず衝突が消えて停止する
-  while (hasPlacementConflict(existingNodes, pastedNodes, dx, dy, gap)) {
-    dx += gap;
-    dy += gap;
-  }
+  const anchorDx = targetX - pastedBounds.x;
+  const anchorDy = targetY - pastedBounds.y;
+  const anchoredNodes = pastedNodes.map((node) => ({
+    ...node,
+    x: node.x + anchorDx,
+    y: node.y + anchorDy,
+  }));
+  const { dx, dy } = resolveNonOverlappingGroupOffset(existingNodes, anchoredNodes, gap);
 
-  return pastedNodes.map((node) => ({ nodeId: node.id, x: node.x + dx, y: node.y + dy }));
+  return anchoredNodes.map((node) => ({ nodeId: node.id, x: node.x + dx, y: node.y + dy }));
 }

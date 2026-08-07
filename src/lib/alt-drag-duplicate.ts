@@ -1,5 +1,8 @@
 import { DRAG_REPOSITION_GAP } from '@/constants';
-import { resolveDraggedNodePosition } from '@/lib/sheltie-node-placement';
+import {
+  resolveDraggedNodePosition,
+  resolveNonOverlappingGroupOffset,
+} from '@/lib/sheltie-node-placement';
 import type { BoardEdge, BoardNode } from '@/types';
 
 export interface BuildAltDragDuplicateParams {
@@ -41,8 +44,8 @@ export function buildAltDragDuplicate({
       return { ...source, id: newId, x: dropped.x, y: dropped.y };
     });
 
-  // 単独ドラッグは通常ドラッグ終了と同じ重なり補正。複数同時は既存挙動に合わせて省略する
   if (duplicates.length === 1) {
+    // 単独ドラッグは通常ドラッグ終了と同じ最近傍 1 軸補正にそろえる
     const duplicate = duplicates[0];
     const resolved = resolveDraggedNodePosition({
       nodes,
@@ -52,6 +55,12 @@ export function buildAltDragDuplicate({
       gap: DRAG_REPOSITION_GAP,
     });
     duplicates = [{ ...duplicate, x: resolved.x, y: resolved.y }];
+  } else {
+    // 複数同時は相対レイアウトを保つ必要があるので、ペーストと同じ剛体スライドで逃がす
+    const { dx, dy } = resolveNonOverlappingGroupOffset(nodes, duplicates, DRAG_REPOSITION_GAP);
+    if (dx !== 0 || dy !== 0) {
+      duplicates = duplicates.map((node) => ({ ...node, x: node.x + dx, y: node.y + dy }));
+    }
   }
 
   const duplicatedEdges = edges.flatMap((edge) => {

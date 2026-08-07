@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { BoardNode } from '@/types';
 
-import { resolveDraggedNodePosition } from './sheltie-node-placement';
+import {
+  resolveDraggedNodePosition,
+  resolveNonOverlappingGroupOffset,
+} from './sheltie-node-placement';
 
 function webpage(id: string, x: number, y: number, width: number, height: number): BoardNode {
   return { id, type: 'webpage', x, y, width, height } as BoardNode;
@@ -106,5 +109,48 @@ describe('resolveDraggedNodePosition', () => {
       gap: 0,
     });
     expect(result.corrected).toBe(false);
+  });
+});
+
+describe('resolveNonOverlappingGroupOffset', () => {
+  it('衝突しなければオフセットなし', () => {
+    expect(
+      resolveNonOverlappingGroupOffset(
+        [webpage('a', 0, 0, 100, 100)],
+        [sticky('n', 900, 900, 100, 100)],
+        20,
+      ),
+    ).toEqual({ dx: 0, dy: 0 });
+  });
+
+  it('付箋どうしの重なりは許容する', () => {
+    expect(
+      resolveNonOverlappingGroupOffset(
+        [sticky('a', 0, 0, 100, 100)],
+        [sticky('n', 10, 10, 100, 100)],
+        20,
+      ),
+    ).toEqual({ dx: 0, dy: 0 });
+  });
+
+  it('webpage が既存ノードと gap 未満なら右下対角へ逃がす', () => {
+    const { dx, dy } = resolveNonOverlappingGroupOffset(
+      [webpage('a', 0, 0, 100, 100)],
+      [webpage('n', 50, 50, 100, 100)],
+      20,
+    );
+    expect(dx).toBe(dy);
+    expect(dx).toBeGreaterThan(0);
+    expect(dx % 20).toBe(0);
+  });
+
+  it('群のうち 1 つでも衝突すれば全体を動かし、相対位置は変えない', () => {
+    // webpage だけが既存 webpage と衝突する。付箋は離れているが一緒に動く
+    const group = [webpage('n1', 10, 10, 100, 100), sticky('n2', 810, 10, 100, 100)];
+    const { dx, dy } = resolveNonOverlappingGroupOffset([webpage('a', 0, 0, 100, 100)], group, 20);
+    expect(dx).toBeGreaterThan(0);
+    const moved = group.map((node) => ({ x: node.x + dx, y: node.y + dy }));
+    expect(moved[1].x - moved[0].x).toBe(800);
+    expect(moved[1].y - moved[0].y).toBe(0);
   });
 });

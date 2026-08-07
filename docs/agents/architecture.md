@@ -50,7 +50,8 @@ src/
 - `store/theme-store.ts`: テーマ状態
 - `lib/edit-commands.ts`: キーボードと Edit メニューを共通編集コマンドへ束ねる（`undo` / `redo` / `delete` / `cut` / `copy` / `paste` / `duplicate`）
 - `lib/board-clipboard.ts`: クリップボード payload の build / plain text 化 / parse / materialize。`.sheltie` の document node/edge 形式とその検証を再利用する
-- `lib/board-paste-placement.ts`: ペースト位置の決定（viewport world rect、ノード群の外接矩形、基準点の優先順位、剛体スライド）
+- `lib/board-paste-placement.ts`: ペースト位置の決定（viewport world rect、ノード群の外接矩形、基準点の優先順位）。重なり回避そのものは `sheltie-node-placement.ts` の `resolveNonOverlappingGroupOffset` に委ねる
+- `lib/sheltie-node-placement.ts`: 単独ノードの最近傍 1 軸補正（`resolveDraggedNodePosition`）と、ノード群を剛体のまま右下対角へ逃がす `resolveNonOverlappingGroupOffset`。ペーストと alt ドラッグ複製が後者を共有する
 - `lib/alt-drag-duplicate.ts`: alt ドラッグのドロップ時に作る複製の組み立て（ID 再発行、内部エッジのリマップ、単独ドラッグの重なり補正）
 - `components/ReactFlowNodes/GhostFlowNode.tsx`: alt ドラッグ中に元位置へ残す静的クローン。3 種別すべてを描画専用でレンダーし、Handle / NodeToolbar / リサイズ UI を持たない
 - `hooks/sheltie/useSheltieClipboardCommands.ts`: Cut / Copy / Paste / Duplicate の統括。クリップボード I/O → parse → materialize → 配置 → `insertBoardContent` → 選択更新を担当する

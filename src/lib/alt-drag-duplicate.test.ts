@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { DRAG_REPOSITION_GAP } from '@/constants';
+import { getNodeFrameRect } from '@/lib/sheltie-node-frame';
+import { conflictsWithGap } from '@/lib/sheltie-node-placement';
 import type { BoardEdge, BoardNode } from '@/types';
 
 import { buildAltDragDuplicate } from './alt-drag-duplicate';
@@ -100,14 +103,54 @@ describe('buildAltDragDuplicate', () => {
     });
   });
 
-  it('複数ノードは補正せずドロップ位置をそのまま使う', () => {
-    const nodes = [webpage('a', 0, 0), webpage('b', 200, 0)];
+  it('複数ノードでも webpage が重なるなら群ごとスライドして相対位置を保つ', () => {
+    // Webview は重ねられないので、複数ノードの複製でも webpage の重なりは許さない
+    const nodes = [
+      webpage('w', 0, 0, { width: 393, height: 852 }),
+      sticky('s', 500, 0),
+      { ...sticky('t', 500, 300), type: 'text' } as BoardNode,
+    ];
+
+    const result = buildAltDragDuplicate({
+      nodes,
+      edges: [],
+      draggedNodeIds: ['w', 's', 't'],
+      droppedPositionByNodeId: {
+        w: { x: 30, y: 30 },
+        s: { x: 530, y: 30 },
+        t: { x: 530, y: 330 },
+      },
+      createId: sequentialIds(),
+    });
+
+    const [w, s, t] = result.nodes;
+    const wRect = getNodeFrameRect(w);
+    const originalRect = getNodeFrameRect(nodes[0]);
+    expect(
+      conflictsWithGap(
+        wRect.left,
+        wRect.top,
+        wRect.width,
+        wRect.height,
+        originalRect.left,
+        originalRect.top,
+        originalRect.width,
+        originalRect.height,
+        DRAG_REPOSITION_GAP,
+      ),
+    ).toBe(false);
+    // 群の相対レイアウトは崩さない
+    expect(s.x - w.x).toBe(500);
+    expect(t.y - w.y).toBe(300);
+  });
+
+  it('複数ノードでも webpage が絡まなければドロップ位置のまま重ねられる', () => {
+    const nodes = [sticky('a', 0, 0), sticky('b', 200, 0)];
 
     const result = buildAltDragDuplicate({
       nodes,
       edges: [],
       draggedNodeIds: ['a', 'b'],
-      // 既存 webpage と重なる位置でも複数ドラッグでは補正しない
       droppedPositionByNodeId: { a: { x: 10, y: 10 }, b: { x: 210, y: 10 } },
       createId: sequentialIds(),
     });

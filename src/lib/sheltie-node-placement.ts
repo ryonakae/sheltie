@@ -146,6 +146,57 @@ function resolveAxisCoordinate(
   return findNearestAllowedCoordinate(axis === 'x' ? proposedX : proposedY, intervals);
 }
 
+/**
+ * ノード群を剛体のまま平行移動したときの衝突判定。
+ * Webview は重ねられないため webpage は既存全ノードと、付箋/テキストは既存 webpage とだけ
+ * gap 制約を持つ。群の内部どうしは元のレイアウトが正しい前提で判定しない。
+ */
+function hasGroupPlacementConflict(
+  existingNodes: BoardNode[],
+  groupNodes: BoardNode[],
+  dx: number,
+  dy: number,
+  gap: number,
+): boolean {
+  return groupNodes.some((groupNode) => {
+    const groupRect = getNodeFrameRect({ ...groupNode, x: groupNode.x + dx, y: groupNode.y + dy });
+    return existingNodes.some((existing) => {
+      if (!isWebPageNode(groupNode) && !isWebPageNode(existing)) return false;
+      const existingRect = getNodeFrameRect(existing);
+      return conflictsWithGap(
+        groupRect.left,
+        groupRect.top,
+        groupRect.width,
+        groupRect.height,
+        existingRect.left,
+        existingRect.top,
+        existingRect.width,
+        existingRect.height,
+        gap,
+      );
+    });
+  });
+}
+
+/**
+ * 配置したいノード群（既に希望位置にあるもの）を、既存ノードと重ならない位置まで
+ * 右下対角へ gap 刻みでずらすオフセットを返す。群全体を同じだけ動かすので相対レイアウトは保たれる。
+ * 既存ノードの範囲は有限なので、右下へ進み続ければ必ず衝突が消えて停止する。
+ */
+export function resolveNonOverlappingGroupOffset(
+  existingNodes: BoardNode[],
+  groupNodes: BoardNode[],
+  gap: number,
+): { dx: number; dy: number } {
+  let dx = 0;
+  let dy = 0;
+  while (hasGroupPlacementConflict(existingNodes, groupNodes, dx, dy, gap)) {
+    dx += gap;
+    dy += gap;
+  }
+  return { dx, dy };
+}
+
 export function resolveDraggedNodePosition({
   nodes,
   movingNode,
